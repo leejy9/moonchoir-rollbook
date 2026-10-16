@@ -30,6 +30,7 @@ import { LiquidGauge } from './LiquidGauge';
 import { AdminMatrixGrid } from './AdminMatrixGrid';
 import { AdminNotionFilterBar, type AdminFilterState } from './AdminNotionFilterBar';
 import { MemberProfileModal } from './MemberProfileModal';
+import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface AdminDashboardProps {
   onBackToHome: () => void;
@@ -668,7 +669,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             ← 홈으로
           </button>
           <img
-            src="/moonchoir-logo.png"
+            src={moonchoirLogo}
             alt="Moonchoir"
             style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }}
           />

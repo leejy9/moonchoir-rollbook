@@ -1,35 +1,62 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { bindDeviceProfile } from '../services/auth';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, PartType } from '../types/rollbook';
+import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface BindingModalProps {
   onSuccess: (profile: BoundDeviceProfile) => void;
   onClose?: () => void;
 }
 
-const DEFAULT_PARTS: PartType[] = ['소프라노', '알토', '테너', '베이스', '선생님', '객원'];
+function formatPhoneNumber(val: string): string {
+  const digits = val.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+}
 
 export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }) => {
   const [tab, setTab] = useState<'SELECT' | 'REGISTER'>('SELECT');
   const [selectedPartFilter, setSelectedPartFilter] = useState<string>('전체');
+  const [searchKeyword, setSearchKeyword] = useState('');
 
   // Selection mode state
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [phoneInput, setPhoneInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Register mode state
   const [newName, setNewName] = useState('');
-  const [newPart, setNewPart] = useState<PartType>('소프라노');
+  const availableParts = useMemo(() => sheetsService.getParts(), []);
+  const [newPart, setNewPart] = useState<string>(availableParts[0] || '소프라노');
   const [customPart, setCustomPart] = useState('');
   const [newPhone, setNewPhone] = useState('');
 
   const members = sheetsService.getMembers().filter((m) => m.status === 'ACTIVE');
 
-  const filteredMembers = selectedPartFilter === '전체'
-    ? members
-    : members.filter((m) => m.part === selectedPartFilter);
+  // Filter members by part and search keyword
+  const filteredMembers = members.filter((m) => {
+    const matchPart = selectedPartFilter === '전체' || m.part === selectedPartFilter;
+    const matchKeyword = !searchKeyword.trim() || m.name.toLowerCase().includes(searchKeyword.trim().toLowerCase());
+    return matchPart && matchKeyword;
+  });
+
+  // Handle phone input formatting in register mode
+  const handleRegisterPhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewPhone(formatPhoneNumber(e.target.value));
+  };
+
+  // Handle phone input formatting in select mode (allow full or last 4 digits)
+  const handleSelectPhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (val.replace(/\D/g, '').length > 4) {
+      setPhoneInput(formatPhoneNumber(val));
+    } else {
+      setPhoneInput(val);
+    }
+  };
 
   const handleSelectMemberSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,8 +67,17 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
       return;
     }
 
-    if (phoneInput.trim() !== selectedMember.phoneLast4) {
-      setErrorMsg('전화번호 뒷자리 4자리가 일치하지 않습니다.');
+    const inputDigits = phoneInput.replace(/\D/g, '');
+    if (inputDigits.length < 4) {
+      setErrorMsg('연락처(전체 번호 또는 뒷 4자리)를 올바르게 입력해 주세요.');
+      return;
+    }
+
+    const inputLast4 = inputDigits.slice(-4);
+    const targetLast4 = String(selectedMember.phoneLast4 || '').trim();
+
+    if (inputLast4 !== targetLast4) {
+      setErrorMsg(`연락처 뒷자리(4자리)가 등록된 정보와 일치하지 않습니다. (관리자에게 문의해주세요)`);
       return;
     }
 
@@ -60,56 +96,71 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
 
     const trimmedName = newName.trim();
     if (!trimmedName) {
-      setErrorMsg('이름을 입력해 주세요.');
+      setErrorMsg('이름(실명)을 입력해 주세요.');
       return;
     }
 
-    if (!/^\d{4}$/.test(newPhone.trim())) {
-      setErrorMsg('전화번호 뒷자리는 숫자 4자리여야 합니다.');
+    const digits = newPhone.replace(/\D/g, '');
+    if (digits.length < 10) {
+      setErrorMsg('연락처는 010으로 시작하는 전체 11자리(또는 10자리)를 입력해 주세요.');
       return;
     }
 
-    const finalPart: PartType = newPart === '기타' ? customPart.trim() || '기타' : newPart;
+    const finalLast4 = digits.slice(-4);
+    const finalPart: PartType = newPart === '기타' ? (customPart.trim() || '기타') : (newPart as PartType);
 
     const newMember: Member = {
       id: `mem_new_${Date.now()}`,
       name: trimmedName,
       part: finalPart,
-      phoneLast4: newPhone.trim(),
+      phone: newPhone.trim(),
+      phoneLast4: finalLast4,
       role: finalPart === '선생님' ? 'ADMIN' : finalPart === '객원' ? 'GUEST' : 'MEMBER',
       createdAt: new Date().toISOString(),
       status: 'ACTIVE',
+      joinedAt: new Date().toISOString().slice(0, 10),
+      memberStatus: finalPart === '선생님' ? '선생님' : finalPart === '객원' ? '객원' : '정단원',
     };
 
-    await sheetsService.addMember(newMember);
+    try {
+      setIsSubmitting(true);
+      await sheetsService.addMember(newMember);
 
-    const profile = bindDeviceProfile(
-      newMember.id,
-      newMember.name,
-      newMember.part,
-      newMember.phoneLast4
-    );
+      const profile = bindDeviceProfile(
+        newMember.id,
+        newMember.name,
+        newMember.part,
+        newMember.phoneLast4
+      );
 
-    onSuccess(profile);
+      onSuccess(profile);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : '등록 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  const registerPhoneDigits = newPhone.replace(/\D/g, '');
+  const derivedLast4 = registerPhoneDigits.length >= 4 ? registerPhoneDigits.slice(-4) : '';
 
   return (
     <div className="modal-overlay">
       <div className="modal-card">
         <div className="modal-header">
           <img
-            src="/moonchoir-logo.png"
+            src={moonchoirLogo}
             alt="Moonchoir"
-            style={{ width: 48, height: 48, borderRadius: '50%', margin: '0 auto 10px', display: 'block', objectFit: 'cover' }}
+            style={{ width: 52, height: 52, borderRadius: '50%', margin: '0 auto 12px', display: 'block', objectFit: 'cover', boxShadow: '0 4px 12px rgba(91, 62, 150, 0.2)' }}
           />
           <div className="modal-badge">1회 본인 기기 등록</div>
           <h2 className="modal-title">본인 확인 & 기기 연결</h2>
           <p className="modal-desc">
-            한 번만 등록해 두면, 앞으로 연습실 종이 QR을 비출 때마다 대리 출석 걱정 없이 1초 만에 바로 출석됩니다!
+            한 번만 등록해 두면, 앞으로 연습실 상설 QR을 비출 때마다 대리 출석 걱정 없이 1초 만에 바로 출석됩니다!
           </p>
         </div>
 
-        <div className="tab-pill-group">
+        <div className="tab-pill-group" style={{ marginBottom: '14px' }}>
           <button
             type="button"
             className={`tab-pill ${tab === 'SELECT' ? 'active' : ''}`}
@@ -126,14 +177,14 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
           </button>
         </div>
 
-        {errorMsg && <div className="error-banner">{errorMsg}</div>}
+        {errorMsg && <div className="error-banner" style={{ marginBottom: '14px' }}>⚠️ {errorMsg}</div>}
 
         {tab === 'SELECT' ? (
           <div>
             {!selectedMember ? (
               <>
                 <div className="filter-scroll-row">
-                  {['전체', '소프라노', '알토', '테너', '베이스'].map((p) => (
+                  {['전체', ...availableParts].map((p) => (
                     <button
                       key={p}
                       type="button"
@@ -145,51 +196,70 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
                   ))}
                 </div>
 
+                <div style={{ marginBottom: '10px' }}>
+                  <input
+                    type="text"
+                    className="modern-input"
+                    style={{ minHeight: '40px', fontSize: '13px' }}
+                    placeholder="🔍 이름 검색 (예: 김하은)"
+                    value={searchKeyword}
+                    onChange={(e) => setSearchKeyword(e.target.value)}
+                  />
+                </div>
+
                 <div className="member-picker-list">
-                  {filteredMembers.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className="member-picker-item"
-                      onClick={() => { setSelectedMember(m); setErrorMsg(''); }}
-                    >
-                      <span className={`part-badge part-${m.part}`}>{m.part}</span>
-                      <span className="member-picker-name">{m.name}</span>
-                      <span className="member-picker-arrow">선택 ➔</span>
-                    </button>
-                  ))}
+                  {filteredMembers.length > 0 ? (
+                    filteredMembers.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        className="member-picker-item"
+                        onClick={() => { setSelectedMember(m); setErrorMsg(''); setPhoneInput(''); }}
+                      >
+                        <span className={`part-badge part-${m.part}`}>{m.part}</span>
+                        <span className="member-picker-name">{m.name}</span>
+                        <span className="member-picker-arrow">선택 ➔</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '24px 10px', color: '#718096', fontSize: '13px' }}>
+                      해당하는 단원이 없습니다. [신규 단원 등록] 탭에서 등록해 주세요.
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
               <form onSubmit={handleSelectMemberSubmit} className="form-stack">
-                <div className="selected-card">
+                <div className="selected-card" style={{ marginBottom: '16px' }}>
                   <span className={`part-badge part-${selectedMember.part}`}>{selectedMember.part}</span>
-                  <span className="selected-name">{selectedMember.name} 님</span>
+                  <span className="selected-name" style={{ fontSize: '16px' }}>{selectedMember.name} 단원님</span>
                   <button
                     type="button"
                     className="btn-change"
-                    onClick={() => { setSelectedMember(null); setPhoneInput(''); }}
+                    onClick={() => { setSelectedMember(null); setPhoneInput(''); setErrorMsg(''); }}
                   >
-                    변경
+                    다른 단원 선택
                   </button>
                 </div>
 
-                <label className="form-label" htmlFor="phone-last4">
-                  전화번호 뒷자리 4자리 입력 (본인 확인용)
+                <label className="form-label" htmlFor="phone-last4" style={{ fontWeight: 600, fontSize: '13.5px' }}>
+                  연락처 확인 (전체 번호 또는 뒷 4자리) *
                 </label>
                 <input
                   id="phone-last4"
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  className="input-text"
-                  placeholder="예: 1234"
+                  type="tel"
+                  className="modern-input"
+                  placeholder="010-0000-0000 또는 뒷 4자리 입력"
                   value={phoneInput}
-                  onChange={(e) => setPhoneInput(e.target.value)}
+                  onChange={handleSelectPhoneChange}
                   autoFocus
+                  required
                 />
+                <span className="binding-input-hint">
+                  ℹ️ 등록된 연락처의 뒷 4자리로 본인 여부를 안전하게 검증합니다.
+                </span>
 
-                <button type="submit" className="btn-primary-large">
+                <button type="submit" className="btn-primary-large" style={{ marginTop: '16px' }}>
                   내 폰으로 등록 완료
                 </button>
               </form>
@@ -197,70 +267,90 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
           </div>
         ) : (
           <form onSubmit={handleRegisterSubmit} className="form-stack">
-            <label className="form-label" htmlFor="reg-name">이름 (실명)</label>
-            <input
-              id="reg-name"
-              type="text"
-              className="input-text"
-              placeholder="예: 홍길동"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              required
-            />
-
-            <label className="form-label">파트 구분</label>
-            <div className="part-radio-grid">
-              {DEFAULT_PARTS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={`part-radio-btn ${newPart === p ? 'active' : ''}`}
-                  onClick={() => setNewPart(p)}
-                >
-                  {p}
-                </button>
-              ))}
-              <button
-                type="button"
-                className={`part-radio-btn ${newPart === '기타' ? 'active' : ''}`}
-                onClick={() => setNewPart('기타')}
-              >
-                기타 (직접입력)
-              </button>
+            <div style={{ marginBottom: '14px' }}>
+              <label className="form-label" htmlFor="reg-name" style={{ fontWeight: 600, fontSize: '13.5px' }}>
+                이름 (실명) *
+              </label>
+              <input
+                id="reg-name"
+                type="text"
+                className="modern-input"
+                placeholder="예: 이재연"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                required
+              />
             </div>
 
-            {newPart === '기타' && (
+            <div style={{ marginBottom: '14px' }}>
+              <label className="form-label" style={{ fontWeight: 600, fontSize: '13.5px' }}>
+                파트 구분 *
+              </label>
+              <div className="part-chips-grid">
+                {availableParts.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`part-chip-btn ${newPart === p ? 'active' : ''}`}
+                    onClick={() => setNewPart(p)}
+                  >
+                    {p}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`part-chip-btn ${newPart === '기타' ? 'active' : ''}`}
+                  onClick={() => setNewPart('기타')}
+                >
+                  기타 (직접입력)
+                </button>
+              </div>
+
+              {newPart === '기타' && (
+                <input
+                  type="text"
+                  className="modern-input"
+                  style={{ marginTop: '8px' }}
+                  placeholder="파트명 직접 입력 (예: 카운터테너, 피아노, 임원)"
+                  value={customPart}
+                  onChange={(e) => setCustomPart(e.target.value)}
+                  autoFocus
+                  required
+                />
+              )}
+            </div>
+
+            <div style={{ marginBottom: '18px' }}>
+              <label className="form-label" htmlFor="reg-phone" style={{ fontWeight: 600, fontSize: '13.5px' }}>
+                연락처 (휴대폰 번호 전체) *
+              </label>
               <input
-                type="text"
-                className="input-text"
-                placeholder="파트명 입력 (예: 카운터테너, 피아노)"
-                value={customPart}
-                onChange={(e) => setCustomPart(e.target.value)}
-                autoFocus
+                id="reg-phone"
+                type="tel"
+                className="modern-input"
+                placeholder="010-0000-0000"
+                value={newPhone}
+                onChange={handleRegisterPhoneChange}
+                maxLength={13}
+                required
               />
-            )}
+              <span className="binding-input-hint">
+                ℹ️ 연락처 전체(11자리)를 입력해주세요. 연습실 출석 및 본인 확인 시에는 뒷 4자리(<strong>{derivedLast4 || '----'}</strong>)로 인증됩니다.
+              </span>
+            </div>
 
-            <label className="form-label" htmlFor="reg-phone">전화번호 뒷자리 4자리 (기기 식별용)</label>
-            <input
-              id="reg-phone"
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              className="input-text"
-              placeholder="예: 5678"
-              value={newPhone}
-              onChange={(e) => setNewPhone(e.target.value)}
-              required
-            />
-
-            <button type="submit" className="btn-primary-large">
-              신규 등록하고 내 폰으로 바인딩
+            <button
+              type="submit"
+              className="btn-primary-large"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? '신규 등록 중...' : '신규 등록하고 내 폰으로 바인딩'}
             </button>
           </form>
         )}
 
         {onClose && (
-          <button type="button" className="btn-secondary-cancel" onClick={onClose}>
+          <button type="button" className="btn-secondary-cancel" onClick={onClose} style={{ marginTop: '10px' }}>
             닫기
           </button>
         )}

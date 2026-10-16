@@ -11,6 +11,7 @@ import {
   IconVote,
 } from './Icons';
 import { LiquidGauge } from './LiquidGauge';
+import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface HomeViewProps {
   profile: BoundDeviceProfile;
@@ -71,7 +72,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <header className="home-header">
         <div className="header-brand">
           <img
-            src="/moonchoir-logo.png"
+            src={moonchoirLogo}
             alt="Moonchoir"
             className="brand-logo-img"
             style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover' }}
