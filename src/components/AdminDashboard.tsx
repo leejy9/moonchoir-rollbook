@@ -30,6 +30,8 @@ import { AdminMatrixGrid } from './AdminMatrixGrid';
 import { AdminNotionFilterBar, type AdminFilterState } from './AdminNotionFilterBar';
 import { MemberProfileModal } from './MemberProfileModal';
 import { LocationPickerMap } from './LocationPickerMap';
+import { ScheduleEditModal } from './ScheduleEditModal';
+import { BatchScheduleEditModal } from './BatchScheduleEditModal';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface AdminDashboardProps {
@@ -349,13 +351,121 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const schedulesOnSelectedDate = schedulesByDate.get(adminSelectedDate) || [];
 
+  // --- Schedule Editing & Batch Operations State ---
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [isScheduleEditModalOpen, setIsScheduleEditModalOpen] = useState(false);
+  const [selectedBatchScheduleIds, setSelectedBatchScheduleIds] = useState<string[]>([]);
+  const [isBatchScheduleEditModalOpen, setIsBatchScheduleEditModalOpen] = useState(false);
+  const [scheduleViewTab, setScheduleViewTab] = useState<'CALENDAR' | 'ALL_LIST'>('CALENDAR');
+  const [allScheduleSearch, setAllScheduleSearch] = useState('');
+  const [allScheduleCatFilter, setAllScheduleCatFilter] = useState('ALL');
+
+  const filteredAllSchedules = useMemo(() => {
+    return schedules.filter((s) => {
+      const q = allScheduleSearch.trim().toLowerCase();
+      const matchSearch =
+        !q ||
+        s.title.toLowerCase().includes(q) ||
+        s.locationName.toLowerCase().includes(q) ||
+        (s.description && s.description.toLowerCase().includes(q)) ||
+        s.date.includes(q);
+      const matchCat = allScheduleCatFilter === 'ALL' || s.category === allScheduleCatFilter;
+      return matchSearch && matchCat;
+    });
+  }, [schedules, allScheduleSearch, allScheduleCatFilter]);
+
+  const handleOpenEditSchedule = (sch: Schedule) => {
+    setEditingSchedule(sch);
+    setIsScheduleEditModalOpen(true);
+  };
+
+  const handleSaveScheduleSingle = async (scheduleId: string, updates: Partial<Schedule>) => {
+    await sheetsService.updateSchedule(scheduleId, updates);
+    setScheduleSuccessMsg(`일정이 성공적으로 수정되었습니다.`);
+    onDataChanged();
+    setTimeout(() => setScheduleSuccessMsg(''), 3500);
+  };
+
+  const handleSaveScheduleSeries = async (matchingIds: string[], updates: Partial<Schedule>) => {
+    await sheetsService.batchUpdateSchedules(matchingIds, updates);
+    setScheduleSuccessMsg(`동일 명칭 일정 ${matchingIds.length}개 회차가 일괄 수정되었습니다.`);
+    onDataChanged();
+    setTimeout(() => setScheduleSuccessMsg(''), 3500);
+  };
+
+  const handleDeleteScheduleSingle = async (scheduleId: string, title: string) => {
+    await sheetsService.deleteSchedule(scheduleId);
+    setScheduleSuccessMsg(`'${title}' 일정이 정상적으로 삭제되었습니다.`);
+    setSelectedBatchScheduleIds((prev) => prev.filter((id) => id !== scheduleId));
+    onDataChanged();
+    setTimeout(() => setScheduleSuccessMsg(''), 3500);
+  };
+
+  const handleDeleteScheduleSeries = async (matchingIds: string[], title: string) => {
+    await sheetsService.deleteSchedules(matchingIds);
+    setScheduleSuccessMsg(`'${title}' 명칭의 전체 ${matchingIds.length}개 일정이 일괄 삭제되었습니다.`);
+    setSelectedBatchScheduleIds((prev) => prev.filter((id) => !matchingIds.includes(id)));
+    onDataChanged();
+    setTimeout(() => setScheduleSuccessMsg(''), 3500);
+  };
+
+  const handleApplyBatchScheduleUpdates = async (ids: string[], updates: Partial<Schedule>) => {
+    await sheetsService.batchUpdateSchedules(ids, updates);
+    setScheduleSuccessMsg(`선택한 ${ids.length}개 일정이 성공적으로 일괄 수정되었습니다.`);
+    onDataChanged();
+    setTimeout(() => setScheduleSuccessMsg(''), 3500);
+  };
+
+  const handleBatchDeleteSelected = async () => {
+    if (selectedBatchScheduleIds.length === 0) return;
+    if (
+      !window.confirm(
+        `선택하신 ${selectedBatchScheduleIds.length}개의 일정을 일괄 삭제하시겠습니까?\n구글 스프레드시트에서도 모두 영구 삭제됩니다.`
+      )
+    ) {
+      return;
+    }
+    const count = selectedBatchScheduleIds.length;
+    await sheetsService.deleteSchedules(selectedBatchScheduleIds);
+    setSelectedBatchScheduleIds([]);
+    setScheduleSuccessMsg(`선택한 ${count}개 일정이 일괄 삭제되었습니다.`);
+    onDataChanged();
+    setTimeout(() => setScheduleSuccessMsg(''), 3500);
+  };
+
+  const handleToggleSelectSchedule = (id: string) => {
+    setSelectedBatchScheduleIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllSchedules = (filteredIds: string[]) => {
+    const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedBatchScheduleIds.includes(id));
+    if (allSelected) {
+      setSelectedBatchScheduleIds((prev) => prev.filter((id) => !filteredIds.includes(id)));
+    } else {
+      setSelectedBatchScheduleIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
+    }
+  };
+
   const handleDeleteSchedule = async (scheduleId: string, title: string) => {
+    // If companion schedules exist with same title, offer choice via edit modal
+    const companions = schedules.filter((s) => s.title === title && s.id !== scheduleId);
+    if (companions.length > 0) {
+      const target = schedules.find((s) => s.id === scheduleId);
+      if (target) {
+        handleOpenEditSchedule(target);
+        return;
+      }
+    }
+
     if (!window.confirm(`정말로 '${title}' 일정을 삭제하시겠습니까?\n구글 스프레드시트에서도 해당 행이 삭제됩니다.`)) {
       return;
     }
     try {
       await sheetsService.deleteSchedule(scheduleId);
       setScheduleSuccessMsg(`'${title}' 일정이 정상적으로 삭제되었습니다.`);
+      setSelectedBatchScheduleIds((prev) => prev.filter((id) => id !== scheduleId));
       onDataChanged();
       setTimeout(() => setScheduleSuccessMsg(''), 4000);
     } catch (err: unknown) {
@@ -1491,133 +1601,454 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* Left Column: Interactive Month Calendar & Selected Day Schedules */}
               <div className="admin-calendar-col">
                 <div className="admin-form-card" style={{ padding: '20px' }}>
-                  <div className="admin-cal-header-row">
+                  {/* View Mode Switcher */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '8px',
+                      marginBottom: '16px',
+                      background: '#F1F5F9',
+                      padding: '4px',
+                      borderRadius: '10px',
+                      width: 'fit-content',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className={`btn-sub-tab ${scheduleViewTab === 'CALENDAR' ? 'active' : ''}`}
+                      onClick={() => setScheduleViewTab('CALENDAR')}
+                      style={{
+                        minHeight: '36px',
+                        padding: '0 16px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        border: 'none',
+                        borderRadius: '8px',
+                        background: scheduleViewTab === 'CALENDAR' ? '#FFFFFF' : 'transparent',
+                        color: scheduleViewTab === 'CALENDAR' ? '#1E293B' : '#64748B',
+                        boxShadow: scheduleViewTab === 'CALENDAR' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      📅 캘린더 날짜별 보기
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-sub-tab ${scheduleViewTab === 'ALL_LIST' ? 'active' : ''}`}
+                      onClick={() => setScheduleViewTab('ALL_LIST')}
+                      style={{
+                        minHeight: '36px',
+                        padding: '0 16px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        border: 'none',
+                        borderRadius: '8px',
+                        background: scheduleViewTab === 'ALL_LIST' ? '#FFFFFF' : 'transparent',
+                        color: scheduleViewTab === 'ALL_LIST' ? '#1E293B' : '#64748B',
+                        boxShadow: scheduleViewTab === 'ALL_LIST' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      📋 전체 등록 일정 일괄 관리 ({schedules.length}건)
+                    </button>
+                  </div>
+
+                  {scheduleViewTab === 'CALENDAR' ? (
                     <div>
-                      <h2 className="section-title" style={{ margin: 0 }}>
-                        📅 연습 일정 캘린더
-                      </h2>
-                      <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
-                        등록된 총 {schedules.length}건의 일정을 월별로 확인하고 관리합니다.
-                      </p>
-                    </div>
-                    <div className="month-switcher-compact">
-                      <button
-                        type="button"
-                        className="month-arrow-btn"
-                        onClick={handleAdminPrevMonth}
-                        aria-label="이전 달"
-                      >
-                        ◀
-                      </button>
-                      <span className="current-month-label">
-                        {adminCalYear}년 {adminCalMonth + 1}월
-                      </span>
-                      <button
-                        type="button"
-                        className="month-arrow-btn"
-                        onClick={handleAdminNextMonth}
-                        aria-label="다음 달"
-                      >
-                        ▶
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 7-Col Calendar Grid */}
-                  <div className="admin-cal-wrap" style={{ marginTop: '14px' }}>
-                    <div className="calendar-grid-weekdays">
-                      <span className="weekday-header sun">일</span>
-                      <span className="weekday-header">월</span>
-                      <span className="weekday-header">화</span>
-                      <span className="weekday-header">수</span>
-                      <span className="weekday-header">목</span>
-                      <span className="weekday-header">금</span>
-                      <span className="weekday-header sat">토</span>
-                    </div>
-
-                    <div className="calendar-grid-cells">
-                      {adminCalendarGrid.map((day) => {
-                        const daySchedules = schedulesByDate.get(day.dateStr) || [];
-                        const isSelected = day.dateStr === adminSelectedDate;
-
-                        return (
-                          <div
-                            key={day.dateStr}
-                            className={`calendar-cell ${!day.isCurrentMonth ? 'dimmed' : ''} ${day.isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}`}
-                            onClick={() => {
-                              setAdminSelectedDate(day.dateStr);
-                              setNewDate(day.dateStr);
-                            }}
-                            title={daySchedules.length > 0 ? `${day.dateStr} (${daySchedules.length}건)` : day.dateStr}
+                      <div className="admin-cal-header-row">
+                        <div>
+                          <h2 className="section-title" style={{ margin: 0 }}>
+                            📅 연습 일정 캘린더
+                          </h2>
+                          <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
+                            등록된 총 {schedules.length}건의 일정을 월별로 확인하고 관리합니다.
+                          </p>
+                        </div>
+                        <div className="month-switcher-compact">
+                          <button
+                            type="button"
+                            className="month-arrow-btn"
+                            onClick={handleAdminPrevMonth}
+                            aria-label="이전 달"
                           >
-                            <span className="cell-day-num">{day.dayNumber}</span>
-                            {daySchedules.length > 0 && (
-                              <div className="cell-dots-row">
-                                {daySchedules.slice(0, 3).map((s) => (
-                                  <span
-                                    key={s.id}
-                                    className={`schedule-dot cat-${s.category}`}
-                                    title={s.title}
-                                  />
-                                ))}
+                            ◀
+                          </button>
+                          <span className="current-month-label">
+                            {adminCalYear}년 {adminCalMonth + 1}월
+                          </span>
+                          <button
+                            type="button"
+                            className="month-arrow-btn"
+                            onClick={handleAdminNextMonth}
+                            aria-label="다음 달"
+                          >
+                            ▶
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 7-Col Calendar Grid */}
+                      <div className="admin-cal-wrap" style={{ marginTop: '14px' }}>
+                        <div className="calendar-grid-weekdays">
+                          <span className="weekday-header sun">일</span>
+                          <span className="weekday-header">월</span>
+                          <span className="weekday-header">화</span>
+                          <span className="weekday-header">수</span>
+                          <span className="weekday-header">목</span>
+                          <span className="weekday-header">금</span>
+                          <span className="weekday-header sat">토</span>
+                        </div>
+
+                        <div className="calendar-grid-cells">
+                          {adminCalendarGrid.map((day) => {
+                            const daySchedules = schedulesByDate.get(day.dateStr) || [];
+                            const isSelected = day.dateStr === adminSelectedDate;
+
+                            return (
+                              <div
+                                key={day.dateStr}
+                                className={`calendar-cell ${!day.isCurrentMonth ? 'dimmed' : ''} ${day.isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}`}
+                                onClick={() => {
+                                  setAdminSelectedDate(day.dateStr);
+                                  setNewDate(day.dateStr);
+                                }}
+                                title={daySchedules.length > 0 ? `${day.dateStr} (${daySchedules.length}건)` : day.dateStr}
+                              >
+                                <span className="cell-day-num">{day.dayNumber}</span>
+                                {daySchedules.length > 0 && (
+                                  <div className="cell-dots-row">
+                                    {daySchedules.slice(0, 3).map((s) => (
+                                      <span
+                                        key={s.id}
+                                        className={`schedule-dot cat-${s.category}`}
+                                        title={s.title}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            )}
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Selected Date Schedule List */}
+                      <div className="selected-date-schedules-box" style={{ marginTop: '18px' }}>
+                        <div className="box-header-row">
+                          <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#191f28' }}>
+                            📌 {adminSelectedDate} 일정 ({schedulesOnSelectedDate.length}건)
+                          </h4>
+                          <button
+                            type="button"
+                            className="btn-quick-new-sch"
+                            onClick={() => setNewDate(adminSelectedDate)}
+                          >
+                            + 이 날짜로 폼 채우기
+                          </button>
+                        </div>
+
+                        {schedulesOnSelectedDate.length > 0 ? (
+                          <div className="admin-selected-sch-list" style={{ marginTop: '10px' }}>
+                            {schedulesOnSelectedDate.map((sch) => (
+                              <div key={sch.id} className="admin-sch-item-card">
+                                <div className="sch-item-info">
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span className="schedule-category-badge">{sch.category}</span>
+                                    <strong style={{ fontSize: '14px', color: '#191f28' }}>{sch.title}</strong>
+                                    {sch.checkInPin && (
+                                      <span style={{ fontSize: '11px', color: '#64748B', background: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
+                                        PIN: {sch.checkInPin}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7684' }}>
+                                    🕒 {sch.startTime} ~ {sch.endTime} · 📍 {sch.locationName}
+                                  </p>
+                                  {sch.description && (
+                                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b95a1' }}>
+                                      곡목: {sch.description}
+                                    </p>
+                                  )}
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    className="btn-edit-sch-mini"
+                                    onClick={() => handleOpenEditSchedule(sch)}
+                                    title="일정 수정"
+                                    style={{
+                                      background: '#EEF2FF',
+                                      color: '#4F46E5',
+                                      border: '1px solid #C7D2FE',
+                                      borderRadius: '6px',
+                                      padding: '4px 8px',
+                                      fontSize: '12px',
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    ✏️ 수정
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-delete-sch-mini"
+                                    onClick={() => handleDeleteSchedule(sch.id, sch.title)}
+                                    title="일정 삭제"
+                                  >
+                                    🗑️ 삭제
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        );
-                      })}
+                        ) : (
+                          <p className="empty-subtext" style={{ padding: '16px 0', textAlign: 'center', margin: 0 }}>
+                            해당 날짜에 등록된 일정이 없습니다. 우측 폼에서 새 일정을 등록해보세요.
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    /* ALL LIST BATCH MANAGEMENT VIEW */
+                    <div>
+                      <div style={{ marginBottom: '14px' }}>
+                        <h2 className="section-title" style={{ margin: 0 }}>
+                          📋 전체 등록 일정 일괄 관리
+                        </h2>
+                        <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
+                          반복 등록된 일정들을 한눈에 확인하고, 다중 선택하여 일괄 삭제하거나 장소/시간을 일괄 수정합니다.
+                        </p>
+                      </div>
 
-                  {/* Selected Date Schedule List */}
-                  <div className="selected-date-schedules-box" style={{ marginTop: '18px' }}>
-                    <div className="box-header-row">
-                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#191f28' }}>
-                        📌 {adminSelectedDate} 일정 ({schedulesOnSelectedDate.length}건)
-                      </h4>
-                      <button
-                        type="button"
-                        className="btn-quick-new-sch"
-                        onClick={() => setNewDate(adminSelectedDate)}
+                      {/* Search & Filter Bar */}
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: '180px', position: 'relative' }}>
+                          <input
+                            type="text"
+                            className="modern-input"
+                            placeholder="일정명, 날짜, 장소, 곡목 검색..."
+                            value={allScheduleSearch}
+                            onChange={(e) => setAllScheduleSearch(e.target.value)}
+                            style={{ height: '38px', paddingLeft: '32px', fontSize: '13px' }}
+                          />
+                          <span style={{ position: 'absolute', left: '10px', top: '10px', color: '#94A3B8', fontSize: '13px' }}>🔍</span>
+                        </div>
+                        <select
+                          className="modern-select"
+                          value={allScheduleCatFilter}
+                          onChange={(e) => setAllScheduleCatFilter(e.target.value)}
+                          style={{ width: 'auto', minWidth: '120px', height: '38px', fontSize: '13px' }}
+                        >
+                          <option value="ALL">전체 카테고리</option>
+                          {dynamicCategories.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Bulk Action Bar */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          background: selectedBatchScheduleIds.length > 0 ? '#EEF2FF' : '#F8FAFC',
+                          border: `1px solid ${selectedBatchScheduleIds.length > 0 ? '#C7D2FE' : '#E2E8F0'}`,
+                          borderRadius: '10px',
+                          padding: '10px 14px',
+                          marginBottom: '14px',
+                          flexWrap: 'wrap',
+                          gap: '10px',
+                        }}
                       >
-                        + 이 날짜로 폼 채우기
-                      </button>
-                    </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <label
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              fontWeight: 700,
+                              color: '#334155',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={
+                                filteredAllSchedules.length > 0 &&
+                                filteredAllSchedules.every((s) => selectedBatchScheduleIds.includes(s.id))
+                              }
+                              onChange={() => handleSelectAllSchedules(filteredAllSchedules.map((s) => s.id))}
+                              style={{ width: '18px', height: '18px', accentColor: '#4F46E5', cursor: 'pointer' }}
+                            />
+                            전체 선택 ({filteredAllSchedules.length}건 중 {selectedBatchScheduleIds.length}개 선택됨)
+                          </label>
+                        </div>
 
-                    {schedulesOnSelectedDate.length > 0 ? (
-                      <div className="admin-selected-sch-list" style={{ marginTop: '10px' }}>
-                        {schedulesOnSelectedDate.map((sch) => (
-                          <div key={sch.id} className="admin-sch-item-card">
-                            <div className="sch-item-info">
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span className="schedule-category-badge">{sch.category}</span>
-                                <strong style={{ fontSize: '14px', color: '#191f28' }}>{sch.title}</strong>
-                              </div>
-                              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7684' }}>
-                                🕒 {sch.startTime} ~ {sch.endTime} · 📍 {sch.locationName}
-                              </p>
-                              {sch.description && (
-                                <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b95a1' }}>
-                                  곡목: {sch.description}
-                                </p>
-                              )}
-                            </div>
+                        {selectedBatchScheduleIds.length > 0 && (
+                          <div style={{ display: 'flex', gap: '8px' }}>
                             <button
                               type="button"
-                              className="btn-delete-sch-mini"
-                              onClick={() => handleDeleteSchedule(sch.id, sch.title)}
-                              title="일정 삭제"
+                              onClick={() => setIsBatchScheduleEditModalOpen(true)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: '#4F46E5',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '6px 14px',
+                                fontSize: '13px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                minHeight: '36px',
+                              }}
                             >
-                              🗑️ 삭제
+                              ✏️ {selectedBatchScheduleIds.length}개 일괄 수정
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleBatchDeleteSelected}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: '#EF4444',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '6px 14px',
+                                fontSize: '13px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                minHeight: '36px',
+                              }}
+                            >
+                              🗑️ {selectedBatchScheduleIds.length}개 일괄 삭제
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedBatchScheduleIds([])}
+                              style={{
+                                background: '#FFFFFF',
+                                color: '#64748B',
+                                border: '1px solid #CBD5E1',
+                                borderRadius: '8px',
+                                padding: '6px 12px',
+                                fontSize: '13px',
+                                cursor: 'pointer',
+                                minHeight: '36px',
+                              }}
+                            >
+                              선택 해제
                             </button>
                           </div>
-                        ))}
+                        )}
                       </div>
-                    ) : (
-                      <p className="empty-subtext" style={{ padding: '16px 0', textAlign: 'center', margin: 0 }}>
-                        해당 날짜에 등록된 일정이 없습니다. 우측 폼에서 새 일정을 등록해보세요.
-                      </p>
-                    )}
-                  </div>
+
+                      {/* Schedule List Cards */}
+                      {filteredAllSchedules.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '520px', overflowY: 'auto' }}>
+                          {filteredAllSchedules.map((sch) => {
+                            const isChecked = selectedBatchScheduleIds.includes(sch.id);
+                            return (
+                              <div
+                                key={sch.id}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  background: isChecked ? '#F5F3FF' : '#FFFFFF',
+                                  border: `1px solid ${isChecked ? '#DDD6FE' : '#E2E8F0'}`,
+                                  borderRadius: '10px',
+                                  padding: '10px 14px',
+                                  gap: '12px',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => handleToggleSelectSchedule(sch.id)}
+                                    style={{ width: '18px', height: '18px', accentColor: '#4F46E5', cursor: 'pointer' }}
+                                  />
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                      <span
+                                        style={{
+                                          fontSize: '12px',
+                                          fontWeight: 800,
+                                          color: '#3B82F6',
+                                          background: '#EFF6FF',
+                                          padding: '2px 8px',
+                                          borderRadius: '6px',
+                                        }}
+                                      >
+                                        {sch.date}
+                                      </span>
+                                      <span className="schedule-category-badge">{sch.category}</span>
+                                      <strong style={{ fontSize: '13.5px', color: '#1E293B' }}>{sch.title}</strong>
+                                      {sch.checkInPin && (
+                                        <span style={{ fontSize: '11px', color: '#64748B', background: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
+                                          PIN: {sch.checkInPin}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#64748B' }}>
+                                      🕒 {sch.startTime} ~ {sch.endTime} · 📍 {sch.locationName}
+                                    </p>
+                                    {sch.description && (
+                                      <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: '#94A3B8' }}>
+                                        메모: {sch.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                  <button
+                                    type="button"
+                                    className="btn-edit-sch-mini"
+                                    onClick={() => handleOpenEditSchedule(sch)}
+                                    style={{
+                                      background: '#EEF2FF',
+                                      color: '#4F46E5',
+                                      border: '1px solid #C7D2FE',
+                                      borderRadius: '6px',
+                                      padding: '5px 10px',
+                                      fontSize: '12px',
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      minHeight: '34px',
+                                    }}
+                                  >
+                                    ✏️ 수정
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-delete-sch-mini"
+                                    onClick={() => handleDeleteSchedule(sch.id, sch.title)}
+                                    style={{ minHeight: '34px', padding: '5px 8px' }}
+                                  >
+                                    🗑️ 삭제
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="empty-subtext" style={{ padding: '24px 0', textAlign: 'center', margin: 0 }}>
+                          조건에 부합하는 일정이 없습니다.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2396,6 +2827,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       )}
+      {/* ============================================================== */}
+      {/* MODAL: Single / Series Schedule Edit Modal                     */}
+      {/* ============================================================== */}
+      <ScheduleEditModal
+        key={editingSchedule?.id || 'none'}
+        isOpen={isScheduleEditModalOpen}
+        schedule={editingSchedule}
+        allSchedules={schedules}
+        locationPresets={locationPresets}
+        categories={dynamicCategories}
+        onClose={() => {
+          setIsScheduleEditModalOpen(false);
+          setEditingSchedule(null);
+        }}
+        onSaveSingle={handleSaveScheduleSingle}
+        onSaveSeries={handleSaveScheduleSeries}
+        onDeleteSingle={handleDeleteScheduleSingle}
+        onDeleteSeries={handleDeleteScheduleSeries}
+      />
+
+      {/* ============================================================== */}
+      {/* MODAL: Batch Schedule Edit Modal                               */}
+      {/* ============================================================== */}
+      <BatchScheduleEditModal
+        isOpen={isBatchScheduleEditModalOpen}
+        selectedScheduleIds={selectedBatchScheduleIds}
+        allSchedules={schedules}
+        locationPresets={locationPresets}
+        categories={dynamicCategories}
+        onClose={() => setIsBatchScheduleEditModalOpen(false)}
+        onApplyBatch={handleApplyBatchScheduleUpdates}
+      />
     </div>
   );
 };

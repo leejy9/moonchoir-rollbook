@@ -17,6 +17,7 @@ const SHEET_NAMES = {
   SCHEDULES: '일정캘린더',
   RSVP: '사전투표_RSVP',
   LOGS: '출석원천로그',
+  LOCATIONS: '장소정보',
 };
 
 // 1. GET: 전체 데이터 로드 및 헬스체크
@@ -29,6 +30,8 @@ function doGet(e) {
     const schedules = readSheetData(ss.getSheetByName(SHEET_NAMES.SCHEDULES));
     const rsvpVotes = readSheetData(ss.getSheetByName(SHEET_NAMES.RSVP));
     const logs = readSheetData(ss.getSheetByName(SHEET_NAMES.LOGS));
+    const locSheet = ss.getSheetByName(SHEET_NAMES.LOCATIONS);
+    const locations = locSheet ? readSheetData(locSheet) : [];
 
     const response = {
       success: true,
@@ -38,12 +41,14 @@ function doGet(e) {
         schedules,
         rsvpVotes,
         logs,
+        locations,
       },
       count: {
         members: members.length,
         schedules: schedules.length,
         logs: logs.length,
         rsvpVotes: rsvpVotes.length,
+        locations: locations.length,
       },
     };
 
@@ -241,6 +246,88 @@ function doPost(e) {
       return jsonResponse({ success: false, message: '해당 일정을 찾을 수 없습니다.' });
     }
 
+    if (action === 'BATCH_DELETE_SCHEDULES') {
+      const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
+      if (!sheet) return jsonResponse({ success: false, message: '일정캘린더 탭이 없습니다.' });
+      const idsToDelete = new Set(data.ids || []);
+      const rows = sheet.getDataRange().getValues();
+      let deletedCount = 0;
+      for (let i = rows.length - 1; i >= 1; i--) {
+        if (idsToDelete.has(rows[i][0])) {
+          sheet.deleteRow(i + 1);
+          deletedCount++;
+        }
+      }
+      return jsonResponse({ success: true, message: deletedCount + '개 일정 일괄 삭제 완료' });
+    }
+
+    if (action === 'BATCH_UPDATE_SCHEDULES') {
+      const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
+      if (!sheet) return jsonResponse({ success: false, message: '일정캘린더 탭이 없습니다.' });
+      const idsToUpdate = new Set(data.ids || []);
+      const updates = data.updates || {};
+      const rows = sheet.getDataRange().getValues();
+      const headers = rows[0];
+      let updatedCount = 0;
+      for (let i = 1; i < rows.length; i++) {
+        const id = rows[i][0];
+        if (idsToUpdate.has(id)) {
+          const row = [...rows[i]];
+          headers.forEach(function (h, colIdx) {
+            if (updates[h] !== undefined) {
+              row[colIdx] = updates[h];
+            }
+          });
+          sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+          updatedCount++;
+        }
+      }
+      return jsonResponse({ success: true, message: updatedCount + '개 일정 일괄 수정 완료' });
+    }
+
+    if (action === 'SAVE_LOCATION' || action === 'REGISTER_LOCATION') {
+      const sheet = ss.getSheetByName(SHEET_NAMES.LOCATIONS);
+      if (!sheet) return jsonResponse({ success: false, message: '장소정보 탭이 없습니다.' });
+      const rows = sheet.getDataRange().getValues();
+      let rowIndex = -1;
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === data.id) {
+          rowIndex = i + 1;
+          break;
+        }
+      }
+      const rowData = [
+        data.id,
+        data.name || '',
+        data.address || '',
+        data.detailAddress || '',
+        data.entranceNote || '',
+        data.latitude || 37.5665,
+        data.longitude || 126.9780,
+        data.radiusMeters || 100,
+        data.isDefault ? 'TRUE' : 'FALSE',
+      ];
+      if (rowIndex > 0) {
+        sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
+      } else {
+        sheet.appendRow(rowData);
+      }
+      return jsonResponse({ success: true, message: '장소 정보 저장 완료' });
+    }
+
+    if (action === 'DELETE_LOCATION') {
+      const sheet = ss.getSheetByName(SHEET_NAMES.LOCATIONS);
+      if (!sheet) return jsonResponse({ success: false, message: '장소정보 탭이 없습니다.' });
+      const rows = sheet.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === data.id) {
+          sheet.deleteRow(i + 1);
+          return jsonResponse({ success: true, message: '장소 삭제 완료' });
+        }
+      }
+      return jsonResponse({ success: false, message: '해당 장소를 찾을 수 없습니다.' });
+    }
+
     return jsonResponse({ success: false, message: '알 수 없는 액션: ' + action });
   } catch (err) {
     return jsonResponse({ success: false, error: err.toString() });
@@ -251,7 +338,7 @@ function doPost(e) {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🎵 문콰이어 출석부')
-    .addItem('시트 4대 탭 및 기본 데이터 생성', 'manualInitialize')
+    .addItem('시트 5대 탭 및 기본 데이터 생성', 'manualInitialize')
     .addToUi();
 }
 
@@ -259,10 +346,10 @@ function manualInitialize() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureSheetStructure(ss);
   seedInitialData(ss);
-  SpreadsheetApp.getUi().alert('초기화 완료!\n\n단원명부(24명), 일정캘린더(6건), 출석로그, 사전투표 탭이 생성되었습니다.');
+  SpreadsheetApp.getUi().alert('초기화 완료!\n\n단원명부, 일정캘린더, 출석로그, 사전투표, 장소정보 탭이 생성되었습니다.');
 }
 
-// 헬퍼: 4대 탭 및 헤더 자동 생성 (기존 데이터 보존)
+// 헬퍼: 5대 탭 및 헤더 자동 생성 (기존 데이터 보존)
 function ensureSheetStructure(ss) {
   const schemas = [
     {
@@ -280,6 +367,10 @@ function ensureSheetStructure(ss) {
     {
       name: SHEET_NAMES.LOGS,
       headers: ['id', 'timestamp', 'scheduleId', 'memberId', 'memberName', 'part', 'authMethod', 'isVerifiedLocation', 'adminNote'],
+    },
+    {
+      name: SHEET_NAMES.LOCATIONS,
+      headers: ['id', 'name', 'address', 'detailAddress', 'entranceNote', 'latitude', 'longitude', 'radiusMeters', 'isDefault'],
     },
   ];
 

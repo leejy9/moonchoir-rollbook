@@ -344,6 +344,13 @@ export class SheetsService {
     if (idx < 0) throw new Error(`일정을 찾을 수 없습니다. (ID: ${scheduleId})`);
     this.schedules[idx] = { ...this.schedules[idx], ...updates };
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('UPDATE_SCHEDULE', this.schedules[idx]).catch((err) => {
+        console.error('[Sheets API] Schedule update sync failed:', err);
+      });
+    }
+
     return this.schedules[idx];
   }
 
@@ -358,6 +365,42 @@ export class SheetsService {
     }
   }
 
+  public async deleteSchedules(scheduleIds: string[]): Promise<void> {
+    const idSet = new Set(scheduleIds);
+    this.schedules = this.schedules.filter((s) => !idSet.has(s.id));
+    saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('BATCH_DELETE_SCHEDULES', { ids: scheduleIds }).catch((err) => {
+        console.error('[Sheets API] Batch schedule delete sync failed:', err);
+      });
+    }
+  }
+
+  public async batchUpdateSchedules(scheduleIds: string[], updates: Partial<Schedule>): Promise<Schedule[]> {
+    const idSet = new Set(scheduleIds);
+    const updatedSchedules: Schedule[] = [];
+
+    this.schedules = this.schedules.map((s) => {
+      if (idSet.has(s.id)) {
+        const updated = { ...s, ...updates };
+        updatedSchedules.push(updated);
+        return updated;
+      }
+      return s;
+    });
+
+    saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('BATCH_UPDATE_SCHEDULES', { ids: scheduleIds, updates }).catch((err) => {
+        console.error('[Sheets API] Batch schedule update sync failed:', err);
+      });
+    }
+
+    return updatedSchedules;
+  }
+
   // --- Location Presets Management ---
   public async addLocationPreset(preset: LocationPreset): Promise<LocationPreset> {
     if (preset.isDefault) {
@@ -365,6 +408,13 @@ export class SheetsService {
     }
     this.locations.push(preset);
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
+
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('SAVE_LOCATION', preset).catch((err) => {
+        console.error('[Sheets API] Location preset save sync failed:', err);
+      });
+    }
+
     return preset;
   }
 
@@ -376,6 +426,13 @@ export class SheetsService {
     }
     this.locations[idx] = { ...this.locations[idx], ...updates };
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
+
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('SAVE_LOCATION', this.locations[idx]).catch((err) => {
+        console.error('[Sheets API] Location preset update sync failed:', err);
+      });
+    }
+
     return this.locations[idx];
   }
 
@@ -386,6 +443,12 @@ export class SheetsService {
       this.locations[0].isDefault = true;
     }
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
+
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('DELETE_LOCATION', { id }).catch((err) => {
+        console.error('[Sheets API] Location preset delete sync failed:', err);
+      });
+    }
   }
 
   public updateConfig(newConfig: Partial<AppConfig>): AppConfig {
@@ -652,7 +715,7 @@ export class SheetsService {
   }
 
   // --- Remote Google Sheets API Handler ---
-  public async fetchRemoteData(overrideUrl?: string): Promise<{ success: boolean; message: string; count?: { members: number; schedules: number; logs: number } }> {
+  public async fetchRemoteData(overrideUrl?: string): Promise<{ success: boolean; message: string; count?: { members: number; schedules: number; logs: number; locations?: number } }> {
     const targetUrl = overrideUrl || this.config.sheetsWebAppUrl;
     if (!targetUrl) {
       throw new Error('구글 시트 Web App URL이 설정되지 않았습니다.');
@@ -677,6 +740,7 @@ export class SheetsService {
       rsvpVotes?: RSVPVote[];
       logs?: RawAttendanceLog[];
       recentLogs?: RawAttendanceLog[];
+      locations?: LocationPreset[];
       config?: Partial<AppConfig>;
     } };
 
@@ -783,6 +847,24 @@ export class SheetsService {
       this.config = { ...this.config, ...data.config, sheetsWebAppUrl: targetUrl };
       saveToStorage(STORAGE_KEYS.CONFIG, this.config);
     }
+    if (Array.isArray(data.locations) && data.locations.length > 0) {
+      const remoteLocations: LocationPreset[] = data.locations.map((l) => ({
+        id: String(l.id || `loc_${Date.now()}`),
+        name: String(l.name || ''),
+        address: l.address ? String(l.address) : undefined,
+        detailAddress: l.detailAddress ? String(l.detailAddress) : undefined,
+        entranceNote: l.entranceNote ? String(l.entranceNote) : undefined,
+        latitude: typeof l.latitude === 'number' ? l.latitude : parseFloat(String(l.latitude || 37.5665)),
+        longitude: typeof l.longitude === 'number' ? l.longitude : parseFloat(String(l.longitude || 126.9780)),
+        radiusMeters: typeof l.radiusMeters === 'number' ? l.radiusMeters : parseInt(String(l.radiusMeters || 100), 10),
+        isDefault: l.isDefault === true || String(l.isDefault).toUpperCase() === 'TRUE',
+      }));
+
+      const remoteLocIds = new Set(remoteLocations.map((l) => l.id));
+      const localOnly = this.locations.filter((l) => !remoteLocIds.has(l.id));
+      this.locations = [...remoteLocations, ...localOnly];
+      saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
+    }
 
     return {
       success: true,
@@ -791,6 +873,7 @@ export class SheetsService {
         members: this.members.length,
         schedules: this.schedules.length,
         logs: this.logs.length,
+        locations: this.locations.length,
       },
     };
   }

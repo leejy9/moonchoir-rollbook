@@ -216,6 +216,48 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     const votesAfter = service.getRSVPVotes(scheduleId);
     expect(votesAfter.some((v) => v.memberId === memberId)).toBe(false);
   });
+
+  it('supports batch deleting and batch updating multiple schedules', async () => {
+    await service.addSchedule({
+      id: 'sch_batch_1',
+      title: '일괄테스트 1',
+      date: '2026-11-01',
+      startTime: '19:00',
+      endTime: '21:00',
+      locationName: '합창실 A',
+      category: '정기연습',
+    });
+    await service.addSchedule({
+      id: 'sch_batch_2',
+      title: '일괄테스트 2',
+      date: '2026-11-08',
+      startTime: '19:00',
+      endTime: '21:00',
+      locationName: '합창실 A',
+      category: '정기연습',
+    });
+
+    expect(service.getSchedules().some((s) => s.id === 'sch_batch_1')).toBe(true);
+    expect(service.getSchedules().some((s) => s.id === 'sch_batch_2')).toBe(true);
+
+    // Batch update
+    await service.batchUpdateSchedules(['sch_batch_1', 'sch_batch_2'], {
+      locationName: '새 연습실 B',
+      startTime: '20:00',
+    });
+
+    const updated1 = service.getSchedules().find((s) => s.id === 'sch_batch_1');
+    const updated2 = service.getSchedules().find((s) => s.id === 'sch_batch_2');
+    expect(updated1?.locationName).toBe('새 연습실 B');
+    expect(updated1?.startTime).toBe('20:00');
+    expect(updated2?.locationName).toBe('새 연습실 B');
+    expect(updated2?.startTime).toBe('20:00');
+
+    // Batch delete
+    await service.deleteSchedules(['sch_batch_1', 'sch_batch_2']);
+    expect(service.getSchedules().some((s) => s.id === 'sch_batch_1')).toBe(false);
+    expect(service.getSchedules().some((s) => s.id === 'sch_batch_2')).toBe(false);
+  });
 });
 
 
