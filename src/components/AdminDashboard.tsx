@@ -17,7 +17,6 @@ import {
 import {
   IconCalendar,
   IconClose,
-  IconLocation,
   IconRefresh,
   IconSearch,
   IconSettings,
@@ -30,6 +29,7 @@ import { LiquidGauge } from './LiquidGauge';
 import { AdminMatrixGrid } from './AdminMatrixGrid';
 import { AdminNotionFilterBar, type AdminFilterState } from './AdminNotionFilterBar';
 import { MemberProfileModal } from './MemberProfileModal';
+import { LocationPickerMap } from './LocationPickerMap';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface AdminDashboardProps {
@@ -376,7 +376,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [presetFormLon, setPresetFormLon] = useState<number>(126.9780);
   const [presetFormRadius, setPresetFormRadius] = useState<number>(100);
   const [presetFormIsDefault, setPresetFormIsDefault] = useState<boolean>(false);
-  const [isLocatingGPS, setIsLocatingGPS] = useState<boolean>(false);
   const [presetSuccessMsg, setPresetSuccessMsg] = useState<string | null>(null);
 
   // --- 8. Taxonomy Dynamic Settings State ---
@@ -389,29 +388,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleLogout = () => {
     setAdminLoggedIn(false);
     onBackToHome();
-  };
-
-  // GPS Location auto-capture handler
-  const handleGetGpsCurrent = () => {
-    if (!navigator.geolocation) {
-      alert('이 브라우저는 위치 정보(GPS) 서비스를 지원하지 않습니다.');
-      return;
-    }
-    setIsLocatingGPS(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setIsLocatingGPS(false);
-        setPresetFormLat(Number(pos.coords.latitude.toFixed(6)));
-        setPresetFormLon(Number(pos.coords.longitude.toFixed(6)));
-        setPresetSuccessMsg('📍 현재 기기 위치(GPS) 좌표가 성공적으로 입력되었습니다!');
-        setTimeout(() => setPresetSuccessMsg(null), 3500);
-      },
-      (err) => {
-        setIsLocatingGPS(false);
-        alert('위치 정보를 가져올 수 없습니다. 위치 권한을 확인해주세요: ' + err.message);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
   };
 
   const handleAddLocationPreset = (e: React.FormEvent) => {
@@ -1882,88 +1858,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </h3>
             <form onSubmit={handleAddLocationPreset} className="form-stack">
               <div>
-                <label className="form-label">장소 명칭 (필수)</label>
+                <label className="form-label" style={{ fontWeight: 700 }}>장소 명칭 (필수)</label>
                 <input
                   type="text"
-                  className="input-text"
-                  placeholder="예: 문콰이어 제2연습실 (서초)"
+                  className="modern-input"
+                  placeholder="예: 문콰이어 제2연습실 (서초), 예술의전당 체임버홀"
                   value={presetFormName}
                   onChange={(e) => setPresetFormName(e.target.value)}
                   required
                 />
               </div>
 
-              <div>
-                <label className="form-label">도로명 주소 (선택)</label>
-                <input
-                  type="text"
-                  className="input-text"
-                  placeholder="예: 서울 서초구 남부순환로 2406"
-                  value={presetFormAddress}
-                  onChange={(e) => setPresetFormAddress(e.target.value)}
+              {/* Modern Interactive Map & Daum Postcode Search */}
+              <div style={{ marginTop: '8px', marginBottom: '8px' }}>
+                <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>
+                  🗺️ 장소 위치 및 출석 인정 반경 설정
+                </label>
+                <LocationPickerMap
+                  lat={presetFormLat}
+                  lon={presetFormLon}
+                  radius={presetFormRadius}
+                  address={presetFormAddress}
+                  onChangeLocation={(lat, lon, addr) => {
+                    setPresetFormLat(lat);
+                    setPresetFormLon(lon);
+                    if (addr) {
+                      setPresetFormAddress(addr);
+                      if (!presetFormName.trim()) {
+                        setPresetFormName(addr.split(' ')[0] || addr);
+                      }
+                    }
+                  }}
+                  onChangeRadius={(r) => setPresetFormRadius(r)}
                 />
-              </div>
-
-              {/* GPS Coordinates & Auto-detect Button */}
-              <div style={{ background: '#fff', padding: '14px', borderRadius: '12px', border: '1px solid #ECEBFC' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <label className="form-label" style={{ margin: 0 }}>
-                    위도 / 경도 좌표
-                  </label>
-                  <button
-                    type="button"
-                    className="gps-locate-btn"
-                    onClick={handleGetGpsCurrent}
-                    disabled={isLocatingGPS}
-                  >
-                    <IconLocation size={16} />
-                    <span>{isLocatingGPS ? 'GPS 수신 중...' : '📍 현재 내 위치로 자동 채우기'}</span>
-                  </button>
-                </div>
-
-                <div className="form-row-2">
-                  <div>
-                    <label className="form-label" style={{ fontSize: '12px' }}>위도 (Latitude)</label>
-                    <input
-                      type="number"
-                      step="any"
-                      className="input-text"
-                      value={presetFormLat}
-                      onChange={(e) => setPresetFormLat(Number(e.target.value))}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label" style={{ fontSize: '12px' }}>경도 (Longitude)</label>
-                    <input
-                      type="number"
-                      step="any"
-                      className="input-text"
-                      value={presetFormLon}
-                      onChange={(e) => setPresetFormLon(Number(e.target.value))}
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="form-label">출석 인증 허용 반경 (미터)</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <input
-                    type="range"
-                    min={30}
-                    max={500}
-                    step={10}
-                    value={presetFormRadius}
-                    onChange={(e) => setPresetFormRadius(Number(e.target.value))}
-                    style={{ flex: 1, accentColor: 'var(--brand-accent)' }}
-                  />
-                  <span style={{ fontWeight: 700, minWidth: '60px', color: 'var(--brand-accent)' }}>
-                    {presetFormRadius} m
-                  </span>
-                </div>
-                <span className="form-hint">* 권장: 실내 Wi-Fi/GPS 오차를 감안해 80m~120m 설정</span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminPinModal } from './components/AdminPinModal';
 import { BindingModal } from './components/BindingModal';
@@ -26,6 +26,25 @@ export function App() {
   // Refresh trigger for re-rendering when data changes
   const [refreshKey, setRefreshKey] = useState(0);
   const triggerRefresh = () => setRefreshKey((k) => k + 1);
+
+  // Automatic remote sync on initial load
+  useEffect(() => {
+    let isCancelled = false;
+    sheetsService
+      .fetchRemoteData()
+      .then(() => {
+        if (!isCancelled) {
+          triggerRefresh();
+        }
+      })
+      .catch((err) => {
+        console.warn('[App] Initial sheet sync fallback:', err);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   const activeSchedules = sheetsService.getSchedules();
   const currentSchedule = activeSchedules[0];

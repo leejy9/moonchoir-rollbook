@@ -41,7 +41,7 @@ export const INITIAL_CONFIG: AppConfig = {
   customParts: ['소프라노', '알토', '테너', '베이스', '선생님', '객원'],
   customMemberStatuses: ['정단원', '준단원', '휴단원', '퇴단원', '선생님', '객원'],
   customCategories: ['정기연습', '추가연습', '연주', '녹음', '기타행사'],
-  sheetsWebAppUrl: '',
+  sheetsWebAppUrl: 'https://script.google.com/macros/s/AKfycbwWEhINO6ve9f7GSZhehhmWAcY8NkJ6vbNchWQoXkWpNnxFRsM110CoEgGuJ-41SKb4/exec',
 };
 
 export const INITIAL_MEMBERS: Member[] = [

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import jsQR from 'jsqr';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, RawAttendanceLog, Schedule } from '../types/rollbook';
 import { calculateDistanceMeters, isWithinRadius } from '../utils/geo';
@@ -32,50 +33,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     isVerified: boolean;
     msg: string;
   } | null>(null);
-
-  // Initialize camera stream when in QR mode
-  useEffect(() => {
-    if (activeTab !== 'QR') return;
-
-    let stream: MediaStream | null = null;
-    let isCancelled = false;
-
-    const startCamera = async () => {
-      try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error('이 브라우저는 카메라 스트림을 지원하지 않습니다.');
-        }
-
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false,
-        });
-
-        if (isCancelled) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-      } catch (err: unknown) {
-        console.warn('[Camera] Failed to access camera:', err);
-        const errMsg = err instanceof Error ? err.message : String(err);
-        setCameraError(`카메라 접근 불가: ${errMsg}. 현장 PIN 입력 탭을 이용해주세요.`);
-      }
-    };
-
-    startCamera();
-
-    return () => {
-      isCancelled = true;
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, [activeTab]);
 
   // Common check-in logic
   const executeCheckIn = async (
@@ -111,7 +68,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       distanceMeters = calculateDistanceMeters(lat, lon, targetLat, targetLon);
       isVerifiedLocation = isWithinRadius(lat, lon, targetLat, targetLon, radiusMeters);
     } catch {
-      console.warn('[Geo] Failed to fetch GPS, fallback to mock room proximity');
+      console.warn('[Geo] Failed to fetch GPS, fallback to room proximity');
       distanceMeters = 8;
       isVerifiedLocation = true;
       setGeoStatus('GPS 수신 제한 (연습실 반경 내로 승인)');
@@ -137,6 +94,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       distanceMeters,
       isVerifiedLocation,
     };
+
+    try {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([100, 50, 100]);
+      }
+    } catch {
+      // Haptic vibrate might be restricted
+    }
 
     await sheetsService.addCheckInLog(log);
     playScanSuccessSound();
@@ -172,6 +137,166 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     await executeCheckIn(targetSchedule, 'QR_WEB_CAM');
   };
 
+  // Image file QR scanner fallback
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'attemptBoth',
+        });
+        if (code && code.data && code.data.trim()) {
+          handleDetectedQRCode(code.data.trim());
+        } else {
+          alert('선택하신 이미지에서 QR 코드를 인식하지 못했습니다. 더 선명한 사진을 선택하거나 직접 스캔해주세요.');
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Real-time camera stream + dual decode (BarcodeDetector + jsQR fallback)
+  useEffect(() => {
+    if (activeTab !== 'QR' || scanResult !== null) return;
+
+    let stream: MediaStream | null = null;
+    let animId: number | null = null;
+    let isCancelled = false;
+    let lastScanTime = 0;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    // Initialize native BarcodeDetector if available
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let barcodeDetector: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        barcodeDetector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+      } catch {
+        barcodeDetector = null;
+      }
+    }
+
+    const scanFrame = async () => {
+      if (isCancelled || isProcessing) return;
+
+      const video = videoRef.current;
+      const now = performance.now();
+
+      // Throttle scanning to every 80ms for optimal performance & battery
+      if (
+        video &&
+        video.readyState >= 2 &&
+        video.videoWidth > 0 &&
+        video.videoHeight > 0 &&
+        now - lastScanTime >= 80
+      ) {
+        lastScanTime = now;
+        let detectedPayload: string | null = null;
+
+        // 1. Try native hardware BarcodeDetector first
+        if (barcodeDetector) {
+          try {
+            const barcodes = await barcodeDetector.detect(video);
+            if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+              detectedPayload = barcodes[0].rawValue.trim();
+            }
+          } catch {
+            // fallback to jsQR
+          }
+        }
+
+        // 2. Fallback to jsQR on canvas
+        if (!detectedPayload && ctx) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+          try {
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'attemptBoth',
+            });
+
+            if (code && code.data && code.data.trim()) {
+              detectedPayload = code.data.trim();
+            }
+          } catch {
+            // Ignore partial decode glitches
+          }
+        }
+
+        if (detectedPayload && !isCancelled) {
+          handleDetectedQRCode(detectedPayload);
+          return;
+        }
+      }
+
+      if (!isCancelled) {
+        animId = requestAnimationFrame(scanFrame);
+      }
+    };
+
+    const startCamera = async () => {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('이 브라우저는 카메라 스트림을 지원하지 않습니다.');
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+
+        if (isCancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.setAttribute('playsinline', 'true');
+          await videoRef.current.play();
+          animId = requestAnimationFrame(scanFrame);
+        }
+      } catch (err: unknown) {
+        console.warn('[Camera] Failed to access camera:', err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        setCameraError(`카메라 접근 불가: ${errMsg}. 현장 PIN 입력 탭을 이용해주세요.`);
+      }
+    };
+
+    startCamera();
+
+    return () => {
+      isCancelled = true;
+      if (animId !== null) cancelAnimationFrame(animId);
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isProcessing, scanResult]);
+
   // Process PIN
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,27 +322,25 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           <div className="modal-badge">{schedule.title}</div>
           <h2 className="modal-title">{profile.name} 님 출석 체크</h2>
           <p className="modal-desc">
-            현장 QR을 스캔하거나 관리자가 안내한 4자리 PIN을 입력하세요.
+            연습실 벽면의 상설 QR 또는 주간 QR을 카메라에 비춰주세요.
           </p>
         </div>
 
         {/* Mode Selector Tabs */}
         {!scanResult && (
-          <div className="toss-filter-row" style={{ marginBottom: '16px' }}>
+          <div className="tab-pill-group" style={{ marginBottom: '16px' }}>
             <button
               type="button"
-              className={`toss-filter-chip ${activeTab === 'QR' ? 'active' : ''}`}
+              className={`tab-pill ${activeTab === 'QR' ? 'active' : ''}`}
               onClick={() => setActiveTab('QR')}
-              style={{ flex: 1, justifyContent: 'center' }}
             >
               <IconQrScan size={16} />
               <span>종이 QR 스캔</span>
             </button>
             <button
               type="button"
-              className={`toss-filter-chip ${activeTab === 'PIN' ? 'active' : ''}`}
+              className={`tab-pill ${activeTab === 'PIN' ? 'active' : ''}`}
               onClick={() => setActiveTab('PIN')}
-              style={{ flex: 1, justifyContent: 'center' }}
             >
               <IconKeypad size={16} />
               <span>현장 PIN 번호 입력</span>
@@ -233,50 +356,96 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             {scanResult.distance !== undefined && (
               <span className="distance-badge">
                 📍 연습실과의 거리: {scanResult.distance}m (
-                {scanResult.isVerified ? '반경 100m 이내 정상' : '위치 초과'})
+                {scanResult.isVerified ? '반경 이내 정상' : '위치 초과'})
               </span>
             )}
           </div>
         ) : activeTab === 'QR' ? (
-          <div className="camera-viewfinder-container">
-            {!cameraError ? (
-              <>
-                <video
-                  ref={videoRef}
-                  playsInline
-                  muted
-                  className="camera-video-stream"
-                />
-                <div className="viewfinder-overlay">
-                  <div className="viewfinder-box">
-                    <div className="viewfinder-laser" />
-                    <span className="corner top-left" />
-                    <span className="corner top-right" />
-                    <span className="corner bottom-left" />
-                    <span className="corner bottom-right" />
+          <div>
+            <div className="camera-viewfinder-container">
+              {!cameraError ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    playsInline
+                    muted
+                    autoPlay
+                    className="camera-video-stream"
+                  />
+                  <div className="viewfinder-overlay">
+                    <div className="viewfinder-box">
+                      <div className="viewfinder-laser" />
+                      <span className="corner top-left" />
+                      <span className="corner top-right" />
+                      <span className="corner bottom-left" />
+                      <span className="corner bottom-right" />
+                    </div>
+                    <div className="viewfinder-hint-text">
+                      QR 코드를 사각형 안에 비추면 자동으로 인식됩니다
+                    </div>
                   </div>
+                </>
+              ) : (
+                <div className="camera-fallback-box">
+                  <span className="camera-fallback-icon">📷</span>
+                  <p className="camera-fallback-text">{cameraError}</p>
                 </div>
-              </>
-            ) : (
-              <div className="camera-fallback-box">
-                <span className="camera-fallback-icon">📷</span>
-                <p className="camera-fallback-text">{cameraError}</p>
-              </div>
-            )}
-
-            <div className="geo-status-indicator">
-              <span className="geo-dot" /> {geoStatus}
+              )}
             </div>
 
-            <div className="scanner-action-row">
-              <button
-                type="button"
-                className="btn-sim-scan"
-                onClick={() => handleDetectedQRCode(schedule.id)}
-                disabled={isProcessing}
-              >
-                {isProcessing ? '출석 처리 중...' : '⚡ 종이 QR 스캔 시뮬레이션'}
-              </button>
+            {/* Below Camera Controls */}
+            <div style={{ marginTop: '12px', textAlign: 'center' }}>
+              <div className="geo-status-indicator">
+                <span className="geo-dot" /> {geoStatus}
+              </div>
+
+              {/* Album photo QR scanner option */}
+              <div style={{ marginTop: '10px' }}>
+                <label
+                  style={{
+                    fontSize: '12.5px',
+                    color: '#5B3E96',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '6px 14px',
+                    background: '#F8F5FE',
+                    borderRadius: '8px',
+                    border: '1px solid #ECEBFC',
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>🖼️ 앨범에서 QR 사진 선택</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={handleImageUpload}
+                  />
+                </label>
+              </div>
+
+              {/* Dev simulator button at bottom */}
+              <div style={{ marginTop: '10px' }}>
+                <button
+                  type="button"
+                  className="btn-sim-scan"
+                  onClick={() => handleDetectedQRCode(schedule.id)}
+                  disabled={isProcessing}
+                  style={{
+                    fontSize: '12px',
+                    padding: '6px 12px',
+                    background: 'transparent',
+                    color: '#718096',
+                    border: '1px dashed #CBD5E0',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isProcessing ? '출석 처리 중...' : '⚡ 카메라 없는 환경용: 출석 테스트'}
+                </button>
+              </div>
             </div>
           </div>
         ) : (
@@ -291,7 +460,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 type="tel"
                 maxLength={4}
                 autoFocus
-                className="input-text"
+                className="modern-input"
                 style={{
                   fontSize: '28px',
                   letterSpacing: '12px',
@@ -310,14 +479,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 </div>
               )}
 
-              <p className="form-hint" style={{ textAlign: 'center' }}>
-                * 스마트폰 GPS가 연습실 반경(100m) 내에 있을 때만 정상 출석 처리됩니다.
+              <p className="form-hint" style={{ textAlign: 'center', fontSize: '12px', color: '#718096', marginTop: '6px' }}>
+                * 스마트폰 GPS가 연습실 반경 내에 있을 때 정상 출석 처리됩니다.
               </p>
 
               <button
                 type="submit"
                 className="btn-primary-large"
                 disabled={isProcessing || inputPin.length < 4}
+                style={{ marginTop: '12px' }}
               >
                 {isProcessing ? '위치 검증 및 출석 처리 중...' : '현장 PIN으로 출석하기'}
               </button>
@@ -330,6 +500,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           className="btn-secondary-cancel"
           onClick={onClose}
           disabled={isProcessing}
+          style={{ marginTop: '12px' }}
         >
           닫기
         </button>
@@ -337,4 +508,3 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     </div>
   );
 };
-

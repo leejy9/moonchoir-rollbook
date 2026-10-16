@@ -66,7 +66,7 @@ function doPost(e) {
     const payload = JSON.parse(e.postData.contents);
     const { action, data } = payload;
 
-    if (action === 'RECORD_ATTENDANCE') {
+    if (action === 'RECORD_ATTENDANCE' || action === 'SUBMIT_CHECKIN') {
       // 출석 체크 로그 Append Only
       const sheet = ss.getSheetByName(SHEET_NAMES.LOGS);
       sheet.appendRow([

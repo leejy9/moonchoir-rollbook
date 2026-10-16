@@ -25,8 +25,15 @@ class MemoryStorage {
 const memoryStorage = new MemoryStorage();
 
 function getStorage() {
-  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-    return window.localStorage;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const testKey = '__mc_auth_probe__';
+      window.localStorage.setItem(testKey, '1');
+      window.localStorage.removeItem(testKey);
+      return window.localStorage;
+    }
+  } catch (err) {
+    console.warn('[Auth] localStorage probe failed, using fallback:', err);
   }
   return memoryStorage;
 }

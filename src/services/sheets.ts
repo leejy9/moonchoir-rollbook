@@ -86,6 +86,10 @@ export class SheetsService {
 
   constructor() {
     this.config = loadFromStorage(STORAGE_KEYS.CONFIG, INITIAL_CONFIG);
+    if (!this.config.sheetsWebAppUrl && INITIAL_CONFIG.sheetsWebAppUrl) {
+      this.config.sheetsWebAppUrl = INITIAL_CONFIG.sheetsWebAppUrl;
+      saveToStorage(STORAGE_KEYS.CONFIG, this.config);
+    }
     this.members = loadFromStorage(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS);
     this.schedules = loadFromStorage(STORAGE_KEYS.SCHEDULES, INITIAL_SCHEDULES);
     this.rsvpVotes = loadFromStorage(STORAGE_KEYS.RSVP_VOTES, INITIAL_RSVP_VOTES);
@@ -135,7 +139,7 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.LOGS, this.logs);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('SUBMIT_CHECKIN', log).catch((err) => {
+      this.sendToGoogleSheet('RECORD_ATTENDANCE', log).catch((err) => {
         console.error('[Sheets API] Background sync failed, preserved in local log:', err);
       });
     }
@@ -195,9 +199,11 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('REGISTER_MEMBER', newMember).catch((err) => {
+      try {
+        await this.sendToGoogleSheet('REGISTER_MEMBER', newMember);
+      } catch (err) {
         console.error('[Sheets API] Member register sync failed:', err);
-      });
+      }
     }
 
     return newMember;

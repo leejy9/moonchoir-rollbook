@@ -207,6 +207,27 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
                   />
                 </div>
 
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '0 4px' }}>
+                  <span style={{ fontSize: '12px', color: '#718096' }}>등록 단원 {filteredMembers.length}명</span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsSubmitting(true);
+                      try {
+                        await sheetsService.fetchRemoteData();
+                      } catch (e) {
+                        console.warn(e);
+                      } finally {
+                        setIsSubmitting(false);
+                      }
+                    }}
+                    disabled={isSubmitting}
+                    style={{ background: 'transparent', border: 'none', color: '#5B3E96', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, padding: '4px 8px' }}
+                  >
+                    {isSubmitting ? '동기화 중...' : '🔄 시트 명부 새로고침'}
+                  </button>
+                </div>
+
                 <div className="member-picker-list">
                   {filteredMembers.length > 0 ? (
                     filteredMembers.map((m) => (
@@ -344,7 +365,7 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
               className="btn-primary-large"
               disabled={isSubmitting}
             >
-              {isSubmitting ? '신규 등록 중...' : '신규 등록하고 내 폰으로 바인딩'}
+              {isSubmitting ? '구글 시트 저장 및 기기 연결 중...' : '신규 등록하고 내 폰으로 바인딩'}
             </button>
           </form>
         )}
