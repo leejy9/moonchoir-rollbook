@@ -7,7 +7,11 @@ interface LocationPickerMapProps {
   lon: number;
   radius: number;
   address?: string;
+  detailAddress?: string;
+  entranceNote?: string;
   onChangeLocation: (lat: number, lon: number, address?: string) => void;
+  onChangeDetailAddress?: (detail: string) => void;
+  onChangeEntranceNote?: (note: string) => void;
   onChangeRadius: (radius: number) => void;
 }
 
@@ -41,8 +45,12 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
   lat,
   lon,
   radius,
-  address,
+  address = '',
+  detailAddress = '',
+  entranceNote = '',
   onChangeLocation,
+  onChangeDetailAddress,
+  onChangeEntranceNote,
   onChangeRadius,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -50,9 +58,6 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
   const markerRef = useRef<L.Marker | null>(null);
   const circleRef = useRef<L.Circle | null>(null);
 
-  const [keyword, setKeyword] = useState(address || '');
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchMsg, setSearchMsg] = useState('');
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
 
   // Initialize Leaflet Map
@@ -136,13 +141,10 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
     }
   }, [radius]);
 
-  // Geocode address or keyword using Nominatim
+  // Geocode official road address to lat/lon using Nominatim
   const geocodeAddress = async (queryText: string) => {
     if (!queryText.trim()) return;
     try {
-      setIsSearching(true);
-      setSearchMsg('주소 좌표를 검색하고 있습니다...');
-
       const encoded = encodeURIComponent(queryText.trim());
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=kr&limit=1`,
@@ -153,33 +155,23 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
         }
       );
 
-      if (!res.ok) throw new Error('주소 검색 서버 응답 실패');
+      if (!res.ok) return;
 
-      const data = (await res.json()) as Array<{ lat: string; lon: string; display_name: string; name?: string }>;
+      const data = (await res.json()) as Array<{ lat: string; lon: string }>;
+      if (data && data.length > 0) {
+        const foundLat = Number(parseFloat(data[0].lat).toFixed(6));
+        const foundLon = Number(parseFloat(data[0].lon).toFixed(6));
 
-      if (!data || data.length === 0) {
-        setSearchMsg('정확한 좌표를 찾지 못했습니다. 장소명(예: 예술의전당)으로 다시 검색하거나 지도를 직접 클릭해주세요.');
-        return;
+        onChangeLocation(foundLat, foundLon);
+
+        if (mapInstanceRef.current && markerRef.current && circleRef.current) {
+          markerRef.current.setLatLng([foundLat, foundLon]);
+          circleRef.current.setLatLng([foundLat, foundLon]);
+          mapInstanceRef.current.flyTo([foundLat, foundLon], 17, { duration: 1.2 });
+        }
       }
-
-      const foundLat = Number(parseFloat(data[0].lat).toFixed(6));
-      const foundLon = Number(parseFloat(data[0].lon).toFixed(6));
-      const foundName = data[0].name || queryText;
-
-      onChangeLocation(foundLat, foundLon, foundName);
-      setKeyword(foundName);
-      setSearchMsg(`✅ 위치를 찾았습니다: ${data[0].display_name.split(',').slice(0, 3).join(', ')}`);
-
-      if (mapInstanceRef.current && markerRef.current && circleRef.current) {
-        markerRef.current.setLatLng([foundLat, foundLon]);
-        circleRef.current.setLatLng([foundLat, foundLon]);
-        mapInstanceRef.current.flyTo([foundLat, foundLon], 17, { duration: 1.2 });
-      }
-    } catch (err) {
-      setSearchMsg('주소 검색 중 오류가 발생했습니다. 지도를 직접 클릭하여 위치를 설정해주세요.');
-      console.warn('[Geocode error]:', err);
-    } finally {
-      setIsSearching(false);
+    } catch {
+      // Nominatim error fallback
     }
   };
 
@@ -195,11 +187,11 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
         new daum.Postcode({
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           oncomplete: (data: any) => {
-            const fullAddress = data.roadAddress || data.jibunAddress;
+            const roadAddr = data.roadAddress || data.jibunAddress;
             const bname = data.buildingName ? ` (${data.buildingName})` : '';
-            const finalAddr = fullAddress + bname;
-            setKeyword(finalAddr);
-            geocodeAddress(fullAddress);
+            const fullAddress = roadAddr + bname;
+            onChangeLocation(lat, lon, fullAddress);
+            geocodeAddress(roadAddr);
           },
         }).open();
       } else {
@@ -232,7 +224,6 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
         const curLat = Number(pos.coords.latitude.toFixed(6));
         const curLon = Number(pos.coords.longitude.toFixed(6));
         onChangeLocation(curLat, curLon);
-        setSearchMsg('📍 현재 내 GPS 위치로 핀을 설정했습니다.');
 
         if (mapInstanceRef.current && markerRef.current && circleRef.current) {
           markerRef.current.setLatLng([curLat, curLon]);
@@ -249,14 +240,14 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
   };
 
   return (
-    <div className="location-picker-map-card" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      {/* 1. Address Search Bar */}
+    <div className="location-picker-map-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {/* 1. Address Search Action Buttons */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <button
           type="button"
           className="btn-qr-action-primary"
           onClick={handleOpenDaumPostcode}
-          style={{ flex: '1 1 180px', minHeight: '44px', fontSize: '13.5px', padding: '0 14px' }}
+          style={{ flex: '1 1 200px', minHeight: '44px', fontSize: '13.5px', padding: '0 14px' }}
         >
           🔍 도로명 주소 검색 (다음/카카오)
         </button>
@@ -272,40 +263,66 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
         </button>
       </div>
 
-      {/* Manual Keyword Search */}
-      <div style={{ display: 'flex', gap: '6px' }}>
-        <input
-          type="text"
-          className="modern-input"
-          style={{ flex: 1, minHeight: '42px', fontSize: '13.5px' }}
-          placeholder="건물명 또는 도로명 검색 (예: 예술의전당, 세종문화회관, 명동 대경빌딩)"
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              geocodeAddress(keyword);
-            }
-          }}
-        />
-        <button
-          type="button"
-          className="btn-primary-large"
-          style={{ width: 'auto', padding: '0 18px', minHeight: '42px', fontSize: '13.5px' }}
-          onClick={() => geocodeAddress(keyword)}
-          disabled={isSearching}
-        >
-          {isSearching ? '검색 중...' : '검색'}
-        </button>
+      {/* 2. Three-stage address input: Basic Road Address, Detail Address, Entrance Note */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {/* Road Address Display */}
+        <div>
+          <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568' }}>
+            기본 주소 (도로명) *
+          </label>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <input
+              type="text"
+              className="modern-input"
+              style={{ flex: 1, backgroundColor: '#F8FAFC', cursor: 'pointer', fontSize: '13.5px' }}
+              readOnly
+              placeholder="위의 [도로명 주소 검색] 버튼을 눌러주세요"
+              value={address}
+              onClick={handleOpenDaumPostcode}
+            />
+            <button
+              type="button"
+              className="btn-qr-action-secondary"
+              style={{ width: 'auto', padding: '0 14px', fontSize: '13px', whiteSpace: 'nowrap', minHeight: '42px' }}
+              onClick={handleOpenDaumPostcode}
+            >
+              주소 변경
+            </button>
+          </div>
+        </div>
+
+        {/* Detail Address Input */}
+        <div>
+          <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568' }}>
+            상세 주소 (층 / 호수 / 연습실명)
+          </label>
+          <input
+            type="text"
+            className="modern-input"
+            style={{ fontSize: '13.5px' }}
+            placeholder="예: 대경빌딩 4층 대연습실, 지하 1층 소극장"
+            value={detailAddress}
+            onChange={(e) => onChangeDetailAddress?.(e.target.value)}
+          />
+        </div>
+
+        {/* Entrance Note Input */}
+        <div>
+          <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568' }}>
+            입구 위치 / 진입 방법 (오시는 길 안내)
+          </label>
+          <input
+            type="text"
+            className="modern-input"
+            style={{ fontSize: '13.5px' }}
+            placeholder="예: 정문 우측 계단으로 진입 / 후문 주차장 엘리베이터 이용"
+            value={entranceNote}
+            onChange={(e) => onChangeEntranceNote?.(e.target.value)}
+          />
+        </div>
       </div>
 
-      {searchMsg && (
-        <div style={{ fontSize: '12px', color: searchMsg.startsWith('✅') ? '#059669' : '#D97706', padding: '4px 8px', background: searchMsg.startsWith('✅') ? '#ECFDF5' : '#FFFBEB', borderRadius: '6px' }}>
-          {searchMsg}
-        </div>
-      )}
-
-      {/* 2. Interactive Map Container */}
+      {/* 3. Interactive Map Container */}
       <div style={{ position: 'relative', width: '100%', height: '280px', borderRadius: '12px', overflow: 'hidden', border: '1.5px solid #E2E8F0', zIndex: 1 }}>
         <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
         <div style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(255,255,255,0.92)', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', color: '#4A5568', pointerEvents: 'none', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 1000 }}>
@@ -313,7 +330,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
         </div>
       </div>
 
-      {/* 3. Radius Control (Circle size) */}
+      {/* 4. Radius Control (Circle size) */}
       <div style={{ background: '#F8F5FE', padding: '12px 14px', borderRadius: '12px', border: '1px solid #ECEBFC' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <label style={{ fontSize: '13.5px', fontWeight: 700, color: '#282C48' }}>
@@ -354,12 +371,6 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
           <span>기본 권장 (100m)</span>
           <span>넓게 (500m)</span>
         </div>
-      </div>
-
-      {/* 4. Coordinate Display Summary */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#718096', padding: '6px 10px', background: '#F7FAFC', borderRadius: '8px' }}>
-        <span>📍 선택된 위도: <strong>{lat}</strong></span>
-        <span>📍 선택된 경도: <strong>{lon}</strong></span>
       </div>
     </div>
   );

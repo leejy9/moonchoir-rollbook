@@ -166,6 +166,8 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       id: 'loc_test_new',
       name: '새로운 테스트 연습실',
       address: '서울시 강남구 테헤란로 1',
+      detailAddress: '지하 1층 대연습실',
+      entranceNote: '정문 좌측 계단',
       latitude: 37.5,
       longitude: 127.0,
       radiusMeters: 120,
@@ -175,6 +177,16 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     service.addLocationPreset(newPreset);
     expect(service.getLocationPresets().length).toBe(initialCount + 1);
     expect(service.getLocationPresets().some((l) => l.id === 'loc_test_new')).toBe(true);
+
+    service.updateLocationPreset('loc_test_new', {
+      name: '수정된 테스트 연습실',
+      detailAddress: '2층 스튜디오',
+      radiusMeters: 150,
+    });
+    const updated = service.getLocationPresets().find((l) => l.id === 'loc_test_new');
+    expect(updated?.name).toBe('수정된 테스트 연습실');
+    expect(updated?.detailAddress).toBe('2층 스튜디오');
+    expect(updated?.radiusMeters).toBe(150);
 
     service.deleteLocationPreset('loc_test_new');
     expect(service.getLocationPresets().length).toBe(initialCount);

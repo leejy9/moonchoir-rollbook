@@ -72,7 +72,9 @@ export interface Member {
 export interface LocationPreset {
   id: string;
   name: string;
-  address?: string;
+  address?: string; // 도로명 기본 주소
+  detailAddress?: string; // 상세 주소 (층/호수/연습실명)
+  entranceNote?: string; // 입구 위치 및 진입 안내 (오시는 길)
   latitude: number;
   longitude: number;
   radiusMeters: number;
@@ -101,6 +103,8 @@ export interface Schedule {
   endTime: string; // HH:mm
   locationName: string;
   locationId?: string;
+  detailAddress?: string;
+  entranceNote?: string;
   targetLat?: number;
   targetLon?: number;
   radiusMeters?: number;

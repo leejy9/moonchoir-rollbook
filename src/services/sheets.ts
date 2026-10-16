@@ -286,6 +286,9 @@ export class SheetsService {
 
   // --- Location Presets Management ---
   public async addLocationPreset(preset: LocationPreset): Promise<LocationPreset> {
+    if (preset.isDefault) {
+      this.locations = this.locations.map((l) => ({ ...l, isDefault: false }));
+    }
     this.locations.push(preset);
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
     return preset;
@@ -294,13 +297,20 @@ export class SheetsService {
   public async updateLocationPreset(id: string, updates: Partial<LocationPreset>): Promise<LocationPreset> {
     const idx = this.locations.findIndex((l) => l.id === id);
     if (idx < 0) throw new Error(`장소 프리셋을 찾을 수 없습니다: ${id}`);
+    if (updates.isDefault) {
+      this.locations = this.locations.map((l) => ({ ...l, isDefault: false }));
+    }
     this.locations[idx] = { ...this.locations[idx], ...updates };
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
     return this.locations[idx];
   }
 
   public async deleteLocationPreset(id: string): Promise<void> {
+    const wasDefault = this.locations.find((l) => l.id === id)?.isDefault;
     this.locations = this.locations.filter((l) => l.id !== id);
+    if (wasDefault && this.locations.length > 0) {
+      this.locations[0].isDefault = true;
+    }
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
   }
 

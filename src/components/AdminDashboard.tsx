@@ -372,11 +372,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // --- 7. Location Presets Tab State ---
   const [presetFormName, setPresetFormName] = useState('');
   const [presetFormAddress, setPresetFormAddress] = useState('');
+  const [presetFormDetailAddress, setPresetFormDetailAddress] = useState('');
+  const [presetFormEntranceNote, setPresetFormEntranceNote] = useState('');
   const [presetFormLat, setPresetFormLat] = useState<number>(37.5665);
   const [presetFormLon, setPresetFormLon] = useState<number>(126.9780);
   const [presetFormRadius, setPresetFormRadius] = useState<number>(100);
   const [presetFormIsDefault, setPresetFormIsDefault] = useState<boolean>(false);
   const [presetSuccessMsg, setPresetSuccessMsg] = useState<string | null>(null);
+
+  // Edit & Delete Modal States for Locations
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
+  const [locationToDelete, setLocationToDelete] = useState<import('../types/rollbook').LocationPreset | null>(null);
+  const [, setLocationRefreshKey] = useState<number>(0);
 
   // --- 8. Taxonomy Dynamic Settings State ---
   const [newPartInput, setNewPartInput] = useState('');
@@ -390,33 +397,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onBackToHome();
   };
 
-  const handleAddLocationPreset = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!presetFormName.trim()) {
-      alert('장소명을 입력해주세요.');
-      return;
-    }
-    const newPreset = {
-      id: `loc_${Date.now()}`,
-      name: presetFormName.trim(),
-      address: presetFormAddress.trim(),
-      latitude: presetFormLat,
-      longitude: presetFormLon,
-      radiusMeters: presetFormRadius,
-      isDefault: presetFormIsDefault,
-    };
-    sheetsService.addLocationPreset(newPreset);
-    setPresetSuccessMsg(`'${newPreset.name}' 연습실이 성공적으로 등록되었습니다.`);
+  const resetLocationForm = () => {
+    setEditingLocationId(null);
     setPresetFormName('');
     setPresetFormAddress('');
+    setPresetFormDetailAddress('');
+    setPresetFormEntranceNote('');
+    setPresetFormLat(37.5665);
+    setPresetFormLon(126.9780);
+    setPresetFormRadius(100);
+    setPresetFormIsDefault(false);
+  };
+
+  const handleStartEditLocation = (loc: import('../types/rollbook').LocationPreset) => {
+    setEditingLocationId(loc.id);
+    setPresetFormName(loc.name);
+    setPresetFormAddress(loc.address || '');
+    setPresetFormDetailAddress(loc.detailAddress || '');
+    setPresetFormEntranceNote(loc.entranceNote || '');
+    setPresetFormLat(loc.latitude);
+    setPresetFormLon(loc.longitude);
+    setPresetFormRadius(loc.radiusMeters || 100);
+    setPresetFormIsDefault(loc.isDefault || false);
+
+    const formEl = document.getElementById('location-preset-form-card');
+    if (formEl) {
+      formEl.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleSaveLocationPreset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedName = presetFormName.trim();
+    if (!trimmedName) {
+      alert('장소 명칭을 입력해주세요.');
+      return;
+    }
+
+    if (editingLocationId) {
+      await sheetsService.updateLocationPreset(editingLocationId, {
+        name: trimmedName,
+        address: presetFormAddress.trim(),
+        detailAddress: presetFormDetailAddress.trim(),
+        entranceNote: presetFormEntranceNote.trim(),
+        latitude: presetFormLat,
+        longitude: presetFormLon,
+        radiusMeters: presetFormRadius,
+        isDefault: presetFormIsDefault,
+      });
+      setPresetSuccessMsg(`'${trimmedName}' 장소 정보가 성공적으로 수정되었습니다.`);
+    } else {
+      const newPreset: import('../types/rollbook').LocationPreset = {
+        id: `loc_${Date.now()}`,
+        name: trimmedName,
+        address: presetFormAddress.trim(),
+        detailAddress: presetFormDetailAddress.trim(),
+        entranceNote: presetFormEntranceNote.trim(),
+        latitude: presetFormLat,
+        longitude: presetFormLon,
+        radiusMeters: presetFormRadius,
+        isDefault: presetFormIsDefault,
+      };
+      await sheetsService.addLocationPreset(newPreset);
+      setPresetSuccessMsg(`'${trimmedName}' 연습실이 새로 등록되었습니다.`);
+    }
+
+    resetLocationForm();
+    setLocationRefreshKey((k) => k + 1);
     onDataChanged();
     setTimeout(() => setPresetSuccessMsg(null), 3500);
   };
 
-  const handleDeleteLocationPreset = (id: string, name: string) => {
-    if (!confirm(`'${name}' 장소를 삭제하시겠습니까?`)) return;
-    sheetsService.deleteLocationPreset(id);
-    setPresetSuccessMsg(`'${name}' 장소가 삭제되었습니다.`);
+  const handleConfirmDeleteLocation = async () => {
+    if (!locationToDelete) return;
+    const targetName = locationToDelete.name;
+    await sheetsService.deleteLocationPreset(locationToDelete.id);
+    if (editingLocationId === locationToDelete.id) {
+      resetLocationForm();
+    }
+    setLocationToDelete(null);
+    setPresetSuccessMsg(`'${targetName}' 장소가 삭제되었습니다.`);
+    setLocationRefreshKey((k) => k + 1);
     onDataChanged();
     setTimeout(() => setPresetSuccessMsg(null), 3000);
   };
@@ -512,12 +573,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     if (!newTitle.trim() || !newDate.trim()) return;
 
+    const foundLoc = locationPresets.find((l) => l.id === selectedLocationPresetId);
     const baseSchedule = {
       title: newTitle.trim(),
       date: newDate,
       startTime: newStartTime,
       endTime: newEndTime,
       locationName: newLocName.trim(),
+      locationId: foundLoc ? foundLoc.id : undefined,
+      detailAddress: foundLoc?.detailAddress,
+      entranceNote: foundLoc?.entranceNote,
       targetLat: newLat,
       targetLon: newLon,
       radiusMeters: newRadius,
@@ -1801,75 +1866,143 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div>
               <h2 className="section-title">연습실 장소 및 GPS 반경 설정</h2>
               <p className="section-subtitle">
-                단원이 현장에서 출석 체크할 때 GPS 반경(기본 100m) 내에 있는지 검증할 장소를 관리합니다.
+                단원이 현장에서 출석 체크할 때 GPS 반경 내에 있는지 검증할 장소를 관리합니다.
               </p>
             </div>
           </div>
 
+          {presetSuccessMsg && (
+            <div className="success-banner" style={{ marginTop: '12px', padding: '10px 14px', borderRadius: '10px' }}>
+              ✅ {presetSuccessMsg}
+            </div>
+          )}
+
           {/* Registered Locations List */}
           <div style={{ marginTop: '16px', marginBottom: '24px' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px', color: '#191f28' }}>
-              등록된 장소 목록 ({locationPresets.length}곳)
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: '#191f28' }}>
+                등록된 장소 목록 ({locationPresets.length}곳)
+              </h3>
+              {editingLocationId && (
+                <button
+                  type="button"
+                  onClick={resetLocationForm}
+                  style={{ background: 'transparent', border: 'none', color: '#5B3E96', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  ➕ 새 장소 등록하기
+                </button>
+              )}
+            </div>
+
             {locationPresets.length === 0 ? (
               <p className="empty-hint">등록된 연습실 장소가 없습니다. 아래에서 추가해주세요.</p>
             ) : (
               locationPresets.map((loc) => (
-                <div key={loc.id} className={`location-item-card ${loc.isDefault ? 'is-default' : ''}`}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div
+                  key={loc.id}
+                  className={`location-item-card ${loc.isDefault ? 'is-default' : ''}`}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    padding: '14px 16px',
+                    background: editingLocationId === loc.id ? '#F8F5FE' : '#FFFFFF',
+                    borderRadius: '12px',
+                    border: editingLocationId === loc.id ? '2px solid #5B3E96' : loc.isDefault ? '1.5px solid #5B3E96' : '1px solid #E2E8F0',
+                    marginBottom: '10px',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '16px', fontWeight: 700, color: '#191f28' }}>
                         {loc.name}
                       </span>
                       {loc.isDefault && (
-                        <span className="part-badge" style={{ backgroundColor: 'var(--brand-accent)', color: '#fff' }}>
+                        <span className="part-badge" style={{ backgroundColor: '#5B3E96', color: '#fff' }}>
                           기본 연습실
                         </span>
                       )}
-                      <span className="status-pill" style={{ backgroundColor: 'var(--brand-purple-soft)', color: 'var(--brand-accent)' }}>
+                      <span className="status-pill" style={{ backgroundColor: '#F3E8FF', color: '#5B3E96', fontWeight: 600 }}>
                         반경 {loc.radiusMeters}m
                       </span>
                     </div>
-                    <div style={{ fontSize: '13px', color: '#4e5968', marginTop: '4px' }}>
-                      {loc.address || '주소 정보 없음'}
+                    <div style={{ fontSize: '13px', color: '#4e5968', marginTop: '6px' }}>
+                      📍 {loc.address || '주소 정보 없음'}
                     </div>
-                    <div style={{ fontSize: '12px', color: '#8b95a1', marginTop: '2px' }}>
-                      📍 위도: {loc.latitude} / 경도: {loc.longitude}
-                    </div>
+                    {loc.detailAddress && (
+                      <div style={{ fontSize: '12.5px', color: '#6B7280', marginTop: '2px' }}>
+                        🏢 상세: {loc.detailAddress}
+                      </div>
+                    )}
+                    {loc.entranceNote && (
+                      <div style={{ fontSize: '12.5px', color: '#059669', marginTop: '2px' }}>
+                        🚪 입구 안내: {loc.entranceNote}
+                      </div>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    className="tag-remove-btn"
-                    title="장소 삭제"
-                    onClick={() => handleDeleteLocationPreset(loc.id, loc.name)}
-                    style={{ width: '28px', height: '28px', fontSize: '16px' }}
-                  >
-                    ×
-                  </button>
+
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      className="btn-qr-action-secondary"
+                      onClick={() => handleStartEditLocation(loc)}
+                      style={{ minHeight: '34px', padding: '0 12px', fontSize: '12.5px', borderRadius: '8px' }}
+                    >
+                      ✏️ 수정
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-qr-action-secondary"
+                      onClick={() => setLocationToDelete(loc)}
+                      style={{ minHeight: '34px', padding: '0 12px', fontSize: '12.5px', borderRadius: '8px', color: '#EF4444', borderColor: '#FCA5A5' }}
+                    >
+                      🗑️ 삭제
+                    </button>
+                  </div>
                 </div>
               ))
             )}
           </div>
 
-          {/* New Location Registration Form */}
-          <div className="toss-section-card" style={{ border: '1.5px dashed rgba(92, 83, 219, 0.3)', background: '#FAF9FF' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--brand-primary)', marginBottom: '12px' }}>
-              ➕ 새 연습실 / 공연장 등록
-            </h3>
-            <form onSubmit={handleAddLocationPreset} className="form-stack">
+          {/* Location Add / Edit Form */}
+          <div
+            id="location-preset-form-card"
+            className="toss-section-card"
+            style={{
+              border: editingLocationId ? '1.5px solid #5B3E96' : '1.5px dashed rgba(92, 83, 219, 0.3)',
+              background: editingLocationId ? '#FBF9FF' : '#FAF9FF',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--brand-primary)', margin: 0 }}>
+                {editingLocationId ? `✏️ 장소 정보 수정 ('${presetFormName}')` : '➕ 새 연습실 / 공연장 등록'}
+              </h3>
+              {editingLocationId && (
+                <button
+                  type="button"
+                  onClick={resetLocationForm}
+                  style={{ background: 'transparent', border: 'none', color: '#6B7280', fontSize: '12.5px', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  새 등록으로 전환
+                </button>
+              )}
+            </div>
+
+            <form onSubmit={handleSaveLocationPreset} className="form-stack">
               <div>
                 <label className="form-label" style={{ fontWeight: 700 }}>장소 명칭 (필수)</label>
                 <input
                   type="text"
                   className="modern-input"
-                  placeholder="예: 문콰이어 제2연습실 (서초), 예술의전당 체임버홀"
+                  placeholder="예: 문콰이어 제1연습실 (명동), 예술의전당 체임버홀"
                   value={presetFormName}
                   onChange={(e) => setPresetFormName(e.target.value)}
                   required
                 />
               </div>
 
-              {/* Modern Interactive Map & Daum Postcode Search */}
+              {/* Modern Interactive Map with Daum Road Address Search & Radius */}
               <div style={{ marginTop: '8px', marginBottom: '8px' }}>
                 <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>
                   🗺️ 장소 위치 및 출석 인정 반경 설정
@@ -1879,6 +2012,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   lon={presetFormLon}
                   radius={presetFormRadius}
                   address={presetFormAddress}
+                  detailAddress={presetFormDetailAddress}
+                  entranceNote={presetFormEntranceNote}
                   onChangeLocation={(lat, lon, addr) => {
                     setPresetFormLat(lat);
                     setPresetFormLon(lon);
@@ -1889,6 +2024,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       }
                     }
                   }}
+                  onChangeDetailAddress={(detail) => setPresetFormDetailAddress(detail)}
+                  onChangeEntranceNote={(note) => setPresetFormEntranceNote(note)}
                   onChangeRadius={(r) => setPresetFormRadius(r)}
                 />
               </div>
@@ -1899,16 +2036,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   id="chk-default-loc"
                   checked={presetFormIsDefault}
                   onChange={(e) => setPresetFormIsDefault(e.target.checked)}
-                  style={{ width: '18px', height: '18px', accentColor: 'var(--brand-accent)' }}
+                  style={{ width: '18px', height: '18px', accentColor: 'var(--brand-accent)', cursor: 'pointer' }}
                 />
                 <label htmlFor="chk-default-loc" style={{ fontSize: '14px', cursor: 'pointer', fontWeight: 600 }}>
-                  이 장소를 기본 연습실로 설정
+                  이 장소를 기본 연습실로 설정 (새 일정 생성 시 기본 선택)
                 </label>
               </div>
 
-              <button type="submit" className="btn-primary-large" style={{ marginTop: '8px' }}>
-                장소 등록 완료
-              </button>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                <button type="submit" className="btn-primary-large" style={{ minHeight: '44px' }}>
+                  {editingLocationId ? '💾 장소 수정사항 저장' : '장소 등록 완료'}
+                </button>
+                {editingLocationId && (
+                  <button
+                    type="button"
+                    className="btn-secondary-cancel"
+                    onClick={resetLocationForm}
+                    style={{ minHeight: '44px', padding: '0 20px' }}
+                  >
+                    수정 취소
+                  </button>
+                )}
+              </div>
             </form>
           </div>
         </div>
@@ -2135,9 +2284,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {loc.name} {loc.isDefault && <span className="part-badge">기본</span>}
                     </span>
                     <span className="meta-text" style={{ fontSize: '12px' }}>
-                      {loc.address || '주소 미등록'} · 위도 {loc.latitude}, 경도 {loc.longitude} (반경 {loc.radiusMeters}m)
+                      {loc.address || '주소 미등록'} {loc.detailAddress ? `· ${loc.detailAddress}` : ''} (인정 반경 {loc.radiusMeters}m)
                     </span>
                   </div>
+                  <button
+                    type="button"
+                    className="btn-qr-action-secondary"
+                    onClick={() => setSettingsSubTab('LOCATIONS')}
+                    style={{ fontSize: '12px', padding: '4px 10px', minHeight: '32px' }}
+                  >
+                    관리 이동
+                  </button>
                 </div>
               ))}
             </div>
@@ -2189,6 +2346,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: Delete Location Confirmation                            */}
+      {/* ============================================================== */}
+      {locationToDelete && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal-card" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <div className="modal-badge" style={{ color: '#EF4444', borderColor: '#FCA5A5', background: '#FEF2F2' }}>
+                장소 삭제 확인
+              </div>
+              <h2 className="modal-title" style={{ fontSize: '18px', marginTop: '8px' }}>
+                '{locationToDelete.name}' 장소를 삭제할까요?
+              </h2>
+              <p className="modal-desc" style={{ marginTop: '6px', fontSize: '13.5px', color: '#4E5968' }}>
+                삭제 시 연습실 목록에서 제거되며, 이 장소를 사용 중인 기존 일정은 기본 좌표를 유지합니다. 계속 진행하시겠습니까?
+              </p>
+            </div>
+
+            <div className="modal-button-group" style={{ marginTop: '20px', display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn-primary-large"
+                style={{ backgroundColor: '#EF4444', minHeight: '44px' }}
+                onClick={handleConfirmDeleteLocation}
+              >
+                삭제하기
+              </button>
+              <button
+                type="button"
+                className="btn-secondary-cancel"
+                style={{ minHeight: '44px' }}
+                onClick={() => setLocationToDelete(null)}
+              >
+                취소
+              </button>
+            </div>
           </div>
         </div>
       )}
