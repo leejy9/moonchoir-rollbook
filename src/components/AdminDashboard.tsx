@@ -61,6 +61,10 @@ function generateRandomPin(): string {
   return String(Math.floor(1000 + Math.random() * 9000));
 }
 
+function createScheduleId(dateStr: string): string {
+  return `sch_${dateStr.replace(/-/g, '')}_${Date.now().toString().slice(-4)}`;
+}
+
 function createManualLogMeta(): { id: string; timestamp: string } {
   const now = new Date();
   return {
@@ -99,6 +103,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Member Profile Modal State
   const [selectedMemberForModal, setSelectedMemberForModal] = useState<Member | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [, setMemberRefreshKey] = useState<number>(0);
 
   // Sub-segments for unified major categories
   const [scheduleSubTab, setScheduleSubTab] = useState<'LIST' | 'QR' | 'SESSION'>('LIST');
@@ -142,6 +147,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await sheetsService.addMember(memberData);
       setMemberActionMsg(`신규 단원 [${memberData.name}]이(가) 등록되었습니다.`);
     }
+    setMemberRefreshKey((k) => k + 1);
     onDataChanged();
     setTimeout(() => setMemberActionMsg(''), 3500);
   };
@@ -150,6 +156,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const target = members.find((m) => m.id === memberId);
     await sheetsService.deleteMember(memberId);
     setMemberActionMsg(`단원 [${target?.name || memberId}]이(가) 삭제되었습니다.`);
+    setMemberRefreshKey((k) => k + 1);
     onDataChanged();
     setTimeout(() => setMemberActionMsg(''), 3500);
   };
@@ -594,7 +601,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (recurrenceFreq === 'NONE') {
       const newSch: Schedule = {
         ...baseSchedule,
-        id: `sch_${newDate.replace(/-/g, '')}_${Date.now().toString().slice(-4)}`,
+        id: createScheduleId(newDate),
       };
       await sheetsService.addSchedule(newSch);
       setSelectedScheduleId(newSch.id);

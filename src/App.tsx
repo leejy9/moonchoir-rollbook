@@ -20,6 +20,7 @@ export function App() {
 
   // Modal states
   const [showQRScanner, setShowQRScanner] = useState(false);
+  const [qrTargetSchedule, setQrTargetSchedule] = useState<Schedule | null>(null);
   const [rsvpSchedule, setRsvSchedule] = useState<Schedule | null>(null);
   const [showAdminPinModal, setShowAdminPinModal] = useState(false);
 
@@ -47,7 +48,12 @@ export function App() {
   }, []);
 
   const activeSchedules = sheetsService.getSchedules();
-  const currentSchedule = activeSchedules[0];
+  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
+  const currentSchedule =
+    qrTargetSchedule ||
+    activeSchedules.find((s) => s.date === todayStr) ||
+    activeSchedules.find((s) => s.date >= todayStr) ||
+    activeSchedules[0];
 
   // If user has not bound a device yet, show binding prompt
   const isBound = profile !== null;
@@ -77,7 +83,10 @@ export function App() {
       {isBound && currentView === 'HOME' && (
         <HomeView
           profile={profile}
-          onOpenQRScanner={() => setShowQRScanner(true)}
+          onOpenQRScanner={(sch) => {
+            if (sch) setQrTargetSchedule(sch);
+            setShowQRScanner(true);
+          }}
           onOpenRSVP={(sch) => setRsvSchedule(sch)}
           onOpenAdmin={handleOpenAdmin}
           onChangeProfile={() => setShowBindingModal(true)}
@@ -116,9 +125,13 @@ export function App() {
         <QRScannerModal
           schedule={currentSchedule}
           profile={profile}
-          onClose={() => setShowQRScanner(false)}
+          onClose={() => {
+            setShowQRScanner(false);
+            setQrTargetSchedule(null);
+          }}
           onSuccess={() => {
             setShowQRScanner(false);
+            setQrTargetSchedule(null);
             triggerRefresh();
           }}
         />

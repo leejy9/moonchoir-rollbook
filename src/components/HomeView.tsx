@@ -15,7 +15,7 @@ import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface HomeViewProps {
   profile: BoundDeviceProfile;
-  onOpenQRScanner: () => void;
+  onOpenQRScanner: (schedule?: Schedule) => void;
   onOpenRSVP: (schedule: Schedule) => void;
   onOpenAdmin: () => void;
   onChangeProfile: () => void;
@@ -170,7 +170,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <button
                   type="button"
                   className="btn-qr-scan-primary"
-                  onClick={onOpenQRScanner}
+                  onClick={() => onOpenQRScanner(activeSchedule)}
                 >
                   <IconQrScan size={22} className="btn-icon" />
                   <div className="btn-text-block">

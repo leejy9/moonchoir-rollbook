@@ -25,6 +25,7 @@ const STORAGE_KEYS = {
   LOGS: 'moonchoir_logs_v2',
   CONFIG: 'moonchoir_config_v2',
   LOCATIONS: 'moonchoir_locations_v2',
+  PENDING_MEMBERS: 'moonchoir_pending_members_v2',
 };
 
 class MemoryStorage {
@@ -83,6 +84,7 @@ export class SheetsService {
   private rsvpVotes: RSVPVote[];
   private logs: RawAttendanceLog[];
   private locations: LocationPreset[];
+  private pendingMemberIds: Set<string>;
 
   constructor() {
     this.config = loadFromStorage(STORAGE_KEYS.CONFIG, INITIAL_CONFIG);
@@ -95,6 +97,7 @@ export class SheetsService {
     this.rsvpVotes = loadFromStorage(STORAGE_KEYS.RSVP_VOTES, INITIAL_RSVP_VOTES);
     this.logs = loadFromStorage(STORAGE_KEYS.LOGS, INITIAL_LOGS);
     this.locations = loadFromStorage(STORAGE_KEYS.LOCATIONS, INITIAL_LOCATION_PRESETS);
+    this.pendingMemberIds = new Set(loadFromStorage<string[]>(STORAGE_KEYS.PENDING_MEMBERS, []));
   }
 
   // --- Read Operations ---
@@ -106,6 +109,35 @@ export class SheetsService {
   }
 
   public getMembers(): Member[] {
+    // Auto-restore bound device profile if missing from member array
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const boundRaw = window.localStorage.getItem('moonchoir_bound_device');
+        if (boundRaw) {
+          const bound = JSON.parse(boundRaw);
+          if (bound && bound.memberId && !this.members.some((m) => m.id === bound.memberId)) {
+            const restored: Member = {
+              id: bound.memberId,
+              name: bound.name,
+              part: bound.part,
+              phoneLast4: bound.phoneLast4 || '0000',
+              role: bound.part === '선생님' ? 'ADMIN' : bound.part === '객원' ? 'GUEST' : 'MEMBER',
+              createdAt: new Date().toISOString(),
+              status: 'ACTIVE',
+              joinedAt: new Date().toISOString().slice(0, 10),
+              memberStatus: bound.part === '선생님' ? '선생님' : bound.part === '객원' ? '객원' : '정단원',
+              note: '',
+            };
+            this.members.push(restored);
+            saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+            this.sendToGoogleSheet('REGISTER_MEMBER', restored).catch(() => {});
+          }
+        }
+      }
+    } catch {
+      // ignore storage access errors
+    }
+
     // Backward compatibility adapter (Schema Evolution Invariant)
     return this.members.map((m) => ({
       ...m,
@@ -113,6 +145,44 @@ export class SheetsService {
       memberStatus: m.memberStatus || (m.role === 'ADMIN' ? '선생님' : m.role === 'GUEST' ? '객원' : '정단원'),
       note: m.note || '',
     }));
+  }
+
+  /**
+   * Resolves target GPS coordinates & radius for any schedule
+   * by matching against location presets or falling back to defaults.
+   */
+  public resolveScheduleLocation(schedule: Schedule): {
+    targetLat: number;
+    targetLon: number;
+    radiusMeters: number;
+    locationName: string;
+    detailAddress?: string;
+    entranceNote?: string;
+  } {
+    const presets = this.getLocationPresets();
+    const locName = schedule.locationName || '';
+
+    // Match by ID, exact name, or substring
+    const matched =
+      (schedule.locationId ? presets.find((p) => p.id === schedule.locationId) : undefined) ||
+      presets.find((p) => p.name.trim() === locName.trim()) ||
+      presets.find((p) => locName.includes(p.name) || p.name.includes(locName)) ||
+      presets.find((p) => p.isDefault) ||
+      presets[0];
+
+    const targetLat = schedule.targetLat ?? matched?.latitude ?? this.config.defaultLat ?? 37.5665;
+    const targetLon = schedule.targetLon ?? matched?.longitude ?? this.config.defaultLon ?? 126.9780;
+    const radiusMeters = schedule.radiusMeters ?? matched?.radiusMeters ?? this.config.defaultRadius ?? 100;
+    const finalLocationName = schedule.locationName || matched?.name || '연습실';
+
+    return {
+      targetLat,
+      targetLon,
+      radiusMeters,
+      locationName: finalLocationName,
+      detailAddress: schedule.detailAddress || matched?.detailAddress,
+      entranceNote: schedule.entranceNote || matched?.entranceNote,
+    };
   }
 
   public getSchedules(): Schedule[] {
@@ -196,7 +266,9 @@ export class SheetsService {
       note: member.note || '',
     };
     this.members.push(newMember);
+    this.pendingMemberIds.add(newMember.id);
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+    saveToStorage(STORAGE_KEYS.PENDING_MEMBERS, Array.from(this.pendingMemberIds));
 
     if (this.config.sheetsWebAppUrl) {
       try {
@@ -228,7 +300,9 @@ export class SheetsService {
 
   public async deleteMember(memberId: string): Promise<void> {
     this.members = this.members.filter((m) => m.id !== memberId);
+    this.pendingMemberIds.delete(memberId);
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+    saveToStorage(STORAGE_KEYS.PENDING_MEMBERS, Array.from(this.pendingMemberIds));
 
     if (this.config.sheetsWebAppUrl) {
       this.sendToGoogleSheet('DELETE_MEMBER', { id: memberId }).catch((err) => {
@@ -612,7 +686,7 @@ export class SheetsService {
 
     const data = json.data;
     if (Array.isArray(data.members)) {
-      this.members = data.members.map((m) => {
+      const remoteMembers = data.members.map((m) => {
         const phone = m.phone ? String(m.phone).trim() : '';
         const rawLast4 = m.phoneLast4 !== undefined && m.phoneLast4 !== null ? String(m.phoneLast4).trim() : '';
         const phoneLast4 = rawLast4 ? rawLast4.padStart(4, '0') : (phone ? phone.replace(/\D/g, '').slice(-4) : '0000');
@@ -626,7 +700,40 @@ export class SheetsService {
           note: m.note ? String(m.note) : '',
         };
       });
+
+      // Clear confirmed remote members from pending set
+      const remoteIds = new Set(remoteMembers.map((m) => m.id));
+      for (const id of remoteIds) {
+        this.pendingMemberIds.delete(id);
+      }
+
+      // Check if bound device profile exists locally and isn't in remote yet
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          const boundRaw = window.localStorage.getItem('moonchoir_bound_device');
+          if (boundRaw) {
+            const bound = JSON.parse(boundRaw);
+            if (bound && bound.memberId && !remoteIds.has(bound.memberId)) {
+              this.pendingMemberIds.add(bound.memberId);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      saveToStorage(STORAGE_KEYS.PENDING_MEMBERS, Array.from(this.pendingMemberIds));
+
+      // Keep only remote members + pending user-created members
+      const unsyncedLocalMembers = this.members.filter((m) => this.pendingMemberIds.has(m.id));
+
+      this.members = [...remoteMembers, ...unsyncedLocalMembers];
       saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+
+      // Background push any unsynced local members to Google Sheets
+      for (const unsynced of unsyncedLocalMembers) {
+        this.sendToGoogleSheet('REGISTER_MEMBER', unsynced).catch(() => {});
+      }
     }
     if (Array.isArray(data.schedules)) {
       this.schedules = data.schedules.map((s) => {
@@ -691,15 +798,20 @@ export class SheetsService {
   private async sendToGoogleSheet(action: string, payload: unknown): Promise<void> {
     if (!this.config.sheetsWebAppUrl) return;
 
-    // Google Apps Script redirect: 'follow' and text/plain to bypass CORS preflight
-    await fetch(this.config.sheetsWebAppUrl, {
-      method: 'POST',
-      redirect: 'follow',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify({ action, data: payload, payload }),
-    });
+    // Google Apps Script redirect: use mode: 'no-cors' so mobile browsers
+    // never abort or throw CORS redirect errors on 302 responses.
+    try {
+      await fetch(this.config.sheetsWebAppUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({ action, data: payload, payload }),
+      });
+    } catch (err) {
+      console.warn('[Sheets API] POST send warning:', err);
+    }
   }
 }
 

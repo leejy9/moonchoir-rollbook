@@ -44,11 +44,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     let lat: number | undefined;
     let lon: number | undefined;
     let distanceMeters: number | undefined;
-    let isVerifiedLocation = true;
+    let isVerifiedLocation = false;
 
-    const targetLat = targetSchedule.targetLat ?? 37.5665;
-    const targetLon = targetSchedule.targetLon ?? 126.9780;
-    const radiusMeters = targetSchedule.radiusMeters ?? 100;
+    // Dynamically resolve target GPS coords and radius from location presets
+    const locInfo = sheetsService.resolveScheduleLocation(targetSchedule);
+    const targetLat = locInfo.targetLat;
+    const targetLon = locInfo.targetLon;
+    const radiusMeters = locInfo.radiusMeters;
+    const venueName = locInfo.locationName;
 
     try {
       setGeoStatus('현재 위치(GPS)를 정밀 측정하고 있습니다...');
@@ -59,7 +62,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         }
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 4000,
+          timeout: 8000,
         });
       });
 
@@ -68,16 +71,40 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       distanceMeters = calculateDistanceMeters(lat, lon, targetLat, targetLon);
       isVerifiedLocation = isWithinRadius(lat, lon, targetLat, targetLon, radiusMeters);
     } catch {
-      console.warn('[Geo] Failed to fetch GPS, fallback to room proximity');
-      distanceMeters = 8;
-      isVerifiedLocation = true;
-      setGeoStatus('GPS 수신 제한 (연습실 반경 내로 승인)');
+      console.warn('[Geo] Failed to fetch GPS coordinates');
+      distanceMeters = undefined;
+      isVerifiedLocation = false;
+      setGeoStatus('GPS 수신 제한 (위치 권한 확인 필요)');
     }
 
-    // Strict boundary for PIN check-in to prevent remote cheating
-    if (authMethod === 'MANUAL_PIN' && !isVerifiedLocation) {
+    // Strict boundary check for both QR and PIN to prevent remote check-in
+    if (distanceMeters === undefined) {
       setIsProcessing(false);
-      setPinError(`연습실 반경 ${radiusMeters}m 밖에서는 PIN 출석을 할 수 없습니다 (${distanceMeters}m 측정).`);
+      setScanResult({
+        success: false,
+        distance: undefined,
+        isVerified: false,
+        msg: `기기의 위치(GPS) 정보를 수신할 수 없습니다. 브라우저 위치 권한을 허용한 뒤 연습실 현장에서 다시 시도해 주세요.`,
+      });
+      return;
+    }
+
+    if (!isVerifiedLocation) {
+      setIsProcessing(false);
+      const distFormatted = distanceMeters >= 1000
+        ? `${(distanceMeters / 1000).toFixed(1)}km`
+        : `${distanceMeters}m`;
+
+      if (authMethod === 'MANUAL_PIN') {
+        setPinError(`연습실 반경 ${radiusMeters}m 밖에서는 PIN 출석을 할 수 없습니다 (${distFormatted} 측정).`);
+      }
+
+      setScanResult({
+        success: false,
+        distance: distanceMeters,
+        isVerified: false,
+        msg: `현재 위치가 '${venueName}' 출석 인정 반경(${radiusMeters}m) 밖입니다 (${distFormatted} 떨어짐). 연습실 현장에 도착 후 출석을 진행해 주세요.`,
+      });
       return;
     }
 
@@ -92,7 +119,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       latitude: lat,
       longitude: lon,
       distanceMeters,
-      isVerifiedLocation,
+      isVerifiedLocation: true,
     };
 
     try {
@@ -109,10 +136,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     setScanResult({
       success: true,
       distance: distanceMeters,
-      isVerified: isVerifiedLocation,
-      msg: isVerifiedLocation
-        ? `${targetSchedule.title} 현장 출석이 완료되었습니다!`
-        : `연습실 허용 반경(${radiusMeters}m) 외부에서 인증되었습니다 (${distanceMeters}m).`,
+      isVerified: true,
+      msg: `${targetSchedule.title} [${venueName}] 현장 출석이 완료되었습니다!`,
     });
 
     setTimeout(() => {
@@ -349,15 +374,37 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         )}
 
         {scanResult ? (
-          <div className="scan-success-box">
-            <div className="success-icon-anim">🎉</div>
-            <h3 className="success-title">출석 체크 완료!</h3>
-            <p className="success-desc">{scanResult.msg}</p>
+          <div className={`scan-success-box ${scanResult.success ? '' : 'is-error'}`}>
+            <div className="success-icon-anim">{scanResult.success ? '🎉' : '⚠️'}</div>
+            <h3 className="success-title">{scanResult.success ? '출석 체크 완료!' : '현장 위치 불일치'}</h3>
+            <p className="success-desc" style={{ color: scanResult.success ? '#191f28' : '#EF4444', wordBreak: 'keep-all' }}>
+              {scanResult.msg}
+            </p>
             {scanResult.distance !== undefined && (
-              <span className="distance-badge">
-                📍 연습실과의 거리: {scanResult.distance}m (
-                {scanResult.isVerified ? '반경 이내 정상' : '위치 초과'})
+              <span
+                className="distance-badge"
+                style={{
+                  backgroundColor: scanResult.isVerified ? '#ECFDF5' : '#FEF2F2',
+                  color: scanResult.isVerified ? '#059669' : '#DC2626',
+                  borderColor: scanResult.isVerified ? '#A7F3D0' : '#FECACA',
+                }}
+              >
+                📍 연습실과의 거리: {scanResult.distance >= 1000 ? `${(scanResult.distance / 1000).toFixed(1)}km` : `${scanResult.distance}m`} (
+                {scanResult.isVerified ? '반경 이내 정상' : '인정 반경 초과'})
               </span>
+            )}
+            {!scanResult.success && (
+              <button
+                type="button"
+                className="btn-qr-action-secondary"
+                style={{ marginTop: '16px', minHeight: '44px', width: '100%' }}
+                onClick={() => {
+                  setScanResult(null);
+                  setIsProcessing(false);
+                }}
+              >
+                다시 스캔 시도하기
+              </button>
             )}
           </div>
         ) : activeTab === 'QR' ? (
