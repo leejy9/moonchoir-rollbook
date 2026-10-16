@@ -1,0 +1,168 @@
+import React, { useState } from 'react';
+import { sheetsService } from '../services/sheets';
+import type { BoundDeviceProfile, RSVPStatus, RSVPVote, Schedule } from '../types/rollbook';
+
+interface RSVPModalProps {
+  schedule: Schedule;
+  profile: BoundDeviceProfile;
+  currentVote?: RSVPVote;
+  onClose: () => void;
+  onSuccess: (vote?: RSVPVote) => void;
+}
+
+const COMMON_REASONS = ['회사 야근', '가족 행사/경조사', '건강/감기 몸살', '지방 출장', '개인 사정'];
+
+export const RSVPModal: React.FC<RSVPModalProps> = ({
+  schedule,
+  profile,
+  currentVote,
+  onClose,
+  onSuccess,
+}) => {
+  const [status, setStatus] = useState<RSVPStatus>(currentVote?.status || 'ATTEND');
+  const [reason, setReason] = useState<string>(currentVote?.reason || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleCancelVote = async () => {
+    if (!currentVote) return;
+    setIsSubmitting(true);
+    await sheetsService.cancelRSVP(schedule.id, profile.memberId);
+    setIsSubmitting(false);
+    onSuccess();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    const vote: RSVPVote = {
+      id: currentVote?.id || `vote_${Date.now()}`,
+      scheduleId: schedule.id,
+      memberId: profile.memberId,
+      memberName: profile.name,
+      part: profile.part,
+      status,
+      reason: status === 'ABSENT' ? reason.trim() : undefined,
+      timestamp: new Date().toISOString(),
+    };
+
+    await sheetsService.submitRSVP(vote);
+    setIsSubmitting(false);
+    onSuccess(vote);
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-card">
+        <div className="modal-header">
+          <div className="modal-badge">사전 참석 투표 (RSVP)</div>
+          <h2 className="modal-title">{schedule.title}</h2>
+          <p className="modal-desc">
+            일시: {schedule.date} ({schedule.startTime}~{schedule.endTime})<br />
+            장소: {schedule.locationName}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="form-stack">
+          <div className="selected-card">
+            <span className={`part-badge part-${profile.part}`}>{profile.part}</span>
+            <span className="selected-name">{profile.name} 님의 투표</span>
+          </div>
+
+          <div className="rsvp-toggle-grid">
+            <button
+              type="button"
+              className={`rsvp-choice-btn attend ${status === 'ATTEND' ? 'active' : ''}`}
+              onClick={() => setStatus('ATTEND')}
+            >
+              <span className="rsvp-icon">🟢</span>
+              <span className="rsvp-title">참석합니다</span>
+              <span className="rsvp-subtitle">연습에 참여해요</span>
+            </button>
+
+            <button
+              type="button"
+              className={`rsvp-choice-btn absent ${status === 'ABSENT' ? 'active' : ''}`}
+              onClick={() => setStatus('ABSENT')}
+            >
+              <span className="rsvp-icon">🔴</span>
+              <span className="rsvp-title">불참합니다</span>
+              <span className="rsvp-subtitle">사유를 남겨주세요</span>
+            </button>
+          </div>
+
+          {status === 'ABSENT' && (
+            <div className="absent-reason-block">
+              <label className="form-label" htmlFor="rsvp-reason">
+                불참 사유 (대시보드에 사유결석으로 자동 반영됩니다)
+              </label>
+
+              <div className="reason-chips-row">
+                {COMMON_REASONS.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    className={`filter-chip ${reason === r ? 'active' : ''}`}
+                    onClick={() => setReason(r)}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                id="rsvp-reason"
+                type="text"
+                className="input-text"
+                placeholder="상세 사유 직접 입력 (예: 갑작스러운 야근)"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                required
+              />
+            </div>
+          )}
+
+          <div className="modal-button-group">
+            <button
+              type="submit"
+              className="btn-primary-large"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? '저장 중...' : '투표 제출하기'}
+            </button>
+            {currentVote && (
+              <button
+                type="button"
+                className="btn-danger-outline"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '10px',
+                  border: '1px solid #ff4d4f',
+                  background: '#fff',
+                  color: '#ff4d4f',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s',
+                }}
+                onClick={handleCancelVote}
+                disabled={isSubmitting}
+              >
+                투표 취소 (보류/미정으로 변경)
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-secondary-cancel"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              닫기
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
