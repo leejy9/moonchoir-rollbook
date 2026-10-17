@@ -57,6 +57,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   refreshTrigger: _refreshTrigger,
 }) => {
   const [homeViewTab, setHomeViewTab] = useState<'CALENDAR' | 'LIST'>('CALENDAR');
+  const [isRosterOpen, setIsRosterOpen] = useState(false);
 
   const [todayStr] = useState(getTodayDateString);
   const [currentNow, setCurrentNow] = useState(() => new Date());
@@ -225,6 +226,26 @@ export const HomeView: React.FC<HomeViewProps> = ({
       return true;
     });
   }, [targetMembers, votedNames, votedIds]);
+
+  const currentMember = useMemo(() => {
+    return (
+      members.find((m) => m.id === profile.memberId) ||
+      ({
+        id: profile.memberId,
+        name: profile.name,
+        part: profile.part,
+        phoneLast4: profile.phoneLast4,
+        role: 'MEMBER',
+        status: 'ACTIVE',
+        joinedAt: '2020-01-01',
+      } as Member)
+    );
+  }, [members, profile]);
+
+  const isTargetMember = useMemo(() => {
+    if (!activeSchedule) return true;
+    return isMemberRequiredForSchedule(currentMember, activeSchedule.date, activeSchedule);
+  }, [currentMember, activeSchedule]);
 
   const totalTargetCount = Math.max(targetMembers.length, uniqueVotes.length);
   const attendRate = totalTargetCount > 0 ? Math.round((attendees.length / totalTargetCount) * 100) : 0;
@@ -533,6 +554,21 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <div className="schedule-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
               <span className="schedule-category-badge">{activeSchedule.category}</span>
+              {!isTargetMember && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#047857',
+                    background: '#ECFDF5',
+                    border: '1px solid #A7F3D0',
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                  }}
+                >
+                  🌿 자율 참여 연습
+                </span>
+              )}
               <span className={`schedule-date-badge ${activeSchedule.date === todayStr ? 'is-today' : ''}`}>
                 {activeSchedule.date === todayStr ? '오늘 연습' : activeSchedule.date}
               </span>
@@ -574,6 +610,32 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           {activeSchedule.description && (
             <p className="schedule-desc-box">{activeSchedule.description}</p>
+          )}
+
+          {/* Non-target member gentle notice banner */}
+          {!isTargetMember && (
+            <div
+              style={{
+                background: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                margin: '12px 0 4px',
+                fontSize: '12.5px',
+                color: '#166534',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <span style={{ fontSize: '16px' }}>🌿</span>
+              <div>
+                <strong>공식 필참 일정이 아닙니다.</strong>
+                <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: '#15803D' }}>
+                  참관이나 개인 연습으로 자유롭게 참여하실 수 있습니다.
+                </p>
+              </div>
+            </div>
           )}
 
           {/* User's Check-in & RSVP Status Banner */}
@@ -618,9 +680,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <IconQrScan size={22} className="btn-icon" />
                   <div className="btn-text-block">
                     <span className="btn-main-label">
-                      {myLog ? '다시 출석 체크하기' : 'QR 출석 체크'}
+                      {myLog ? '다시 출석 체크하기' : (!isTargetMember ? '개인 연습으로 출석 체크' : 'QR 출석 체크')}
                     </span>
-                    <span className="btn-sub-label">연습실 종이 QR 코드를 스캔하세요</span>
+                    <span className="btn-sub-label">
+                      {!isTargetMember ? '자유 연습/참관으로 출석 기록을 남깁니다' : '연습실 종이 QR 코드를 스캔하세요'}
+                    </span>
                   </div>
                 </button>
 
@@ -630,7 +694,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   onClick={() => onOpenRSVP(activeSchedule)}
                 >
                   <IconVote size={18} className="btn-icon" />
-                  <span>{myVote ? '사전 참석/불참 투표 수정' : '사전 참석/불참 투표하기'}</span>
+                  <span>
+                    {!isTargetMember
+                      ? (myVote ? '개인 연습 참여 여부 수정' : '개인 연습으로 참여 투표')
+                      : (myVote ? '사전 참석/불참 투표 수정' : '사전 참석/불참 투표하기')}
+                  </span>
                 </button>
               </>
             ) : windowState?.status === 'WINDOW_CLOSED' ? (
@@ -659,12 +727,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <IconVote size={22} className="btn-icon" />
                   <div className="btn-text-block">
                     <span className="btn-main-label">
-                      {myVote ? '사전 참석/불참 투표 수정' : '사전 참석/불참 투표하기'}
+                      {!isTargetMember
+                        ? (myVote ? '개인 연습 참여 여부 수정' : '개인 연습으로 참여 투표')
+                        : (myVote ? '사전 참석/불참 투표 수정' : '사전 참석/불참 투표하기')}
                     </span>
                     <span className="btn-sub-label">
                       {myVote
                         ? `현재 선택: ${myVote.status === 'ATTEND' ? '참석 예정' : '불참'}`
-                        : '연습 참석 여부를 미리 알려주세요'}
+                        : (!isTargetMember ? '자유 연습/참관 참여 여부를 알려주세요' : '연습 참석 여부를 미리 알려주세요')}
                     </span>
                   </div>
                 </button>
@@ -717,37 +787,97 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </span>
             </div>
 
-            {/* List of Attendees */}
-            <div className="tally-list-block">
-              <div className="tally-sub-title">참석 예정 ({attendees.length}명)</div>
-              {attendees.length > 0 ? (
-                <div className="member-chips-wrap">
-                  {attendees.map((a) => (
-                    <span key={a.id} className="attendee-chip">
-                      <span className={`mini-part-dot part-${a.part}`} />
-                      {a.memberName}
+            {/* Clean, Subtle Roster Disclosure Toggle */}
+            <div style={{ marginTop: '14px' }}>
+              <button
+                type="button"
+                onClick={() => setIsRosterOpen((prev) => !prev)}
+                style={{
+                  width: '100%',
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: isRosterOpen ? '8px 8px 0 0' : '8px',
+                  padding: '9px 12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#475569',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s ease',
+                }}
+              >
+                <span>
+                  👥 단원 투표 명단 (참석 {attendees.length} · 불참 {absentees.length} · 미응답 {unvotedMembers.length})
+                </span>
+                <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                  {isRosterOpen ? '▲ 명단 접기' : '▼ 명단 펼치기'}
+                </span>
+              </button>
+
+              {isRosterOpen && (
+                <div
+                  style={{
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderTop: 'none',
+                    borderRadius: '0 0 8px 8px',
+                    padding: '12px 14px',
+                    fontSize: '12px',
+                    color: '#334155',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                  }}
+                >
+                  {/* Attendees */}
+                  <div>
+                    <span style={{ fontWeight: 700, color: '#059669', display: 'block', marginBottom: '4px' }}>
+                      ✓ 참석 ({attendees.length}명)
                     </span>
-                  ))}
+                    {attendees.length > 0 ? (
+                      <span style={{ color: '#475569', lineHeight: 1.6 }}>
+                        {attendees.map((a) => a.memberName).join(', ')}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#94A3B8' }}>아직 참석 투표한 단원이 없습니다.</span>
+                    )}
+                  </div>
+
+                  {/* Absentees */}
+                  {absentees.length > 0 && (
+                    <div>
+                      <span style={{ fontWeight: 700, color: '#DC2626', display: 'block', marginBottom: '4px' }}>
+                        ✕ 불참 ({absentees.length}명)
+                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        {absentees.map((ab) => (
+                          <span key={ab.id} style={{ color: '#475569', lineHeight: 1.5 }}>
+                            <strong>{ab.memberName}</strong>
+                            {ab.reason ? ` (${ab.reason})` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Unvoted */}
+                  <div>
+                    <span style={{ fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '4px' }}>
+                      ⏳ 미응답 ({unvotedMembers.length}명)
+                    </span>
+                    {unvotedMembers.length > 0 ? (
+                      <span style={{ color: '#64748B', lineHeight: 1.6 }}>
+                        {unvotedMembers.map((m) => m.name).join(', ')}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#059669' }}>모든 대상 단원이 응답을 완료했습니다! 🎉</span>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <p className="empty-subtext">아직 참석 투표자가 없습니다.</p>
               )}
             </div>
-
-            {/* List of Absentees with Reasons */}
-            {absentees.length > 0 && (
-              <div className="tally-list-block">
-                <div className="tally-sub-title">불참 사유 ({absentees.length}명)</div>
-                <div className="absentee-reasons-list">
-                  {absentees.map((ab) => (
-                    <div key={ab.id} className="absentee-reason-item">
-                      <span className="absentee-name">{ab.memberName}</span>
-                      <span className="absentee-reason-text">"{ab.reason || '사유 미작성'}"</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </section>
       ) : (

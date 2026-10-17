@@ -60,12 +60,22 @@ export function findActiveScheduleForMasterQR(
 /**
  * Verifies on-site temporary 4-digit PIN for a schedule
  */
-export function verifySchedulePin(schedule: import('../types/rollbook').Schedule, inputPin: string): boolean {
-  if (!schedule.checkInPin) {
-    // If no specific pin set, default to last 4 digits of schedule id or allow '1234'
-    return inputPin.trim() === '1234';
+export function verifySchedulePin(
+  schedule: import('../types/rollbook').Schedule,
+  inputPin: string,
+  activeMasterPin?: string
+): boolean {
+  const trimmed = inputPin.trim();
+  if (schedule.checkInPin && schedule.checkInPin.trim() === trimmed) {
+    return true;
   }
-  return schedule.checkInPin.trim() === inputPin.trim();
+  if (activeMasterPin && activeMasterPin.trim() === trimmed) {
+    return true;
+  }
+  if (!schedule.checkInPin && trimmed === '1234') {
+    return true;
+  }
+  return false;
 }
 
 /**

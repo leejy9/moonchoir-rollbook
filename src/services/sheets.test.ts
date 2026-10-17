@@ -542,6 +542,58 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     const recOct = service.reconcileAttendance('sch_oct_01').find((r) => r.memberId === memberA.id);
     expect(recOct?.finalStatus).toBe('수동인정');
   });
+
+  it('prioritizes dynamic preset coordinates and radius over outdated schedule snapshots', async () => {
+    // 1. Add preset
+    const presetId = 'loc_incheon_practice';
+    await service.addLocationPreset({
+      id: presetId,
+      name: '인천 연수구 연습실',
+      address: '인천 연수구 한나루로 158번길 31',
+      latitude: 37.4258,
+      longitude: 126.6655,
+      radiusMeters: 50,
+      isDefault: false,
+    });
+
+    // 2. Add schedule with outdated/different snapshot coords (e.g. initial Myeongdong coords)
+    const testSch: import('../types/rollbook').Schedule = {
+      id: 'sch_relational_test',
+      title: '인천 연수구 추가 연습',
+      date: '2026-10-25',
+      startTime: '19:30',
+      endTime: '21:30',
+      locationName: '인천 연수구 연습실',
+      locationId: presetId,
+      targetLat: 37.5665, // Outdated Myeongdong
+      targetLon: 126.9780,
+      radiusMeters: 100,
+      category: '추가연습',
+    };
+    await service.addSchedule(testSch);
+
+    // 3. Resolve location: Must prioritize preset coords (37.4258, 126.6655, 50m)
+    const resolved = service.resolveScheduleLocation(testSch);
+    expect(resolved.targetLat).toBe(37.4258);
+    expect(resolved.targetLon).toBe(126.6655);
+    expect(resolved.radiusMeters).toBe(50);
+
+    // 4. Update preset radius to 200m -> immediately cascades to schedule resolution
+    await service.updateLocationPreset(presetId, { radiusMeters: 200 });
+    const resolvedAfterUpdate = service.resolveScheduleLocation(testSch);
+    expect(resolvedAfterUpdate.radiusMeters).toBe(200);
+  });
+
+  it('handles universal activeOnSitePin retrieval and regeneration', () => {
+    const pin1 = service.getActiveOnSitePin();
+    expect(pin1).toBeDefined();
+    expect(pin1.length).toBe(4);
+
+    const pin2 = service.refreshActiveOnSitePin();
+    expect(pin2).toBeDefined();
+    expect(pin2.length).toBe(4);
+    expect(service.getActiveOnSitePin()).toBe(pin2);
+  });
 });
 
 

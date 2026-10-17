@@ -158,11 +158,14 @@ erDiagram
 | `startTime` | `startTime` | 연습 시작 시각 (`HH:mm`, 예: `19:30`) | `string` (필수) | 출석 QR 오픈 시간 및 지각 기준점 | • 시간 변경 시 QR 활성화 타임윈도우(시작 1시간 전 ~ 종료 후 30분) 및 정시/지각 판정선이 자동 재계산됨. |
 | `endTime` | `endTime` | 연습 종료 시각 (`HH:mm`, 예: `22:00`) | `string` (필수) | 출석 QR 마감 시간 | • QR 마감 시각 자동 재계산. |
 | `locationName` | `locationName`| 연습 장소명 (예: `드림 보컬 스튜디오`) | `string` (필수) | 사용자 UI 및 캘린더 안내 | • 장소 프리셋 선택 시 자동 반영. |
-| `locationId` | `locationId` | 연결된 장소 프리셋 ID (예: `loc_dream_01`) | `string` (선택) | **외래키 (FK)** $\rightarrow$ `장소정보.id` | • 장소 프리셋의 좌표가 변경되면 본 일정의 위경도 좌표도 함께 동기화됨. |
-| `targetLat` | `latitude` | 장소 위도 (예: `37.498092`) | `number` (선택) | 모바일 네이티브 Geolocation 검증 (`geo.ts`) | • 좌표 변경 시 단원 모바일 GPS 출석 반경 검증 기준점이 이동됨. |
-| `targetLon` | `longitude` | 장소 경도 (예: `127.027610`) | `number` (선택) | 모바일 네이티브 Geolocation 검증 (`geo.ts`) | • 좌표 변경 시 기준점 이동. |
-| `radiusMeters` | `radiusMeters`| 출석 인정 반경 (미터, 기본 `100`) | `number` (선택) | Haversine 공식 거리 오차 허용 한계 | • 수정 시 현장에서 출석이 인정되는 반경 범위가 즉시 변경됨 (50m ~ 500m). |
-| `checkInPin` | `checkInPin` | 현장 4자리 인증 PIN (예: `4821`) | `string` (필수) | QR 카메라 미작동 단원의 키패드 수동 출석 검증 | • PIN 번호 수정 시 단원들이 화면 키패드로 입력해야 하는 번호가 즉시 동기화됨. |
+| `locationId` | `locationId` | 연결된 장소 프리셋 ID (예: `loc_dream_01`) | `string` (선택) | **외래키 (FK)** $\rightarrow$ `장소정보.id` | • **관계형 단일 진실 공급원(SSOT)**: `locationId`가 존재하면 본 일정의 좌표/반경은 `장소정보`의 최신 값을 실시간 참조함. 장소정보 수정 시 모든 일정이 즉시 동기화됨. |
+| `targetLat` | `latitude` | 장소 위도 (예: `37.498092`) | `number` (선택) | 모바일 네이티브 Geolocation 검증 (`geo.ts`) | • 프리셋 없을 때만 직접 입력 폴백. 카카오 API로 유효 좌표 미확보 시 저장 차단. |
+| `targetLon` | `longitude` | 장소 경도 (예: `127.027610`) | `number` (선택) | 모바일 네이티브 Geolocation 검증 (`geo.ts`) | • 프리셋 없을 때만 직접 입력 폴백. |
+| `radiusMeters` | `radiusMeters`| 출석 인정 반경 (미터, 기본 `100`) | `number` (선택) | Haversine 공식 거리 오차 허용 한계 | • `locationId` 프리셋의 최신 반경이 실시간 반영됨 (50m ~ 500m). |
+| `targetAudienceType` | `targetAudienceType` | 참석 대상 필터 (`ALL`, `PARTS`, `CUSTOM_MEMBERS`) | `string` (선택) | 출결 통계 및 개인 홈 화면 분기 기준 | • `ALL`: 전체 필참<br>• `PARTS`: 특정 파트 한정<br>• `CUSTOM_MEMBERS`: 선발 단원 수동 지정 |
+| `targetParts` | `targetParts` | 대상 파트 목록 (예: `소프라노,알토`) | `string[]` (선택) | 시트에는 쉼표 CSV 문자열로 저장, 모델은 `string[]` 변환 | • 파트 한정 연습 시 대상 파트가 아니면 `[🌿 자율 참여 연습]`으로 분기 |
+| `targetMemberIds` | `targetMemberIds` | 선발 단원 ID 목록 (예: `mem_s01,mem_a02`) | `string[]` (선택) | 시트에는 쉼표 CSV 문자열로 저장, 모델은 `string[]` 변환 | • 선발 단원 외에는 `[🌿 자율 참여 연습]` 및 개인 연습 참여 투표로 분기 |
+| `checkInPin` | `checkInPin` | 당일 현장 4자리 인증 PIN (예: `5027`) | `string` (선택) | QR 카메라 미작동 단원의 키패드 수동 출석 검증 | • 회차별 고유 꼬리표 없이 상설 현장 출석 PIN으로 단순화 |
 | `category` | `category` | 일정 구분 (`정기연습`, `추가연습`, `연주` 등) | `string` (필수) | 캘린더 필터 및 통계 반영 여부 | • 수정 시 일정 목록 필터링 반영. |
 | `description` | `description` | 상세 설명 (준비물, 곡목 등) | `string` (선택) | 캘린더 상세 팝업 | • 수정 시 해당 셀만 갱신. |
 | `isArchived` | `isArchived` | 아카이브 여부 (`true` / `false`) | `boolean` (선택) | 일정 뷰 표시 여부 | • `true` 설정 시 단원 캘린더에서 숨김. |

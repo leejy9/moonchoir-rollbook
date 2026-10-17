@@ -34,6 +34,12 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       return;
     }
 
+    const isDefaultCoords = Math.abs(latitude - 37.5665) < 0.0001 && Math.abs(longitude - 126.978) < 0.0001;
+    if (address.trim() && isDefaultCoords && !address.includes('명동')) {
+      setErrorMsg('📍 지도 검색 또는 현재 위치 설정을 통해 실제 좌표를 지정해주세요. (기본 서울 명동 좌표로 잘못 저장되지 않도록 방지합니다.)');
+      return;
+    }
+
     const preset: LocationPreset = {
       id: initialPreset?.id || `loc_${Date.now()}`,
       name: name.trim(),

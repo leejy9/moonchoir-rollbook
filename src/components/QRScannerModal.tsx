@@ -270,7 +270,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       return;
     }
 
-    if (!verifySchedulePin(schedule, inputPin)) {
+    const activeMasterPin = sheetsService.getActiveOnSitePin();
+    if (!verifySchedulePin(schedule, inputPin, activeMasterPin)) {
       setPinError('입력하신 PIN 번호가 일치하지 않습니다. 관리자에게 문의하세요.');
       return;
     }

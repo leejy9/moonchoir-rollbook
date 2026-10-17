@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-interface LocationPickerMapProps {
+export interface LocationPickerMapProps {
   lat: number;
   lon: number;
   radius: number;
@@ -13,7 +13,20 @@ interface LocationPickerMapProps {
   onChangeDetailAddress?: (detail: string) => void;
   onChangeEntranceNote?: (note: string) => void;
   onChangeRadius: (radius: number) => void;
+  onSelectPlaceName?: (name: string) => void;
 }
+
+interface KakaoPlaceItem {
+  id: string;
+  place_name: string;
+  road_address_name: string;
+  address_name: string;
+  x: string; // lon
+  y: string; // lat
+  category_group_name?: string;
+}
+
+const KAKAO_APP_KEY = import.meta.env.VITE_KAKAO_MAP_API_KEY || '1465ed6063afca1d3ea91711cbdeb84a';
 
 // Custom modern SVG marker for Leaflet
 const createCustomMarker = () => {
@@ -52,6 +65,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
   onChangeDetailAddress,
   onChangeEntranceNote,
   onChangeRadius,
+  onSelectPlaceName,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -59,8 +73,46 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
   const circleRef = useRef<L.Circle | null>(null);
 
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
+  const [kakaoLoaded, setKakaoLoaded] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<KakaoPlaceItem[]>([]);
+  const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
 
-  // Initialize Leaflet Map
+  // 1. Dynamically Load Kakao Maps Services SDK
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).kakao && (window as any).kakao.maps && (window as any).kakao.maps.services) {
+      setKakaoLoaded(true);
+      return;
+    }
+
+    const scriptId = 'kakao-maps-sdk-script';
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement('script');
+      script.id = scriptId;
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_APP_KEY}&libraries=services&autoload=false`;
+      document.head.appendChild(script);
+    }
+
+    const handleLoad = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const kakao = (window as any).kakao;
+      if (kakao && kakao.maps) {
+        kakao.maps.load(() => {
+          setKakaoLoaded(true);
+        });
+      }
+    };
+
+    script.addEventListener('load', handleLoad);
+    return () => {
+      script?.removeEventListener('load', handleLoad);
+    };
+  }, []);
+
+  // 2. Initialize Leaflet Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
@@ -99,6 +151,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
       const pos = marker.getLatLng();
       circle.setLatLng(pos);
       onChangeLocation(Number(pos.lat.toFixed(6)), Number(pos.lng.toFixed(6)));
+      setSearchFeedback(`📍 지도 핀 드래그로 위치가 설정되었습니다 (${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)})`);
     });
 
     // Map click event
@@ -107,6 +160,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
       marker.setLatLng(pos);
       circle.setLatLng(pos);
       onChangeLocation(Number(pos.lat.toFixed(6)), Number(pos.lng.toFixed(6)));
+      setSearchFeedback(`📍 지도 클릭으로 위치가 설정되었습니다 (${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)})`);
     });
 
     mapInstanceRef.current = map;
@@ -141,41 +195,133 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
     }
   }, [radius]);
 
-  // Geocode official road address to lat/lon using Nominatim
-  const geocodeAddress = async (queryText: string) => {
-    if (!queryText.trim()) return;
-    try {
-      const encoded = encodeURIComponent(queryText.trim());
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=kr&limit=1`,
-        {
-          headers: {
-            'Accept-Language': 'ko,en',
-          },
+  // 3. Search Kakao Places Keyword
+  const handleSearchKakaoPlaces = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const query = searchKeyword.trim();
+    if (!query) {
+      alert('검색할 장소명 또는 도로명 주소를 입력해주세요.');
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchFeedback(null);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const kakao = (window as any).kakao;
+    if (kakao && kakao.maps && kakao.maps.services) {
+      const ps = new kakao.maps.services.Places();
+      ps.keywordSearch(query, (data: KakaoPlaceItem[], status: string) => {
+        setIsSearching(false);
+        if (status === kakao.maps.services.Status.OK && data && data.length > 0) {
+          setSearchResults(data.slice(0, 6));
+        } else {
+          // If keyword search fails, try geocoder as fallback
+          tryGeocodeWithKakao(query);
         }
-      );
-
-      if (!res.ok) return;
-
-      const data = (await res.json()) as Array<{ lat: string; lon: string }>;
-      if (data && data.length > 0) {
-        const foundLat = Number(parseFloat(data[0].lat).toFixed(6));
-        const foundLon = Number(parseFloat(data[0].lon).toFixed(6));
-
-        onChangeLocation(foundLat, foundLon);
-
-        if (mapInstanceRef.current && markerRef.current && circleRef.current) {
-          markerRef.current.setLatLng([foundLat, foundLon]);
-          circleRef.current.setLatLng([foundLat, foundLon]);
-          mapInstanceRef.current.flyTo([foundLat, foundLon], 17, { duration: 1.2 });
-        }
-      }
-    } catch {
-      // Nominatim error fallback
+      });
+    } else {
+      // Fallback if Kakao SDK not loaded
+      tryGeocodeWithNominatim(query);
     }
   };
 
-  // Open Daum/Kakao Postcode Popup
+  const tryGeocodeWithKakao = (addressStr: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const kakao = (window as any).kakao;
+    if (kakao && kakao.maps && kakao.maps.services) {
+      const geocoder = new kakao.maps.services.Geocoder();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      geocoder.addressSearch(addressStr, (result: any[], status: string) => {
+        setIsSearching(false);
+        if (status === kakao.maps.services.Status.OK && result && result.length > 0) {
+          const item: KakaoPlaceItem = {
+            id: `addr_${Date.now()}`,
+            place_name: addressStr,
+            road_address_name: result[0].road_address ? result[0].road_address.address_name : result[0].address_name,
+            address_name: result[0].address_name,
+            x: result[0].x,
+            y: result[0].y,
+            category_group_name: '주소검색결과',
+          };
+          setSearchResults([item]);
+        } else {
+          tryGeocodeWithNominatim(addressStr);
+        }
+      });
+    } else {
+      tryGeocodeWithNominatim(addressStr);
+    }
+  };
+
+  const tryGeocodeWithNominatim = async (queryText: string) => {
+    try {
+      const encoded = encodeURIComponent(queryText.trim());
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=kr&limit=3`,
+        {
+          headers: {
+            'Accept-Language': 'ko,en',
+            'User-Agent': 'MoonchoirRollbook/1.0',
+          },
+        }
+      );
+      setIsSearching(false);
+      if (!res.ok) {
+        handleGeocodeFailure(queryText);
+        return;
+      }
+      const data = (await res.json()) as Array<{ place_id: number; display_name: string; lat: string; lon: string }>;
+      if (data && data.length > 0) {
+        const items: KakaoPlaceItem[] = data.map((d) => ({
+          id: String(d.place_id),
+          place_name: d.display_name.split(',')[0] || queryText,
+          road_address_name: d.display_name,
+          address_name: d.display_name,
+          x: d.lon,
+          y: d.lat,
+          category_group_name: '오픈맵검색결과',
+        }));
+        setSearchResults(items);
+      } else {
+        handleGeocodeFailure(queryText);
+      }
+    } catch {
+      setIsSearching(false);
+      handleGeocodeFailure(queryText);
+    }
+  };
+
+  const handleGeocodeFailure = (query: string) => {
+    setSearchResults([]);
+    setSearchFeedback(`⚠️ '${query}'에 대한 정확한 GPS 좌표를 찾지 못했습니다. 아래 지도에서 위치를 직접 클릭하거나 [📍 현재 내 위치로 설정]을 눌러주세요.`);
+  };
+
+  // 4. User selects a place item from search results
+  const handleSelectPlace = (item: KakaoPlaceItem) => {
+    const foundLat = Number(parseFloat(item.y).toFixed(6));
+    const foundLon = Number(parseFloat(item.x).toFixed(6));
+    const fullAddr = item.road_address_name || item.address_name;
+
+    onChangeLocation(foundLat, foundLon, fullAddr);
+    if (item.place_name && onSelectPlaceName) {
+      onSelectPlaceName(item.place_name);
+    }
+    if (item.place_name && !detailAddress) {
+      onChangeDetailAddress?.(item.place_name);
+    }
+
+    if (mapInstanceRef.current && markerRef.current && circleRef.current) {
+      markerRef.current.setLatLng([foundLat, foundLon]);
+      circleRef.current.setLatLng([foundLat, foundLon]);
+      mapInstanceRef.current.flyTo([foundLat, foundLon], 17, { duration: 1.0 });
+    }
+
+    setSearchResults([]);
+    setSearchFeedback(`✓ [${item.place_name}] 위치가 지도에 정상 반영되었습니다. (${foundLat}, ${foundLon})`);
+  };
+
+  // 5. Open Daum/Kakao Postcode Popup
   const handleOpenDaumPostcode = () => {
     const scriptId = 'daum-postcode-script';
     const existingScript = document.getElementById(scriptId);
@@ -190,8 +336,34 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
             const roadAddr = data.roadAddress || data.jibunAddress;
             const bname = data.buildingName ? ` (${data.buildingName})` : '';
             const fullAddress = roadAddr + bname;
-            onChangeLocation(lat, lon, fullAddress);
-            geocodeAddress(roadAddr);
+
+            // Trigger Kakao Geocoder to resolve coordinates for this road address
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const kakao = (window as any).kakao;
+            if (kakao && kakao.maps && kakao.maps.services) {
+              const geocoder = new kakao.maps.services.Geocoder();
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              geocoder.addressSearch(roadAddr, (result: any[], status: string) => {
+                if (status === kakao.maps.services.Status.OK && result && result.length > 0) {
+                  const foundLat = Number(parseFloat(result[0].y).toFixed(6));
+                  const foundLon = Number(parseFloat(result[0].x).toFixed(6));
+                  onChangeLocation(foundLat, foundLon, fullAddress);
+                  if (data.buildingName && onSelectPlaceName) {
+                    onSelectPlaceName(data.buildingName);
+                  }
+                  if (mapInstanceRef.current && markerRef.current && circleRef.current) {
+                    markerRef.current.setLatLng([foundLat, foundLon]);
+                    circleRef.current.setLatLng([foundLat, foundLon]);
+                    mapInstanceRef.current.flyTo([foundLat, foundLon], 17, { duration: 1.0 });
+                  }
+                  setSearchFeedback(`✓ 도로명 주소 [${fullAddress}]의 좌표를 성공적으로 찾았습니다.`);
+                } else {
+                  tryGeocodeWithNominatim(roadAddr);
+                }
+              });
+            } else {
+              tryGeocodeWithNominatim(roadAddr);
+            }
           },
         }).open();
       } else {
@@ -210,7 +382,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
     }
   };
 
-  // Current GPS button
+  // 6. Current GPS button
   const handleGetCurrentGPS = () => {
     if (!navigator.geolocation) {
       alert('브라우저가 위치 정보를 지원하지 않습니다.');
@@ -218,6 +390,8 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
     }
 
     setIsLocatingGPS(true);
+    setSearchFeedback(null);
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setIsLocatingGPS(false);
@@ -228,67 +402,158 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
         if (mapInstanceRef.current && markerRef.current && circleRef.current) {
           markerRef.current.setLatLng([curLat, curLon]);
           circleRef.current.setLatLng([curLat, curLon]);
-          mapInstanceRef.current.flyTo([curLat, curLon], 17, { duration: 1.2 });
+          mapInstanceRef.current.flyTo([curLat, curLon], 17, { duration: 1.0 });
         }
+        setSearchFeedback(`📍 현재 스마트폰/PC의 실제 GPS 좌표(${curLat}, ${curLon})로 설정되었습니다.`);
       },
       (err) => {
         setIsLocatingGPS(false);
-        alert(`위치 정보 수신 실패: ${err.message}`);
+        alert(`위치 정보 수신 실패: ${err.message}\n브라우저의 위치 권한을 확인해주세요.`);
       },
-      { enableHighAccuracy: true, timeout: 5000 }
+      { enableHighAccuracy: true, timeout: 8000 }
     );
   };
 
   return (
     <div className="location-picker-map-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {/* 1. Address Search Action Buttons */}
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          className="btn-qr-action-primary"
-          onClick={handleOpenDaumPostcode}
-          style={{ flex: '1 1 200px', minHeight: '44px', fontSize: '13.5px', padding: '0 14px' }}
-        >
-          🔍 도로명 주소 검색 (다음/카카오)
-        </button>
+      {/* 1. Kakao Places & Road Address Search Box */}
+      <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+          <label className="form-label" style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B', margin: 0 }}>
+            🔍 장소명 또는 도로명 주소 검색
+          </label>
+          <span style={{ fontSize: '11px', color: kakaoLoaded ? '#059669' : '#64748B', fontWeight: 600 }}>
+            {kakaoLoaded ? '⚡ 카카오맵 연동' : '🌐 검색 연동'}
+          </span>
+        </div>
+        <form onSubmit={handleSearchKakaoPlaces} style={{ display: 'flex', gap: '6px' }}>
+          <input
+            type="text"
+            className="modern-input"
+            style={{ flex: 1, fontSize: '13.5px' }}
+            placeholder="예: 예술의전당, 서해문화회관, 연수구 한나루로"
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="btn-qr-action-primary"
+            style={{ width: 'auto', padding: '0 16px', minHeight: '42px', fontSize: '13px', whiteSpace: 'nowrap' }}
+            disabled={isSearching}
+          >
+            {isSearching ? '검색 중...' : '검색'}
+          </button>
+          <button
+            type="button"
+            className="btn-qr-action-secondary"
+            onClick={handleOpenDaumPostcode}
+            style={{ width: 'auto', padding: '0 12px', minHeight: '42px', fontSize: '12.5px', whiteSpace: 'nowrap' }}
+            title="다음 우편번호 팝업 열기"
+          >
+            우편번호
+          </button>
+        </form>
 
-        <button
-          type="button"
-          className="btn-qr-action-secondary"
-          onClick={handleGetCurrentGPS}
-          disabled={isLocatingGPS}
-          style={{ flex: '1 1 160px', minHeight: '44px', fontSize: '13.5px', padding: '0 14px' }}
-        >
-          {isLocatingGPS ? 'GPS 수신 중...' : '📍 현재 내 위치로 핀 찍기'}
-        </button>
+        {/* Search feedback note */}
+        {searchFeedback && (
+          <div
+            style={{
+              marginTop: '8px',
+              fontSize: '12px',
+              fontWeight: 600,
+              color: searchFeedback.startsWith('✓') ? '#059669' : searchFeedback.startsWith('⚠️') ? '#DC2626' : '#4F46E5',
+              background: searchFeedback.startsWith('✓') ? '#ECFDF5' : searchFeedback.startsWith('⚠️') ? '#FEF2F2' : '#EEF2FF',
+              padding: '6px 10px',
+              borderRadius: '6px',
+            }}
+          >
+            {searchFeedback}
+          </div>
+        )}
+
+        {/* Search Results Dropdown List */}
+        {searchResults.length > 0 && (
+          <div
+            style={{
+              marginTop: '8px',
+              background: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              borderRadius: '8px',
+              maxHeight: '190px',
+              overflowY: 'auto',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            }}
+          >
+            <div style={{ padding: '6px 10px', background: '#F1F5F9', fontSize: '11.5px', color: '#475569', fontWeight: 700 }}>
+              검색 결과 ({searchResults.length}건) — 등록할 장소를 클릭하세요:
+            </div>
+            {searchResults.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => handleSelectPlace(item)}
+                style={{
+                  padding: '8px 12px',
+                  borderBottom: '1px solid #F1F5F9',
+                  cursor: 'pointer',
+                  fontSize: '12.5px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#EEF2FF')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#FFFFFF')}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={{ color: '#1E293B' }}>{item.place_name}</strong>
+                  {item.category_group_name && (
+                    <span style={{ fontSize: '11px', color: '#6366F1', background: '#EEF2FF', padding: '1px 6px', borderRadius: '4px' }}>
+                      {item.category_group_name}
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontSize: '11.5px', color: '#64748B' }}>
+                  {item.road_address_name || item.address_name}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* 2. Three-stage address input: Basic Road Address, Detail Address, Entrance Note */}
+      {/* 2. Direct Address Input & One-Touch GPS */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {/* Road Address Display */}
-        <div>
-          <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568' }}>
-            기본 주소 (도로명) *
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568', margin: 0 }}>
+            기본 도로명 주소 *
           </label>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <input
-              type="text"
-              className="modern-input"
-              style={{ flex: 1, backgroundColor: '#F8FAFC', cursor: 'pointer', fontSize: '13.5px' }}
-              readOnly
-              placeholder="위의 [도로명 주소 검색] 버튼을 눌러주세요"
-              value={address}
-              onClick={handleOpenDaumPostcode}
-            />
-            <button
-              type="button"
-              className="btn-qr-action-secondary"
-              style={{ width: 'auto', padding: '0 14px', fontSize: '13px', whiteSpace: 'nowrap', minHeight: '42px' }}
-              onClick={handleOpenDaumPostcode}
-            >
-              주소 변경
-            </button>
-          </div>
+          <button
+            type="button"
+            className="btn-qr-action-secondary"
+            onClick={handleGetCurrentGPS}
+            disabled={isLocatingGPS}
+            style={{ width: 'auto', padding: '4px 10px', minHeight: '32px', fontSize: '12px' }}
+          >
+            {isLocatingGPS ? 'GPS 수신 중...' : '📍 현재 내 위치로 설정'}
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <input
+            type="text"
+            className="modern-input"
+            style={{ flex: 1, backgroundColor: '#F8FAFC', fontSize: '13.5px' }}
+            placeholder="상단 검색 또는 우측 [주소 검색] 버튼을 눌러주세요"
+            value={address}
+            onChange={(e) => onChangeLocation(lat, lon, e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn-qr-action-secondary"
+            style={{ width: 'auto', padding: '0 14px', fontSize: '13px', whiteSpace: 'nowrap', minHeight: '42px' }}
+            onClick={handleOpenDaumPostcode}
+          >
+            주소 검색
+          </button>
         </div>
 
         {/* Detail Address Input */}
@@ -322,9 +587,12 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
         </div>
       </div>
 
-      {/* 3. Interactive Map Container */}
+      {/* 3. Interactive Map Container with Coordinates Badge */}
       <div style={{ position: 'relative', width: '100%', height: '280px', borderRadius: '12px', overflow: 'hidden', border: '1.5px solid #E2E8F0', zIndex: 1 }}>
         <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+        <div style={{ position: 'absolute', top: '8px', left: '8px', background: 'rgba(30, 41, 59, 0.85)', color: '#FFFFFF', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
+          GPS: {lat.toFixed(5)}, {lon.toFixed(5)}
+        </div>
         <div style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(255,255,255,0.92)', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', color: '#4A5568', pointerEvents: 'none', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 1000 }}>
           💡 지도를 클릭하거나 핀을 드래그하여 출입구 위치를 미세 조정할 수 있습니다.
         </div>

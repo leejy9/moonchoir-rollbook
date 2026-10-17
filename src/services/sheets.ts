@@ -181,10 +181,10 @@ export class SheetsService {
       presets.find((p) => p.isDefault) ||
       presets[0];
 
-    const targetLat = schedule.targetLat ?? matched?.latitude ?? this.config.defaultLat ?? 37.5665;
-    const targetLon = schedule.targetLon ?? matched?.longitude ?? this.config.defaultLon ?? 126.9780;
-    const radiusMeters = schedule.radiusMeters ?? matched?.radiusMeters ?? this.config.defaultRadius ?? 100;
-    const finalLocationName = schedule.locationName || matched?.name || '연습실';
+    const targetLat = matched?.latitude ?? schedule.targetLat ?? this.config.defaultLat ?? 37.5665;
+    const targetLon = matched?.longitude ?? schedule.targetLon ?? this.config.defaultLon ?? 126.9780;
+    const radiusMeters = matched?.radiusMeters ?? schedule.radiusMeters ?? this.config.defaultRadius ?? 100;
+    const finalLocationName = matched?.name || schedule.locationName || '연습실';
 
     return {
       targetLat,
@@ -660,6 +660,25 @@ export class SheetsService {
     this.locations[idx] = { ...this.locations[idx], ...updates };
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
 
+    // Cascade updates to existing schedules referencing this location
+    const updatedLoc = this.locations[idx];
+    this.schedules = this.schedules.map((s) => {
+      if (s.locationId === id || s.locationName === updatedLoc.name) {
+        return {
+          ...s,
+          locationId: id,
+          locationName: updatedLoc.name,
+          targetLat: updatedLoc.latitude,
+          targetLon: updatedLoc.longitude,
+          radiusMeters: updatedLoc.radiusMeters,
+          detailAddress: updatedLoc.detailAddress,
+          entranceNote: updatedLoc.entranceNote,
+        };
+      }
+      return s;
+    });
+    saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+
     if (this.config.sheetsWebAppUrl) {
       this.sendToGoogleSheet('SAVE_LOCATION', this.locations[idx]).catch((err) => {
         console.error('[Sheets API] Location preset update sync failed:', err);
@@ -764,6 +783,23 @@ export class SheetsService {
     const newToken = 'mq_master_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now();
     this.updateConfig({ masterQrToken: newToken });
     return newToken;
+  }
+
+  public getActiveOnSitePin(): string {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todaySch = this.schedules.find((s) => s.date === todayStr);
+    return this.config.activeOnSitePin || todaySch?.checkInPin || '5027';
+  }
+
+  public refreshActiveOnSitePin(): string {
+    const newPin = String(Math.floor(1000 + Math.random() * 9000));
+    this.updateConfig({ activeOnSitePin: newPin });
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todaySch = this.schedules.find((s) => s.date === todayStr);
+    if (todaySch) {
+      this.updateSchedule(todaySch.id, { checkInPin: newPin }).catch(() => {});
+    }
+    return newPin;
   }
 
   // --- Projection View: Cumulative Attendance Statistics ---
@@ -1149,11 +1185,22 @@ export class SheetsService {
             endTime = kst.toISOString().slice(11, 16);
           }
         }
+        const rawParts = (s as unknown as Record<string, unknown>).targetParts;
+        const targetParts = typeof rawParts === 'string'
+          ? (rawParts.split(',').map((p: string) => p.trim()).filter(Boolean) as import('../types/rollbook').PartType[])
+          : Array.isArray(rawParts) ? (rawParts as import('../types/rollbook').PartType[]) : undefined;
+        const rawMembers = (s as unknown as Record<string, unknown>).targetMemberIds;
+        const targetMemberIds = typeof rawMembers === 'string'
+          ? rawMembers.split(',').map((id: string) => id.trim()).filter(Boolean)
+          : Array.isArray(rawMembers) ? (rawMembers as string[]) : undefined;
+
         return {
           ...s,
           date: normalizedDate,
           startTime,
           endTime,
+          targetParts,
+          targetMemberIds,
         };
       });
       saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
@@ -1235,8 +1282,12 @@ export class SheetsService {
         defaultStartTime: c.defaultStartTime ? String(c.defaultStartTime) : '19:30',
         defaultEndTime: c.defaultEndTime ? String(c.defaultEndTime) : '21:30',
         targetAudienceType: c.targetAudienceType || 'ALL',
-        targetParts: Array.isArray(c.targetParts) ? c.targetParts : undefined,
-        targetMemberIds: Array.isArray(c.targetMemberIds) ? c.targetMemberIds : undefined,
+        targetParts: typeof (c as unknown as Record<string, unknown>).targetParts === 'string'
+          ? (((c as unknown as Record<string, unknown>).targetParts as string).split(',').map((p: string) => p.trim()).filter(Boolean) as import('../types/rollbook').PartType[])
+          : Array.isArray((c as unknown as Record<string, unknown>).targetParts) ? ((c as unknown as Record<string, unknown>).targetParts as import('../types/rollbook').PartType[]) : undefined,
+        targetMemberIds: typeof (c as unknown as Record<string, unknown>).targetMemberIds === 'string'
+          ? (((c as unknown as Record<string, unknown>).targetMemberIds as string).split(',').map((id: string) => id.trim()).filter(Boolean) as string[])
+          : Array.isArray((c as unknown as Record<string, unknown>).targetMemberIds) ? ((c as unknown as Record<string, unknown>).targetMemberIds as string[]) : undefined,
         isArchived: c.isArchived === true || String(c.isArchived).toUpperCase() === 'TRUE',
         createdAt: c.createdAt ? String(c.createdAt) : new Date().toISOString(),
       }));

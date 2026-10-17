@@ -70,10 +70,6 @@ function getTodayString(): string {
   return `${y}-${m}-${d}`;
 }
 
-function generateRandomPin(): string {
-  return String(Math.floor(1000 + Math.random() * 9000));
-}
-
 function createManualLogMeta(): { id: string; timestamp: string } {
   const now = new Date();
   return {
@@ -321,7 +317,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [scheduleAddMode, setScheduleAddMode] = useState<ScheduleAddMode>('SINGLE');
   const [editingScheduleForForm, setEditingScheduleForForm] = useState<Schedule | null>(null);
   const [showPastSchedules, setShowPastSchedules] = useState(false);
-  const [locationMode, setLocationMode] = useState<'PRESET' | 'DIRECT'>('PRESET');
   const [newTitle, setNewTitle] = useState('');
   const [newDate, setNewDate] = useState(() => getTodayString());
   const [newStartTime, setNewStartTime] = useState('19:30');
@@ -856,6 +851,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
 
+    const isDefaultCoords = Math.abs(presetFormLat - 37.5665) < 0.0001 && Math.abs(presetFormLon - 126.9780) < 0.0001;
+    if (presetFormAddress.trim() && isDefaultCoords && !presetFormAddress.includes('명동')) {
+      alert('📍 지도 검색 또는 현재 위치 설정을 통해 실제 좌표를 지정해주세요.\n(기본 서울 명동 좌표로 잘못 저장되지 않도록 보호합니다.)');
+      return;
+    }
+
     if (editingLocationId) {
       await sheetsService.updateLocationPreset(editingLocationId, {
         name: trimmedName,
@@ -1073,11 +1074,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewDate(sch.date);
     setNewStartTime(sch.startTime);
     setNewEndTime(sch.endTime);
-    setSelectedLocationPresetId(sch.locationId || 'custom');
+    const resolvedLoc = locationPresets.find((l) => l.id === sch.locationId || l.name === sch.locationName);
+    setSelectedLocationPresetId(resolvedLoc ? resolvedLoc.id : (sch.locationId || 'custom'));
     setNewLocName(sch.locationName);
-    setNewLat(sch.targetLat ?? defaultLoc?.latitude ?? 37.5665);
-    setNewLon(sch.targetLon ?? defaultLoc?.longitude ?? 126.9780);
-    setNewRadius(sch.radiusMeters ?? defaultLoc?.radiusMeters ?? 100);
+    setNewLat(resolvedLoc ? resolvedLoc.latitude : (sch.targetLat ?? defaultLoc?.latitude ?? 37.5665));
+    setNewLon(resolvedLoc ? resolvedLoc.longitude : (sch.targetLon ?? defaultLoc?.longitude ?? 126.9780));
+    setNewRadius(resolvedLoc ? resolvedLoc.radiusMeters : (sch.radiusMeters ?? defaultLoc?.radiusMeters ?? 100));
     setNewCategory(sch.category);
     setNewDesc(sch.description || '');
     setSelectedProgramCardId(sch.programId || '');
@@ -1241,11 +1243,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Regenerate Session PIN
   const handleRegenSessionPin = async () => {
-    if (!currentSchedule) return;
-    const newPin = generateRandomPin();
-    await sheetsService.updateSchedule(currentSchedule.id, { checkInPin: newPin });
+    const newPin = sheetsService.refreshActiveOnSitePin();
+    if (currentSchedule) {
+      await sheetsService.updateSchedule(currentSchedule.id, { checkInPin: newPin });
+    }
     onDataChanged();
-    setPinRegenMsg(`오늘 회차 현장 PIN이 [${newPin}]으로 재발급되었습니다.`);
+    setPinRegenMsg(`당일 현장 PIN이 [${newPin}]으로 재발급되었습니다.`);
     setTimeout(() => setPinRegenMsg(''), 3000);
   };
 
@@ -1390,10 +1393,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <span style={{ fontSize: '20px' }}>⚠️</span>
                 <div>
                   <strong style={{ fontSize: '13.5px', color: '#B45309', display: 'block' }}>
-                    중복 등록 의심 단원 {duplicateMemberGroups.length}건 감지 ({duplicateMemberGroups.map((g) => g.name).join(', ')})
+                    동일 정보 단원 {duplicateMemberGroups.length}건 감지 ({duplicateMemberGroups.map((g) => g.name).join(', ')})
                   </strong>
                   <span style={{ fontSize: '12px', color: '#78350F' }}>
-                    동일한 이름과 전화번호 뒤 4자리를 가진 계정이 중복 감지되었습니다. 출결 로그가 분산되지 않도록 하나로 안전하게 통합할 수 있습니다.
+                    동일한 이름과 전화번호 뒤 4자리를 가진 단원이 감지되었습니다. 각 단원은 고유 ID(외래키) 및 개별 기기 바인딩으로 안전하게 분리 관리되며, 임의로 자동 병합되지 않습니다. 필요 시 중복 등록 여부를 검토해주세요.
                   </span>
                 </div>
               </div>
@@ -1412,7 +1415,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   minHeight: '38px',
                 }}
               >
-                🔍 이력 대조 및 통합
+                🔍 중복 단원 검토
               </button>
             </div>
           )}
@@ -2013,60 +2016,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <p className="print-instruction">{printNotice}</p>
               </div>
 
-              {/* Slim 1-line On-Site PIN Assistance Card */}
-              {currentSchedule && (
-                <div
-                  style={{
-                    marginTop: '16px',
-                    background: '#F8FAFC',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: '10px',
-                    padding: '12px 18px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '10px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
-                      🔑 QR 스캔 불가 / 외부 일정 시 <strong>현장 PIN 인증</strong>:
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '22px',
-                        fontWeight: 800,
-                        color: 'var(--brand-accent)',
-                        letterSpacing: '4px',
-                        background: '#EEF2FF',
-                        padding: '2px 12px',
-                        borderRadius: '8px',
-                      }}
-                    >
-                      {currentSchedule.checkInPin || '1234'}
-                    </span>
-                    <span style={{ fontSize: '12px', color: '#64748B' }}>
-                      ({currentSchedule.title})
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {pinRegenMsg && (
-                      <span style={{ fontSize: '11.5px', color: '#059669', fontWeight: 600 }}>
-                        {pinRegenMsg}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="btn-sync"
-                      style={{ fontSize: '12px', padding: '5px 10px', margin: 0 }}
-                      onClick={handleRegenSessionPin}
-                    >
-                      🔄 PIN 재발급
-                    </button>
-                  </div>
+              {/* Slim 1-line Universal On-Site PIN Assistance Card */}
+              <div
+                style={{
+                  marginTop: '16px',
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '12px 18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+                    🔑 당일 현장 출석 PIN:
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '22px',
+                      fontWeight: 800,
+                      color: 'var(--brand-accent)',
+                      letterSpacing: '4px',
+                      background: '#EEF2FF',
+                      padding: '2px 12px',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    {sheetsService.getActiveOnSitePin() || currentSchedule?.checkInPin || '5027'}
+                  </span>
                 </div>
-              )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {pinRegenMsg && (
+                    <span style={{ fontSize: '11.5px', color: '#059669', fontWeight: 600 }}>
+                      {pinRegenMsg}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="btn-sync"
+                    style={{ fontSize: '12px', padding: '5px 10px', margin: 0 }}
+                    onClick={handleRegenSessionPin}
+                  >
+                    🔄 PIN 재발급
+                  </button>
+                </div>
+              </div>
 
               {/* Customize Text Form (Naver QR Style) */}
               <div className="admin-form-card" style={{ marginTop: '16px' }}>
@@ -3140,74 +3138,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                                 {isExpanded && (
                                   <div style={{ marginTop: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    {group.schedules.map((sch) => (
-                                      <div
-                                        key={sch.id}
-                                        style={{
-                                          display: 'flex',
-                                          justifyContent: 'space-between',
-                                          alignItems: 'center',
-                                          padding: '8px 12px',
-                                          background: '#F8FAFC',
-                                          borderRadius: '6px',
-                                          fontSize: '12px',
-                                        }}
-                                      >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                          <strong style={{ color: '#2563EB' }}>{sch.date}</strong>
-                                          <span style={{ color: '#1E293B', fontWeight: 600 }}>{sch.title}</span>
-                                          <span style={{ color: '#64748B' }}>({sch.startTime}~{sch.endTime})</span>
+                                    {group.schedules.map((sch) => {
+                                      const isSelectedForEdit = editingScheduleForForm?.id === sch.id;
+                                      return (
+                                        <div
+                                          key={sch.id}
+                                          onClick={() => handleBindScheduleToForm(sch)}
+                                          style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            padding: '8px 12px',
+                                            background: isSelectedForEdit ? '#EEF2FF' : '#F8FAFC',
+                                            border: isSelectedForEdit ? '1.5px solid #6366F1' : '1px solid #E2E8F0',
+                                            borderRadius: '6px',
+                                            fontSize: '12px',
+                                            cursor: 'pointer',
+                                            boxShadow: isSelectedForEdit ? '0 0 0 2px rgba(99, 102, 241, 0.2)' : 'none',
+                                            transition: 'all 0.15s ease',
+                                          }}
+                                          title="클릭하여 우측에서 일정 정보 수정"
+                                        >
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {isSelectedForEdit && (
+                                              <span style={{ fontSize: '11px', color: '#4F46E5', fontWeight: 700 }}>
+                                                ✏️ 편집 중:
+                                              </span>
+                                            )}
+                                            <strong style={{ color: '#2563EB' }}>{sch.date}</strong>
+                                            <span style={{ color: '#1E293B', fontWeight: 600 }}>{sch.title}</span>
+                                            <span style={{ color: '#64748B' }}>({sch.startTime}~{sch.endTime})</span>
+                                          </div>
+                                          <div style={{ display: 'flex', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleCloneScheduleToForm(sch)}
+                                              style={{
+                                                background: '#F1F5F9',
+                                                color: '#475569',
+                                                border: '1px solid #CBD5E1',
+                                                borderRadius: '4px',
+                                                padding: '3px 8px',
+                                                fontSize: '11px',
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                              }}
+                                              title="일정 복제"
+                                            >
+                                              복제
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDeleteSchedule(sch.id, sch.title)}
+                                              style={{
+                                                background: '#FEE2E2',
+                                                color: '#DC2626',
+                                                border: 'none',
+                                                borderRadius: '4px',
+                                                padding: '3px 8px',
+                                                fontSize: '11px',
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                              }}
+                                            >
+                                              삭제
+                                            </button>
+                                          </div>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '4px' }}>
-                                          {sch.date < getTodayString() ? (
-                                            <>
-                                              <button
-                                                type="button"
-                                                onClick={() => handleCloneScheduleToForm(sch)}
-                                                style={{ background: '#ECFDF5', color: '#059669', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                                                title="오늘 날짜로 복제"
-                                              >
-                                                복제
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() => handleBindScheduleToForm(sch)}
-                                                style={{ background: '#EEF2FF', color: '#4F46E5', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                                                title="일정 상세/수정"
-                                              >
-                                                수정
-                                              </button>
-                                            </>
-                                          ) : (
-                                            <>
-                                              <button
-                                                type="button"
-                                                onClick={() => handleBindScheduleToForm(sch)}
-                                                style={{ background: '#EEF2FF', color: '#4F46E5', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                                                title="우측 폼에서 수정"
-                                              >
-                                                수정
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() => handleCloneScheduleToForm(sch)}
-                                                style={{ background: '#F8FAFC', color: '#475569', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                                                title="일정 복제"
-                                              >
-                                                복제
-                                              </button>
-                                            </>
-                                          )}
-                                          <button
-                                            type="button"
-                                            onClick={() => handleDeleteSchedule(sch.id, sch.title)}
-                                            style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                                          >
-                                            삭제
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>
@@ -3649,7 +3648,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     }}
                                   >
                                     <span>
-                                      <strong>{m.name}</strong> ({m.part})
+                                      <strong>{m.name}</strong> ({m.part} · {m.phoneLast4 || '0000'})
                                     </span>
                                     <span style={{ color: isSel ? '#4F46E5' : '#94A3B8', fontWeight: 700 }}>
                                       {isSel ? '선택됨 ✓' : '+ 추가'}
@@ -3659,7 +3658,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               })}
                           </div>
                           <span className="form-hint" style={{ marginTop: '8px', display: 'block', color: '#4F46E5' }}>
-                            * 지정된 선발 단원 외에는 출결 통계에서 자동으로 '모수제외' 처리됩니다.
+                            * 지정된 선발 단원 외 단원은 자율 참여 일정으로 분류됩니다.
                           </span>
                         </div>
                       )}
@@ -3758,108 +3757,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Location Selection 2-Step Toggle */}
+                    {/* Unified Location Selector */}
                     <div style={{ marginTop: '4px' }}>
-                      <label className="form-label">연습 장소 선택 방식</label>
-                      <div className="toss-filter-row" style={{ gap: '6px', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label className="form-label" htmlFor="sch-loc-select" style={{ marginBottom: 0 }}>
+                          연습 장소
+                        </label>
                         <button
                           type="button"
-                          className={`toss-filter-chip ${locationMode === 'PRESET' ? 'active' : ''}`}
-                          onClick={() => setLocationMode('PRESET')}
-                        >
-                          <span>🏢 기존 연습실 프리셋</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`toss-filter-chip ${locationMode === 'DIRECT' ? 'active' : ''}`}
-                          onClick={() => {
-                            setLocationMode('DIRECT');
-                            setSelectedLocationPresetId('custom');
+                          onClick={() => setIsScheduleLocationModalOpen(true)}
+                          style={{
+                            fontSize: '12px',
+                            color: '#4F46E5',
+                            fontWeight: 600,
+                            background: '#EEF2FF',
+                            border: '1px solid #C7D2FE',
+                            borderRadius: '6px',
+                            padding: '4px 10px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
                           }}
                         >
-                          <span>🗺️ 새 장소 직접 등록 / 검색</span>
+                          🗺️ + 새 장소 등록 (검색/GPS)
                         </button>
                       </div>
-
-                      {locationMode === 'PRESET' ? (
-                        <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                            <span style={{ fontSize: '12px', color: '#64748B' }}>등록된 연습실 목록</span>
-                            <button
-                              type="button"
-                              onClick={() => setIsScheduleLocationModalOpen(true)}
-                              style={{
-                                fontSize: '11.5px',
-                                color: '#4F46E5',
-                                fontWeight: 600,
-                                background: 'transparent',
-                                border: 'none',
-                                cursor: 'pointer',
-                                padding: 0,
-                              }}
-                            >
-                              🗺️ 지도에서 새 장소 검색/등록
-                            </button>
-                          </div>
-                          <select
-                            className="select-input"
-                            value={selectedLocationPresetId}
-                            onChange={(e) => {
-                              if (e.target.value === '__NEW_LOCATION__') {
-                                setIsScheduleLocationModalOpen(true);
-                              } else {
-                                handleLocationPresetChange(e.target.value);
-                              }
-                            }}
-                          >
-                            {locationPresets.map((loc) => (
-                              <option key={loc.id} value={loc.id}>
-                                {loc.name} (반경 {loc.radiusMeters}m)
-                              </option>
-                            ))}
-                            <option value="__NEW_LOCATION__">🗺️ + 새 연습실 등록 (지도/도로명 검색)...</option>
-                          </select>
-                        </div>
-                      ) : (
-                        <div>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <input
-                              type="text"
-                              className="input-text"
-                              placeholder="직접 입력할 장소명 (예: 예술의전당 리허설룸)"
-                              value={newLocName}
-                              onChange={(e) => setNewLocName(e.target.value)}
-                              style={{ flex: 1 }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setIsScheduleLocationModalOpen(true)}
-                              style={{
-                                background: '#4F46E5',
-                                color: '#FFFFFF',
-                                border: 'none',
-                                borderRadius: '8px',
-                                padding: '0 14px',
-                                fontSize: '12.5px',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              🗺️ 지도 검색
-                            </button>
-                          </div>
-                          <span className="form-hint" style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px', display: 'block' }}>
-                            * 지도 검색 버튼을 누르면 카카오맵/주소 검색으로 GPS 좌표를 자동 설정할 수 있습니다.
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {locationMode === 'PRESET' && (
-                      <div>
-                        <label className="form-label" htmlFor="sch-loc">
-                          연습 장소 명칭 (표기용)
+                      <select
+                        id="sch-loc-select"
+                        className="select-input"
+                        value={selectedLocationPresetId}
+                        onChange={(e) => {
+                          if (e.target.value === '__NEW_LOCATION__') {
+                            setIsScheduleLocationModalOpen(true);
+                          } else {
+                            handleLocationPresetChange(e.target.value);
+                          }
+                        }}
+                      >
+                        {locationPresets.map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            {loc.name} {loc.address ? `(${loc.address})` : ''} · 반경 {loc.radiusMeters}m
+                          </option>
+                        ))}
+                        <option value="__NEW_LOCATION__">🗺️ + 새 연습실 등록 (지도/키워드 검색)...</option>
+                      </select>
+                      <div style={{ marginTop: '6px' }}>
+                        <label className="form-label" htmlFor="sch-loc" style={{ fontSize: '12px', color: '#64748B' }}>
+                          일정 표기용 장소명 (수정 가능)
                         </label>
                         <input
                           id="sch-loc"
@@ -3867,10 +3812,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="input-text"
                           value={newLocName}
                           onChange={(e) => setNewLocName(e.target.value)}
+                          placeholder="장소명 (예: 서초 앙상블 연습실)"
                           required
                         />
                       </div>
-                    )}
+                    </div>
 
                     <label className="form-label" htmlFor="sch-desc">
                       상세 설명 / 연습 곡목 (선택)
@@ -3887,7 +3833,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {editingScheduleForForm ? (
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button type="submit" className="btn-primary-large" style={{ minHeight: '44px', flex: 1 }}>
-                          💾 수정 완료 및 시트 반영
+                          저장
                         </button>
                         <button
                           type="button"

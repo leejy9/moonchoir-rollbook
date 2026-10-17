@@ -108,6 +108,14 @@
 - [x] **Task 49**: 출석 QR 코드 워딩 단일화 & PIN 보조 UI 슬림화 (Completed)
 - [x] **Task 50**: 실시간 시간 윈도우 기반 실전 테스트 시나리오 및 프로토콜 구축 (Completed)
 
+### Phase 4.8: 관계형 데이터, 카카오맵 장소 검색 및 실전 UX 전면 개편 (Planned - [계획서 08](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/08_relational_data_kakao_places_and_ux_overhaul.md))
+- [ ] **Task 51**: 카카오맵 키워드/장소 검색 & 주소 지오코딩 및 엄격한 좌표 검증 (Strict Geocoding Guard)
+- [ ] **Task 52**: 장소 프리셋 관계형 단일 진실 공급원(SSOT) 및 중복 버튼 제거
+- [ ] **Task 53**: 대시보드 Master-Detail 카드 클릭 즉시 바인딩 & 간결한 `[저장]` 버튼
+- [ ] **Task 54**: 단원 명부 불변 식별자(PK) 유지 & 선발 단원 릴레이션 동기화
+- [ ] **Task 55**: 부드러운 워딩(`[🌿 자율 참여 연습]`) & 담백한 미응답자 토글 명단 UI
+- [ ] **Task 56**: 현장 출석 PIN 단일화 & 전수 통합 검증 (Green Bar)
+
 ---
 
 ## Detailed Task Specifications
@@ -457,6 +465,88 @@
 - **Acceptance Criteria**:
   - 관리자가 실시간으로 10분 뒤 일정을 생성하여 [사전투표] $\rightarrow$ [QR 활성화] $\rightarrow$ [출석 마감]의 상태 전이 정상 동작 검증.
 - **Status**: [x] Completed
+
+---
+
+### Task 51: 카카오맵 키워드/장소 검색 & 주소 지오코딩 및 엄격한 좌표 검증 (Strict Geocoding Guard)
+- **Goal**: 카카오맵 JavaScript SDK(`1465ed6063afca1d3ea91711cbdeb84a`)를 안전하게 로드하고, 건물/장소명 키워드 검색(`Places`) 및 도로명 주소 지오코더(`Geocoder`)를 일체형 팝업으로 제공. 좌표 미확보 시 명동 폴백을 원천 차단하고 저장 거부 경고를 출력하며, `[📍 내 현재 위치로 설정]` GPS 원터치 버튼 제공.
+- **Touched Files**:
+  - `src/components/LocationPickerMap.tsx`
+  - `src/types/rollbook.ts`
+- **Acceptance Criteria**:
+  - "서해문화회관", "예술의전당", "인천 연수구 한나루로 158번길 31" 등 입력 시 카카오 API가 유효한 위경도 좌표(X, Y)를 실시간 반환.
+  - 좌표 조회 실패 시 명동 좌표(`37.5665, 126.9780`)로 몰래 저장되지 않고, 저장을 막고 안내 모달 출력.
+  - `[📍 내 현재 위치로 설정]` 클릭 시 스마트폰/브라우저 GPS로 실제 위치 좌표 즉시 획득.
+- **Verification**: `npm test && npm run typecheck`
+- **Status**: [ ] Planned
+
+---
+
+### Task 52: 장소 프리셋 관계형 단일 진실 공급원(SSOT) 및 중복 버튼 제거
+- **목표**: 연습 장소 선택 방식을 복잡한 2분할 탭(`PRESET` vs `DIRECT`) 및 중복 버튼에서 단일 드롭다운 + `[+ 새 장소 등록]` 단일 버튼으로 일원화. `Schedule`이 `locationId` 외래키를 통해 `LocationPreset`의 최신 좌표와 반경을 동적으로 참조하도록 개편하여, 프리셋 수정 시 모든 기존/미래 일정이 즉시 최신 정보로 출석 판정되도록 보장.
+- **Touched Files**:
+  - `src/components/AdminDashboard.tsx`
+  - `src/services/sheets.ts`
+  - `src/utils/geo.ts`
+- **Acceptance Criteria**:
+  - 장소 등록 버튼 중복 제거 (단일 드롭다운 + `[+ 새 장소 등록]` 버튼 1개).
+  - 프리셋의 반경을 100m에서 200m로 변경 시, 해당 장소를 쓰는 기존 일정의 출석 반경도 즉시 200m로 판정.
+- **Verification**: `npm test && npm run typecheck`
+- **Status**: [ ] Planned
+
+---
+
+### Task 53: 대시보드 Master-Detail 카드 클릭 즉시 바인딩 & 간결한 [저장] 버튼
+- **Goal**: 좌측 일정 카드의 작은 [수정] 버튼을 없애고, 카드/목록 행 전체 클릭 시 즉시 우측 폼에 인라인 바인딩. 선택된 카드에 선명한 활성 테두리(Active Ring) 표시. 우측 폼 하단 제출 버튼을 장황한 문구 대신 담백하게 `[저장]` (신규 시 `[새 일정 등록]`)으로 변경. 상단 `[+ 새 일정 추가]` 버튼으로 신규 작성 모드 전환.
+- **Touched Files**:
+  - `src/components/AdminDashboard.tsx`
+- **Acceptance Criteria**:
+  - 좌측 일정 카드를 클릭하면 즉시 우측 폼에 해당 일정의 제목, 날짜, 시간, 장소, 대상자가 인라인 바인딩.
+  - 우측 버튼이 `[저장]`으로 표시되고, 수정 완료 시 즉시 목록에 반영.
+- **Verification**: `npm test && npm run typecheck`
+- **Status**: [ ] Planned
+
+---
+
+### Task 54: 단원 명부 불변 식별자(PK) 유지 & 선발 단원 릴레이션 동기화
+- **Goal**: 시스템 임의 자동 병합(Auto-merge) 완전 금지. `Member.id`를 변경 불가능한 고유 PK로 영구 보존하고 기기 바인딩(`moonchoir_bound_device`) 무결성 보호. 이름/전화번호가 같은 중복 의심 계정이 발견될 경우 관리자 페이지 상단에 단순 검토 알림 배너만 노출. 선발 단원 리스트에서 파트와 뒷자리 4자리를 병기하여 정확한 식별자 매칭 지원 및 `targetMemberIds` 시트 CSV ↔ 배열 양방향 변환 보장.
+- **Touched Files**:
+  - `src/services/sheets.ts`
+  - `src/components/AdminDashboard.tsx`
+  - `src/utils/attendanceStats.ts`
+- **Acceptance Criteria**:
+  - 시스템 임의 머지 없음. 단원 ID 불변 보존.
+  - 선발 단원 지정 시 `이재연 (테너 · 1234)`와 같이 구별 표기되어 정확한 단원 지정 가능.
+  - 시트 저장 및 재동기화 후에도 선발 단원 선택 체크 상태 100% 보존.
+- **Verification**: `npm test && npm run typecheck`
+- **Status**: [ ] Planned
+
+---
+
+### Task 55: 부드러운 워딩([🌿 자율 참여 연습]) & 담백한 미응답자 토글 명단 UI
+- **Goal**: 비대상 단원의 홈 화면에서 "출석 통계 모수" 등 난해한 개발 용어 전면 제거. 배지 `[🌿 자율 참여 연습]`, 안내 "공식 필참 일정이 아닙니다. 참관이나 개인 연습으로 자유롭게 참여하실 수 있습니다.", 버튼 `[개인 연습으로 참여 투표]` / `[자율 출석 체크]`로 전환. 일정 카드 하단에 담백한 회색 모노톤의 `참석 N명 · 불참 N명 · 미응답 N명 ▼` 요약 및 토글 명단 추가 (클릭 시 회색 박스에 미응답자/참석자 이름 나열).
+- **Touched Files**:
+  - `src/components/HomeView.tsx`
+  - `src/index.css`
+- **Acceptance Criteria**:
+  - 비대상자가 로그인했을 때 소외감 없이 자율 연습 안내 및 개인 연습 참여 버튼 노출.
+  - 일정 카드 하단 토글을 누르면 담백한 회색 박스에 미응답자, 참석자, 불참자 명단이 깔끔하게 표시.
+- **Verification**: `npm test && npm run typecheck`
+- **Status**: [ ] Planned
+
+---
+
+### Task 56: 현장 출석 PIN 단일화 & 전수 통합 검증 (Green Bar)
+- **Goal**: 상설 QR 서브탭에서 과거 일정 명칭(`(경찰의날 녹음)`) 꼬리표를 완전히 제거하고, `🔑 당일 현장 출석 PIN: [ 5 0 2 7 ]  [🔄 PIN 재발급]` 단일 블록으로 간결화. `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 전수 통과 확인 및 `DEV_LOG.md` 갱신.
+- **Touched Files**:
+  - `src/components/AdminDashboard.tsx`
+  - `docs/DEV_LOG.md`
+  - `docs/tasks.md`
+- **Acceptance Criteria**:
+  - 과거 일정 명칭 없는 깨끗한 단일 현장 PIN 발급 및 검증 정상 동작.
+  - 4대 정적/단위 센서(typecheck, lint, test, build) 0 error 무결성 확인.
+- **Verification**: `npm test && npm run typecheck && npm run lint && npm run build`
+- **Status**: [ ] Planned
 
 ---
 

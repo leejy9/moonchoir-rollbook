@@ -248,6 +248,7 @@ export interface AppConfig {
   defaultRadius: number; // 100m
   adminPin: string; // "1234"
   masterQrToken?: string; // Permanent Wall-mounted QR Token
+  activeOnSitePin?: string; // Current Active On-site PIN (Universal)
   locationPresets?: LocationPreset[];
   customParts?: string[]; // Dynamic Parts Taxonomy
   customMemberStatuses?: string[]; // Dynamic Member Statuses
