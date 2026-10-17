@@ -50,7 +50,21 @@ export type AuthMethod =
   | 'MANUAL_PIN';
 
 /**
- * 1. Member entity in the master roster
+ * 1. Member Status History for Point-in-time Membership & Attendance Eligibility
+ */
+export interface MemberStatusHistory {
+  id: string;
+  memberId: string;
+  status: MemberStatus;
+  part: PartType;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD (e.g. 2999-12-31 for permanent)
+  reason?: string;
+  createdAt: string; // ISO 8601
+}
+
+/**
+ * 1-1. Member entity in the master roster
  */
 export interface Member {
   id: string;
@@ -64,7 +78,26 @@ export interface Member {
   joinedAt?: string; // YYYY-MM-DD
   memberStatus?: MemberStatus; // 정단원, 준단원, 휴단원, 퇴단원, 선생님, 객원
   note?: string; // 비고 / 특이사항
+  statusHistory?: MemberStatusHistory[]; // 기간제 상태 및 파트 변경 이력
+  boundDeviceId?: string; // 1인 1기기 락 고유 식별자 (Device UUID)
+  boundDeviceAt?: string; // 기기 바인딩 일시
 }
+
+/**
+ * 1-2. Program Card Container for grouping schedules (e.g., 2026 가을 정기연습, 연주회 프로젝트)
+ */
+export interface ProgramCard {
+  id: string;
+  title: string;
+  description?: string;
+  category: ScheduleCategory;
+  defaultLocationId?: string;
+  defaultStartTime?: string; // HH:mm
+  defaultEndTime?: string; // HH:mm
+  isArchived?: boolean;
+  createdAt: string; // ISO 8601
+}
+
 
 /**
  * 2. Location Preset for Rehearsals & Concerts
@@ -110,6 +143,11 @@ export interface Schedule {
   radiusMeters?: number;
   category: ScheduleCategory;
   recurrenceRule?: string; // e.g. "WEEKLY_THU" or JSON serialized RecurrenceRule
+  programId?: string; // FK to ProgramCard (container)
+  seriesId?: string; // Grouping ID for recurring series (e.g. series_20261017_abcd)
+  seriesIndex?: number; // 1-based occurrence index (e.g. 1)
+  seriesTotal?: number; // Total count of occurrences in the series (e.g. 16)
+  isArchived?: boolean; // Archived/hidden state for past semesters
   checkInPin?: string; // 4-digit temporary PIN for on-site check-in
   description?: string;
 }
@@ -185,6 +223,8 @@ export interface CumulativeMemberAttendance {
   attendanceRate: number; // percentage (0 ~ 100)
   recentStatusList: AttendanceStatus[];
   badges: string[]; // e.g. '개근', '우수', '주의'
+  guestAttended?: number; // 자발적 옵트인 참석 횟수 (휴단원/객원)
+  isSpecialGuest?: boolean; // 게스트/휴단원 특별 참석 여부
 }
 
 /**
@@ -204,6 +244,10 @@ export interface AppConfig {
   customMemberStatuses?: string[]; // Dynamic Member Statuses
   customCategories?: string[]; // Dynamic Schedule Categories
   sheetsWebAppUrl?: string;
+  choirName?: string;
+  qrPrintTitle?: string;
+  qrPrintSubtitle?: string;
+  qrPrintNotice?: string;
 }
 
 /**
@@ -215,4 +259,5 @@ export interface BoundDeviceProfile {
   part: PartType;
   phoneLast4: string;
   boundAt: string; // ISO 8601
+  deviceId?: string; // Client Unique Device UUID
 }

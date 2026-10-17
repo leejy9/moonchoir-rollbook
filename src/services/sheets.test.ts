@@ -258,6 +258,77 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(service.getSchedules().some((s) => s.id === 'sch_batch_1')).toBe(false);
     expect(service.getSchedules().some((s) => s.id === 'sch_batch_2')).toBe(false);
   });
+
+  it('enforces 1-person 1-device lock and prevents unauthorized multi-device binding', async () => {
+    const memberId = 'mem_s01'; // 김하은
+    const device1 = 'device_uuid_phone_1';
+    const device2 = 'device_uuid_phone_2';
+
+    // 1st device binding succeeds
+    const bound = await service.bindMemberDevice(memberId, device1);
+    expect(bound.boundDeviceId).toBe(device1);
+    expect(bound.boundDeviceAt).toBeTruthy();
+
+    // Same device re-binding succeeds
+    const reBound = await service.bindMemberDevice(memberId, device1);
+    expect(reBound.boundDeviceId).toBe(device1);
+
+    // 2nd different device binding MUST be rejected
+    await expect(service.bindMemberDevice(memberId, device2)).rejects.toThrow(
+      '이미 다른 기기(스마트폰)에 연동되어 있는 계정입니다'
+    );
+
+    // Unbinding allows device 2 to bind
+    await service.unbindMemberDevice(memberId);
+    const unBoundMember = service.getMembers().find((m) => m.id === memberId);
+    expect(unBoundMember?.boundDeviceId).toBeUndefined();
+
+    const device2Bound = await service.bindMemberDevice(memberId, device2);
+    expect(device2Bound.boundDeviceId).toBe(device2);
+  });
+
+  it('guarantees 1-person 1-vote for RSVP without duplicating records', async () => {
+    const scheduleId = 'sch_20261015';
+    const memberId = 'mem_s01';
+
+    const vote1: RSVPVote = {
+      id: 'vote_1',
+      scheduleId,
+      memberId,
+      memberName: '김하은',
+      part: '소프라노',
+      status: 'ATTEND',
+      timestamp: new Date().toISOString(),
+    };
+
+    await service.submitRSVP(vote1);
+    const votesAfter1 = service.getRSVPVotes().filter(
+      (v) => v.scheduleId === scheduleId && v.memberId === memberId
+    );
+    expect(votesAfter1.length).toBe(1);
+    expect(votesAfter1[0].status).toBe('ATTEND');
+
+    // Change mind -> ABSENT
+    const vote2: RSVPVote = {
+      id: 'vote_2',
+      scheduleId,
+      memberId,
+      memberName: '김하은',
+      part: '소프라노',
+      status: 'ABSENT',
+      reason: '갑작스러운 야근',
+      timestamp: new Date().toISOString(),
+    };
+
+    await service.submitRSVP(vote2);
+    const votesAfter2 = service.getRSVPVotes().filter(
+      (v) => v.scheduleId === scheduleId && v.memberId === memberId
+    );
+    expect(votesAfter2.length).toBe(1); // STILL exactly 1 vote! No duplicate rows!
+    expect(votesAfter2[0].status).toBe('ABSENT');
+    expect(votesAfter2[0].reason).toBe('갑작스러운 야근');
+  });
 });
+
 
 

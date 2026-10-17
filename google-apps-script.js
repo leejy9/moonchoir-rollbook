@@ -18,6 +18,8 @@ const SHEET_NAMES = {
   RSVP: '사전투표_RSVP',
   LOGS: '출석원천로그',
   LOCATIONS: '장소정보',
+  MEMBER_HISTORY: '단원변경로그',
+  PROGRAM_CARDS: '일정카드',
 };
 
 // 1. GET: 전체 데이터 로드 및 헬스체크
@@ -32,6 +34,10 @@ function doGet(e) {
     const logs = readSheetData(ss.getSheetByName(SHEET_NAMES.LOGS));
     const locSheet = ss.getSheetByName(SHEET_NAMES.LOCATIONS);
     const locations = locSheet ? readSheetData(locSheet) : [];
+    const histSheet = ss.getSheetByName(SHEET_NAMES.MEMBER_HISTORY);
+    const memberHistory = histSheet ? readSheetData(histSheet) : [];
+    const cardSheet = ss.getSheetByName(SHEET_NAMES.PROGRAM_CARDS);
+    const programCards = cardSheet ? readSheetData(cardSheet) : [];
 
     const response = {
       success: true,
@@ -42,6 +48,8 @@ function doGet(e) {
         rsvpVotes,
         logs,
         locations,
+        memberHistory,
+        programCards,
       },
       count: {
         members: members.length,
@@ -49,6 +57,8 @@ function doGet(e) {
         logs: logs.length,
         rsvpVotes: rsvpVotes.length,
         locations: locations.length,
+        memberHistory: memberHistory.length,
+        programCards: programCards.length,
       },
     };
 
@@ -89,13 +99,14 @@ function doPost(e) {
     }
 
     if (action === 'SUBMIT_RSVP') {
-      // 사전 투표 등록/수정
+      // 사전 투표 등록/수정 (1인 1투표 보장 및 중복 행 생성 원천 방지)
       const sheet = ss.getSheetByName(SHEET_NAMES.RSVP);
       const rows = sheet.getDataRange().getValues();
       let rowIndex = -1;
 
       for (let i = 1; i < rows.length; i++) {
-        if (rows[i][1] === data.scheduleId && rows[i][2] === data.memberId) {
+        if (String(rows[i][1]).trim() === String(data.scheduleId).trim() &&
+            String(rows[i][2]).trim() === String(data.memberId).trim()) {
           rowIndex = i + 1;
           break;
         }
@@ -125,12 +136,49 @@ function doPost(e) {
       const sheet = ss.getSheetByName(SHEET_NAMES.RSVP);
       const rows = sheet.getDataRange().getValues();
       for (let i = 1; i < rows.length; i++) {
-        if (rows[i][1] === data.scheduleId && rows[i][2] === data.memberId) {
+        if (String(rows[i][1]).trim() === String(data.scheduleId).trim() &&
+            String(rows[i][2]).trim() === String(data.memberId).trim()) {
           sheet.deleteRow(i + 1);
           break;
         }
       }
       return jsonResponse({ success: true, message: '사전 투표 취소 완료' });
+    }
+
+    if (action === 'BIND_DEVICE') {
+      const sheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
+      const rows = sheet.getDataRange().getValues();
+      const headers = rows[0];
+      const idCol = headers.indexOf('id');
+      const devCol = headers.indexOf('boundDeviceId');
+      const timeCol = headers.indexOf('boundDeviceAt');
+
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][idCol]) === String(data.memberId)) {
+          if (devCol >= 0) sheet.getRange(i + 1, devCol + 1).setValue(data.deviceId || '');
+          if (timeCol >= 0) sheet.getRange(i + 1, timeCol + 1).setValue(new Date().toISOString());
+          return jsonResponse({ success: true, message: '기기 바인딩 완료' });
+        }
+      }
+      return jsonResponse({ success: false, message: '단원을 찾을 수 없습니다.' });
+    }
+
+    if (action === 'UNBIND_DEVICE') {
+      const sheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
+      const rows = sheet.getDataRange().getValues();
+      const headers = rows[0];
+      const idCol = headers.indexOf('id');
+      const devCol = headers.indexOf('boundDeviceId');
+      const timeCol = headers.indexOf('boundDeviceAt');
+
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][idCol]) === String(data.memberId)) {
+          if (devCol >= 0) sheet.getRange(i + 1, devCol + 1).setValue('');
+          if (timeCol >= 0) sheet.getRange(i + 1, timeCol + 1).setValue('');
+          return jsonResponse({ success: true, message: '기기 연동 해제 완료' });
+        }
+      }
+      return jsonResponse({ success: false, message: '단원을 찾을 수 없습니다.' });
     }
 
     if (action === 'REGISTER_MEMBER') {
@@ -147,6 +195,8 @@ function doPost(e) {
         if (h === 'joinedAt') return data.joinedAt || new Date().toISOString().slice(0, 10);
         if (h === 'memberStatus') return data.memberStatus || '정단원';
         if (h === 'note') return data.note || '';
+        if (h === 'boundDeviceId') return data.boundDeviceId || '';
+        if (h === 'boundDeviceAt') return data.boundDeviceAt || '';
         return data[h] !== undefined ? data[h] : '';
       });
       sheet.appendRow(newRow);
@@ -176,12 +226,53 @@ function doPost(e) {
           if (h === 'joinedAt') return data.joinedAt || '';
           if (h === 'memberStatus') return data.memberStatus || '정단원';
           if (h === 'note') return data.note !== undefined ? data.note : '';
+          if (h === 'boundDeviceId') return data.boundDeviceId !== undefined ? data.boundDeviceId : '';
+          if (h === 'boundDeviceAt') return data.boundDeviceAt !== undefined ? data.boundDeviceAt : '';
           return data[h] !== undefined ? data[h] : '';
         });
         sheet.getRange(rowIndex, 1, 1, updateRow.length).setValues([updateRow]);
+
+        // 단원 변경 이력이 동봉되어 있다면 '단원변경로그' 탭에도 append
+        if (data.historyItem) {
+          const histSheet = ss.getSheetByName(SHEET_NAMES.MEMBER_HISTORY);
+          if (histSheet) {
+            const h = data.historyItem;
+            histSheet.appendRow([
+              h.id || ('hist_' + Date.now()),
+              data.id,
+              data.name || '',
+              h.status || data.memberStatus || '정단원',
+              h.part || data.part || '소프라노',
+              h.startDate || '',
+              h.endDate || '2999-12-31',
+              h.reason || '',
+              h.createdAt || new Date().toISOString(),
+            ]);
+          }
+        }
+
         return jsonResponse({ success: true, message: '단원 정보 수정 완료' });
       }
       return jsonResponse({ success: false, message: '해당 단원을 찾을 수 없습니다: ' + data.id });
+    }
+
+    if (action === 'ADD_MEMBER_HISTORY') {
+      const histSheet = ss.getSheetByName(SHEET_NAMES.MEMBER_HISTORY);
+      if (histSheet) {
+        histSheet.appendRow([
+          data.id || ('hist_' + Date.now()),
+          data.memberId,
+          data.name || '',
+          data.status,
+          data.part,
+          data.startDate,
+          data.endDate || '2999-12-31',
+          data.reason || '',
+          data.createdAt || new Date().toISOString(),
+        ]);
+        return jsonResponse({ success: true, message: '단원 변경 이력 기록 완료' });
+      }
+      return jsonResponse({ success: false, message: '단원변경로그 탭을 찾을 수 없습니다.' });
     }
 
     if (action === 'DELETE_MEMBER') {
@@ -198,7 +289,11 @@ function doPost(e) {
 
     if (action === 'CREATE_SCHEDULE' || action === 'REGISTER_SCHEDULE') {
       const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
-      sheet.appendRow([
+      const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+      const newRow = headers.map(function(h) {
+        return data[h] !== undefined ? data[h] : '';
+      });
+      sheet.appendRow(newRow.length > 0 ? newRow : [
         data.id,
         data.title,
         data.date,
@@ -215,19 +310,16 @@ function doPost(e) {
     if (action === 'UPDATE_SCHEDULE') {
       const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
       const rows = sheet.getDataRange().getValues();
+      const headers = rows[0];
       for (let i = 1; i < rows.length; i++) {
         if (rows[i][0] === data.id) {
-          sheet.getRange(i + 1, 1, 1, 9).setValues([[
-            data.id,
-            data.title,
-            data.date,
-            data.startTime,
-            data.endTime,
-            data.locationName,
-            data.category,
-            data.checkInPin,
-            data.description || '',
-          ]]);
+          const row = [...rows[i]];
+          headers.forEach(function (h, colIdx) {
+            if (data[h] !== undefined) {
+              row[colIdx] = data[h];
+            }
+          });
+          sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
           return jsonResponse({ success: true, message: '일정 수정 완료' });
         }
       }
@@ -328,6 +420,49 @@ function doPost(e) {
       return jsonResponse({ success: false, message: '해당 장소를 찾을 수 없습니다.' });
     }
 
+    if (action === 'SAVE_PROGRAM_CARD') {
+      const sheet = ss.getSheetByName(SHEET_NAMES.PROGRAM_CARDS);
+      if (!sheet) return jsonResponse({ success: false, message: '일정카드 탭이 없습니다.' });
+      const rows = sheet.getDataRange().getValues();
+      let rowIndex = -1;
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === data.id) {
+          rowIndex = i + 1;
+          break;
+        }
+      }
+      const rowData = [
+        data.id,
+        data.title || '',
+        data.description || '',
+        data.category || '정기연습',
+        data.defaultLocationId || '',
+        data.defaultStartTime || '19:30',
+        data.defaultEndTime || '22:00',
+        data.isArchived ? 'TRUE' : 'FALSE',
+        data.createdAt || new Date().toISOString(),
+      ];
+      if (rowIndex > 0) {
+        sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
+      } else {
+        sheet.appendRow(rowData);
+      }
+      return jsonResponse({ success: true, message: '일정카드 저장 완료' });
+    }
+
+    if (action === 'DELETE_PROGRAM_CARD') {
+      const sheet = ss.getSheetByName(SHEET_NAMES.PROGRAM_CARDS);
+      if (!sheet) return jsonResponse({ success: false, message: '일정카드 탭이 없습니다.' });
+      const rows = sheet.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === data.id) {
+          sheet.deleteRow(i + 1);
+          return jsonResponse({ success: true, message: '일정카드 삭제 완료' });
+        }
+      }
+      return jsonResponse({ success: false, message: '해당 일정카드를 찾을 수 없습니다.' });
+    }
+
     return jsonResponse({ success: false, message: '알 수 없는 액션: ' + action });
   } catch (err) {
     return jsonResponse({ success: false, error: err.toString() });
@@ -346,19 +481,19 @@ function manualInitialize() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureSheetStructure(ss);
   seedInitialData(ss);
-  SpreadsheetApp.getUi().alert('초기화 완료!\n\n단원명부, 일정캘린더, 출석로그, 사전투표, 장소정보 탭이 생성되었습니다.');
+  SpreadsheetApp.getUi().alert('초기화 완료!\n\n단원명부, 일정캘린더, 출석로그, 사전투표, 장소정보, 단원변경로그, 일정카드 탭이 생성되었습니다.');
 }
 
-// 헬퍼: 5대 탭 및 헤더 자동 생성 (기존 데이터 보존)
+// 헬퍼: 7대 탭 및 헤더 자동 생성 (기존 데이터 보존)
 function ensureSheetStructure(ss) {
   const schemas = [
     {
       name: SHEET_NAMES.MEMBERS,
-      headers: ['id', 'name', 'part', 'phoneLast4', 'phone', 'role', 'status', 'joinedAt', 'memberStatus', 'note'],
+      headers: ['id', 'name', 'part', 'phoneLast4', 'phone', 'role', 'status', 'joinedAt', 'memberStatus', 'note', 'boundDeviceId', 'boundDeviceAt'],
     },
     {
       name: SHEET_NAMES.SCHEDULES,
-      headers: ['id', 'title', 'date', 'startTime', 'endTime', 'locationName', 'category', 'checkInPin', 'description'],
+      headers: ['id', 'title', 'date', 'startTime', 'endTime', 'locationName', 'category', 'checkInPin', 'description', 'programId', 'seriesId', 'seriesIndex', 'seriesTotal', 'isArchived'],
     },
     {
       name: SHEET_NAMES.RSVP,
@@ -371,6 +506,14 @@ function ensureSheetStructure(ss) {
     {
       name: SHEET_NAMES.LOCATIONS,
       headers: ['id', 'name', 'address', 'detailAddress', 'entranceNote', 'latitude', 'longitude', 'radiusMeters', 'isDefault'],
+    },
+    {
+      name: SHEET_NAMES.MEMBER_HISTORY,
+      headers: ['id', 'memberId', 'name', 'status', 'part', 'startDate', 'endDate', 'reason', 'createdAt'],
+    },
+    {
+      name: SHEET_NAMES.PROGRAM_CARDS,
+      headers: ['id', 'title', 'description', 'category', 'defaultLocationId', 'defaultStartTime', 'defaultEndTime', 'isArchived', 'createdAt'],
     },
   ];
 

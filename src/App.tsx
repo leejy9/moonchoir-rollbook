@@ -4,9 +4,10 @@ import { AdminPinModal } from './components/AdminPinModal';
 import { BindingModal } from './components/BindingModal';
 import { CalendarView } from './components/CalendarView';
 import { HomeView } from './components/HomeView';
+import { MemberPortalModal } from './components/MemberPortalModal';
 import { QRScannerModal } from './components/QRScannerModal';
 import { RSVPModal } from './components/RSVPModal';
-import { getBoundDeviceProfile, isAdminLoggedIn } from './services/auth';
+import { clearDeviceProfile, getBoundDeviceProfile, isAdminLoggedIn } from './services/auth';
 import { sheetsService } from './services/sheets';
 import type { BoundDeviceProfile, Schedule } from './types/rollbook';
 
@@ -14,6 +15,7 @@ export function App() {
   // Device binding state
   const [profile, setProfile] = useState<BoundDeviceProfile | null>(() => getBoundDeviceProfile());
   const [showBindingModal, setShowBindingModal] = useState(false);
+  const [showMemberPortalModal, setShowMemberPortalModal] = useState(false);
 
   // View state: 'HOME' | 'CALENDAR' | 'ADMIN'
   const [currentView, setCurrentView] = useState<'HOME' | 'CALENDAR' | 'ADMIN'>('HOME');
@@ -90,6 +92,7 @@ export function App() {
           onOpenRSVP={(sch) => setRsvSchedule(sch)}
           onOpenAdmin={handleOpenAdmin}
           onChangeProfile={() => setShowBindingModal(true)}
+          onOpenProfilePortal={() => setShowMemberPortalModal(true)}
           onViewCalendar={() => setCurrentView('CALENDAR')}
           refreshTrigger={refreshKey}
         />
@@ -118,6 +121,26 @@ export function App() {
         <BindingModal
           onSuccess={handleDeviceBound}
           onClose={() => setShowBindingModal(false)}
+        />
+      )}
+
+      {showMemberPortalModal && profile && (
+        <MemberPortalModal
+          profile={profile}
+          onClose={() => setShowMemberPortalModal(false)}
+          onChangeBinding={() => {
+            setShowMemberPortalModal(false);
+            setShowBindingModal(true);
+          }}
+          onLogout={async () => {
+            if (profile) {
+              await sheetsService.unbindMemberDevice(profile.memberId).catch(console.error);
+            }
+            clearDeviceProfile();
+            setProfile(null);
+            setShowMemberPortalModal(false);
+          }}
+          onRefreshData={triggerRefresh}
         />
       )}
 

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { expandRecurringSchedules, formatYearMonth, getCalendarGrid } from './calendar';
+import {
+  duplicateScheduleSeries,
+  expandRecurringSchedules,
+  formatYearMonth,
+  getCalendarGrid,
+} from './calendar';
 
 describe('Calendar Utility', () => {
   it('formats year and month as YYYY-MM', () => {
@@ -45,5 +50,47 @@ describe('Calendar Utility', () => {
     expect(expanded[1].date).toBe('2026-10-22');
     expect(expanded[2].date).toBe('2026-10-29');
     expect(expanded[3].date).toBe('2026-11-05');
+
+    // Verify series metadata
+    expect(expanded[0].seriesId).toBeDefined();
+    expect(expanded[0].seriesId).toBe(expanded[1].seriesId);
+    expect(expanded[0].seriesIndex).toBe(1);
+    expect(expanded[0].seriesTotal).toBe(4);
+    expect(expanded[3].seriesIndex).toBe(4);
+  });
+
+  it('duplicates an existing schedule series with new start date and unique IDs', () => {
+    const base = {
+      title: '정기연습',
+      date: '2026-10-15',
+      startTime: '19:30',
+      endTime: '21:30',
+      locationName: '제1연습실',
+      category: '정기연습' as const,
+    };
+
+    const originalSeries = expandRecurringSchedules(base, {
+      frequency: 'WEEKLY',
+      byDays: ['THU'],
+      count: 3,
+    });
+
+    const targetSeriesId = originalSeries[0].seriesId!;
+    const duplicated = duplicateScheduleSeries(originalSeries, targetSeriesId, '2027-03-04');
+
+    expect(duplicated.length).toBe(3);
+    expect(duplicated[0].date).toBe('2027-03-04');
+    expect(duplicated[1].date).toBe('2027-03-11');
+    expect(duplicated[2].date).toBe('2027-03-18');
+
+    // New seriesId should be generated and differ from original
+    expect(duplicated[0].seriesId).toBeDefined();
+    expect(duplicated[0].seriesId).not.toBe(targetSeriesId);
+    expect(duplicated[0].seriesId).toBe(duplicated[1].seriesId);
+
+    // Each duplicated item has a unique scheduleId
+    expect(duplicated[0].id).not.toBe(originalSeries[0].id);
+    expect(duplicated[0].seriesIndex).toBe(1);
+    expect(duplicated[2].seriesIndex).toBe(3);
   });
 });

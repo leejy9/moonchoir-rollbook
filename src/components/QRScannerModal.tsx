@@ -26,15 +26,17 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [geoStatus, setGeoStatus] = useState<string>('위치 정보 확인 중...');
+  const [geoStatus, setGeoStatus] = useState<string>('위치(GPS) 확인 중...');
   const [scanResult, setScanResult] = useState<{
     success: boolean;
     distance?: number;
     isVerified: boolean;
     msg: string;
   } | null>(null);
+  const [savedLog, setSavedLog] = useState<RawAttendanceLog | null>(null);
+  const [successTimeStr, setSuccessTimeStr] = useState('');
 
-  // Common check-in logic
+  // Common check-in execution
   const executeCheckIn = async (
     targetSchedule: Schedule,
     authMethod: 'QR_WEB_CAM' | 'MANUAL_PIN'
@@ -54,7 +56,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const venueName = locInfo.locationName;
 
     try {
-      setGeoStatus('현재 위치(GPS)를 정밀 측정하고 있습니다...');
+      setGeoStatus('현재 위치(GPS) 정밀 측정 중...');
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         if (!navigator.geolocation) {
           reject(new Error('GPS 미지원'));
@@ -103,7 +105,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         success: false,
         distance: distanceMeters,
         isVerified: false,
-        msg: `현재 위치가 '${venueName}' 출석 인정 반경(${radiusMeters}m) 밖입니다 (${distFormatted} 떨어짐). 연습실 현장에 도착 후 출석을 진행해 주세요.`,
+        msg: `현재 위치가 '${venueName}' 출석 인정 반경(${radiusMeters}m) 밖입니다 (${distFormatted} 떨어짐). 연습실에 도착하신 후 다시 시도해 주세요.`,
       });
       return;
     }
@@ -133,16 +135,17 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     await sheetsService.addCheckInLog(log);
     playScanSuccessSound();
 
+    const timeLabel = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+    setSuccessTimeStr(`${timeLabel} 정상 인증`);
+
+    setSavedLog(log);
+    setIsProcessing(false);
     setScanResult({
       success: true,
       distance: distanceMeters,
       isVerified: true,
       msg: `${targetSchedule.title} [${venueName}] 현장 출석이 완료되었습니다!`,
     });
-
-    setTimeout(() => {
-      onSuccess(log);
-    }, 1200);
   };
 
   // Process QR
@@ -162,35 +165,10 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     await executeCheckIn(targetSchedule, 'QR_WEB_CAM');
   };
 
-  // Image file QR scanner fallback
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'attemptBoth',
-        });
-        if (code && code.data && code.data.trim()) {
-          handleDetectedQRCode(code.data.trim());
-        } else {
-          alert('선택하신 이미지에서 QR 코드를 인식하지 못했습니다. 더 선명한 사진을 선택하거나 직접 스캔해주세요.');
-        }
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  };
+  const handleDetectedQRCodeRef = useRef(handleDetectedQRCode);
+  useEffect(() => {
+    handleDetectedQRCodeRef.current = handleDetectedQRCode;
+  });
 
   // Real-time camera stream + dual decode (BarcodeDetector + jsQR fallback)
   useEffect(() => {
@@ -199,101 +177,27 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     let stream: MediaStream | null = null;
     let animId: number | null = null;
     let isCancelled = false;
-    let lastScanTime = 0;
+    let detector: any = null;
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-    // Initialize native BarcodeDetector if available
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let barcodeDetector: any = null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        barcodeDetector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+        const BD = (window as any).BarcodeDetector;
+        detector = new BD({ formats: ['qr_code'] });
       } catch {
-        barcodeDetector = null;
+        detector = null;
       }
     }
 
-    const scanFrame = async () => {
-      if (isCancelled || isProcessing) return;
-
-      const video = videoRef.current;
-      const now = performance.now();
-
-      // Throttle scanning to every 80ms for optimal performance & battery
-      if (
-        video &&
-        video.readyState >= 2 &&
-        video.videoWidth > 0 &&
-        video.videoHeight > 0 &&
-        now - lastScanTime >= 80
-      ) {
-        lastScanTime = now;
-        let detectedPayload: string | null = null;
-
-        // 1. Try native hardware BarcodeDetector first
-        if (barcodeDetector) {
-          try {
-            const barcodes = await barcodeDetector.detect(video);
-            if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-              detectedPayload = barcodes[0].rawValue.trim();
-            }
-          } catch {
-            // fallback to jsQR
-          }
-        }
-
-        // 2. Fallback to jsQR on canvas
-        if (!detectedPayload && ctx) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-          try {
-            const code = jsQR(imageData.data, imageData.width, imageData.height, {
-              inversionAttempts: 'attemptBoth',
-            });
-
-            if (code && code.data && code.data.trim()) {
-              detectedPayload = code.data.trim();
-            }
-          } catch {
-            // Ignore partial decode glitches
-          }
-        }
-
-        if (detectedPayload && !isCancelled) {
-          handleDetectedQRCode(detectedPayload);
-          return;
-        }
-      }
-
-      if (!isCancelled) {
-        animId = requestAnimationFrame(scanFrame);
-      }
-    };
-
-    const startCamera = async () => {
+    async function startCamera() {
       try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error('이 브라우저는 카메라 스트림을 지원하지 않습니다.');
-        }
-
+        setCameraError(null);
         stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
+          video: { facingMode: { ideal: 'environment' } },
           audio: false,
         });
 
         if (isCancelled) {
-          stream.getTracks().forEach((track) => track.stop());
+          stream.getTracks().forEach((t) => t.stop());
           return;
         }
 
@@ -301,28 +205,62 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           videoRef.current.srcObject = stream;
           videoRef.current.setAttribute('playsinline', 'true');
           await videoRef.current.play();
-          animId = requestAnimationFrame(scanFrame);
+          scanFrame();
         }
       } catch (err: unknown) {
-        console.warn('[Camera] Failed to access camera:', err);
-        const errMsg = err instanceof Error ? err.message : String(err);
-        setCameraError(`카메라 접근 불가: ${errMsg}. 현장 PIN 입력 탭을 이용해주세요.`);
+        console.error('[QRScanner] Camera access error:', err);
+        setCameraError('카메라를 실행할 수 없습니다. 브라우저 카메라 권한을 허용해주세요.');
       }
-    };
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    async function scanFrame() {
+      if (isCancelled) return;
+
+      const video = videoRef.current;
+      if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+        if (detector) {
+          try {
+            const barcodes = await detector.detect(video);
+            if (barcodes.length > 0 && barcodes[0].rawValue) {
+              handleDetectedQRCodeRef.current(barcodes[0].rawValue);
+              return;
+            }
+          } catch {
+            // Detector failed this frame, fallback
+          }
+        }
+
+        if (ctx) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert',
+          });
+
+          if (code && code.data && code.data.trim()) {
+            handleDetectedQRCodeRef.current(code.data.trim());
+            return;
+          }
+        }
+      }
+
+      animId = requestAnimationFrame(scanFrame);
+    }
 
     startCamera();
 
     return () => {
       isCancelled = true;
       if (animId !== null) cancelAnimationFrame(animId);
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      if (stream) stream.getTracks().forEach((t) => t.stop());
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, isProcessing, scanResult]);
+  }, [activeTab, scanResult]);
 
-  // Process PIN
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPinError('');
@@ -340,218 +278,373 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     await executeCheckIn(schedule, 'MANUAL_PIN');
   };
 
+  const handleFinishSuccess = () => {
+    if (savedLog) {
+      onSuccess(savedLog);
+    } else {
+      onClose();
+    }
+  };
+
   return (
-    <div className="modal-overlay">
-      <div className="modal-card scanner-card">
-        <div className="modal-header">
-          <div className="modal-badge">{schedule.title}</div>
-          <h2 className="modal-title">{profile.name} 님 출석 체크</h2>
-          <p className="modal-desc">
-            연습실 벽면의 상설 QR 또는 주간 QR을 카메라에 비춰주세요.
-          </p>
+    <div className="modal-overlay" style={{ backdropFilter: 'blur(8px)', backgroundColor: 'rgba(15, 23, 42, 0.75)' }}>
+      <div
+        className="modal-card"
+        style={{
+          maxWidth: '440px',
+          width: '92%',
+          padding: '24px 20px',
+          borderRadius: '24px',
+          background: '#ffffff',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+          position: 'relative',
+        }}
+      >
+        {/* Top Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#6366F1', background: '#EEF2FF', padding: '3px 8px', borderRadius: '6px' }}>
+              🎵 문콰이어 출석 체크
+            </span>
+            <h2 style={{ margin: '4px 0 0', fontSize: '18px', fontWeight: 800, color: '#1E293B' }}>
+              {profile.name} 님 <span style={{ fontSize: '14px', fontWeight: 600, color: '#64748B' }}>({profile.part})</span>
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isProcessing}
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              border: 'none',
+              background: '#F1F5F9',
+              color: '#64748B',
+              fontSize: '18px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            ✕
+          </button>
         </div>
 
-        {/* Mode Selector Tabs */}
-        {!scanResult && (
-          <div className="tab-pill-group" style={{ marginBottom: '16px' }}>
+        {/* ============================================================== */}
+        {/* 1. SUCCESS CELEBRATION VIEW (긍정적 경험 극대화)                 */}
+        {/* ============================================================== */}
+        {scanResult?.success ? (
+          <div style={{ textAlign: 'center', padding: '16px 8px 8px' }}>
+            <div
+              style={{
+                width: '84px',
+                height: '84px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #10B981, #059669)',
+                color: '#ffffff',
+                fontSize: '44px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+                boxShadow: '0 10px 25px -5px rgba(16, 185, 129, 0.5)',
+                animation: 'bounce 0.6s ease-in-out',
+              }}
+            >
+              🎉
+            </div>
+
+            <h3 style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', margin: '0 0 6px' }}>
+              인증에 성공했어요! 🎉
+            </h3>
+
+            <p style={{ fontSize: '15px', color: '#334155', fontWeight: 600, margin: '0 0 16px', lineHeight: 1.5, wordBreak: 'keep-all' }}>
+              {profile.name} 단원님, 환영합니다! 오늘 활동도 힘차고 즐겁게 시작해봐요! 🎵
+            </p>
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '12px',
+                color: '#64748B',
+                marginBottom: '20px',
+              }}
+            >
+              <span>📍 {schedule.locationName}</span>
+              <span>·</span>
+              <span>⏰ {successTimeStr || '정상 인증 완료'}</span>
+            </div>
+
             <button
               type="button"
-              className={`tab-pill ${activeTab === 'QR' ? 'active' : ''}`}
-              onClick={() => setActiveTab('QR')}
+              onClick={handleFinishSuccess}
+              style={{
+                width: '100%',
+                minHeight: '52px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, #4F46E5, #4338CA)',
+                color: '#FFFFFF',
+                fontSize: '16px',
+                fontWeight: 800,
+                border: 'none',
+                boxShadow: '0 10px 20px -5px rgba(79, 70, 229, 0.4)',
+                cursor: 'pointer',
+              }}
             >
-              <IconQrScan size={16} />
-              <span>종이 QR 스캔</span>
-            </button>
-            <button
-              type="button"
-              className={`tab-pill ${activeTab === 'PIN' ? 'active' : ''}`}
-              onClick={() => setActiveTab('PIN')}
-            >
-              <IconKeypad size={16} />
-              <span>현장 PIN 번호 입력</span>
+              오늘 연습 힘차게 시작하기 🎵
             </button>
           </div>
-        )}
+        ) : scanResult && !scanResult.success ? (
+          /* ============================================================== */
+          /* 2. ERROR / LOCATION MISMATCH VIEW                              */
+          /* ============================================================== */
+          <div style={{ textAlign: 'center', padding: '16px 8px 8px' }}>
+            <div
+              style={{
+                width: '76px',
+                height: '76px',
+                borderRadius: '50%',
+                background: '#FEE2E2',
+                color: '#DC2626',
+                fontSize: '38px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+              }}
+            >
+              ⚠️
+            </div>
 
-        {scanResult ? (
-          <div className={`scan-success-box ${scanResult.success ? '' : 'is-error'}`}>
-            <div className="success-icon-anim">{scanResult.success ? '🎉' : '⚠️'}</div>
-            <h3 className="success-title">{scanResult.success ? '출석 체크 완료!' : '현장 위치 불일치'}</h3>
-            <p className="success-desc" style={{ color: scanResult.success ? '#191f28' : '#EF4444', wordBreak: 'keep-all' }}>
+            <h3 style={{ fontSize: '19px', fontWeight: 800, color: '#991B1B', margin: '0 0 8px' }}>
+              현장 위치 확인 실패
+            </h3>
+
+            <p style={{ fontSize: '14px', color: '#475569', margin: '0 0 16px', lineHeight: 1.5, wordBreak: 'keep-all' }}>
               {scanResult.msg}
             </p>
-            {scanResult.distance !== undefined && (
-              <span
-                className="distance-badge"
-                style={{
-                  backgroundColor: scanResult.isVerified ? '#ECFDF5' : '#FEF2F2',
-                  color: scanResult.isVerified ? '#059669' : '#DC2626',
-                  borderColor: scanResult.isVerified ? '#A7F3D0' : '#FECACA',
-                }}
-              >
-                📍 연습실과의 거리: {scanResult.distance >= 1000 ? `${(scanResult.distance / 1000).toFixed(1)}km` : `${scanResult.distance}m`} (
-                {scanResult.isVerified ? '반경 이내 정상' : '인정 반경 초과'})
-              </span>
-            )}
-            {!scanResult.success && (
-              <button
-                type="button"
-                className="btn-qr-action-secondary"
-                style={{ marginTop: '16px', minHeight: '44px', width: '100%' }}
-                onClick={() => {
-                  setScanResult(null);
-                  setIsProcessing(false);
-                }}
-              >
-                다시 스캔 시도하기
-              </button>
-            )}
-          </div>
-        ) : activeTab === 'QR' ? (
-          <div>
-            <div className="camera-viewfinder-container">
-              {!cameraError ? (
-                <>
-                  <video
-                    ref={videoRef}
-                    playsInline
-                    muted
-                    autoPlay
-                    className="camera-video-stream"
-                  />
-                  <div className="viewfinder-overlay">
-                    <div className="viewfinder-box">
-                      <div className="viewfinder-laser" />
-                      <span className="corner top-left" />
-                      <span className="corner top-right" />
-                      <span className="corner bottom-left" />
-                      <span className="corner bottom-right" />
-                    </div>
-                    <div className="viewfinder-hint-text">
-                      QR 코드를 사각형 안에 비추면 자동으로 인식됩니다
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="camera-fallback-box">
-                  <span className="camera-fallback-icon">📷</span>
-                  <p className="camera-fallback-text">{cameraError}</p>
-                </div>
-              )}
-            </div>
 
-            {/* Below Camera Controls */}
-            <div style={{ marginTop: '12px', textAlign: 'center' }}>
-              <div className="geo-status-indicator">
-                <span className="geo-dot" /> {geoStatus}
-              </div>
-
-              {/* Album photo QR scanner option */}
-              <div style={{ marginTop: '10px' }}>
-                <label
-                  style={{
-                    fontSize: '12.5px',
-                    color: '#5B3E96',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    padding: '6px 14px',
-                    background: '#F8F5FE',
-                    borderRadius: '8px',
-                    border: '1px solid #ECEBFC',
-                    fontWeight: 600,
-                  }}
-                >
-                  <span>🖼️ 앨범에서 QR 사진 선택</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    style={{ display: 'none' }}
-                    onChange={handleImageUpload}
-                  />
-                </label>
-              </div>
-
-              {/* Dev simulator button at bottom */}
-              <div style={{ marginTop: '10px' }}>
-                <button
-                  type="button"
-                  className="btn-sim-scan"
-                  onClick={() => handleDetectedQRCode(schedule.id)}
-                  disabled={isProcessing}
-                  style={{
-                    fontSize: '12px',
-                    padding: '6px 12px',
-                    background: 'transparent',
-                    color: '#718096',
-                    border: '1px dashed #CBD5E0',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {isProcessing ? '출석 처리 중...' : '⚡ 카메라 없는 환경용: 출석 테스트'}
-                </button>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setScanResult(null);
+                setIsProcessing(false);
+              }}
+              style={{
+                width: '100%',
+                minHeight: '48px',
+                borderRadius: '12px',
+                background: '#1E293B',
+                color: '#FFFFFF',
+                fontSize: '15px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              다시 스캔 시도하기 ↺
+            </button>
           </div>
         ) : (
-          /* PIN Input Mode */
-          <div className="pin-mode-container" style={{ padding: '12px 0' }}>
-            <form onSubmit={handlePinSubmit} className="form-stack">
-              <label className="form-label" style={{ textAlign: 'center', fontSize: '15px' }}>
-                관리자가 공지한 현장 PIN 4자리
-              </label>
-
-              <input
-                type="tel"
-                maxLength={4}
-                autoFocus
-                className="modern-input"
-                style={{
-                  fontSize: '28px',
-                  letterSpacing: '12px',
-                  textAlign: 'center',
-                  fontWeight: 700,
-                  height: '56px',
-                }}
-                placeholder="••••"
-                value={inputPin}
-                onChange={(e) => setInputPin(e.target.value.replace(/\D/g, ''))}
-              />
-
-              {pinError && (
-                <div className="error-banner" style={{ fontSize: '13px' }}>
-                  {pinError}
-                </div>
-              )}
-
-              <p className="form-hint" style={{ textAlign: 'center', fontSize: '12px', color: '#718096', marginTop: '6px' }}>
-                * 스마트폰 GPS가 연습실 반경 내에 있을 때 정상 출석 처리됩니다.
-              </p>
-
+          /* ============================================================== */
+          /* 3. ACTIVE SCANNING VIEW (LARGE VIEWFINDER)                      */
+          /* ============================================================== */
+          <div>
+            {/* Minimal Mode Tab Switcher */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
               <button
-                type="submit"
-                className="btn-primary-large"
-                disabled={isProcessing || inputPin.length < 4}
-                style={{ marginTop: '12px' }}
+                type="button"
+                onClick={() => setActiveTab('QR')}
+                style={{
+                  flex: 1,
+                  minHeight: '40px',
+                  borderRadius: '10px',
+                  border: `1.5px solid ${activeTab === 'QR' ? '#4F46E5' : '#E2E8F0'}`,
+                  background: activeTab === 'QR' ? '#EEF2FF' : '#FFFFFF',
+                  color: activeTab === 'QR' ? '#4F46E5' : '#64748B',
+                  fontWeight: 700,
+                  fontSize: '13.5px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                }}
               >
-                {isProcessing ? '위치 검증 및 출석 처리 중...' : '현장 PIN으로 출석하기'}
+                <IconQrScan size={16} />
+                <span>카메라 QR 스캔</span>
               </button>
-            </form>
+              <button
+                type="button"
+                onClick={() => setActiveTab('PIN')}
+                style={{
+                  flex: 1,
+                  minHeight: '40px',
+                  borderRadius: '10px',
+                  border: `1.5px solid ${activeTab === 'PIN' ? '#4F46E5' : '#E2E8F0'}`,
+                  background: activeTab === 'PIN' ? '#EEF2FF' : '#FFFFFF',
+                  color: activeTab === 'PIN' ? '#4F46E5' : '#64748B',
+                  fontWeight: 700,
+                  fontSize: '13.5px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                }}
+              >
+                <IconKeypad size={16} />
+                <span>현장 PIN 번호</span>
+              </button>
+            </div>
+
+            {activeTab === 'QR' ? (
+              <div>
+                {/* Large Responsive Camera Box */}
+                <div
+                  style={{
+                    width: '100%',
+                    height: '320px',
+                    borderRadius: '20px',
+                    overflow: 'hidden',
+                    position: 'relative',
+                    background: '#000000',
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {!cameraError ? (
+                    <>
+                      <video
+                        ref={videoRef}
+                        playsInline
+                        muted
+                        autoPlay
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                      <div className="viewfinder-overlay">
+                        <div className="viewfinder-box" style={{ width: '220px', height: '220px' }}>
+                          <div className="viewfinder-laser" />
+                          <span className="corner top-left" />
+                          <span className="corner top-right" />
+                          <span className="corner bottom-left" />
+                          <span className="corner bottom-right" />
+                        </div>
+                        <div
+                          style={{
+                            marginTop: '16px',
+                            color: '#FFFFFF',
+                            fontSize: '12.5px',
+                            fontWeight: 600,
+                            textShadow: '0 2px 4px rgba(0,0,0,0.8)',
+                            textAlign: 'center',
+                            padding: '0 16px',
+                          }}
+                        >
+                          벽면의 QR 코드를 사각형 안에 비춰주세요
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ color: '#FFFFFF', textAlign: 'center', padding: '24px' }}>
+                      <span style={{ fontSize: '36px', display: 'block', marginBottom: '10px' }}>📷</span>
+                      <p style={{ fontSize: '13px', margin: 0, color: '#FECACA' }}>{cameraError}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Sub status info below camera */}
+                <div style={{ marginTop: '14px', textAlign: 'center' }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '12px',
+                      color: '#475569',
+                      background: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        backgroundColor: '#10B981',
+                        display: 'inline-block',
+                      }}
+                    />
+                    {geoStatus}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              /* PIN Input View */
+              <div style={{ padding: '8px 0 12px' }}>
+                <form onSubmit={handlePinSubmit} className="form-stack">
+                  <label className="form-label" style={{ textAlign: 'center', fontSize: '14px' }}>
+                    관리자가 공지한 현장 PIN 4자리
+                  </label>
+
+                  <input
+                    type="tel"
+                    maxLength={4}
+                    autoFocus
+                    className="modern-input"
+                    style={{
+                      fontSize: '32px',
+                      letterSpacing: '14px',
+                      textAlign: 'center',
+                      fontWeight: 800,
+                      height: '60px',
+                      borderRadius: '14px',
+                    }}
+                    placeholder="••••"
+                    value={inputPin}
+                    onChange={(e) => setInputPin(e.target.value.replace(/\D/g, ''))}
+                  />
+
+                  {pinError && (
+                    <div className="error-banner" style={{ fontSize: '13px' }}>
+                      {pinError}
+                    </div>
+                  )}
+
+                  <p className="form-hint" style={{ textAlign: 'center', fontSize: '12px', color: '#64748B', margin: '4px 0 0' }}>
+                    * 연습실 반경 내에서만 PIN 출석이 유효합니다.
+                  </p>
+
+                  <button
+                    type="submit"
+                    className="btn-primary-large"
+                    disabled={isProcessing || inputPin.length < 4}
+                    style={{ marginTop: '12px', minHeight: '48px', fontSize: '15px' }}
+                  >
+                    {isProcessing ? '위치 검증 및 출석 처리 중...' : '현장 PIN으로 출석 완료'}
+                  </button>
+                </form>
+              </div>
+            )}
           </div>
         )}
-
-        <button
-          type="button"
-          className="btn-secondary-cancel"
-          onClick={onClose}
-          disabled={isProcessing}
-          style={{ marginTop: '12px' }}
-        >
-          닫기
-        </button>
       </div>
     </div>
   );
 };
+
+export default QRScannerModal;

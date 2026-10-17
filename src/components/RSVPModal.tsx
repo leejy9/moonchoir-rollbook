@@ -122,27 +122,41 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
             </div>
           )}
 
-          <div className="modal-button-group">
-            <button
-              type="submit"
-              className="btn-primary-large"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? '저장 중...' : '투표 제출하기'}
-            </button>
+          <div className="rsvp-modal-actions" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn-secondary-cancel"
+                style={{ flex: 1, minHeight: '44px', padding: '0 12px', fontSize: '14px', borderRadius: '10px' }}
+                onClick={onClose}
+                disabled={isSubmitting}
+              >
+                닫기
+              </button>
+              <button
+                type="submit"
+                className="btn-primary-large"
+                style={{ flex: 2, minHeight: '44px', fontSize: '14px', borderRadius: '10px' }}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? '저장 중...' : '투표 제출하기'}
+              </button>
+            </div>
+
             {currentVote && (
               <button
                 type="button"
                 className="btn-danger-outline"
                 style={{
                   width: '100%',
-                  padding: '10px',
+                  minHeight: '38px',
+                  padding: '8px 12px',
                   borderRadius: '10px',
                   border: '1px solid #ff4d4f',
                   background: '#fff',
                   color: '#ff4d4f',
                   fontWeight: 600,
-                  fontSize: '13px',
+                  fontSize: '12px',
                   cursor: 'pointer',
                   transition: 'background 0.2s',
                 }}
@@ -152,14 +166,6 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
                 투표 취소 (보류/미정으로 변경)
               </button>
             )}
-            <button
-              type="button"
-              className="btn-secondary-cancel"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              닫기
-            </button>
           </div>
         </form>
       </div>

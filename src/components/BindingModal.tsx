@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { bindDeviceProfile } from '../services/auth';
+import { bindDeviceProfile, getOrCreateDeviceId } from '../services/auth';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, PartType } from '../types/rollbook';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
@@ -58,7 +58,7 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
     }
   };
 
-  const handleSelectMemberSubmit = (e: React.FormEvent) => {
+  const handleSelectMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -81,13 +81,30 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
       return;
     }
 
-    const profile = bindDeviceProfile(
-      selectedMember.id,
-      selectedMember.name,
-      selectedMember.part,
-      selectedMember.phoneLast4
-    );
-    onSuccess(profile);
+    const currentDeviceId = getOrCreateDeviceId();
+    if (selectedMember.boundDeviceId && selectedMember.boundDeviceId !== currentDeviceId) {
+      setErrorMsg(
+        `이미 다른 기기(스마트폰)에 연동되어 있는 계정입니다.\n기존 기기에서 [연동 해제]를 먼저 진행하셨거나 기기 교체 시 관리자에게 초기화를 요청하세요.`
+      );
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await sheetsService.bindMemberDevice(selectedMember.id, currentDeviceId);
+      const profile = bindDeviceProfile(
+        selectedMember.id,
+        selectedMember.name,
+        selectedMember.part,
+        selectedMember.phoneLast4,
+        currentDeviceId
+      );
+      onSuccess(profile);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : '기기 연동 처리 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -108,6 +125,7 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
 
     const finalLast4 = digits.slice(-4);
     const finalPart: PartType = newPart === '기타' ? (customPart.trim() || '기타') : (newPart as PartType);
+    const currentDeviceId = getOrCreateDeviceId();
 
     const newMember: Member = {
       id: `mem_new_${Date.now()}`,
@@ -120,6 +138,8 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
       status: 'ACTIVE',
       joinedAt: new Date().toISOString().slice(0, 10),
       memberStatus: finalPart === '선생님' ? '선생님' : finalPart === '객원' ? '객원' : '정단원',
+      boundDeviceId: currentDeviceId,
+      boundDeviceAt: new Date().toISOString(),
     };
 
     try {
@@ -130,7 +150,8 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
         newMember.id,
         newMember.name,
         newMember.part,
-        newMember.phoneLast4
+        newMember.phoneLast4,
+        currentDeviceId
       );
 
       onSuccess(profile);

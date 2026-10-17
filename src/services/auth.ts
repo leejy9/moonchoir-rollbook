@@ -51,11 +51,23 @@ export function getBoundDeviceProfile(): BoundDeviceProfile | null {
   }
 }
 
+export function getOrCreateDeviceId(): string {
+  const storage = getStorage();
+  if (!storage) return 'dev_temp_' + Math.random().toString(36).slice(2);
+  let devId = storage.getItem('moonchoir_client_device_id');
+  if (!devId) {
+    devId = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+    storage.setItem('moonchoir_client_device_id', devId);
+  }
+  return devId;
+}
+
 export function bindDeviceProfile(
   memberId: string,
   name: string,
   part: PartType,
-  phoneLast4: string
+  phoneLast4: string,
+  deviceId?: string
 ): BoundDeviceProfile {
   const profile: BoundDeviceProfile = {
     memberId,
@@ -63,6 +75,7 @@ export function bindDeviceProfile(
     part,
     phoneLast4,
     boundAt: new Date().toISOString(),
+    deviceId: deviceId || getOrCreateDeviceId(),
   };
 
   const storage = getStorage();

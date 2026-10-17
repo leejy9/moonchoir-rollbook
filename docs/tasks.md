@@ -1,6 +1,8 @@
 # Moonchoir Rollbook — PIV Execution Tasks (`tasks.md`)
 
 > **Spec Reference**: [docs/PRD.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/PRD.md)  
+> **Master Dev Log**: [docs/DEV_LOG.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/DEV_LOG.md)  
+> **Dedicated Plans**: [docs/plans/](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/)  
 > **Harness Constitution**: [AGENTS.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/AGENTS.md)  
 > **Workflow Rule**: 1 Task = 1 Commit / Verification (Green Bar: `typecheck`, `lint`, `test`)
 
@@ -40,17 +42,37 @@
 - [x] **Task 13**: 전수 검증 및 브라우저 시연
   - `typecheck`, `lint`, `test`, `build` 무결성 검증 (0 errors, 17/17 tests pass) 및 실제 모바일 브라우저 시연 완료
 
-### Phase 3: 단원 경험(UX), 세션 안전성 & 자동화 백로그 (Planned)
+### Phase 2.5: 네이버 지도 픽커 & 구글 시트 장소정보 동기화 & 일정 일괄 관리 (Completed - [계획서 01](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/01_location_picker_and_sheets_sync.md))
+- [x] **Task 20**: 네이버 지도 + 도로명 주소 검색 + 출석 반경 오버레이 (`LocationPickerMap.tsx`)
+- [x] **Task 21**: 구글 시트 5번째 탭(`장소정보`) 양방향 동기화 및 역순 일괄 삭제 알고리즘 (`google-apps-script.js`, `sheets.ts`)
+- [x] **Task 22**: 다중 일정 일괄 수정/삭제 모달 (`ScheduleEditModal.tsx`, `BatchScheduleEditModal.tsx`, `AdminDashboard.tsx`)
+
+### Phase 3: 정기 일정 3단 제어, 시즌 복제, 인라인 UX & QR 매칭 안정화 (Completed - [계획서 02](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/02_schedule_batch_management_and_ux.md))
+- [x] **Task 23**: 인라인 '직접 입력' (파트/카테고리) 및 일정 창에서 바로 새 장소 픽커(도로명/지도) 등록 연동
+- [x] **Task 24**: QR 스캐너 상단 실시간 출석 일정 매칭 배지 표시 (상설/회차별 QR 자동 매칭 확인)
+- [x] **Task 25**: `seriesId` 기반 정기 일정 3단 수정/삭제 (이 일정만 / 향후 모든 일정 / 전체 반복 일정)
+- [x] **Task 26**: 시즌 일정 템플릿 복제 (`Duplicate Season`) 및 아카이빙(표시/숨기기) 필터
+- [x] **Task 27**: 전수 검증 (Green Bar: `typecheck`, `lint`, `test`) 및 배포, DEV_LOG 업데이트
+
+### Phase 3.5: 단원 생애주기 이력, 일정 카드 컨테이너 & 데이터 계약 검증 (Completed - [계획서 03](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/03_member_lifecycle_and_program_card.md) & [데이터 스키마](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/DATA_SCHEMA.md))
+- [x] **Task 28**: 마스터 데이터 계약 검증 테스트 구축 (`src/types/schema.test.ts`)
+- [x] **Task 29**: 단원 생애주기 이력 모델 및 기간제(`startDate`~`endDate` + '영구') UI (`MemberProfileModal.tsx`)
+- [x] **Task 30**: 입단일 및 이력 기반 출결 모수 필터링 & 옵트인 게스트 출석 엔진 (`attendanceStats.ts`)
+- [x] **Task 31**: 회차 번호 제거 및 일정 카드(Program Card) 컨테이너 묶음 관리 UI (`AdminDashboard.tsx`)
+- [x] **Task 32**: 센서 검증(Green Bar) 및 실서버 배포, `DEV_LOG.md` 업데이트
+
+### Phase 4: 단원 경험(UX), 세션 안전성 & 자동화 백로그 (Planned)
 - [ ] **Task 14**: 출석 QR 화면 UX & 사전 투표(RSVP) 시계 기반 상태 머신
   - 카카오톡 투표 연동 기술 한계 검토 및 웹앱 단일 채널 집중 전략
   - 시간 윈도우 기반 상태 전환: [연습 D-N일 ~ 연습 1시간 전: RSVP 투표] -> [연습 1시간 전 ~ 종료: 현장 QR 스캐너 활성화]
-- [ ] **Task 15**: 단원 전용 출결 포털 & 기기 명부 통신/파트 선택 오류 개선
-  - 일반 단원용 [내 출결 성적표 & 원천 로그 히스토리] 모달
-  - 앱 기동 시 구글 시트 원천 동기화(`fetchRemoteData`) 누락 해결 및 하드코딩 완전 제거
-  - `BindingModal` 내 동적 파트 필터링 오류 수정 (동적 taxonomy 반영)
-- [ ] **Task 16**: 홈 화면 캘린더 중심 레이아웃 재배치
-  - 상단: 당월 인터랙티브 캘린더 기본 렌더링
-  - 하단: 오늘/다가오는 연습 일정 리스트 큐로 재배치
+- [x] **Task 15**: 단원 전용 출결 포털 & 기기 명부 통신/파트 선택 오류 개선 (Completed - [계획서 04](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/04_member_portal_and_unified_calendar_home.md))
+  - 일반 단원용 [내 출결 성적표 & 원천 로그 히스토리] 모달 (`MemberPortalModal.tsx`)
+  - 실시간 누적 출석률, 입단일/생애주기 이력 반영, 출석 원천로그 타임스탬프 및 RSVP 이력 투영
+  - 원클릭 구글 시트 동기화 및 기기 재바인딩 지원
+- [x] **Task 16**: 홈 화면 캘린더 일체형 레이아웃 재배치 (Completed - [계획서 04](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/04_member_portal_and_unified_calendar_home.md))
+  - 상단: 인터랙티브 월간 미니 캘린더 일체형 렌더링 (날짜별 연습 점, 내 출석 체크 점 표시)
+  - 날짜 탭 시 해당 날짜의 연습 카드로 실시간 포커스 및 액션(QR/RSVP) 연계
+  - 하단: 오늘 및 다가오는 연습 일정 연속 리스트 큐 배치
 - [ ] **Task 17**: 연습 일정 공지 & 다중 첨부(악보 링크/드라이브) 시스템
   - 일정 스키마에 공지사항 텍스트 및 다중 첨부 링크/파일(`attachments: { title, url }[]`) 확장
   - 출석 전/후 단원 안내 모달 및 일정 상세 카드 내 퀵 링크 지원
@@ -199,3 +221,102 @@
 - **Acceptance Criteria**:
   - 일정 생성 시 대상자(`targetAudience`: `ALL`, 특정 파트, `정단원만` 등) 지정 기능.
   - 통계 집계 시 휴단원/퇴단원은 전체 모수(분모)에서 자동 제외되거나 사유불참으로 분리 집계.
+
+---
+
+### [Phase 3.5] 단원 생애주기 이력 관리 & 일정 카드 체계 개편
+
+### Task 28: 단원 생애주기 이력(`MemberStatusHistory`) 모델 및 구글 시트 감사 DB 구축
+- **Goal**: 단원의 회원상태(정단원/준단원/휴단원/퇴단원/객원) 및 파트 변경 이력을 날짜 구간(`startDate`~`endDate`)과 사유와 함께 구글 시트 `단원변경로그` 탭에 Append-only로 영구 보존.
+- **Touched Files**:
+  - `src/types/rollbook.ts`
+  - `google-apps-script.js` & `docs/google_apps_script.js`
+  - `src/services/sheets.ts`
+- **Status**: [x] Completed
+
+---
+
+### Task 29: 입단일 및 생애주기 기반 출결 모수(분모) 산출 엔진 & 단위 테스트
+- **Goal**: $Schedule.date < joinedAt$ 일정은 분모에서 완전 제외하고, 휴단원/퇴단원 기간은 기본 모수에서 제외하되 현장 출석 시 자발적 옵트인(분모+1, 분자+1) 인정 및 `[💡 게스트 N회]` 뱃지 부여.
+- **Touched Files**:
+  - `src/utils/attendanceStats.ts`
+  - `src/utils/attendanceStats.test.ts`
+  - `src/services/sheets.ts`
+  - `src/components/AdminDashboard.tsx`
+- **Status**: [x] Completed
+
+---
+
+### Task 30: 단원 프로필 수정 모달 내 기간제 이력 관리 & 영구 적용 UI
+- **Goal**: 상태/파트 변경 시 적용 기간(`historyStartDate`~`historyEndDate`), `[♾️ 영구 적용]`(2999-12-31) 퀵 버튼, 사유 인풋 제공 및 하단 타임라인 이력 카드 뷰 구현.
+- **Touched Files**:
+  - `src/components/MemberProfileModal.tsx`
+- **Status**: [x] Completed
+
+---
+
+### Task 31: 일정 카드(Program Card) 컨테이너 중심 관리 UI 개편
+- **Goal**: 16개 행이 흩어진 캘린더에서 벗어나 학기/시즌별 일정 카드 묶음 뷰(`PROGRAM_CARDS`)를 제공하고, 회차 번호 없는 단순 표기, 카드별 추가연습 등록 및 다음 학기 복제 지원.
+- **Touched Files**:
+  - `src/types/rollbook.ts`
+  - `src/components/AdminDashboard.tsx`
+- **Status**: [x] Completed
+
+---
+
+### Task 32: 마스터 데이터 스키마 & 연쇄 영향도 매트릭스(`DATA_SCHEMA.md`) 및 정합성 테스트
+- **Goal**: 7대 엔티티의 모든 필드에 대해 무슨 값인지, 어디로 연결되는지(PK/FK), 수정/삭제 시 연쇄 영향도(Cascade Rule), 구글 시트 7대 탭 매핑을 SSOT로 문서화하고 `schema.test.ts`로 정합성 자동 검증.
+- **Touched Files**:
+  - `docs/DATA_SCHEMA.md`
+  - `src/types/schema.test.ts`
+- **Status**: [x] Completed
+
+---
+
+### Phase 4.3: 1인 1투표 보장, 1인 1기기 락 & 대형 팝업 QR 긍정 경험 (Completed)
+- [x] **Task 33**: 1인 1투표 엄격 보장 및 구글 시트 RSVP 중복 행 방지 (`google-apps-script.js`, `sheets.ts`, `sheets.test.ts`)
+  - `String(scheduleId).trim() && String(memberId).trim()` 복합 키로 In-place Upsert 보장
+- [x] **Task 34**: 1인 1기기 락(Device Locking) 시스템 및 대리 바인딩 차단 (`auth.ts`, `sheets.ts`, `BindingModal.tsx`, `MemberProfileModal.tsx`)
+  - 브라우저 고유 UUID 발급, 시트 `단원명부`의 `boundDeviceId` 영구 등록, 타 기기 중복 바인딩 차단, 관리자 `[🔓 기기 연동 초기화]` 지원
+- [x] **Task 35**: 대형 팝업 QR 스캐너 개편 & 긍정 경험 중심 축하 화면 (`QRScannerModal.tsx`)
+  - 부정 출석 방지를 위한 갤러리/앨범 사진 파일 업로드(`<input type="file">`) 완전 제거
+  - 320px 대형 뷰파인더, 인증 성공 시 🎉 축하 애니메이션 및 `[오늘 연습 힘차게 시작하기 🎵]` 버튼
+- [x] **Task 36**: QR 관리 하드코딩 텍스트 제거 및 인쇄 설정 영구 저장 (`AdminDashboard.tsx`, `sheets.ts`)
+  - "명동 제1연습실" 등 하드코딩 제거, 등록된 장소 프리셋 연동, `[💾 문구 영구 저장]` 지원
+- [x] **Task 37**: 연습 일정 아카이브 3종 기능 신설 (`AdminDashboard.tsx`, `ScheduleEditModal.tsx`)
+  - 단일 일정 `[📦 보관]` / `[📂 복원]`, 다중 선택 일괄 아카이브, 프로그램 카드 묶음 전체 아카이브
+
+---
+
+### Phase 5: [기획 & 백로그] 단원 음악적 역량 풀 & 맞춤형 코칭/격려 엔진 (Future RFC / Backlog)
+> **사용자 요구사항**: "장기적인 관점에선 단원 관리 풀로 사용해볼 생각이야. 인적관리처럼 데이터화 할 수 있는 요소들(출석률, 음감, 피치, 호흡, 악보 리딩 능력, 악상 표현력)을 데이터화하고, 그에 맞춘 메시지나 조언/영상자료를 추천하려고 해. 아직 어떤 식으로 진행할지 미정이므로 코드는 추가하지 말고 기획 및 투두리스트로 정리해둘 것."
+
+- [ ] **Task 38**: 단원 음악 역량 4대 척도 모델링 및 평가 체계 기획
+  - **평가 항목 후보**:
+    1. `음감 / 피치 정확도` (Pitch Intonation): 1~5점 척도 (1: 기초 필요 ~ 5: 정확한 피치)
+    2. `호흡 지지력` (Breath Support): 1~5점 척도 (1: 호흡 짧음 ~ 5: 안정적 복식 지지)
+    3. `시창 / 악보 리딩` (Sight-Reading): 1~5점 척도 (1: 청음 의존 ~ 5: 빠른 초견 독보)
+    4. `악상 표현력` (Musical Expression): 1~5점 척도 (1: 평이함 ~ 5: 섬세한 프레이징 및 다이내믹)
+  - **기획 결정 필요 사항 (Open Questions)**:
+    - 5점 척도 슬라이더 vs 3단계 뱃지(초급/중급/고급) vs 키워드 태그형
+    - 평가 주체: 지휘자/발성코치 단독 입력 vs 파트장 피드백 병행
+    - 단원 공개 정책: 단원 본인에게 점수를 노출할 것인가(자기 성찰), 아니면 관리자/지휘자만 참고하는 비밀 지표로 둘 것인가?
+
+- [ ] **Task 39**: 장기적 인적 관리 풀 & 발성/음색 분석 데이터베이스 설계
+  - **수집 데이터 항목**:
+    - `음색 및 발성 특징`: 서술형 (예: "맑고 서정적인 리릭 소프라노, 고음 전환 시 연구개 확장 필요")
+    - `성악적 고민/약점 태그`: 다중 선택 (예: `#고음피치불안`, `#호흡부족`, `#성대긴장`, `#악보독보어려움`)
+    - `추천 파트 및 솔로 적합도`: 파트장 추천 메모
+  - **구글 시트 저장 방식 검토**:
+    - 옵션 A: `단원명부` 시트 내 단일 JSON 컬럼 (`musicalProfile`)에 저장 (경량, 스키마 유연)
+    - 옵션 B: 별도 `단원역량풀` 시트 탭 신설 (행 단위 이력 관리 가능, 지휘자의 회차별 코멘트 누적)
+
+- [ ] **Task 40**: 출석 및 단원 포털 맞춤형 조언 & 영상/자료 추천 엔진 기획
+  - **트리거 시나리오**:
+    - **공백기 감지**: 14일 또는 3회 이상 불참 후 오랜만에 복귀한 단원 $\rightarrow$ *"오랜만에 오셨네요! 목 상하지 않게 발성부터 차근차근!"*
+    - **고민 해결 큐레이션**: 단원의 고민 태그(`호흡부족`)에 맞춰 사전에 등록된 유튜브 보컬 트레이닝 영상 링크, 추천 호흡 연습법 카드 자동 매칭
+    - **지휘자/파트장의 개별 격려 한마디**: 관리자가 프로필에 남겨둔 코칭 메모가 출석 완료 화면에 말풍선으로 전달
+  - **노출 UX 위치 검토**:
+    - 출석 완료 축하 팝업 화면 vs 단원 전용 출결 포털(`MemberPortalModal`) 내 '오늘의 코칭 카드' 탭
+
+

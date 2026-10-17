@@ -4,12 +4,18 @@ import { setAdminLoggedIn } from '../services/auth';
 import { sheetsService } from '../services/sheets';
 import type {
   AttendanceStatus,
+  LocationPreset,
   Member,
+  MemberStatusHistory,
   RawAttendanceLog,
   Schedule,
   ScheduleCategory,
 } from '../types/rollbook';
-import { expandRecurringSchedules, getCalendarGrid } from '../utils/calendar';
+import {
+  duplicateScheduleSeries,
+  expandRecurringSchedules,
+  getCalendarGrid,
+} from '../utils/calendar';
 import {
   generateMasterWallQRPayload,
   generateRehearsalQRPayload,
@@ -30,6 +36,7 @@ import { AdminMatrixGrid } from './AdminMatrixGrid';
 import { AdminNotionFilterBar, type AdminFilterState } from './AdminNotionFilterBar';
 import { MemberProfileModal } from './MemberProfileModal';
 import { LocationPickerMap } from './LocationPickerMap';
+import { LocationPickerModal } from './LocationPickerModal';
 import { ScheduleEditModal } from './ScheduleEditModal';
 import { BatchScheduleEditModal } from './BatchScheduleEditModal';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
@@ -140,11 +147,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsProfileModalOpen(true);
   };
 
-  const handleSaveMemberProfile = async (memberData: Member) => {
+  const handleSaveMemberProfile = async (
+    memberData: Member,
+    historyItem?: MemberStatusHistory
+  ) => {
     const exists = members.some((m) => m.id === memberData.id);
     if (exists) {
-      await sheetsService.updateMember(memberData.id, memberData);
-      setMemberActionMsg(`단원 [${memberData.name}] 인적사항이 수정되었습니다.`);
+      await sheetsService.updateMember(memberData.id, memberData, historyItem);
+      setMemberActionMsg(
+        `단원 [${memberData.name}] 정보가 수정되었습니다.${historyItem ? ' (변경 이력 시트 기록 완료)' : ''}`
+      );
     } else {
       await sheetsService.addMember(memberData);
       setMemberActionMsg(`신규 단원 [${memberData.name}]이(가) 등록되었습니다.`);
@@ -283,11 +295,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [memberActionMsg, setMemberActionMsg] = useState('');
 
   // --- 4. QR & PIN Management State ---
-  const [printTitle, setPrintTitle] = useState('🎵 문콰이어 정기연습 출석 QR');
-  const [printSubtitle, setPrintSubtitle] = useState('명동 제1연습실 상설 출석부');
-  const [printNotice, setPrintNotice] = useState(
-    '스마트폰 카메라로 비추거나 문콰이어 앱 [출석하기] 버튼을 눌러 스캔하세요.'
+  const choirConfig = sheetsService.getConfig();
+  const defaultLoc = locationPresets.find((l) => l.isDefault) || locationPresets[0];
+  const defaultLocName = defaultLoc?.name || '문콰이어 연습실';
+
+  const [printTitle, setPrintTitle] = useState(
+    () => choirConfig.qrPrintTitle || (choirConfig.choirName ? `🎵 ${choirConfig.choirName} 출석 QR` : '🎵 문콰이어 정기연습 출석 QR')
   );
+  const [printSubtitle, setPrintSubtitle] = useState(
+    () => choirConfig.qrPrintSubtitle || `${defaultLocName} 상설 출석부`
+  );
+  const [printNotice, setPrintNotice] = useState(
+    () => choirConfig.qrPrintNotice || '스마트폰 카메라로 비추거나 문콰이어 앱 [출석하기] 버튼을 눌러 스캔하세요.'
+  );
+  const [qrTextSavedMsg, setQrTextSavedMsg] = useState(false);
   const [qrMode, setQrMode] = useState<'MASTER' | 'SESSION'>('MASTER');
   const [pinRegenMsg, setPinRegenMsg] = useState('');
 
@@ -300,17 +321,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     locationPresets[0]?.id || 'custom'
   );
   const [newLocName, setNewLocName] = useState(
-    locationPresets[0]?.name || '문콰이어 제1연습실 (명동)'
+    defaultLocName
   );
   const [newLat, setNewLat] = useState(locationPresets[0]?.latitude || 37.5665);
   const [newLon, setNewLon] = useState(locationPresets[0]?.longitude || 126.9780);
   const [newRadius, setNewRadius] = useState(locationPresets[0]?.radiusMeters || 100);
   const [newCategory, setNewCategory] = useState<ScheduleCategory>('정기연습');
+  const [isCustomNewCategory, setIsCustomNewCategory] = useState(false);
+  const [customNewCategoryInput, setCustomNewCategoryInput] = useState('');
+  const [isScheduleLocationModalOpen, setIsScheduleLocationModalOpen] = useState(false);
   const [newDesc, setNewDesc] = useState('');
   const [recurrenceFreq, setRecurrenceFreq] = useState<'NONE' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'>('WEEKLY');
   const [selectedDays, setSelectedDays] = useState<('MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN')[]>(['THU']);
   const [repeatCount, setRepeatCount] = useState<number>(12);
   const [scheduleSuccessMsg, setScheduleSuccessMsg] = useState('');
+  const [showArchivedSchedules, setShowArchivedSchedules] = useState(false);
 
   // --- 5.1 Admin Interactive Calendar State (SCHEDULES > LIST) ---
   const [adminCalYear, setAdminCalYear] = useState(() => new Date().getFullYear());
@@ -356,12 +381,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isScheduleEditModalOpen, setIsScheduleEditModalOpen] = useState(false);
   const [selectedBatchScheduleIds, setSelectedBatchScheduleIds] = useState<string[]>([]);
   const [isBatchScheduleEditModalOpen, setIsBatchScheduleEditModalOpen] = useState(false);
-  const [scheduleViewTab, setScheduleViewTab] = useState<'CALENDAR' | 'ALL_LIST'>('CALENDAR');
+  const [scheduleViewTab, setScheduleViewTab] = useState<'CALENDAR' | 'ALL_LIST' | 'PROGRAM_CARDS'>('CALENDAR');
+  const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(new Set());
   const [allScheduleSearch, setAllScheduleSearch] = useState('');
   const [allScheduleCatFilter, setAllScheduleCatFilter] = useState('ALL');
 
+  // 일정 카드(Program Card) 컨테이너 그룹핑 (시리즈/프로젝트 단위 묶음)
+  const programGroups = useMemo(() => {
+    const groups = new Map<string, {
+      cardId: string;
+      title: string;
+      category: ScheduleCategory;
+      description?: string;
+      locationName: string;
+      startTime: string;
+      endTime: string;
+      schedules: Schedule[];
+      startDate: string;
+      endDate: string;
+      isArchived: boolean;
+    }>();
+
+    for (const sch of schedules) {
+      if (!showArchivedSchedules && sch.isArchived) continue;
+      const key = sch.programId || sch.seriesId || sch.title;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          cardId: key,
+          title: sch.title,
+          category: sch.category,
+          description: sch.description,
+          locationName: sch.locationName,
+          startTime: sch.startTime,
+          endTime: sch.endTime,
+          schedules: [],
+          startDate: sch.date,
+          endDate: sch.date,
+          isArchived: Boolean(sch.isArchived),
+        });
+      }
+      const g = groups.get(key)!;
+      g.schedules.push(sch);
+      if (sch.date < g.startDate) g.startDate = sch.date;
+      if (sch.date > g.endDate) g.endDate = sch.date;
+    }
+
+    return Array.from(groups.values()).map((g) => {
+      g.schedules.sort((a, b) => a.date.localeCompare(b.date));
+      return g;
+    });
+  }, [schedules, showArchivedSchedules]);
+
   const filteredAllSchedules = useMemo(() => {
     return schedules.filter((s) => {
+      if (!showArchivedSchedules && s.isArchived) return false;
       const q = allScheduleSearch.trim().toLowerCase();
       const matchSearch =
         !q ||
@@ -372,7 +445,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const matchCat = allScheduleCatFilter === 'ALL' || s.category === allScheduleCatFilter;
       return matchSearch && matchCat;
     });
-  }, [schedules, allScheduleSearch, allScheduleCatFilter]);
+  }, [schedules, allScheduleSearch, allScheduleCatFilter, showArchivedSchedules]);
+
+  const handleAddNewLocationPresetFromModal = async (newPreset: LocationPreset) => {
+    await sheetsService.addLocationPreset(newPreset);
+    setSelectedLocationPresetId(newPreset.id);
+    setNewLocName(newPreset.name);
+    setNewLat(newPreset.latitude);
+    setNewLon(newPreset.longitude);
+    setNewRadius(newPreset.radiusMeters);
+    setIsScheduleLocationModalOpen(false);
+    setScheduleSuccessMsg(`새 연습실 [${newPreset.name}]이 등록되어 장소로 선택되었습니다.`);
+    onDataChanged();
+    setTimeout(() => setScheduleSuccessMsg(''), 4000);
+  };
+
+  const handleDuplicateSelectedSeries = async (preferredSeriesId?: string) => {
+    let targetItems = schedules.filter((s) => selectedBatchScheduleIds.includes(s.id));
+    if (preferredSeriesId) {
+      targetItems = schedules.filter((s) => s.seriesId === preferredSeriesId);
+    }
+    if (targetItems.length === 0) {
+      alert('복제할 일정을 선택해주세요.');
+      return;
+    }
+
+    const seriesIdToDup = preferredSeriesId || targetItems[0].seriesId || targetItems[0].id;
+    const defaultNextDate = new Date();
+    defaultNextDate.setMonth(defaultNextDate.getMonth() + 4);
+    const defaultDateStr = defaultNextDate.toISOString().slice(0, 10);
+
+    const userInput = window.prompt(
+      `선택하신 [${targetItems[0].title}] ${targetItems.length}개 회차를 다음 학기/시즌으로 복제합니다.\n새 학기 첫 연습 시작 날짜를 입력해주세요 (YYYY-MM-DD):`,
+      defaultDateStr
+    );
+    if (!userInput || !userInput.trim()) return;
+
+    const newStartDate = userInput.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newStartDate)) {
+      alert('올바른 날짜 형식(YYYY-MM-DD)으로 입력해주세요.');
+      return;
+    }
+
+    try {
+      const duplicated = duplicateScheduleSeries(
+        schedules.some((s) => s.seriesId === seriesIdToDup)
+          ? schedules
+          : targetItems.map((s) => ({ ...s, seriesId: seriesIdToDup })),
+        seriesIdToDup,
+        newStartDate
+      );
+
+      if (duplicated.length === 0) {
+        alert('복제할 일정을 찾지 못했습니다.');
+        return;
+      }
+
+      await sheetsService.addSchedules(duplicated);
+      setSelectedBatchScheduleIds([]);
+      setScheduleSuccessMsg(`🎉 ${duplicated.length}개 회차가 새 학기(${newStartDate}~) 일정으로 복제 생성되었습니다!`);
+      onDataChanged();
+      setTimeout(() => setScheduleSuccessMsg(''), 4500);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : '시즌 복제 중 오류가 발생했습니다.');
+    }
+  };
 
   const handleOpenEditSchedule = (sch: Schedule) => {
     setEditingSchedule(sch);
@@ -388,7 +525,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleSaveScheduleSeries = async (matchingIds: string[], updates: Partial<Schedule>) => {
     await sheetsService.batchUpdateSchedules(matchingIds, updates);
-    setScheduleSuccessMsg(`동일 명칭 일정 ${matchingIds.length}개 회차가 일괄 수정되었습니다.`);
+    setScheduleSuccessMsg(`동일 시리즈 일정 ${matchingIds.length}개 회차가 일괄 수정되었습니다.`);
     onDataChanged();
     setTimeout(() => setScheduleSuccessMsg(''), 3500);
   };
@@ -471,6 +608,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : '일정 삭제 중 오류가 발생했습니다.');
     }
+  };
+
+  // Archive single schedule
+  const handleToggleArchiveSchedule = async (scheduleId: string, isArchived: boolean) => {
+    try {
+      await sheetsService.updateSchedule(scheduleId, { isArchived });
+      setScheduleSuccessMsg(
+        isArchived ? '선택한 일정을 지난 시즌 아카이브로 보관했습니다.' : '선택한 일정을 일반 목록으로 복원했습니다.'
+      );
+      setTimeout(() => setScheduleSuccessMsg(''), 3000);
+      onDataChanged();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : '아카이브 처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  // Archive batch schedules
+  const handleBatchArchiveSelected = async (isArchived: boolean) => {
+    if (selectedBatchScheduleIds.length === 0) return;
+    try {
+      await sheetsService.batchUpdateSchedules(selectedBatchScheduleIds, { isArchived });
+      setScheduleSuccessMsg(
+        isArchived
+          ? `${selectedBatchScheduleIds.length}개 일정을 지난 시즌 아카이브로 보관했습니다.`
+          : `${selectedBatchScheduleIds.length}개 일정을 보관 해제(복원)했습니다.`
+      );
+      setSelectedBatchScheduleIds([]);
+      setTimeout(() => setScheduleSuccessMsg(''), 3500);
+      onDataChanged();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : '일괄 아카이브 처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  // Archive entire program group
+  const handleToggleArchiveGroup = async (scheduleIds: string[], isArchived: boolean) => {
+    try {
+      await sheetsService.batchUpdateSchedules(scheduleIds, { isArchived });
+      setScheduleSuccessMsg(
+        isArchived
+          ? '해당 묶음의 모든 일정을 지난 시즌 아카이브로 보관했습니다.'
+          : '해당 묶음의 모든 일정을 일반 목록으로 복원했습니다.'
+      );
+      setTimeout(() => setScheduleSuccessMsg(''), 3500);
+      onDataChanged();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : '묶음 아카이브 처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleSaveQrPrintSettings = () => {
+    sheetsService.updateConfig({
+      qrPrintTitle: printTitle,
+      qrPrintSubtitle: printSubtitle,
+      qrPrintNotice: printNotice,
+    });
+    setQrTextSavedMsg(true);
+    setTimeout(() => setQrTextSavedMsg(false), 3000);
   };
 
   // --- 6. Settings State ---
@@ -665,6 +860,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Location Preset change in Schedule Creation
   const handleLocationPresetChange = (presetId: string) => {
+    if (presetId === '__NEW_LOCATION__') {
+      setIsScheduleLocationModalOpen(true);
+      return;
+    }
     setSelectedLocationPresetId(presetId);
     const found = locationPresets.find((l) => l.id === presetId);
     if (found) {
@@ -690,6 +889,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     if (!newTitle.trim() || !newDate.trim()) return;
 
+    const finalCategory = isCustomNewCategory
+      ? ((customNewCategoryInput.trim() || '기타행사') as ScheduleCategory)
+      : newCategory;
+    if (isCustomNewCategory && customNewCategoryInput.trim()) {
+      sheetsService.addCategory(customNewCategoryInput.trim());
+    }
+
     const foundLoc = locationPresets.find((l) => l.id === selectedLocationPresetId);
     const baseSchedule = {
       title: newTitle.trim(),
@@ -703,7 +909,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       targetLat: newLat,
       targetLon: newLon,
       radiusMeters: newRadius,
-      category: newCategory,
+      category: finalCategory,
       description: newDesc.trim() || undefined,
       checkInPin: generateRandomPin(),
     };
@@ -1211,11 +1417,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 fontWeight: 700,
                                 padding: '2px 6px',
                                 borderRadius: '6px',
-                                backgroundColor: b === '개근' ? '#10b981' : b === '우수' ? 'var(--brand-accent)' : '#f04452',
+                                backgroundColor:
+                                  b === '개근'
+                                    ? '#10b981'
+                                    : b === '우수'
+                                    ? 'var(--brand-accent)'
+                                    : b.startsWith('게스트')
+                                    ? '#8b5cf6'
+                                    : '#f04452',
                                 color: '#fff',
                               }}
                             >
-                              {b}
+                              {b.startsWith('게스트') ? `💡 ${b}` : b}
                             </span>
                           ))}
                         </div>
@@ -1526,11 +1739,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="printable-qr-container">
             <h2 className="print-choir-title">{printTitle}</h2>
             <h3 className="print-schedule-title">{printSubtitle}</h3>
-            <p className="print-schedule-meta">
-              {qrMode === 'MASTER'
-                ? '문콰이어 연습실 상설 배치 QR (스캔 시 당일 진행 일정 자동 매칭)'
-                : `${currentSchedule?.date} | ${currentSchedule?.title}`}
-            </p>
+            {qrMode !== 'MASTER' && currentSchedule && (
+              <p className="print-schedule-meta">
+                {`${currentSchedule.date} | ${currentSchedule.title}`}
+              </p>
+            )}
 
             <div className="printable-qr-frame">
               <QRCodeSVG value={activeQrPayload} size={280} level="H" />
@@ -1541,7 +1754,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {/* Customize Text Form (Naver QR Style) */}
           <div className="admin-form-card" style={{ marginTop: '16px' }}>
-            <h3 className="section-title">네이버 QR 스타일 인쇄 문구 커스텀</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <h3 className="section-title" style={{ margin: 0 }}>네이버 QR 스타일 인쇄 문구 커스텀</h3>
+              <button
+                type="button"
+                onClick={handleSaveQrPrintSettings}
+                style={{
+                  background: '#4F46E5',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '6px 14px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <span>💾 문구 영구 저장</span>
+              </button>
+            </div>
+            {qrTextSavedMsg && (
+              <div className="success-banner" style={{ marginBottom: '12px', fontSize: '13px' }}>
+                ✅ QR 인쇄 문구가 저장되었습니다. 페이지를 새로고침해도 유지됩니다.
+              </div>
+            )}
             <div className="form-stack">
               <div>
                 <label className="form-label">인쇄 상단 타이틀</label>
@@ -1549,7 +1788,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="text"
                   className="input-text"
                   value={printTitle}
-                  onChange={(e) => setPrintTitle(e.target.value)}
+                  onChange={(e) => {
+                    setPrintTitle(e.target.value);
+                    sheetsService.updateConfig({ qrPrintTitle: e.target.value });
+                  }}
                 />
               </div>
               <div>
@@ -1558,7 +1800,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="text"
                   className="input-text"
                   value={printSubtitle}
-                  onChange={(e) => setPrintSubtitle(e.target.value)}
+                  onChange={(e) => {
+                    setPrintSubtitle(e.target.value);
+                    sheetsService.updateConfig({ qrPrintSubtitle: e.target.value });
+                  }}
                 />
               </div>
               <div>
@@ -1567,7 +1812,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="text"
                   className="input-text"
                   value={printNotice}
-                  onChange={(e) => setPrintNotice(e.target.value)}
+                  onChange={(e) => {
+                    setPrintNotice(e.target.value);
+                    sheetsService.updateConfig({ qrPrintNotice: e.target.value });
+                  }}
                 />
               </div>
             </div>
@@ -1649,7 +1897,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         cursor: 'pointer',
                       }}
                     >
-                      📋 전체 등록 일정 일괄 관리 ({schedules.length}건)
+                      📋 전체 등록 일정 ({schedules.length}건)
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-sub-tab ${scheduleViewTab === 'PROGRAM_CARDS' ? 'active' : ''}`}
+                      onClick={() => setScheduleViewTab('PROGRAM_CARDS')}
+                      style={{
+                        minHeight: '36px',
+                        padding: '0 16px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        border: 'none',
+                        borderRadius: '8px',
+                        background: scheduleViewTab === 'PROGRAM_CARDS' ? '#FFFFFF' : 'transparent',
+                        color: scheduleViewTab === 'PROGRAM_CARDS' ? '#1E293B' : '#64748B',
+                        boxShadow: scheduleViewTab === 'PROGRAM_CARDS' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      📦 일정 카드 묶음 ({programGroups.length}개 카드)
                     </button>
                   </div>
 
@@ -1773,6 +2040,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <div style={{ display: 'flex', gap: '6px' }}>
                                   <button
                                     type="button"
+                                    onClick={() => handleToggleArchiveSchedule(sch.id, !sch.isArchived)}
+                                    title={sch.isArchived ? '일반 목록으로 복원' : '지난 시즌 아카이브로 보관'}
+                                    style={{
+                                      background: sch.isArchived ? '#EDE9FE' : '#F1F5F9',
+                                      color: sch.isArchived ? '#6D28D9' : '#475569',
+                                      border: `1px solid ${sch.isArchived ? '#C4B5FD' : '#CBD5E1'}`,
+                                      borderRadius: '6px',
+                                      padding: '4px 8px',
+                                      fontSize: '12px',
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    {sch.isArchived ? '📂 복원' : '📦 보관'}
+                                  </button>
+                                  <button
+                                    type="button"
                                     className="btn-edit-sch-mini"
                                     onClick={() => handleOpenEditSchedule(sch)}
                                     title="일정 수정"
@@ -1808,7 +2092,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         )}
                       </div>
                     </div>
-                  ) : (
+                  ) : scheduleViewTab === 'ALL_LIST' ? (
                     /* ALL LIST BATCH MANAGEMENT VIEW */
                     <div>
                       <div style={{ marginBottom: '14px' }}>
@@ -1846,6 +2130,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </option>
                           ))}
                         </select>
+                        <button
+                          type="button"
+                          onClick={() => setShowArchivedSchedules((prev) => !prev)}
+                          style={{
+                            background: showArchivedSchedules ? '#EDE9FE' : '#F8FAFC',
+                            color: showArchivedSchedules ? '#6D28D9' : '#64748B',
+                            border: `1px solid ${showArchivedSchedules ? '#C4B5FD' : '#CBD5E1'}`,
+                            borderRadius: '8px',
+                            padding: '0 12px',
+                            height: '38px',
+                            fontSize: '12.5px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {showArchivedSchedules ? '📂 지난 시즌 숨기기' : '📁 지난 시즌 아카이브'}
+                        </button>
                       </div>
 
                       {/* Bulk Action Bar */}
@@ -1909,6 +2210,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               }}
                             >
                               ✏️ {selectedBatchScheduleIds.length}개 일괄 수정
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDuplicateSelectedSeries()}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: '#10B981',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '6px 14px',
+                                fontSize: '13px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                minHeight: '36px',
+                              }}
+                              title="선택한 일정을 새 학기 시작 날짜로 통째로 복제"
+                            >
+                              🔁 다음 학기로 복제
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleBatchArchiveSelected(true)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: '#8B5CF6',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '6px 14px',
+                                fontSize: '13px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                minHeight: '36px',
+                              }}
+                              title="선택한 일정을 지난 시즌 아카이브로 보관"
+                            >
+                              📦 {selectedBatchScheduleIds.length}개 아카이브
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleBatchArchiveSelected(false)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: '#EDE9FE',
+                                color: '#6D28D9',
+                                border: '1px solid #C4B5FD',
+                                borderRadius: '8px',
+                                padding: '6px 14px',
+                                fontSize: '13px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                minHeight: '36px',
+                              }}
+                              title="선택한 일정을 일반 목록으로 복원"
+                            >
+                              📂 보관 해제
                             </button>
                             <button
                               type="button"
@@ -1993,6 +2357,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       </span>
                                       <span className="schedule-category-badge">{sch.category}</span>
                                       <strong style={{ fontSize: '13.5px', color: '#1E293B' }}>{sch.title}</strong>
+                                      {sch.seriesIndex && sch.seriesTotal && (
+                                        <span
+                                          style={{
+                                            fontSize: '11px',
+                                            color: '#059669',
+                                            background: '#ECFDF5',
+                                            border: '1px solid #A7F3D0',
+                                            padding: '1px 6px',
+                                            borderRadius: '4px',
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          {sch.seriesIndex}/{sch.seriesTotal}회차
+                                        </span>
+                                      )}
                                       {sch.checkInPin && (
                                         <span style={{ fontSize: '11px', color: '#64748B', background: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
                                           PIN: {sch.checkInPin}
@@ -2011,6 +2390,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </div>
 
                                 <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                  {sch.seriesId && (
+                                    <button
+                                      type="button"
+                                      className="btn-edit-sch-mini"
+                                      onClick={() => handleDuplicateSelectedSeries(sch.seriesId)}
+                                      title="이 일정 묶음을 다음 학기로 통째로 복제"
+                                      style={{
+                                        background: '#F0FDF4',
+                                        color: '#059669',
+                                        border: '1px solid #BBF7D0',
+                                        borderRadius: '6px',
+                                        padding: '5px 8px',
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        minHeight: '34px',
+                                      }}
+                                    >
+                                      🔁 시즌 복제
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleArchiveSchedule(sch.id, !sch.isArchived)}
+                                    title={sch.isArchived ? '일반 목록으로 복원' : '지난 시즌 아카이브로 보관'}
+                                    style={{
+                                      background: sch.isArchived ? '#EDE9FE' : '#F1F5F9',
+                                      color: sch.isArchived ? '#6D28D9' : '#475569',
+                                      border: `1px solid ${sch.isArchived ? '#C4B5FD' : '#CBD5E1'}`,
+                                      borderRadius: '6px',
+                                      padding: '5px 8px',
+                                      fontSize: '12px',
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      minHeight: '34px',
+                                    }}
+                                  >
+                                    {sch.isArchived ? '📂 복원' : '📦 보관'}
+                                  </button>
                                   <button
                                     type="button"
                                     className="btn-edit-sch-mini"
@@ -2045,6 +2463,190 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       ) : (
                         <p className="empty-subtext" style={{ padding: '24px 0', textAlign: 'center', margin: 0 }}>
                           조건에 부합하는 일정이 없습니다.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    /* PROGRAM_CARDS CONTAINER VIEW */
+                    <div>
+                      <div style={{ marginBottom: '14px' }}>
+                        <h2 className="section-title" style={{ margin: 0 }}>
+                          📦 일정 카드(프로젝트) 묶음 관리
+                        </h2>
+                        <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
+                          학기/프로젝트 단위로 정기연습과 추가연습을 묶어 관리하고, 원클릭으로 추가 연습 등록 및 다음 학기 복제를 수행합니다.
+                        </p>
+                      </div>
+
+                      {programGroups.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '520px', overflowY: 'auto' }}>
+                          {programGroups.map((group) => {
+                            const isExpanded = expandedCardIds.has(group.cardId);
+                            return (
+                              <div
+                                key={group.cardId}
+                                style={{
+                                  background: '#FFFFFF',
+                                  border: '1px solid #E2E8F0',
+                                  borderRadius: '12px',
+                                  padding: '16px',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span className="schedule-category-badge">{group.category}</span>
+                                      <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#1E293B' }}>
+                                        {group.title}
+                                      </h3>
+                                      <span style={{ fontSize: '12px', color: '#6366F1', background: '#EEF2FF', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                                        총 {group.schedules.length}회차
+                                      </span>
+                                    </div>
+                                    <p style={{ margin: '6px 0 0', fontSize: '12.5px', color: '#64748B' }}>
+                                      📅 {group.startDate} ~ {group.endDate} · 🕒 {group.startTime}~{group.endTime} · 📍 {group.locationName}
+                                    </p>
+                                    {group.description && (
+                                      <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#94A3B8' }}>
+                                        메모: {group.description}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setNewTitle(`${group.title} 추가연습`);
+                                        const matchedLoc = locationPresets.find((l) => l.name === group.locationName);
+                                        if (matchedLoc) {
+                                          setSelectedLocationPresetId(matchedLoc.id);
+                                        }
+                                        setNewStartTime(group.startTime);
+                                        setNewEndTime(group.endTime);
+                                        setNewCategory('추가연습');
+                                        setScheduleSuccessMsg(`[${group.title}]에 등록할 추가연습 정보를 우측 폼에 세팅했습니다. 날짜를 확인하고 등록을 눌러주세요.`);
+                                        setTimeout(() => setScheduleSuccessMsg(''), 4500);
+                                      }}
+                                      style={{
+                                        background: '#EEF2FF',
+                                        color: '#4F46E5',
+                                        border: '1px solid #C7D2FE',
+                                        borderRadius: '6px',
+                                        padding: '6px 10px',
+                                        fontSize: '12px',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      ➕ 추가연습 등록
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDuplicateSelectedSeries(group.cardId)}
+                                      style={{
+                                        background: '#F0FDF4',
+                                        color: '#059669',
+                                        border: '1px solid #BBF7D0',
+                                        borderRadius: '6px',
+                                        padding: '6px 10px',
+                                        fontSize: '12px',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      🔁 다음 학기로 복제
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleArchiveGroup(group.schedules.map((s) => s.id), !group.isArchived)}
+                                      style={{
+                                        background: group.isArchived ? '#EDE9FE' : '#F8FAFC',
+                                        color: group.isArchived ? '#6D28D9' : '#475569',
+                                        border: `1px solid ${group.isArchived ? '#C4B5FD' : '#CBD5E1'}`,
+                                        borderRadius: '6px',
+                                        padding: '6px 10px',
+                                        fontSize: '12px',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      {group.isArchived ? '📂 묶음 보관 해제' : '📦 묶음 아카이브'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setExpandedCardIds((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(group.cardId)) next.delete(group.cardId);
+                                          else next.add(group.cardId);
+                                          return next;
+                                        });
+                                      }}
+                                      style={{
+                                        background: isExpanded ? '#F1F5F9' : '#FFFFFF',
+                                        color: '#475569',
+                                        border: '1px solid #CBD5E1',
+                                        borderRadius: '6px',
+                                        padding: '6px 10px',
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      {isExpanded ? '▲ 접기' : `▼ 일정표 (${group.schedules.length})`}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {isExpanded && (
+                                  <div style={{ marginTop: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    {group.schedules.map((sch) => (
+                                      <div
+                                        key={sch.id}
+                                        style={{
+                                          display: 'flex',
+                                          justifyContent: 'space-between',
+                                          alignItems: 'center',
+                                          padding: '8px 12px',
+                                          background: '#F8FAFC',
+                                          borderRadius: '6px',
+                                          fontSize: '12px',
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <strong style={{ color: '#2563EB' }}>{sch.date}</strong>
+                                          <span style={{ color: '#1E293B', fontWeight: 600 }}>{sch.title}</span>
+                                          <span style={{ color: '#64748B' }}>({sch.startTime}~{sch.endTime})</span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '4px' }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenEditSchedule(sch)}
+                                            style={{ background: '#EEF2FF', color: '#4F46E5', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                          >
+                                            수정
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteSchedule(sch.id, sch.title)}
+                                            style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                          >
+                                            삭제
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="empty-subtext" style={{ padding: '24px 0', textAlign: 'center', margin: 0 }}>
+                          등록된 일정 카드가 없습니다.
                         </p>
                       )}
                     </div>
@@ -2171,15 +2773,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <label className="form-label">일정 구분</label>
                         <select
                           className="select-input"
-                          value={newCategory}
-                          onChange={(e) => setNewCategory(e.target.value as ScheduleCategory)}
+                          value={isCustomNewCategory ? '__CUSTOM__' : newCategory}
+                          onChange={(e) => {
+                            if (e.target.value === '__CUSTOM__') {
+                              setIsCustomNewCategory(true);
+                            } else {
+                              setIsCustomNewCategory(false);
+                              setNewCategory(e.target.value as ScheduleCategory);
+                            }
+                          }}
                         >
                           {dynamicCategories.map((cat) => (
                             <option key={cat} value={cat}>
                               {cat}
                             </option>
                           ))}
+                          <option value="__CUSTOM__">✏️ + 새 구분 직접 추가...</option>
                         </select>
+                        {isCustomNewCategory && (
+                          <input
+                            type="text"
+                            className="input-text"
+                            style={{ marginTop: '6px' }}
+                            value={customNewCategoryInput}
+                            onChange={(e) => setCustomNewCategoryInput(e.target.value)}
+                            placeholder="새 일정 구분 직접 입력 (예: 총연습)"
+                            required={isCustomNewCategory}
+                            autoFocus
+                          />
+                        )}
                       </div>
                     </div>
 
@@ -2215,7 +2837,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     {/* Location Preset Selector */}
                     <div>
-                      <label className="form-label">연습실 장소 프리셋</label>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <label className="form-label" style={{ margin: 0 }}>연습실 장소 프리셋</label>
+                        <button
+                          type="button"
+                          onClick={() => setIsScheduleLocationModalOpen(true)}
+                          style={{
+                            fontSize: '11.5px',
+                            color: '#4F46E5',
+                            fontWeight: 600,
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: 0,
+                          }}
+                        >
+                          🗺️ 지도에서 새 장소 검색/등록
+                        </button>
+                      </div>
                       <select
                         className="select-input"
                         value={selectedLocationPresetId}
@@ -2226,6 +2865,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             {loc.name} (반경 {loc.radiusMeters}m)
                           </option>
                         ))}
+                        <option value="__NEW_LOCATION__">🗺️ + 새 연습실 등록 (지도/도로명 검색)...</option>
                         <option value="custom">직접 장소명 입력</option>
                       </select>
                     </div>
@@ -2433,7 +3073,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <input
                   type="text"
                   className="modern-input"
-                  placeholder="예: 문콰이어 제1연습실 (명동), 예술의전당 체임버홀"
+                  placeholder="예: 문콰이어 연습실, 예술의전당 리허설룸"
                   value={presetFormName}
                   onChange={(e) => setPresetFormName(e.target.value)}
                   required
@@ -2845,6 +3485,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onSaveSeries={handleSaveScheduleSeries}
         onDeleteSingle={handleDeleteScheduleSingle}
         onDeleteSeries={handleDeleteScheduleSeries}
+        onSaveNewLocationPreset={handleAddNewLocationPresetFromModal}
       />
 
       {/* ============================================================== */}
@@ -2859,6 +3500,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onClose={() => setIsBatchScheduleEditModalOpen(false)}
         onApplyBatch={handleApplyBatchScheduleUpdates}
       />
+
+      {/* ============================================================== */}
+      {/* MODAL: Standalone Location Picker Modal                        */}
+      {/* ============================================================== */}
+      {isScheduleLocationModalOpen && (
+        <LocationPickerModal
+          isOpen={isScheduleLocationModalOpen}
+          onClose={() => setIsScheduleLocationModalOpen(false)}
+          onSave={handleAddNewLocationPresetFromModal}
+        />
+      )}
     </div>
   );
 };

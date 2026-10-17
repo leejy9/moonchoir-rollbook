@@ -5,10 +5,12 @@ import type {
   CumulativeMemberAttendance,
   LocationPreset,
   Member,
+  MemberStatusHistory,
   RSVPVote,
   RawAttendanceLog,
   Schedule,
 } from '../types/rollbook';
+import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
 import {
   INITIAL_CONFIG,
   INITIAL_LOCATION_PRESETS,
@@ -281,16 +283,33 @@ export class SheetsService {
     return newMember;
   }
 
-  public async updateMember(memberId: string, updates: Partial<Member>): Promise<Member> {
+  public async updateMember(
+    memberId: string,
+    updates: Partial<Member>,
+    historyItem?: MemberStatusHistory
+  ): Promise<Member> {
     const idx = this.members.findIndex((m) => m.id === memberId);
     if (idx < 0) {
       throw new Error(`대원을 찾을 수 없습니다. (ID: ${memberId})`);
     }
-    this.members[idx] = { ...this.members[idx], ...updates };
+
+    const currentHistory = this.members[idx].statusHistory ? [...this.members[idx].statusHistory!] : [];
+    if (historyItem) {
+      currentHistory.push(historyItem);
+    }
+
+    this.members[idx] = {
+      ...this.members[idx],
+      ...updates,
+      ...(currentHistory.length > 0 ? { statusHistory: currentHistory } : {}),
+    };
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('UPDATE_MEMBER', this.members[idx]).catch((err) => {
+      this.sendToGoogleSheet('UPDATE_MEMBER', {
+        ...this.members[idx],
+        historyItem,
+      }).catch((err) => {
         console.error('[Sheets API] Member update sync failed:', err);
       });
     }
@@ -309,6 +328,41 @@ export class SheetsService {
         console.error('[Sheets API] Member delete sync failed:', err);
       });
     }
+  }
+
+  public async bindMemberDevice(memberId: string, deviceId: string): Promise<Member> {
+    const member = this.members.find((m) => m.id === memberId);
+    if (!member) throw new Error('단원을 찾을 수 없습니다.');
+    if (member.boundDeviceId && member.boundDeviceId !== deviceId) {
+      throw new Error(
+        '이미 다른 기기(스마트폰)에 연동되어 있는 계정입니다.\n기존 기기에서 [연동 해제]를 먼저 진행하시거나, 기기 분실/변경 시 관리자에게 초기화를 요청하세요.'
+      );
+    }
+    const updated = await this.updateMember(memberId, {
+      boundDeviceId: deviceId,
+      boundDeviceAt: new Date().toISOString(),
+    });
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('BIND_DEVICE', { memberId, deviceId }).catch((err) => {
+        console.error('[Sheets API] BIND_DEVICE sync failed:', err);
+      });
+    }
+    return updated;
+  }
+
+  public async unbindMemberDevice(memberId: string): Promise<Member> {
+    const member = this.members.find((m) => m.id === memberId);
+    if (!member) throw new Error('단원을 찾을 수 없습니다.');
+    const updated = await this.updateMember(memberId, {
+      boundDeviceId: undefined,
+      boundDeviceAt: undefined,
+    });
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('UNBIND_DEVICE', { memberId }).catch((err) => {
+        console.error('[Sheets API] UNBIND_DEVICE sync failed:', err);
+      });
+    }
+    return updated;
   }
 
   public async addSchedule(schedule: Schedule): Promise<Schedule> {
@@ -577,33 +631,50 @@ export class SheetsService {
     }));
 
     const memberSummaries: CumulativeMemberAttendance[] = members.map((m) => {
+      let totalSessions = 0;
       let attended = 0;
       let late = 0;
       let excused = 0;
       let absent = 0;
+      let guestAttended = 0;
       const recentStatusList: AttendanceStatus[] = [];
 
-      for (const { reconciliation } of sessionReconciliations) {
+      for (const { schedule, reconciliation } of sessionReconciliations) {
+        const isRequired = isMemberRequiredForSchedule(m, schedule.date);
         const item = reconciliation.find((r) => r.memberId === m.id);
-        const status = item ? item.finalStatus : '결석';
-        recentStatusList.push(status);
+        const hasCheckedIn = item && (item.finalStatus === '출석' || item.finalStatus === '수동인정' || item.finalStatus === '지각');
 
-        if (status === '출석' || status === '수동인정') {
-          attended += 1;
-        } else if (status === '지각') {
-          late += 1;
-        } else if (status === '사유결석') {
-          excused += 1;
+        if (isRequired) {
+          totalSessions += 1;
+          const status = item ? item.finalStatus : '결석';
+          recentStatusList.push(status);
+
+          if (status === '출석' || status === '수동인정') {
+            attended += 1;
+          } else if (status === '지각') {
+            late += 1;
+          } else if (status === '사유결석') {
+            excused += 1;
+          } else {
+            absent += 1;
+          }
         } else {
-          absent += 1;
+          // 비필참 기간 (입단 전, 휴단/퇴단/객원 기간)
+          if (hasCheckedIn) {
+            // 자발적 옵트인 참석! 출석한 날만 모수+1, 출석+1
+            totalSessions += 1;
+            attended += 1;
+            guestAttended += 1;
+            recentStatusList.push(item!.finalStatus);
+          }
+          // 출석하지 않았으면 모수 및 결석 카운트 안 함 (결석 왜곡 0%)
         }
       }
 
-      const totalSessions = sessions.length;
-      // Formula: (출석 + 지각*0.5) / 총 회차 * 100
+      // Formula: (출석 + 지각*0.5) / 총 유효 회차 * 100
       const attendanceRate = totalSessions > 0
         ? Math.min(100, Math.round(((attended + late * 0.5) / totalSessions) * 100))
-        : 0;
+        : 100;
 
       // Smart Badges calculation
       const badges: string[] = [];
@@ -615,6 +686,10 @@ export class SheetsService {
 
       if (absent >= 3 || (totalSessions >= 3 && attendanceRate < 60)) {
         badges.push('주의');
+      }
+
+      if (guestAttended > 0) {
+        badges.push(`게스트 ${guestAttended}회`);
       }
 
       return {
@@ -632,6 +707,8 @@ export class SheetsService {
         attendanceRate,
         recentStatusList: recentStatusList.slice(-5), // last 5 sessions
         badges,
+        guestAttended,
+        isSpecialGuest: guestAttended > 0,
       };
     });
 
@@ -741,6 +818,7 @@ export class SheetsService {
       logs?: RawAttendanceLog[];
       recentLogs?: RawAttendanceLog[];
       locations?: LocationPreset[];
+      memberHistory?: MemberStatusHistory[];
       config?: Partial<AppConfig>;
     } };
 
@@ -750,10 +828,32 @@ export class SheetsService {
 
     const data = json.data;
     if (Array.isArray(data.members)) {
+      // Map member history by memberId
+      const historyByMember = new Map<string, MemberStatusHistory[]>();
+      if (Array.isArray(data.memberHistory)) {
+        for (const h of data.memberHistory) {
+          if (!h.memberId) continue;
+          const list = historyByMember.get(h.memberId) || [];
+          list.push({
+            id: h.id || `hist_${Math.random()}`,
+            memberId: h.memberId,
+            status: h.status,
+            part: h.part,
+            startDate: h.startDate,
+            endDate: h.endDate || '2999-12-31',
+            reason: h.reason || '',
+            createdAt: h.createdAt || '',
+          });
+          historyByMember.set(h.memberId, list);
+        }
+      }
+
       const remoteMembers = data.members.map((m) => {
         const phone = m.phone ? String(m.phone).trim() : '';
         const rawLast4 = m.phoneLast4 !== undefined && m.phoneLast4 !== null ? String(m.phoneLast4).trim() : '';
         const phoneLast4 = rawLast4 ? rawLast4.padStart(4, '0') : (phone ? phone.replace(/\D/g, '').slice(-4) : '0000');
+        const history = historyByMember.get(m.id) || m.statusHistory;
+
         return {
           ...m,
           name: String(m.name || ''),
@@ -762,6 +862,9 @@ export class SheetsService {
           joinedAt: m.joinedAt ? String(m.joinedAt) : (m.createdAt ? String(m.createdAt).slice(0, 10) : ''),
           memberStatus: m.memberStatus || (m.role === 'ADMIN' ? '선생님' : m.role === 'GUEST' ? '객원' : '정단원'),
           note: m.note ? String(m.note) : '',
+          boundDeviceId: m.boundDeviceId ? String(m.boundDeviceId) : undefined,
+          boundDeviceAt: m.boundDeviceAt ? String(m.boundDeviceAt) : undefined,
+          ...(history && history.length > 0 ? { statusHistory: history } : {}),
         };
       });
 

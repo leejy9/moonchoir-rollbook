@@ -322,6 +322,8 @@ a {
   padding: 10px 14px;
   border-radius: var(--radius-md);
   line-height: 1.5;
+  white-space: pre-line;
+  word-break: break-word;
 }
 
 /* Status Banner */
@@ -1053,6 +1055,8 @@ a {
   background: var(--bg-card);
   padding: 8px 10px;
   border-radius: var(--radius-sm);
+  white-space: pre-line;
+  word-break: break-word;
 }
 
 .item-rsvp-row {
@@ -2378,12 +2382,13 @@ a {
   background: var(--bg-subtle);
   border: 1.5px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: 16px 12px;
+  padding: 10px 8px;
+  min-height: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 4px;
+  gap: 2px;
   transition: all var(--transition-fast);
   cursor: pointer;
 }
@@ -4294,6 +4299,95 @@ a {
   background: #fff0eb;
   border-color: #dc2626;
 }
+
+/* 1인 1기기 락 & 디바이스 바인딩 상태 */
+.profile-device-lock-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.device-lock-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.device-lock-icon {
+  font-size: 24px;
+}
+
+.device-lock-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+}
+
+.device-badge-bound {
+  font-weight: 700;
+  color: #047857;
+  background: #d1fae5;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+}
+
+.device-badge-unbound {
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+}
+
+.device-bind-date {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.device-lock-id {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.btn-unbind-device {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-unbind-device:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+.profile-alert-success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 
 
 

@@ -116,7 +116,7 @@ export function expandRecurringSchedules(
     ];
   }
 
-  const results: import('../types/rollbook').Schedule[] = [];
+  const rawOccurrences: { date: string }[] = [];
   const maxOccurrences = options.count && options.count > 0 ? options.count : 24; // default max 24
   const targetDays =
     options.byDays && options.byDays.length > 0
@@ -148,22 +148,84 @@ export function expandRecurringSchedules(
       // Must be >= baseSchedule.date
       if (dateStr < baseSchedule.date) continue;
       // Must not exceed untilDate if specified
-      if (options.untilDate && dateStr > options.untilDate) return results;
+      if (options.untilDate && dateStr > options.untilDate) break;
 
-      results.push({
-        ...baseSchedule,
-        id: `sch_${dateStr.replace(/-/g, '')}_${Math.random().toString(36).slice(2, 6)}`,
-        date: dateStr,
-      });
+      rawOccurrences.push({ date: dateStr });
 
       generatedCount++;
       if (generatedCount >= maxOccurrences) break;
+    }
+
+    if (options.untilDate && rawOccurrences.length > 0) {
+      const last = rawOccurrences[rawOccurrences.length - 1];
+      if (last.date > options.untilDate) break;
     }
 
     // Step by intervalWeeks
     currentWeekStart.setDate(currentWeekStart.getDate() + intervalWeeks * 7);
   }
 
-  return results;
+  const seriesId = `series_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const totalCount = rawOccurrences.length;
+
+  return rawOccurrences.map((occ, idx) => ({
+    ...baseSchedule,
+    id: `sch_${occ.date.replace(/-/g, '')}_${Math.random().toString(36).slice(2, 6)}`,
+    date: occ.date,
+    seriesId,
+    seriesIndex: idx + 1,
+    seriesTotal: totalCount,
+  }));
+}
+
+/**
+ * Duplicates an existing schedule series to a new semester/period starting on newStartDate.
+ * Generates fresh unique schedule IDs, a new seriesId, and random check-in PINs.
+ * Ensures complete foreign-key isolation so past attendance and RSVP logs remain untouched.
+ */
+export function duplicateScheduleSeries(
+  allSchedules: import('../types/rollbook').Schedule[],
+  targetSeriesId: string,
+  newStartDate: string
+): import('../types/rollbook').Schedule[] {
+  // Find members of the series (or fallback by title if legacy)
+  const seriesItems = allSchedules
+    .filter((s) => s.seriesId === targetSeriesId)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (seriesItems.length === 0) return [];
+
+  const origFirstDate = new Date(seriesItems[0].date + 'T00:00:00');
+  const targetStartDate = new Date(newStartDate + 'T00:00:00');
+  const newSeriesId = `series_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const totalCount = seriesItems.length;
+
+  return seriesItems.map((item, idx) => {
+    const itemDate = new Date(item.date + 'T00:00:00');
+    const dayOffset = Math.round(
+      (itemDate.getTime() - origFirstDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    const newDateObj = new Date(targetStartDate);
+    newDateObj.setDate(newDateObj.getDate() + dayOffset);
+
+    const y = newDateObj.getFullYear();
+    const m = String(newDateObj.getMonth() + 1).padStart(2, '0');
+    const d = String(newDateObj.getDate()).padStart(2, '0');
+    const newDateStr = `${y}-${m}-${d}`;
+
+    const randomPin = Math.floor(1000 + Math.random() * 9000).toString();
+
+    return {
+      ...item,
+      id: `sch_${newDateStr.replace(/-/g, '')}_${Math.random().toString(36).slice(2, 6)}`,
+      date: newDateStr,
+      seriesId: newSeriesId,
+      seriesIndex: idx + 1,
+      seriesTotal: totalCount,
+      checkInPin: randomPin,
+      isArchived: false,
+    };
+  });
 }
 

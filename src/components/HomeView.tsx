@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Schedule } from '../types/rollbook';
+import { getCalendarGrid } from '../utils/calendar';
 import { getCheckInWindowState } from '../utils/timeWindow';
 import {
   IconCalendar,
@@ -18,10 +19,31 @@ interface HomeViewProps {
   onOpenQRScanner: (schedule?: Schedule) => void;
   onOpenRSVP: (schedule: Schedule) => void;
   onOpenAdmin: () => void;
-  onChangeProfile: () => void;
-  onViewCalendar: () => void;
+  onChangeProfile?: () => void;
+  onOpenProfilePortal?: () => void;
+  onViewCalendar?: () => void;
   refreshTrigger: number;
 }
+
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+function getCategoryDotClass(category: string): string {
+  if (category.includes('연주') || category.includes('공연') || category.includes('콘서트')) {
+    return 'dot-concert';
+  }
+  if (
+    category.includes('행사') ||
+    category.includes('합숙') ||
+    category.includes('이벤트') ||
+    category.includes('MT') ||
+    category.includes('기타')
+  ) {
+    return 'dot-event';
+  }
+  return 'dot-practice';
+}
+
+const getTodayDateString = () => new Date().toISOString().slice(0, 10);
 
 export const HomeView: React.FC<HomeViewProps> = ({
   profile,
@@ -29,22 +51,82 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenRSVP,
   onOpenAdmin,
   onChangeProfile,
+  onOpenProfilePortal,
   onViewCalendar,
   refreshTrigger: _refreshTrigger,
 }) => {
   const [testWindowBypass, setTestWindowBypass] = useState(false);
+  const [homeViewTab, setHomeViewTab] = useState<'CALENDAR' | 'LIST'>('CALENDAR');
+
+  const [todayStr] = useState(getTodayDateString);
+  const [currentNow] = useState(() => new Date());
+
+  // Month navigation state (default to current year/month)
+  const [currentYear, setCurrentYear] = useState(() => parseInt(todayStr.slice(0, 4), 10));
+  const [currentMonthIndex, setCurrentMonthIndex] = useState(() => parseInt(todayStr.slice(5, 7), 10) - 1);
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
+
   const schedules = sheetsService.getSchedules();
   const members = sheetsService.getMembers().filter((m) => m.status === 'ACTIVE');
+  const allLogs = sheetsService.getLogs();
 
-  // Find today's or closest upcoming rehearsal
-  const [currentNow] = useState(() => new Date());
-  const todayStr = currentNow.toISOString().slice(0, 10);
+  // Map user's attended schedules
+  const myLogsByScheduleId = useMemo(() => {
+    const map = new Map<string, boolean>();
+    allLogs
+      .filter((l) => l.memberId === profile.memberId)
+      .forEach((l) => map.set(l.scheduleId, true));
+    return map;
+  }, [allLogs, profile.memberId]);
 
-  // Find exact today schedule, or the first schedule today or in the future
-  const activeSchedule =
-    schedules.find((s) => s.date === todayStr) ||
-    schedules.find((s) => s.date >= todayStr) ||
-    schedules[0];
+  // Map schedules by date string
+  const schedulesByDate = useMemo(() => {
+    const map = new Map<string, Schedule[]>();
+    schedules.forEach((s) => {
+      const list = map.get(s.date) || [];
+      list.push(s);
+      map.set(s.date, list);
+    });
+    return map;
+  }, [schedules]);
+
+  // Calendar grid calculation
+  const calendarDays = useMemo(() => {
+    return getCalendarGrid(currentYear, currentMonthIndex);
+  }, [currentYear, currentMonthIndex]);
+
+  const handlePrevMonth = () => {
+    if (currentMonthIndex === 0) {
+      setCurrentMonthIndex(11);
+      setCurrentYear((y) => y - 1);
+    } else {
+      setCurrentMonthIndex((m) => m - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (currentMonthIndex === 11) {
+      setCurrentMonthIndex(0);
+      setCurrentYear((y) => y + 1);
+    } else {
+      setCurrentMonthIndex((m) => m + 1);
+    }
+  };
+
+  // Determine active schedule
+  const activeSchedule: Schedule | undefined = useMemo(() => {
+    const list = schedulesByDate.get(selectedDateStr) || [];
+    // 1. If in Calendar tab and user selected a date that has a schedule
+    if (homeViewTab === 'CALENDAR' && list.length > 0) {
+      return list[0];
+    }
+    // 2. Otherwise today's schedule or next upcoming
+    return (
+      schedules.find((s) => s.date === todayStr) ||
+      schedules.find((s) => s.date >= todayStr) ||
+      schedules[0]
+    );
+  }, [homeViewTab, schedulesByDate, selectedDateStr, schedules, todayStr]);
 
   const windowState = activeSchedule
     ? getCheckInWindowState(activeSchedule, currentNow, testWindowBypass)
@@ -65,6 +147,21 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const unvotedMembers = members.filter((m) => !votedMemberIds.has(m.id));
 
   const attendRate = members.length > 0 ? Math.round((attendees.length / members.length) * 100) : 0;
+
+  // Upcoming future schedules (from today onwards)
+  const upcomingSchedules = useMemo(() => {
+    return schedules
+      .filter((s) => s.date >= todayStr && !s.isArchived)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [schedules, todayStr]);
+
+  const handleProfileClick = () => {
+    if (onOpenProfilePortal) {
+      onOpenProfilePortal();
+    } else if (onChangeProfile) {
+      onChangeProfile();
+    }
+  };
 
   return (
     <div className="home-container">
@@ -87,8 +184,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <button
             type="button"
             className="profile-pill-btn"
-            onClick={onChangeProfile}
-            title="기기 바인딩 프로필 변경"
+            onClick={handleProfileClick}
+            title="내 출결 성적표 및 프로필 열람"
           >
             <span className={`part-badge part-${profile.part}`}>{profile.part}</span>
             <span className="profile-name">{profile.name}</span>
@@ -106,15 +203,272 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </header>
 
-      {/* Main Active Rehearsal Card */}
+      {/* View Switcher Tabs: 캘린더 일체형 뷰 vs 리스트 뷰 */}
+      <div
+        style={{
+          display: 'flex',
+          background: '#f1f5f9',
+          padding: '4px',
+          borderRadius: '12px',
+          margin: '0 0 16px',
+          gap: '4px',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setHomeViewTab('CALENDAR')}
+          style={{
+            flex: 1,
+            minHeight: '44px',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '0.9rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            background: homeViewTab === 'CALENDAR' ? '#ffffff' : 'transparent',
+            color: homeViewTab === 'CALENDAR' ? '#1e293b' : '#64748b',
+            boxShadow: homeViewTab === 'CALENDAR' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <IconCalendar size={16} />
+          <span>월간 캘린더</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setHomeViewTab('LIST')}
+          style={{
+            flex: 1,
+            minHeight: '44px',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '0.9rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            background: homeViewTab === 'LIST' ? '#ffffff' : 'transparent',
+            color: homeViewTab === 'LIST' ? '#1e293b' : '#64748b',
+            boxShadow: homeViewTab === 'LIST' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span>📋 오늘 & 다가오는 연습</span>
+        </button>
+      </div>
+
+      {/* Embedded Monthly Interactive Calendar (When in CALENDAR tab) */}
+      {homeViewTab === 'CALENDAR' && (
+        <section
+          className="integrated-calendar-card"
+          style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            padding: '16px',
+            border: '1px solid #e2e8f0',
+            marginBottom: '16px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+          }}
+        >
+          {/* Calendar Header Month Switcher */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b', margin: 0 }}>
+                {currentYear}년 {currentMonthIndex + 1}월
+              </h2>
+              {selectedDateStr !== todayStr && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const todayYear = parseInt(todayStr.slice(0, 4), 10);
+                    const todayMonth = parseInt(todayStr.slice(5, 7), 10) - 1;
+                    setCurrentYear(todayYear);
+                    setCurrentMonthIndex(todayMonth);
+                    setSelectedDateStr(todayStr);
+                  }}
+                  style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    background: '#e0e7ff',
+                    color: '#4338ca',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  오늘
+                </button>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button
+                type="button"
+                onClick={handlePrevMonth}
+                aria-label="이전 달"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  background: '#ffffff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                }}
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                onClick={handleNextMonth}
+                aria-label="다음 달"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  background: '#ffffff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                }}
+              >
+                ▶
+              </button>
+            </div>
+          </div>
+
+          {/* Weekday Row */}
+          <div className="calendar-grid-weekdays">
+            {WEEKDAYS.map((wd, idx) => (
+              <span
+                key={wd}
+                className={`weekday-header ${idx === 0 ? 'sun' : idx === 6 ? 'sat' : ''}`}
+              >
+                {wd}
+              </span>
+            ))}
+          </div>
+
+          {/* Calendar Grid Cells */}
+          <div className="calendar-grid-cells">
+            {calendarDays.map((day) => {
+              const daySchedules = schedulesByDate.get(day.dateStr) || [];
+              const isSelected = day.dateStr === selectedDateStr;
+              const isToday = day.dateStr === todayStr;
+              const hasCheckIn = daySchedules.some((s) => myLogsByScheduleId.has(s.id));
+
+              return (
+                <div
+                  key={day.dateStr}
+                  className={`calendar-cell ${day.isCurrentMonth ? '' : 'dimmed'} ${
+                    isToday ? 'today' : ''
+                  } ${isSelected ? 'selected' : ''}`}
+                  onClick={() => setSelectedDateStr(day.dateStr)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${day.dateStr} 일정 선택`}
+                >
+                  <span className="cell-day-num">{day.dayNumber}</span>
+
+                  {/* Attendance check or rehearsal dots */}
+                  {daySchedules.length > 0 && (
+                    <div className="cell-dots-row">
+                      {hasCheckIn ? (
+                        <span
+                          style={{
+                            fontSize: '9px',
+                            fontWeight: 800,
+                            color: isSelected ? '#ffffff' : '#10b981',
+                            lineHeight: 1,
+                          }}
+                          title="출석 완료"
+                        >
+                          ✓
+                        </span>
+                      ) : (
+                        daySchedules.slice(0, 3).map((sch) => (
+                          <span
+                            key={sch.id}
+                            className={`schedule-dot ${getCategoryDotClass(sch.category)}`}
+                          />
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Legend row */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              fontSize: '0.75rem',
+              color: '#64748b',
+              marginTop: '12px',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1' }} /> 정기연습
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} /> 연주/행사
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <strong style={{ color: '#10b981' }}>✓</strong> 내 출석 완료
+            </span>
+          </div>
+        </section>
+      )}
+
+      {/* Main Active / Selected Rehearsal Card */}
       {activeSchedule ? (
         <section className="active-schedule-card">
           <div className="schedule-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
               <span className="schedule-category-badge">{activeSchedule.category}</span>
               <span className={`schedule-date-badge ${activeSchedule.date === todayStr ? 'is-today' : ''}`}>
                 {activeSchedule.date === todayStr ? '오늘 연습' : activeSchedule.date}
               </span>
+              {homeViewTab === 'CALENDAR' && activeSchedule.date === selectedDateStr && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#4f46e5',
+                    background: '#e0e7ff',
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                  }}
+                >
+                  선택한 날짜
+                </span>
+              )}
             </div>
             {/* Cute Liquid Wave Gauge (MYTURN Style) */}
             <LiquidGauge percentage={attendRate} size={44} subText="참석률" />
@@ -301,52 +655,99 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
         </section>
       ) : (
-        <div className="no-schedule-box">
-          <p>등록된 일정이 없습니다.</p>
+        <div className="no-schedule-box" style={{ background: '#ffffff', padding: '30px 20px', borderRadius: '16px', textAlign: 'center', border: '1px solid #e2e8f0', margin: '0 0 16px' }}>
+          <p style={{ margin: '0 0 10px', color: '#64748b', fontSize: '0.95rem' }}>
+            선택한 날짜({selectedDateStr})에는 연습 일정이 없습니다.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSelectedDateStr(todayStr)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              background: '#4f46e5',
+              color: '#ffffff',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+            }}
+          >
+            오늘 일정으로 이동
+          </button>
         </div>
       )}
 
-      {/* Month Schedules Overview Preview */}
-      <section className="month-overview-card">
+      {/* Upcoming Schedules List */}
+      <section className="month-overview-card" style={{ marginTop: '16px' }}>
         <div className="section-title-row">
           <div>
-            <h3 className="section-title">이번 달 연습 일정</h3>
-            <p className="section-subtitle">정기 연습 및 추가 일정</p>
+            <h3 className="section-title">다가오는 연습 일정</h3>
+            <p className="section-subtitle">오늘 이후 예정된 연습 모음</p>
           </div>
-          <button type="button" className="btn-calendar-link" onClick={onViewCalendar}>
-            <IconCalendar size={15} />
-            <span>전체 캘린더</span>
-          </button>
+          {onViewCalendar && (
+            <button type="button" className="btn-calendar-link" onClick={onViewCalendar}>
+              <IconCalendar size={15} />
+              <span>전체 캘린더</span>
+            </button>
+          )}
         </div>
 
         <div className="schedules-preview-list compact">
-          {schedules.map((s) => {
-            const votes = sheetsService.getRSVPVotes(s.id);
-            const count = votes.filter((v) => v.status === 'ATTEND').length;
-            const rate = members.length > 0 ? Math.round((count / members.length) * 100) : 0;
-            return (
-              <div key={s.id} className="schedule-preview-item compact" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px' }}>
-                <div className="preview-date-box" style={{ width: '38px', minWidth: '38px', height: '38px' }}>
-                  <span className="preview-month" style={{ fontSize: '9px' }}>{s.date.slice(5, 7)}월</span>
-                  <span className="preview-day" style={{ fontSize: '14px' }}>{s.date.slice(8, 10)}</span>
-                </div>
-                <div className="preview-content" style={{ flex: 1, minWidth: 0 }}>
-                  <div className="preview-title-row" style={{ gap: '6px' }}>
-                    <span className="preview-title" style={{ fontSize: '13px', fontWeight: 600 }}>{s.title}</span>
-                    <span className="schedule-category-badge" style={{ fontSize: '10px', padding: '1px 6px' }}>{s.category}</span>
+          {upcomingSchedules.length === 0 ? (
+            <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+              예정된 다음 연습 일정이 없습니다.
+            </div>
+          ) : (
+            upcomingSchedules.slice(0, 5).map((s) => {
+              const votes = sheetsService.getRSVPVotes(s.id);
+              const count = votes.filter((v) => v.status === 'ATTEND').length;
+              const rate = members.length > 0 ? Math.round((count / members.length) * 100) : 0;
+              const isSelected = s.date === selectedDateStr;
+
+              return (
+                <div
+                  key={s.id}
+                  className="schedule-preview-item compact"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    cursor: 'pointer',
+                    borderRadius: '10px',
+                    border: isSelected ? '1.5px solid #4f46e5' : '1px solid #f1f5f9',
+                    background: isSelected ? '#f5f3ff' : '#ffffff',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onClick={() => {
+                    setSelectedDateStr(s.date);
+                    setHomeViewTab('CALENDAR');
+                  }}
+                >
+                  <div className="preview-date-box" style={{ width: '38px', minWidth: '38px', height: '38px' }}>
+                    <span className="preview-month" style={{ fontSize: '9px' }}>{s.date.slice(5, 7)}월</span>
+                    <span className="preview-day" style={{ fontSize: '14px' }}>{s.date.slice(8, 10)}</span>
                   </div>
-                  <div className="preview-meta" style={{ fontSize: '11px', color: '#8b95a1', marginTop: '2px' }}>
-                    <span>{s.startTime}~{s.endTime}</span>
-                    <span className="meta-divider">·</span>
-                    <span>{s.locationName}</span>
+                  <div className="preview-content" style={{ flex: 1, minWidth: 0 }}>
+                    <div className="preview-title-row" style={{ gap: '6px' }}>
+                      <span className="preview-title" style={{ fontSize: '13px', fontWeight: 600 }}>{s.title}</span>
+                      <span className="schedule-category-badge" style={{ fontSize: '10px', padding: '1px 6px' }}>{s.category}</span>
+                    </div>
+                    <div className="preview-meta" style={{ fontSize: '11px', color: '#8b95a1', marginTop: '2px' }}>
+                      <span>{s.startTime}~{s.endTime}</span>
+                      <span className="meta-divider">·</span>
+                      <span>{s.locationName}</span>
+                    </div>
                   </div>
+                  <LiquidGauge percentage={rate} size={32} />
                 </div>
-                <LiquidGauge percentage={rate} size={32} />
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </section>
     </div>
   );
 };
+export default HomeView;

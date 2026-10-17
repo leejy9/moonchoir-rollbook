@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import type { Member, Schedule, RawAttendanceLog, PartType, MemberStatus, RoleType } from '../types/rollbook';
+import type { Member, Schedule, RawAttendanceLog, PartType, MemberStatus, RoleType, MemberStatusHistory } from '../types/rollbook';
 import { formatMatrixHeaderDate } from '../utils/date';
+import { sheetsService } from '../services/sheets';
 
 interface MemberProfileModalProps {
   member: Member | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (updated: Member) => Promise<void>;
+  onSave: (updated: Member, historyItem?: MemberStatusHistory) => Promise<void>;
   onDelete?: (memberId: string) => Promise<void>;
   schedules?: Schedule[];
   logs?: RawAttendanceLog[];
@@ -24,6 +25,8 @@ function formatPhoneNumber(val: string): string {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 }
 
+const getTodayDateString = () => new Date().toISOString().slice(0, 10);
+
 const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Member }> = ({
   member,
   onClose,
@@ -32,6 +35,8 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
   schedules = [],
   logs = [],
 }) => {
+  const [todayStr] = useState(getTodayDateString);
+
   const [formData, setFormData] = useState<Member>(() => {
     const rawPhone = member.phone ? String(member.phone) : '';
     const rawLast4 = member.phoneLast4 !== undefined && member.phoneLast4 !== null
@@ -45,6 +50,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
       joinedAt: member.joinedAt ? String(member.joinedAt) : (member.createdAt ? String(member.createdAt).slice(0, 10) : ''),
       memberStatus: member.memberStatus || (member.role === 'ADMIN' ? '선생님' : '정단원'),
       note: member.note ? String(member.note) : '',
+      statusHistory: member.statusHistory || [],
     };
   });
 
@@ -60,9 +66,48 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
   }));
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUnbinding, setIsUnbinding] = useState(false);
+  const [deviceSuccessMsg, setDeviceSuccessMsg] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const STANDARD_PARTS = ['소프라노', '알토', '테너', '베이스', '선생님', '객원'];
+  const [isCustomPart, setIsCustomPart] = useState(
+    () => !STANDARD_PARTS.includes(formData.part) && Boolean(formData.part)
+  );
+  const [customPartInput, setCustomPartInput] = useState(() =>
+    !STANDARD_PARTS.includes(formData.part) ? String(formData.part || '') : ''
+  );
+
+  // 신규 이력 추가 폼 상태
+  const [recordHistory, setRecordHistory] = useState(false);
+  const [historyStartDate, setHistoryStartDate] = useState(getTodayDateString);
+  const [historyEndDate, setHistoryEndDate] = useState('2999-12-31');
+  const [historyReason, setHistoryReason] = useState('');
+
+  // 기기 연동 초기화 핸들러 (1인 1기기 락 해제)
+  const handleUnbindDevice = async () => {
+    if (!window.confirm(`${formData.name} 단원의 기기 연동을 초기화하시겠습니까?\n초기화 후 새 스마트폰에서 다시 본인인증 바인딩이 가능합니다.`)) {
+      return;
+    }
+    try {
+      setIsUnbinding(true);
+      setErrorMessage('');
+      await sheetsService.unbindMemberDevice(formData.id);
+      setFormData((prev) => ({
+        ...prev,
+        boundDeviceId: undefined,
+        boundDeviceAt: undefined,
+      }));
+      setDeviceSuccessMsg('기기 연동이 성공적으로 초기화되었습니다.');
+      setTimeout(() => setDeviceSuccessMsg(''), 4000);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : '기기 연동 해제 중 오류가 발생했습니다.');
+    } finally {
+      setIsUnbinding(false);
+    }
+  };
 
   // 변경 사항(isDirty) 감지 (모든 필드 안전 문자열 변환 후 trim)
   const isDirty = useMemo(() => {
@@ -74,9 +119,10 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
       formData.memberStatus !== initialData.memberStatus ||
       formData.role !== initialData.role ||
       String(formData.joinedAt || '') !== String(initialData.joinedAt || '') ||
-      String(formData.note || '').trim() !== String(initialData.note || '').trim()
+      String(formData.note || '').trim() !== String(initialData.note || '').trim() ||
+      recordHistory
     );
-  }, [formData, initialData]);
+  }, [formData, initialData, recordHistory]);
 
   // 안전 닫기 핸들러 (수정사항 존재 시 확인창 표시)
   const handleAttemptClose = () => {
@@ -126,18 +172,39 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     }
 
     const finalLast4 = digits.slice(-4);
+    const finalPart = isCustomPart ? (customPartInput.trim() || '기타') : formData.part;
+
+    let newHistoryItem: MemberStatusHistory | undefined;
+    const currentHistories = formData.statusHistory ? [...formData.statusHistory] : [];
+
+    if (recordHistory) {
+      newHistoryItem = {
+        id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        memberId: formData.id,
+        status: formData.memberStatus || '정단원',
+        part: finalPart as PartType,
+        startDate: historyStartDate.trim() || todayStr,
+        endDate: historyEndDate.trim() || '2999-12-31',
+        reason: historyReason.trim(),
+        createdAt: new Date().toISOString(),
+      };
+      currentHistories.push(newHistoryItem);
+    }
+
     const updatedMember: Member = {
       ...formData,
       name: String(formData.name || '').trim(),
+      part: finalPart as PartType,
       phone: String(formData.phone || '').trim(),
       phoneLast4: finalLast4,
       note: String(formData.note || '').trim(),
+      statusHistory: currentHistories,
     };
 
     try {
       setIsSubmitting(true);
       setErrorMessage('');
-      await onSave(updatedMember);
+      await onSave(updatedMember, newHistoryItem);
       onClose();
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : '저장 중 오류가 발생했습니다.');
@@ -210,6 +277,45 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
             </div>
           </div>
 
+          {deviceSuccessMsg && (
+            <div className="profile-alert-success" style={{ marginTop: '12px' }}>
+              ✅ {deviceSuccessMsg}
+            </div>
+          )}
+
+          {/* 1인 1기기 락 & 바인딩 상태 */}
+          <div className="profile-device-lock-bar" style={{ marginTop: '14px' }}>
+            <div className="device-lock-info">
+              <span className="device-lock-icon">{formData.boundDeviceId ? '📱' : '📲'}</span>
+              <div>
+                <div className="device-lock-status">
+                  {formData.boundDeviceId ? (
+                    <>
+                      <span className="device-badge-bound">1인 1기기 연동됨</span>
+                      <span className="device-bind-date">({formData.boundDeviceAt ? formData.boundDeviceAt.slice(0, 10) : '등록됨'})</span>
+                    </>
+                  ) : (
+                    <span className="device-badge-unbound">기기 미연동 (최초 1회 로그인 시 자동 연동)</span>
+                  )}
+                </div>
+                <div className="device-lock-id">
+                  {formData.boundDeviceId ? `기기 고유키: ...${formData.boundDeviceId.slice(-8)}` : '단원이 스마트폰에서 본인인증 시 자동 등록됩니다.'}
+                </div>
+              </div>
+            </div>
+            {formData.boundDeviceId && (
+              <button
+                type="button"
+                className="btn-unbind-device"
+                onClick={handleUnbindDevice}
+                disabled={isUnbinding}
+                title="기기 분실 또는 스마트폰 변경 시 연동을 초기화합니다."
+              >
+                {isUnbinding ? '해제 중...' : '🔓 기기 연동 초기화'}
+              </button>
+            )}
+          </div>
+
           <form id="member-profile-form" onSubmit={handleSubmit} className="modern-form-wrapper">
             <div className="form-responsive-grid">
               <div className="modern-field-group">
@@ -229,17 +335,45 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                 <div className="modern-select-wrapper">
                   <select
                     className="modern-select"
-                    value={formData.part}
-                    onChange={(e) => setFormData({ ...formData, part: e.target.value as PartType })}
+                    value={isCustomPart ? '__CUSTOM__' : formData.part}
+                    onChange={(e) => {
+                      if (e.target.value === '__CUSTOM__') {
+                        setIsCustomPart(true);
+                      } else {
+                        setIsCustomPart(false);
+                        setFormData({ ...formData, part: e.target.value as PartType });
+                        setRecordHistory(true);
+                      }
+                    }}
                   >
-                    <option value="소프라노">소프라노</option>
-                    <option value="알토">알토</option>
-                    <option value="테너">테너</option>
-                    <option value="베이스">베이스</option>
-                    <option value="선생님">선생님</option>
-                    <option value="객원">객원</option>
+                    {STANDARD_PARTS.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                    {!STANDARD_PARTS.includes(formData.part) && Boolean(formData.part) && (
+                      <option value={formData.part}>{formData.part} (기존 지정)</option>
+                    )}
+                    <option value="__CUSTOM__">✏️ 기타 (직접 입력)...</option>
                   </select>
                 </div>
+                {isCustomPart && (
+                  <input
+                    type="text"
+                    className="modern-input"
+                    style={{ marginTop: '8px' }}
+                    value={customPartInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCustomPartInput(val);
+                      setFormData((prev) => ({ ...prev, part: (val.trim() || '기타') as PartType }));
+                      setRecordHistory(true);
+                    }}
+                    placeholder="새 파트명 직접 입력 (예: 카운터테너, 반주자, 임원)"
+                    required={isCustomPart}
+                    autoFocus
+                  />
+                )}
               </div>
 
               <div className="modern-field-group">
@@ -263,9 +397,10 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                   <select
                     className="modern-select"
                     value={formData.memberStatus || '정단원'}
-                    onChange={(e) =>
-                      setFormData({ ...formData, memberStatus: e.target.value as MemberStatus })
-                    }
+                    onChange={(e) => {
+                      setFormData({ ...formData, memberStatus: e.target.value as MemberStatus });
+                      setRecordHistory(true);
+                    }}
                   >
                     <option value="정단원">정단원</option>
                     <option value="준단원">준단원 (신입)</option>
@@ -274,6 +409,78 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                     <option value="선생님">선생님 (지휘/반주)</option>
                     <option value="퇴단원">퇴단원</option>
                   </select>
+                </div>
+
+                {/* 상태/파트 변경 이력 기간 및 사유 설정 */}
+                <div style={{ marginTop: '10px', padding: '12px', background: '#f8f9fe', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', color: '#334155' }}>
+                    <input
+                      type="checkbox"
+                      checked={recordHistory}
+                      onChange={(e) => setRecordHistory(e.target.checked)}
+                      style={{ width: '16px', height: '16px' }}
+                    />
+                    <span>🕒 상태/파트 변경 이력 기록 (시트 DB 저장)</span>
+                  </label>
+
+                  {recordHistory && (
+                    <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: '130px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>적용 시작일</span>
+                          <input
+                            type="date"
+                            className="modern-input"
+                            style={{ height: '38px', fontSize: '0.85rem' }}
+                            value={historyStartDate}
+                            onChange={(e) => setHistoryStartDate(e.target.value)}
+                          />
+                        </div>
+                        <span style={{ marginTop: '16px', color: '#94a3b8' }}>~</span>
+                        <div style={{ flex: 1, minWidth: '130px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>적용 종료일</span>
+                          <input
+                            type="text"
+                            className="modern-input"
+                            style={{ height: '38px', fontSize: '0.85rem' }}
+                            value={historyEndDate}
+                            onChange={(e) => setHistoryEndDate(e.target.value)}
+                            placeholder="YYYY-MM-DD"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setHistoryEndDate('2999-12-31')}
+                          style={{
+                            marginTop: '16px',
+                            height: '38px',
+                            padding: '0 12px',
+                            background: historyEndDate === '2999-12-31' ? '#4f46e5' : '#e2e8f0',
+                            color: historyEndDate === '2999-12-31' ? '#fff' : '#475569',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          ♾️ 영구 적용
+                        </button>
+                      </div>
+
+                      <div>
+                        <input
+                          type="text"
+                          className="modern-input"
+                          style={{ height: '36px', fontSize: '0.85rem' }}
+                          value={historyReason}
+                          onChange={(e) => setHistoryReason(e.target.value)}
+                          placeholder="변경 사유 입력 (예: 개인 사정으로 휴단, 파트 이동)"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -309,13 +516,61 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
               <label className="modern-field-label">특이사항 / 메모 (직책, 담당 역할 등)</label>
               <textarea
                 className="modern-textarea"
-                rows={3}
+                rows={2}
                 value={formData.note || ''}
                 onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                 placeholder="예: 파트장, 악보계, 총무, 10월 둘째주 해외출장 등"
               />
             </div>
           </form>
+
+          {/* Status & Part Lifecycle History Timeline */}
+          {formData.statusHistory && formData.statusHistory.length > 0 && (
+            <div className="profile-section-block" style={{ marginTop: '16px', marginBottom: '16px' }}>
+              <div className="attendance-section-title-row">
+                <h4 className="section-title-compact">🕒 상태 및 파트 변경 이력</h4>
+                <span className="section-subtitle-compact">총 {formData.statusHistory.length}건 기록됨</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                {formData.statusHistory.map((hist, idx) => (
+                  <div
+                    key={hist.id || idx}
+                    style={{
+                      padding: '10px 14px',
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '6px',
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 700, color: '#1e293b' }}>
+                          {hist.status} ({hist.part})
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          {hist.startDate} ~ {hist.endDate === '2999-12-31' ? '영구' : hist.endDate}
+                        </span>
+                      </div>
+                      {hist.reason && (
+                        <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '2px' }}>
+                          💬 {hist.reason}
+                        </div>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                      {hist.createdAt ? hist.createdAt.slice(0, 10) : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Section 2: Attendance Records List (Scrollable List) */}
           <div className="profile-attendance-section">
