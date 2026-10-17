@@ -3818,6 +3818,75 @@ a {
   box-shadow: 0 0 0 3px rgba(107, 70, 193, 0.12);
 }
 
+/* ============================================================== */
+/* Member Status Toggle Group (정단원, 준단원, 휴단, 퇴단 등)        */
+/* ============================================================== */
+.status-toggle-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.status-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 10px;
+  border: 1.5px solid #e5e8eb;
+  background: #ffffff;
+  color: #4e5968;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  user-select: none;
+  min-height: 40px;
+}
+
+.status-toggle-btn:hover {
+  background: #f8f9fa;
+  border-color: #d1d6db;
+}
+
+.status-toggle-btn.active {
+  color: #ffffff !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transform: translateY(-1px);
+}
+
+.status-toggle-btn.status-정단원.active {
+  background: #2563eb !important;
+}
+
+.status-toggle-btn.status-준단원.active {
+  background: #0d9488 !important;
+}
+
+.status-toggle-btn.status-휴단원.active,
+.status-toggle-btn.status-휴단.active {
+  background: #d97706 !important;
+}
+
+.status-toggle-btn.status-퇴단원.active,
+.status-toggle-btn.status-퇴단.active {
+  background: #dc2626 !important;
+}
+
+.status-toggle-btn.status-선생님.active {
+  background: #7c3aed !important;
+}
+
+.status-toggle-btn.status-객원.active {
+  background: #4f46e5 !important;
+}
+
+.status-toggle-btn.status-custom.active {
+  background: #334155 !important;
+}
+
 .modern-textarea {
   width: 100%;
   background: #f8f9fa;
