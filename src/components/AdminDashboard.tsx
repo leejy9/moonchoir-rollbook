@@ -45,6 +45,7 @@ import { ScheduleEditModal } from './ScheduleEditModal';
 import { BatchScheduleEditModal } from './BatchScheduleEditModal';
 import { MemberMergeModal } from './MemberMergeModal';
 import { RoundDatePicker } from './RoundDatePicker';
+import { RoundTimePicker } from './RoundTimePicker';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface AdminDashboardProps {
@@ -3248,20 +3249,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div className="form-row-2">
                           <div>
                             <label className="form-label">기본 시작 시각</label>
-                            <input
-                              type="time"
-                              className="input-text"
+                            <RoundTimePicker
                               value={cardDefaultStartTime}
-                              onChange={(e) => setCardDefaultStartTime(e.target.value)}
+                              onChange={(val) => setCardDefaultStartTime(val)}
                             />
                           </div>
                           <div>
                             <label className="form-label">기본 종료 시각</label>
-                            <input
-                              type="time"
-                              className="input-text"
+                            <RoundTimePicker
                               value={cardDefaultEndTime}
-                              onChange={(e) => setCardDefaultEndTime(e.target.value)}
+                              onChange={(val) => setCardDefaultEndTime(val)}
                             />
                           </div>
                         </div>
@@ -4174,13 +4171,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <label className="form-label" htmlFor="sch-start">
                           시작 시각
                         </label>
-                        <input
+                        <RoundTimePicker
                           id="sch-start"
-                          type="time"
-                          className="input-text"
                           value={newStartTime}
-                          onChange={(e) => setNewStartTime(e.target.value)}
-                          required
+                          onChange={(val) => setNewStartTime(val)}
                         />
                       </div>
 
@@ -4188,13 +4182,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <label className="form-label" htmlFor="sch-end">
                           종료 시각
                         </label>
-                        <input
+                        <RoundTimePicker
                           id="sch-end"
-                          type="time"
-                          className="input-text"
                           value={newEndTime}
-                          onChange={(e) => setNewEndTime(e.target.value)}
-                          required
+                          onChange={(val) => setNewEndTime(val)}
                         />
                       </div>
                     </div>

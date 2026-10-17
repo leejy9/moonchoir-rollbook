@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { LocationPreset, Schedule, ScheduleCategory } from '../types/rollbook';
+import { RoundTimePicker } from './RoundTimePicker';
 
 interface BatchScheduleEditModalProps {
   isOpen: boolean;
@@ -235,21 +236,17 @@ export const BatchScheduleEditModal: React.FC<BatchScheduleEditModalProps> = ({
               {changeTime && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
                   <div>
-                    <label style={{ fontSize: '12px', color: '#6B7280' }}>시작 시간</label>
-                    <input
-                      type="time"
-                      className="modern-input"
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>시작 시간</label>
+                    <RoundTimePicker
                       value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
+                      onChange={(val) => setStartTime(val)}
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '12px', color: '#6B7280' }}>종료 시간</label>
-                    <input
-                      type="time"
-                      className="modern-input"
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>종료 시간</label>
+                    <RoundTimePicker
                       value={endTime}
-                      onChange={(e) => setEndTime(e.target.value)}
+                      onChange={(val) => setEndTime(val)}
                     />
                   </div>
                 </div>

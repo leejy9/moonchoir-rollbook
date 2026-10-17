@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { LocationPreset, Schedule, ScheduleCategory } from '../types/rollbook';
 import { LocationPickerModal } from './LocationPickerModal';
+import { RoundTimePicker } from './RoundTimePicker';
 
 interface ScheduleEditModalProps {
   isOpen: boolean;
@@ -314,21 +315,17 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
 
               <div className="modern-field-group">
                 <label className="modern-field-label">시작 시간</label>
-                <input
-                  type="time"
-                  className="modern-input"
+                <RoundTimePicker
                   value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
+                  onChange={(val) => setStartTime(val)}
                 />
               </div>
 
               <div className="modern-field-group">
                 <label className="modern-field-label">종료 시간</label>
-                <input
-                  type="time"
-                  className="modern-input"
+                <RoundTimePicker
                   value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
+                  onChange={(val) => setEndTime(val)}
                 />
               </div>
 
