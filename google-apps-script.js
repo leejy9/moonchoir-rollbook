@@ -617,10 +617,12 @@ function readSheetData(sheet) {
       let val = row[j];
       if (val instanceof Date) {
         const headerKey = String(headers[j]).toLowerCase();
-        if (headerKey.includes('time')) {
+        if (headerKey === 'starttime' || headerKey === 'endtime' || headerKey === 'defaultstarttime' || headerKey === 'defaultendtime') {
           val = Utilities.formatDate(val, 'Asia/Seoul', 'HH:mm');
-        } else {
+        } else if (headerKey === 'date' || headerKey === 'startdate' || headerKey === 'enddate' || headerKey === 'joinedat') {
           val = Utilities.formatDate(val, 'Asia/Seoul', 'yyyy-MM-dd');
+        } else {
+          val = Utilities.formatDate(val, 'Asia/Seoul', "yyyy-MM-dd'T'HH:mm:ssXXX");
         }
       } else if (typeof val === 'number') {
         const key = String(headers[j]);

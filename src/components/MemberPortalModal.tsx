@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
-import type { BoundDeviceProfile, Member, RawAttendanceLog, RSVPVote } from '../types/rollbook';
+import type { BoundDeviceProfile, Member } from '../types/rollbook';
 import { calculateCumulativeAttendanceWithLifecycle } from '../utils/attendanceStats';
 
 interface MemberPortalModalProps {
@@ -45,7 +45,6 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
   const schedules = sheetsService.getSchedules();
   const allLogs = sheetsService.getLogs();
-  const allVotes = sheetsService.getRSVPVotes();
 
   // 2. 단원 생애주기 & 입단일 반영 누적 통계 산출
   const memberSummary = useMemo(() => {
@@ -66,44 +65,37 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
   // 3. 탭 1용: 회차별 통합 리스트 데이터 조립 [연습명칭 / 연습일 / 투표 상태 / 출결 시간]
   const scheduleRecords = useMemo(() => {
-    const logMap = new Map<string, RawAttendanceLog>();
-    allLogs
-      .filter((l) => l.memberId === profile.memberId)
-      .forEach((l) => logMap.set(l.scheduleId, l));
-
-    const voteMap = new Map<string, RSVPVote>();
-    allVotes
-      .filter((v) => v.memberId === profile.memberId)
-      .forEach((v) => voteMap.set(v.scheduleId, v));
-
     // 최신 연습일정이 상단에 오도록 내림차순 정렬
     const sortedSchedules = [...schedules].sort((a, b) => b.date.localeCompare(a.date));
 
     return sortedSchedules.map((s) => {
-      const log = logMap.get(s.id);
-      const vote = voteMap.get(s.id);
+      const rec = sheetsService.reconcileMemberAttendance(profile.memberId, s.id);
       const isPast = s.date < todayStr;
       const isToday = s.date === todayStr;
-      const isExempt = Boolean(currentMember.joinedAt && s.date < currentMember.joinedAt);
+      const isExempt = rec?.finalStatus === '모수제외' || Boolean(currentMember.joinedAt && s.date < currentMember.joinedAt);
 
       let checkInTime = '-';
-      let isAttended = false;
-      if (log) {
-        isAttended = true;
+      const isAttended = rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정' || rec?.finalStatus === '지각';
+
+      if (rec?.checkInTime) {
         try {
-          const d = new Date(log.timestamp);
+          const d = new Date(rec.checkInTime);
           if (!isNaN(d.getTime())) {
             checkInTime = d.toLocaleTimeString('ko-KR', {
               hour: '2-digit',
               minute: '2-digit',
               hour12: false,
             });
+          } else if (rec.checkInTime.includes(':')) {
+            checkInTime = rec.checkInTime.slice(0, 5);
           } else {
-            checkInTime = log.timestamp.slice(11, 16);
+            checkInTime = rec.checkInTime;
           }
         } catch {
-          checkInTime = log.timestamp;
+          checkInTime = rec.checkInTime;
         }
+      } else if (rec?.finalStatus === '수동인정') {
+        checkInTime = '수동인정';
       }
 
       return {
@@ -111,16 +103,17 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         title: s.title,
         date: s.date,
         category: s.category || '정기연습',
-        voteStatus: vote ? vote.status : null,
-        voteReason: vote?.reason || '',
+        voteStatus: rec?.rsvpStatus && rec.rsvpStatus !== 'UNVOTED' ? rec.rsvpStatus : null,
+        voteReason: rec?.rsvpReason || '',
         isAttended,
+        finalStatus: rec?.finalStatus || (isPast ? '결석' : '대기'),
         checkInTime,
         isPast,
         isToday,
         isExempt,
       };
     });
-  }, [schedules, allLogs, allVotes, profile.memberId, currentMember.joinedAt, todayStr]);
+  }, [schedules, profile.memberId, currentMember.joinedAt, todayStr]);
 
   // 4. 시트 동기화 핸들러
   const handleSyncRemote = async () => {
@@ -464,51 +457,6 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
           {/* TAB 2: 개인 대시보드 (자연어 브리핑 & 계정 관리) */}
           {activeTab === 'DASHBOARD' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* 자연어 출결 브리핑 카드 */}
-              <div
-                style={{
-                  background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-                  border: '1px solid #bbf7d0',
-                  borderRadius: '16px',
-                  padding: '18px 20px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '20px' }}>📝</span>
-                  <strong style={{ fontSize: '15px', color: '#166534' }}>
-                    {profile.name} 단원 출결 브리핑
-                  </strong>
-                </div>
-                <div style={{ fontSize: '13.5px', color: '#15803d', lineHeight: '1.65' }}>
-                  <p style={{ margin: '0 0 6px' }}>
-                    문콰이어 정기연습 총 <strong>{memberSummary.totalSessions}회</strong> 중{' '}
-                    <strong>{memberSummary.attended}회</strong> 출석하셨습니다.
-                  </p>
-                  <p style={{ margin: '0 0 6px' }}>
-                    현재 누적 출석률은 <strong>{memberSummary.attendanceRate}%</strong>이며,{' '}
-                    {memberSummary.attendanceRate >= 80 ? (
-                      <span>정단원 출석 기준(80% 이상)을 안정적으로 달성하고 계십니다. 🎉</span>
-                    ) : (
-                      <span>출석률 80% 달성을 위해 적극적인 참석을 권장드립니다. 💪</span>
-                    )}
-                  </p>
-                  {memberSummary.absent > 0 ? (
-                    <p style={{ margin: 0, color: '#b45309' }}>
-                      ※ 결석 기록이 <strong>{memberSummary.absent}회</strong> 확인됩니다.
-                    </p>
-                  ) : (
-                    <p style={{ margin: 0, color: '#166534', fontWeight: 700 }}>
-                      🌟 현재 결석 없이 전 회차 성실히 출석 중입니다!
-                    </p>
-                  )}
-                  {(memberSummary.guestAttended ?? 0) > 0 && (
-                    <p style={{ margin: '6px 0 0', color: '#4338ca', fontSize: '12.5px' }}>
-                      💡 비의무/게스트 연습에 {memberSummary.guestAttended}회 추가 참석하여 기여하셨습니다.
-                    </p>
-                  )}
-                </div>
-              </div>
-
               {/* 기본 소속 프로필 정보 */}
               <div
                 style={{

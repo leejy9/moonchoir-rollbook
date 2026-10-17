@@ -318,3 +318,125 @@ npm test -- -t "Attendance Stats with Member Lifecycle"
 - **시트 하위 호환성 (Zero Degradation)**: 본 기능이 도입될 때도 기존 `단원명부`의 이전 레코드는 null 안전 폴백(`undefined` 처리)을 적용하여 이전 데이터가 손상되지 않도록 보호합니다.
 - **기획 결정 선행 필수 (Pre-requisites)**: [docs/PRD.md Section 5](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/PRD.md) 및 [docs/tasks.md Phase 5](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/tasks.md)의 3대 미결 질문(평가 척도 형태, 단원 공개 정책, UI 노출 위치)이 확정된 후 스키마를 정식 반영합니다.
 
+---
+
+## 📌 8. 프론트엔드 UI 화면별 데이터 조회처 (Read Source) 및 데이터 흐름 맵
+
+사용자에게 데이터를 렌더링하는 모든 프론트엔드 뷰 컴포넌트가 **어디의 구글 시트 탭/엔티티에서 어떤 서비스 메서드를 통해 값을 불러오는지**의 전체 릴레이션 매핑입니다.
+
+| 화면 / 컴포넌트명 | 주요 노출 데이터 | 참조 구글 시트 탭 | 프론트엔드 로드 메서드 | 조인 / 투영 로직 (Projection & Join) |
+| :--- | :--- | :--- | :--- | :--- |
+| **`HomeView`**<br>(메인 홈 화면) | • 단원 프로필 (이름, 파트, 권한)<br>• 오늘/다음 연습 일정 카드<br>• 일정 사전투표 상태 (참석/불참)<br>• 현장 QR 출석 여부<br>• 누적 출석률 / 연속 출석 | • `단원명부`<br>• `일정캘린더`<br>• `사전투표_RSVP`<br>• `출석원천로그` | • `sheetsService.getSchedules()`<br>• `sheetsService.getRSVPVotes(schId)`<br>• `sheetsService.getLogs(schId)`<br>• `calculateAttendanceStats()` | • `profile.memberId`로 투표와 로그를 단일 조회.<br>• $S.date \ge today$ 기준 최우선 1개 일정을 추출.<br>• `joinedAt` 이전 일정은 출석률 통계 모수에서 제외. |
+| **`CalendarView`**<br>(월간 캘린더) | • 월별 연습일정 목록 & 장소<br>• 회차별 나의 사전투표 상태<br>• 회차별 나의 현장 출석 여부 | • `일정캘린더`<br>• `사전투표_RSVP`<br>• `출석원천로그` | • `sheetsService.getSchedules()`<br>• `sheetsService.getRSVPVotes()`<br>• `sheetsService.getLogs()` | • $S.date$의 연/월별로 일정을 그룹핑.<br>• 각 일정마다 `v.memberId === profile.memberId` 및 `l.memberId === profile.memberId` 매칭. |
+| **`MemberPortalModal`**<br>(내 출결 성적표) | • **탭 1**: `[연습명칭 / 연습일 / 투표 상태 / 출결 시간]` 4열 대조 표<br>• **탭 2**: 단원 인적사항, 기기 락 상태, 시트 최신화 동기화 액션 | • `일정캘린더`<br>• `사전투표_RSVP`<br>• `출석원천로그`<br>• `단원명부` | • `sheetsService.getSchedules()`<br>• `sheetsService.getRSVPVotes()`<br>• `sheetsService.getLogs()`<br>• `sheetsService.getMembers()` | • 회차별로 `scheduleId`를 인덱스로 Map을 생성하여 `log`와 `rsvp`를 1행에 바인딩.<br>• `log.timestamp`를 시간(`HH:mm`)으로 파싱하여 출력.<br>• `log` 미존재 시 과거 일정이면 '결석', 미래 일정이면 '대기', 모수 제외면 '모수제외' 처리. |
+| **`AdminMatrixGrid`**<br>(관리자 [인적사항&출결]) | • 전체 단원 $\times$ 전체 일정 매트릭스 그리드<br>• 셀별 최종 출결 상태 (출석, 수동인정, 지각, 사유결석, 결석)<br>• 단원별 누적 출석률 및 파트 통계 | • `단원명부`<br>• `일정캘린더`<br>• `사전투표_RSVP`<br>• `출석원천로그` | • `sheetsService.getMembers()`<br>• `sheetsService.getSchedules()`<br>• `sheetsService.reconcileAttendance(scheduleId)` | • **종합 판정 엔진(`reconcileAttendance`)**: 각 일정마다 원천로그(`log`)와 사전투표(`rsvp`)를 대조하여 지각/수동인정/사유결석/결석을 일괄 판정.<br>• 셀 클릭 시 관리자 수동 출석 인정 로그 Append. |
+| **`MemberProfileModal`**<br>(관리자 단원 상세 팝업) | • 단원 기본 인적사항 & 연락처<br>• 기간제 생애주기 이력 타임라인<br>• 해당 단원의 전회차 출결 상세 목록 및 출석률 | • `단원명부`<br>• `단원변경로그`<br>• `출석원천로그`<br>• `일정캘린더` | • `sheetsService.getMembers()`<br>• `sheetsService.getMemberHistory()`<br>• `sheetsService.getLogs()`<br>• `sheetsService.getSchedules()` | • `formData.id`와 일치하는 이력(`MemberStatusHistory`)과 출석 로그(`RawAttendanceLog`)를 조인하여 타임라인 카드 렌더링. |
+| **`AdminDashboard` (로그 탭)**<br>(출석 감사 로그 열람) | • 시스템 전체 원천 출석 이벤트 로그 테이블 (타임스탬프, 인증수단, GPS 통과여부, 관리자메모) | • `출석원천로그` | • `sheetsService.getLogs()` | • 필터 없이 시트에 적재된 불변 원천 로그 행을 최신순 역정렬하여 1:1 출력. |
+| **`MemberHistoryAuditView`**<br>(단원 생애주기 감사) | • 전체 단원의 상태/파트 변경 이력 감사 테이블 (유효 시작일~종료일, 사유, 기록시각) | • `단원변경로그` | • `sheetsService.getMemberHistory()` | • 시트에 누적된 생애주기 이력을 최신순으로 1:1 나열. |
+
+---
+
+## 📌 9. 실시간 정합성 진단 리포트 (현재 확인된 3대 결함 및 GAS 패치 가이드)
+
+### 🚨 결함 1: 로그인 시 기존 단원 전화번호 뒷자리 인증 실패 (이재연 4240 케이스)
+* **현상**: 단원 선택 로그인 모달(`BindingModal`)에서 "이재연"을 선택하고 본인 뒷자리 `4240`을 입력했으나 "일치하지 않습니다" 에러 발생.
+* **근본 원인 (Ground Truth)**:
+  1. 실제 배포된 구글 시트 웹앱 API 응답 분석 결과, `단원명부` 시트에 이재연 단원의 `phoneLast4`가 **`"0000"`으로 저장되어 있음**:
+     ```json
+     {
+       "id": "mem_new_1792138672444",
+       "name": "이재연",
+       "part": "테너",
+       "phoneLast4": "0000"
+     }
+     ```
+  2. 이전 버전에서 기기 바인딩 데이터 복원 시 `phoneLast4`의 기본값(`|| '0000'`)이 주입된 상태에서 구글 시트로 `REGISTER_MEMBER` 전송이 이루어짐.
+  3. `BindingModal` 검증부: `inputLast4("4240") !== targetLast4("0000")` 불일치로 차단됨.
+* **해결 조치**:
+  1. **구글 시트 즉각 조치**: 구글 시트 `단원명부` 탭의 "이재연" 행에서 `phoneLast4` 셀을 `4240` (또는 `phone` 열에 `010-XXXX-4240`)으로 입력/수정.
+  2. **클라이언트 방어 코드**: 시트에 `0000`이나 빈 값으로 남아있는 기존 단원에 대해 관리자가 프로필에서 수정하거나, 최초 연동 시 입력된 번호로 자동 갱신할 수 있는 안전 패치 적용.
+
+---
+
+### 🚨 결함 2: 개인 대시보드 출결 브리핑 숫자 미연동
+* **현상**: 개인 대시보드의 자연어 출결 브리핑 글("총 N회 중 M회 출석...")의 숫자가 실제와 맞지 않음.
+* **근본 원인**:
+  1. 테스트 과정에서 이재연 단원의 ID가 2개(`mem_new_1792138672444` vs `mem_new_1792140579232`) 생성되어, 브라우저가 바인딩한 ID와 원천 로그에 기록된 단원 ID가 분리됨.
+  2. 단원 생애주기 이력(`MemberStatusHistory`) 기반의 모수 판정과 종합 출결 판정 로직이 완전히 동기화되기 전에 텍스트로 노출되어 혼란을 유발함.
+* **해결 조치**:
+  - 사용자 요구사항에 따라 개인 대시보드에서 자연어 브리핑 영역을 완전히 제거하고, 단원 명부와 원천 로그의 단일 ID 체계가 안정화될 때까지 불확실한 통계 텍스트는 숨김 처리.
+
+---
+
+### 🚨 결함 3: [개인 대시보드] 로그 출결 상태와 [인적사항 & 출결] 화면 간 불일치
+* **현상**: 관리자가 임의로 결석을 출석(수동인정)으로 변경했으나, [인적사항&출결]에는 출석으로 보이고 [개인 대시보드] 로그에는 미반영된 것처럼 보임.
+* **시트 전송 여부 확인 결과**:
+  - **구글 시트로 정상 전송되었음 (확인 완료)!**  
+    실제 시트 API에 `log_manual_1792207768484` (인천 정기연습) 및 `log_manual_1792207773684` (경찰의날 녹음) 2건의 `MANUAL_BY_ADMIN` 로그가 정상 기록되어 있음.
+* **불일치 근본 원인**:
+  1. **Google Apps Script의 치명적 날짜 포맷팅 버그**:
+     - `google-apps-script.js`의 618~624행:
+       ```javascript
+       if (val instanceof Date) {
+         const headerKey = String(headers[j]).toLowerCase();
+         if (headerKey.includes('time')) {
+           val = Utilities.formatDate(val, 'Asia/Seoul', 'HH:mm'); // ❌ 치명적 버그!
+         } else {
+           val = Utilities.formatDate(val, 'Asia/Seoul', 'yyyy-MM-dd');
+         }
+       }
+       ```
+     - `출석원천로그`의 헤더명이 `timestamp`인데, `headerKey.includes('time')`이 `true`가 되어 **구글 시트의 날짜가 통째로 잘려나가고 `"19:30"`, `"21:00"` 문자열로만 웹앱에서 반환**됨!
+     - 프론트엔드 `new Date("19:30")`는 파싱 실패(`Invalid Date`)하여 정상적인 타임스탬프 대조 불가.
+  2. **화면별 판정 엔진의 파편화**:
+     - `AdminMatrixGrid`는 `sheetsService.reconcileAttendance()`를 사용하여 `MANUAL_BY_ADMIN` 로그를 '수동인정'(출석)으로 투영함.
+     - 반면 `MemberPortalModal`은 독자적인 단순 필터링(`allLogs.filter(l => l.memberId === profile.memberId)`)을 사용하고 있었으며, 단원 ID가 불일치하거나 타임스탬프 파싱이 실패하면 출석으로 인식하지 못함.
+
+---
+
+### 🛠️ Google Apps Script 필수 수정 가이드 (`google-apps-script.js`)
+
+구글 스프레드시트의 **[확장 프로그램] > [Apps Script]**에서 아래 부분을 수정해야 구글 시트 원천 데이터가 정상 포맷으로 반환됩니다:
+
+#### 수정 대상 위치: `readSheetData(sheet)` 함수 (라인 618~633 부근)
+```javascript
+// [수정 전 - 버그 발생 코드]
+if (val instanceof Date) {
+  const headerKey = String(headers[j]).toLowerCase();
+  if (headerKey.includes('time')) {
+    val = Utilities.formatDate(val, 'Asia/Seoul', 'HH:mm'); // timestamp의 날짜가 잘림
+  } else {
+    val = Utilities.formatDate(val, 'Asia/Seoul', 'yyyy-MM-dd');
+  }
+} else if (typeof val === 'number') {
+  const key = String(headers[j]);
+  if (key === 'phoneLast4' || key === 'checkInPin') {
+    val = String(val).padStart(4, '0');
+  } else if (key === 'phone') {
+    val = String(val);
+  }
+}
+
+// [수정 후 - 정상 코드]
+if (val instanceof Date) {
+  const headerKey = String(headers[j]).toLowerCase();
+  // 오직 시작/종료 시간 열만 HH:mm 포맷 적용
+  if (headerKey === 'starttime' || headerKey === 'endtime' || headerKey === 'defaultstarttime' || headerKey === 'defaultendtime') {
+    val = Utilities.formatDate(val, 'Asia/Seoul', 'HH:mm');
+  } else if (headerKey === 'date' || headerKey === 'startdate' || headerKey === 'enddate' || headerKey === 'joinedat') {
+    val = Utilities.formatDate(val, 'Asia/Seoul', 'yyyy-MM-dd');
+  } else {
+    // timestamp, createdAt, boundDeviceAt 등은 온전한 ISO 타임스탬프 보존
+    val = Utilities.formatDate(val, 'Asia/Seoul', "yyyy-MM-dd'T'HH:mm:ssXXX");
+  }
+} else if (typeof val === 'number') {
+  const key = String(headers[j]);
+  if (key === 'phoneLast4' || key === 'checkInPin') {
+    val = String(val).padStart(4, '0');
+  } else if (key === 'phone') {
+    val = String(val);
+  }
+}
+```
+* **수정 후 배포 필수**: Apps Script 코드 창에서 위 내용을 수정한 후, **[배포] > [배포 관리] > [수정(연필 아이콘)] > [새 버전] 선택 후 [배포]**를 완료해야 라이브 웹앱 URL에 반영됩니다.
+

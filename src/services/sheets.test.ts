@@ -328,6 +328,92 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(votesAfter2[0].status).toBe('ABSENT');
     expect(votesAfter2[0].reason).toBe('갑작스러운 야근');
   });
+
+  it('rescues orphan schedule logs matching by scheduleId prefix or date', async () => {
+    // Add a schedule with randomized suffix
+    const schedule = await service.addSchedule({
+      id: 'sch_20261112_rand',
+      title: '11월 특별연습',
+      date: '2026-11-12',
+      startTime: '19:30',
+      endTime: '21:30',
+      locationName: '제1연습실',
+      category: '정기연습',
+      checkInPin: '1112',
+    });
+
+    // Add log with base scheduleId (sch_20261112)
+    await service.addCheckInLog({
+      id: 'log_orphan_test',
+      scheduleId: 'sch_20261112',
+      timestamp: '2026-11-12T19:25:00',
+      memberId: 'mem_s01',
+      memberName: '김하은',
+      part: '소프라노',
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    });
+
+    // getLogs for the suffixed schedule should rescue and return this log
+    const logs = service.getLogs('sch_20261112_rand');
+    expect(logs.length).toBe(1);
+    expect(logs[0].id).toBe('log_orphan_test');
+
+    // reconcileAttendance should also accurately reflect this attendance
+    const rec = service.reconcileMemberAttendance('mem_s01', schedule.id);
+    expect(rec?.finalStatus).toBe('출석');
+    expect(rec?.authMethod).toBe('QR_WEB_CAM');
+  });
+
+  it('canonicalizes fragmented member IDs across rsvpVotes and logs by matching memberName', async () => {
+    const originalFetch = globalThis.fetch;
+    const mockApiResponse = {
+      success: true,
+      data: {
+        members: [
+          { id: 'mem_primary_100', name: '이재연', part: '테너', phoneLast4: '4240', role: 'MEMBER', createdAt: '2026-10-01', status: 'ACTIVE' }
+        ],
+        schedules: [
+          { id: 'sch_test_canon', title: '테스트일정', date: '2026-11-20', startTime: '19:30', endTime: '21:30', locationName: '연습실', category: '정기연습' }
+        ],
+        // RSVP with an old/fragmented ID 'mem_old_999' but same name '이재연'
+        rsvpVotes: [
+          { id: 'v_old_1', scheduleId: 'sch_test_canon', memberId: 'mem_old_999', memberName: '이재연', part: '테너', status: 'ATTEND', timestamp: '2026-10-17T03:00:00Z' }
+        ],
+        // Log with another fragmented ID 'mem_old_888' but same name '이재연'
+        recentLogs: [
+          { id: 'l_old_1', scheduleId: 'sch_test_canon', memberId: 'mem_old_888', memberName: '이재연', part: '테너', timestamp: '2026-11-20T19:20:00', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true }
+        ],
+        config: {}
+      }
+    };
+
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => mockApiResponse,
+    })) as unknown as typeof fetch;
+
+    try {
+      await service.fetchRemoteData('https://script.google.com/macros/s/TEST/exec');
+
+      // The RSVP should now be associated with the primary member ID 'mem_primary_100'
+      const votes = service.getRSVPVotes('sch_test_canon');
+      expect(votes.length).toBe(1);
+      expect(votes[0].memberId).toBe('mem_primary_100');
+
+      // The log should also be associated with 'mem_primary_100'
+      const logs = service.getLogs('sch_test_canon');
+      expect(logs.length).toBe(1);
+      expect(logs[0].memberId).toBe('mem_primary_100');
+
+      // Reconciliation should succeed seamlessly
+      const rec = service.reconcileMemberAttendance('mem_primary_100', 'sch_test_canon');
+      expect(rec?.finalStatus).toBe('출석');
+      expect(rec?.rsvpStatus).toBe('ATTEND');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 

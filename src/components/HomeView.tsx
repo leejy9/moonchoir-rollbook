@@ -75,9 +75,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
     const map = new Map<string, boolean>();
     allLogs
       .filter((l) => l.memberId === profile.memberId)
-      .forEach((l) => map.set(l.scheduleId, true));
+      .forEach((l) => {
+        map.set(l.scheduleId, true);
+        const matching = schedules.find(
+          (s) => s.id === l.scheduleId || (l.scheduleId && s.id.startsWith(l.scheduleId)) || (l.timestamp && l.timestamp.startsWith(s.date))
+        );
+        if (matching) {
+          map.set(matching.id, true);
+        }
+      });
     return map;
-  }, [allLogs, profile.memberId]);
+  }, [allLogs, profile.memberId, schedules]);
 
   // Map schedules by date string
   const schedulesByDate = useMemo(() => {
@@ -502,8 +510,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <div>
                 <strong>오늘 출석 체크 완료</strong>
                 <p className="banner-subtext">
-                  인증 시각: {myLog.timestamp.slice(11, 16)} ·{' '}
-                  {myLog.isVerifiedLocation ? '연습실 위치 확인됨' : 'GPS 오차 범위'}
+                  인증 시각:{' '}
+                  {myLog.timestamp.includes('T')
+                    ? myLog.timestamp.slice(11, 16)
+                    : myLog.timestamp.slice(0, 5)}{' '}
+                  ·{' '}
+                  {myLog.authMethod === 'MANUAL_BY_ADMIN'
+                    ? '관리자 수동 인정'
+                    : myLog.isVerifiedLocation
+                    ? '연습실 위치 확인됨'
+                    : 'GPS 오차 범위'}
                 </p>
               </div>
             </div>

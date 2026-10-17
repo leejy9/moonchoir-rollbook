@@ -33,7 +33,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
   onSave,
   onDelete,
   schedules = [],
-  logs = [],
+  logs: _logs = [],
 }) => {
   const [todayStr] = useState(getTodayDateString);
 
@@ -133,14 +133,30 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     }
   };
 
-  // 단원의 출결 통계 계산
-  const memberLogs = logs.filter((l) => l.memberId === formData.id);
-  const attendedCount = memberLogs.filter(
-    (l) => l.authMethod !== 'MANUAL_BY_ADMIN' || !l.adminNote?.includes('결석')
-  ).length;
-  const attendanceRate = schedules.length > 0
-    ? Math.round((attendedCount / schedules.length) * 100)
-    : 100;
+  // 단원의 출결 통계 계산 (중앙 엔진 reconcileMemberAttendance 기반 SSOT)
+  const { attendedCount, attendanceRate } = useMemo(() => {
+    let attended = 0;
+    let requiredSessions = 0;
+
+    schedules.forEach((s) => {
+      const rec = sheetsService.reconcileMemberAttendance(formData.id, s.id);
+      const isExempt = rec?.finalStatus === '모수제외' || Boolean(formData.joinedAt && s.date < formData.joinedAt);
+      if (!isExempt) {
+        requiredSessions++;
+        if (rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정') {
+          attended += 1;
+        } else if (rec?.finalStatus === '지각') {
+          attended += 0.7;
+        }
+      } else if (rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정') {
+        requiredSessions++;
+        attended += 1;
+      }
+    });
+
+    const rate = requiredSessions > 0 ? Math.round((attended / requiredSessions) * 100) : 100;
+    return { attendedCount: Math.floor(attended), attendanceRate: rate };
+  }, [schedules, formData.id, formData.joinedAt]);
 
   // 최신순 일정 정렬
   const sortedSchedules = useMemo(() => {
@@ -591,8 +607,18 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                 <div className="attendance-list-scroll-body">
                   {sortedSchedules.map((sch) => {
                     const headerDate = formatMatrixHeaderDate(sch.date);
-                    const logItem = memberLogs.find((l) => l.scheduleId === sch.id);
-                    const isAttended = !!logItem;
+                    const rec = sheetsService.reconcileMemberAttendance(formData.id, sch.id);
+                    const status = rec?.finalStatus || '결석';
+                    const isAttend = status === '출석' || status === '수동인정';
+                    const isLate = status === '지각';
+                    const isExcused = status === '사유결석';
+                    const isExempt = status === '모수제외';
+
+                    let badgeClass = 'badge-absent';
+                    if (isAttend) badgeClass = 'badge-attend';
+                    else if (isLate) badgeClass = 'badge-late';
+                    else if (isExcused) badgeClass = 'badge-excused';
+                    else if (isExempt) badgeClass = 'badge-exempt';
 
                     return (
                       <div key={sch.id} className="attendance-record-row">
@@ -604,8 +630,8 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                           <span className="record-sch-cat">{sch.category}</span>
                         </div>
                         <div className="col-cell col-status">
-                          <span className={`record-badge ${isAttended ? 'badge-attend' : 'badge-absent'}`}>
-                            {isAttended ? '출석' : '결석'}
+                          <span className={`record-badge ${badgeClass}`}>
+                            {status}
                           </span>
                         </div>
                       </div>

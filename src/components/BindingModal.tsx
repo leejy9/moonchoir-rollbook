@@ -16,6 +16,30 @@ function formatPhoneNumber(val: string): string {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 }
 
+function buildNewMember(
+  name: string,
+  part: PartType,
+  phone: string,
+  phoneLast4: string,
+  deviceId: string
+): Member {
+  const now = new Date();
+  return {
+    id: `mem_new_${now.getTime()}`,
+    name,
+    part,
+    phone,
+    phoneLast4,
+    role: part === '선생님' ? 'ADMIN' : part === '객원' ? 'GUEST' : 'MEMBER',
+    createdAt: now.toISOString(),
+    status: 'ACTIVE',
+    joinedAt: now.toISOString().slice(0, 10),
+    memberStatus: part === '선생님' ? '선생님' : part === '객원' ? '객원' : '정단원',
+    boundDeviceId: deviceId,
+    boundDeviceAt: now.toISOString(),
+  };
+}
+
 export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }) => {
   const [tab, setTab] = useState<'SELECT' | 'REGISTER'>('SELECT');
   const [selectedPartFilter, setSelectedPartFilter] = useState<string>('전체');
@@ -76,7 +100,19 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
     const inputLast4 = inputDigits.slice(-4);
     const targetLast4 = String(selectedMember.phoneLast4 || '').trim();
 
-    if (inputLast4 !== targetLast4) {
+    // Self-healing / Rescue: If targetLast4 is '0000', empty, or '----',
+    // allow updating member's phoneLast4 with the valid 4 digits provided by the member!
+    const isUnsetLast4 = !targetLast4 || targetLast4 === '0000' || targetLast4 === '----';
+    let effectiveLast4 = targetLast4;
+
+    if (isUnsetLast4) {
+      effectiveLast4 = inputLast4;
+      const updatedMember: Partial<Member> = {
+        phoneLast4: inputLast4,
+        phone: inputDigits.length >= 10 ? formatPhoneNumber(inputDigits) : selectedMember.phone,
+      };
+      await sheetsService.updateMember(selectedMember.id, updatedMember).catch(console.warn);
+    } else if (inputLast4 !== targetLast4) {
       setErrorMsg(`연락처 뒷자리(4자리)가 등록된 정보와 일치하지 않습니다. (관리자에게 문의해주세요)`);
       return;
     }
@@ -96,7 +132,7 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
         selectedMember.id,
         selectedMember.name,
         selectedMember.part,
-        selectedMember.phoneLast4,
+        effectiveLast4,
         currentDeviceId
       );
       onSuccess(profile);
@@ -127,20 +163,53 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
     const finalPart: PartType = newPart === '기타' ? (customPart.trim() || '기타') : (newPart as PartType);
     const currentDeviceId = getOrCreateDeviceId();
 
-    const newMember: Member = {
-      id: `mem_new_${Date.now()}`,
-      name: trimmedName,
-      part: finalPart,
-      phone: newPhone.trim(),
-      phoneLast4: finalLast4,
-      role: finalPart === '선생님' ? 'ADMIN' : finalPart === '객원' ? 'GUEST' : 'MEMBER',
-      createdAt: new Date().toISOString(),
-      status: 'ACTIVE',
-      joinedAt: new Date().toISOString().slice(0, 10),
-      memberStatus: finalPart === '선생님' ? '선생님' : finalPart === '객원' ? '객원' : '정단원',
-      boundDeviceId: currentDeviceId,
-      boundDeviceAt: new Date().toISOString(),
-    };
+    // Deduplication check: if member with identical name already exists in members list
+    const existingMember = members.find(
+      (m) =>
+        m.name.trim().toLowerCase() === trimmedName.toLowerCase() &&
+        (m.phoneLast4 === finalLast4 || !m.phoneLast4 || m.phoneLast4 === '0000')
+    );
+
+    if (existingMember) {
+      // Re-use existing member instead of creating duplicate fragmented ID
+      if (existingMember.boundDeviceId && existingMember.boundDeviceId !== currentDeviceId) {
+        setErrorMsg(
+          `해당 정보의 단원 계정이 이미 다른 기기(스마트폰)에 연동되어 있습니다.\n기존 기기에서 [연동 해제]를 먼저 진행하셨거나 관리자에게 초기화를 요청하세요.`
+        );
+        return;
+      }
+      try {
+        setIsSubmitting(true);
+        const updated: Partial<Member> = {
+          phoneLast4: finalLast4,
+          phone: newPhone.trim(),
+        };
+        await sheetsService.updateMember(existingMember.id, updated).catch(console.warn);
+        await sheetsService.bindMemberDevice(existingMember.id, currentDeviceId);
+        const profile = bindDeviceProfile(
+          existingMember.id,
+          existingMember.name,
+          existingMember.part,
+          finalLast4,
+          currentDeviceId
+        );
+        onSuccess(profile);
+        return;
+      } catch (err: unknown) {
+        setErrorMsg(err instanceof Error ? err.message : '기존 단원 계정 연동 중 오류가 발생했습니다.');
+        return;
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+
+    const newMember: Member = buildNewMember(
+      trimmedName,
+      finalPart,
+      newPhone.trim(),
+      finalLast4,
+      currentDeviceId
+    );
 
     try {
       setIsSubmitting(true);

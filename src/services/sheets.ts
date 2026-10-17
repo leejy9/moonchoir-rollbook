@@ -192,7 +192,16 @@ export class SheetsService {
   }
 
   public getRSVPVotes(scheduleId?: string): RSVPVote[] {
-    const list = scheduleId ? this.rsvpVotes.filter((v) => v.scheduleId === scheduleId) : this.rsvpVotes;
+    const targetSchedule = scheduleId ? this.schedules.find((s) => s.id === scheduleId) : undefined;
+    const list = scheduleId
+      ? this.rsvpVotes.filter((v) => {
+          if (v.scheduleId === scheduleId) return true;
+          if (targetSchedule && v.scheduleId) {
+            if (scheduleId.startsWith(v.scheduleId) || v.scheduleId.startsWith(scheduleId)) return true;
+          }
+          return false;
+        })
+      : this.rsvpVotes;
     const map = new Map<string, RSVPVote>();
     list.forEach((v) => {
       if (!v.scheduleId || !v.memberId) return;
@@ -207,7 +216,21 @@ export class SheetsService {
 
   public getLogs(scheduleId?: string): RawAttendanceLog[] {
     if (!scheduleId) return [...this.logs];
-    return this.logs.filter((l) => l.scheduleId === scheduleId);
+    const targetSchedule = this.schedules.find((s) => s.id === scheduleId);
+    return this.logs.filter((l) => {
+      if (l.scheduleId === scheduleId) return true;
+      if (targetSchedule) {
+        // Fallback 1: scheduleId prefix matching (e.g. sch_20261022 vs sch_20261022_klyd)
+        if (l.scheduleId && (scheduleId.startsWith(l.scheduleId) || l.scheduleId.startsWith(scheduleId))) {
+          return true;
+        }
+        // Fallback 2: exact match on schedule date if log has timestamp with YYYY-MM-DD
+        if (l.timestamp && l.timestamp.length >= 10 && l.timestamp.slice(0, 10) === targetSchedule.date) {
+          return true;
+        }
+      }
+      return false;
+    });
   }
 
   public getLocationPresets(): LocationPreset[] {
@@ -752,6 +775,8 @@ export class SheetsService {
       let finalStatus: AttendanceStatus = '결석';
       let checkInTime: string | undefined;
 
+      const isExempt = Boolean(member.joinedAt && schedule.date < member.joinedAt);
+
       if (log) {
         checkInTime = log.timestamp;
         if (log.authMethod === 'MANUAL_BY_ADMIN') {
@@ -762,10 +787,15 @@ export class SheetsService {
           if (log.timestamp.includes('T')) {
             const timePart = log.timestamp.split('T')[1].slice(0, 5); // "HH:mm"
             const [h, m] = timePart.split(':').map(Number);
-            logMinutes = h * 60 + m;
+            logMinutes = (h || 0) * 60 + (m || 0);
           } else {
             const logDate = new Date(log.timestamp);
-            logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
+            if (!isNaN(logDate.getTime())) {
+              logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
+            } else if (log.timestamp.includes(':')) {
+              const [h, m] = log.timestamp.split(':').map(Number);
+              logMinutes = (h || 0) * 60 + (m || 0);
+            }
           }
 
           if (logMinutes > lateThresholdMinutes) {
@@ -775,8 +805,10 @@ export class SheetsService {
           }
         }
       } else {
-        // No log found: evaluate RSVP status
-        if (rsvp && rsvp.status === 'ABSENT' && rsvp.reason) {
+        // No log found: evaluate exemption or RSVP status
+        if (isExempt) {
+          finalStatus = '모수제외';
+        } else if (rsvp && rsvp.status === 'ABSENT' && rsvp.reason) {
           finalStatus = '사유결석';
         } else {
           finalStatus = '결석'; // 무단 결석
@@ -798,6 +830,14 @@ export class SheetsService {
         adminNote: log?.adminNote,
       };
     });
+  }
+
+  /**
+   * Reconciles attendance for a single member on a single schedule.
+   */
+  public reconcileMemberAttendance(memberId: string, scheduleId: string): AttendanceReconciliation | null {
+    const list = this.reconcileAttendance(scheduleId);
+    return list.find((r) => r.memberId === memberId) || null;
   }
 
   // --- Remote Google Sheets API Handler ---
@@ -946,14 +986,31 @@ export class SheetsService {
       });
       saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
     }
+    // Build canonical member ID resolution map
+    const primaryMemberIdByName = new Map<string, string>();
+    this.members.forEach((m) => {
+      if (m.name) primaryMemberIdByName.set(m.name.trim(), m.id);
+    });
+
     if (Array.isArray(data.rsvpVotes)) {
       const voteMap = new Map<string, RSVPVote>();
       data.rsvpVotes.forEach((v) => {
-        if (!v.scheduleId || !v.memberId) return;
-        const key = `${String(v.scheduleId).trim()}_${String(v.memberId).trim()}`;
+        if (!v.scheduleId) return;
+        let memberId = String(v.memberId || '').trim();
+        // Resolve alias if memberId unknown but memberName matches an active member
+        if (!this.members.some((m) => m.id === memberId) && v.memberName && primaryMemberIdByName.has(String(v.memberName).trim())) {
+          memberId = primaryMemberIdByName.get(String(v.memberName).trim())!;
+        }
+        if (!memberId) return;
+
+        const canonicalVote: RSVPVote = {
+          ...v,
+          memberId,
+        };
+        const key = `${String(v.scheduleId).trim()}_${memberId}`;
         const existing = voteMap.get(key);
         if (!existing || (v.timestamp && (!existing.timestamp || v.timestamp >= existing.timestamp))) {
-          voteMap.set(key, v);
+          voteMap.set(key, canonicalVote);
         }
       });
       this.rsvpVotes = Array.from(voteMap.values());
@@ -961,7 +1018,16 @@ export class SheetsService {
     }
     const logList = data.logs || data.recentLogs;
     if (Array.isArray(logList)) {
-      this.logs = logList;
+      this.logs = logList.map((l: RawAttendanceLog) => {
+        let memberId = String(l.memberId || '').trim();
+        if (!this.members.some((m) => m.id === memberId) && l.memberName && primaryMemberIdByName.has(String(l.memberName).trim())) {
+          memberId = primaryMemberIdByName.get(String(l.memberName).trim())!;
+        }
+        return {
+          ...l,
+          memberId,
+        };
+      });
       saveToStorage(STORAGE_KEYS.LOGS, this.logs);
     }
     if (data.config && typeof data.config === 'object') {
