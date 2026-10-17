@@ -433,9 +433,38 @@ export class SheetsService {
       throw new Error(`대원을 찾을 수 없습니다. (ID: ${memberId})`);
     }
 
-    const currentHistory = this.members[idx].statusHistory ? [...this.members[idx].statusHistory!] : [];
+    let currentHistory = this.members[idx].statusHistory ? [...this.members[idx].statusHistory!] : [];
     if (historyItem) {
+      // 새 이력이 시작하는 날짜 이전으로 기존 오픈 이력(2999-12-31) 마감
+      const prevDate = new Date(new Date(historyItem.startDate).getTime() - 86400000);
+      const prevDay = !isNaN(prevDate.getTime()) ? prevDate.toISOString().slice(0, 10) : historyItem.startDate;
+      currentHistory = currentHistory.map((h) => {
+        if (h.endDate >= historyItem.startDate) {
+          return { ...h, endDate: h.startDate < historyItem.startDate ? prevDay : historyItem.startDate };
+        }
+        return h;
+      });
       currentHistory.push(historyItem);
+    } else if (updates.memberStatus && updates.memberStatus !== this.members[idx].memberStatus) {
+      // historyItem 없이 memberStatus만 바뀐 경우에도 오픈 이력 마감 및 최신 상태 등록
+      const today = getKSTTimestampString().slice(0, 10);
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      currentHistory = currentHistory.map((h) => {
+        if (h.endDate >= today) {
+          return { ...h, endDate: yesterday };
+        }
+        return h;
+      });
+      currentHistory.push({
+        id: `hist_${Date.now()}`,
+        memberId,
+        status: updates.memberStatus,
+        part: updates.part || this.members[idx].part,
+        startDate: today,
+        endDate: '2999-12-31',
+        reason: `상태를 [${updates.memberStatus}]으로 변경`,
+        createdAt: getKSTTimestampString(),
+      });
     }
 
     this.members[idx] = {

@@ -75,11 +75,21 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
   const [userSelectedScheduleId, setUserSelectedScheduleId] = useState<string | null>(null);
 
-  const schedules = sheetsService.getSchedules();
-  const members = sheetsService.getMembers().filter((m) => m.status === 'ACTIVE');
-  const allLogs = sheetsService.getLogs();
+  const schedules = useMemo(() => {
+    void _refreshTrigger;
+    return sheetsService.getSchedules();
+  }, [_refreshTrigger]);
+  const members = useMemo(() => {
+    void _refreshTrigger;
+    return sheetsService.getMembers().filter((m) => m.status === 'ACTIVE');
+  }, [_refreshTrigger]);
+  const allLogs = useMemo(() => {
+    void _refreshTrigger;
+    return sheetsService.getLogs();
+  }, [_refreshTrigger]);
 
   const currentMember = useMemo(() => {
+    void _refreshTrigger;
     return (
       members.find((m) => m.id === profile.memberId) ||
       (profile.name ? members.find((m) => m.name.trim() === profile.name.trim()) : undefined) ||
@@ -93,7 +103,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         joinedAt: '2020-01-01',
       } as Member)
     );
-  }, [members, profile]);
+  }, [members, profile, _refreshTrigger]);
 
   // Map user's attended schedules
   const myLogsByScheduleId = useMemo(() => {
@@ -278,6 +288,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   // Target active members required for this schedule (accounting for audience selector & member status)
   const targetMembers = useMemo(() => {
+    void _refreshTrigger;
     if (!activeSchedule) return [];
 
     // Filter active members who are required for this schedule
@@ -295,7 +306,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       }
     }
     return Array.from(uniqueMap.values());
-  }, [members, activeSchedule]);
+  }, [members, activeSchedule, _refreshTrigger]);
 
   const targetMemberIds = useMemo(() => new Set(targetMembers.map((m) => m.id)), [targetMembers]);
   const targetMemberNames = useMemo(() => new Set(targetMembers.map((m) => m.name.trim())), [targetMembers]);
@@ -355,9 +366,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
 
   const isTargetMember = useMemo(() => {
+    void _refreshTrigger;
     if (!activeSchedule) return true;
     return isMemberRequiredForSchedule(currentMember, activeSchedule.date, activeSchedule);
-  }, [currentMember, activeSchedule]);
+  }, [currentMember, activeSchedule, _refreshTrigger]);
 
   // Denominator is strictly targetMembers.length (no artificial Math.max inflating)
   const totalTargetCount = targetMembers.length;

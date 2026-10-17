@@ -200,17 +200,53 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     const finalPart = isCustomPart ? (customPartInput.trim() || '기타') : formData.part;
 
     let newHistoryItem: MemberStatusHistory | undefined;
-    const currentHistories = formData.statusHistory ? [...formData.statusHistory] : [];
+    let currentHistories = formData.statusHistory ? [...formData.statusHistory] : [];
+    const isStatusChanged = formData.memberStatus !== initialData.memberStatus;
+    const isPartChanged = finalPart !== initialData.part;
 
     if (recordHistory) {
+      const targetStart = historyStartDate.trim() || todayStr;
+      // 1. 기존에 진행 중이던 열린 이력(endDate >= targetStart)이 있다면, 새 이력 시작일 전날로 자동 마감
+      const prevDate = new Date(new Date(targetStart).getTime() - 86400000);
+      const prevDayStr = !isNaN(prevDate.getTime()) ? prevDate.toISOString().slice(0, 10) : todayStr;
+
+      currentHistories = currentHistories.map((h) => {
+        if (h.endDate >= targetStart) {
+          return { ...h, endDate: h.startDate < targetStart ? prevDayStr : targetStart };
+        }
+        return h;
+      });
+
       newHistoryItem = {
         id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         memberId: formData.id,
         status: formData.memberStatus || '정단원',
         part: finalPart as PartType,
-        startDate: historyStartDate.trim() || todayStr,
+        startDate: targetStart,
         endDate: historyEndDate.trim() || '2999-12-31',
         reason: historyReason.trim(),
+        createdAt: getKSTTimestampString(),
+      };
+      currentHistories.push(newHistoryItem);
+    } else if (isStatusChanged || isPartChanged) {
+      // 2. 사용자가 이력 체크박스를 별도로 켜지 않고 단순히 상단 칩에서 상태/파트를 변경한 경우:
+      // 과거의 무한 열린 이력(2999-12-31)이 미래 일정을 가로막지 않도록 어제 날짜로 자동 마감하고 새 상태 등록
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      currentHistories = currentHistories.map((h) => {
+        if (h.endDate >= todayStr) {
+          return { ...h, endDate: yesterday };
+        }
+        return h;
+      });
+
+      newHistoryItem = {
+        id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        memberId: formData.id,
+        status: formData.memberStatus || '정단원',
+        part: finalPart as PartType,
+        startDate: todayStr,
+        endDate: '2999-12-31',
+        reason: `단원 설정에서 [${formData.memberStatus}]으로 변경`,
         createdAt: getKSTTimestampString(),
       };
       currentHistories.push(newHistoryItem);

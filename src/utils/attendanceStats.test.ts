@@ -431,6 +431,54 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
       // 3. ALL 정기 일정: 휴단원은 일반 일정에선 의무 제외(자율 대상자)
       expect(isMemberRequiredForSchedule(inactiveMember, normalSch.date, normalSch)).toBe(false);
     });
+
+    it('과거 휴단원 이력이 있더라도 정단원으로 복귀한 최신 상태가 전체 일정 필참으로 올바르게 판정된다', () => {
+      const returnedMember: Member = {
+        id: 'mem_returnee',
+        name: '이재연',
+        part: '테너',
+        phoneLast4: '4240',
+        role: 'MEMBER',
+        status: 'ACTIVE',
+        joinedAt: '2023-03-01',
+        createdAt: '2023-03-01 00:00:00',
+        memberStatus: '정단원',
+        statusHistory: [
+          {
+            id: 'hist_old_leave',
+            memberId: 'mem_returnee',
+            status: '휴단원',
+            part: '테너',
+            startDate: '2026-10-18',
+            endDate: '2999-12-31',
+            createdAt: '2026-10-18 00:00:00',
+          },
+          {
+            id: 'hist_new_active',
+            memberId: 'mem_returnee',
+            status: '정단원',
+            part: '테너',
+            startDate: '2026-10-18',
+            endDate: '2999-12-31',
+            createdAt: '2026-10-18 01:00:00', // 더 나중에 생성된 최신 이력
+          },
+        ],
+      };
+
+      const regularSch: Schedule = {
+        id: 'sch_20261022',
+        title: '문콰이어 정기연습',
+        date: '2026-10-22',
+        startTime: '19:30',
+        endTime: '22:00',
+        locationName: '문콰이어 정기연습실',
+        category: '정기연습',
+        targetAudienceType: 'ALL',
+      };
+
+      // 최신 이력이 '정단원'이므로 정기연습 일정에 필참(true)으로 계산되어야 함
+      expect(isMemberRequiredForSchedule(returnedMember, regularSch.date, regularSch)).toBe(true);
+    });
   });
 });
 

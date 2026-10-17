@@ -16,8 +16,14 @@ export function getEffectiveMemberStatus(
   date: string
 ): { status: MemberStatus; part: PartType } {
   if (member.statusHistory && member.statusHistory.length > 0) {
-    // 날짜 범위가 일치하는 이력 탐색 (최신 생성순 또는 특정 구간 매칭)
-    const matched = member.statusHistory.find(
+    // 1. 최신 생성순(createdAt 내림차순) 및 최신 시작일순으로 정렬하여 탐색
+    const sorted = [...member.statusHistory].sort((a, b) => {
+      const timeA = a.createdAt || a.startDate || '';
+      const timeB = b.createdAt || b.startDate || '';
+      return timeB.localeCompare(timeA);
+    });
+
+    const matched = sorted.find(
       (h) => h.startDate <= date && date <= h.endDate
     );
     if (matched) {
@@ -25,7 +31,7 @@ export function getEffectiveMemberStatus(
     }
   }
 
-  // Fallback: 기본 프로필 상태 사용
+  // 2. Fallback: 기본 프로필 상태 사용
   return {
     status: member.memberStatus || '정단원',
     part: member.part || '소프라노',
