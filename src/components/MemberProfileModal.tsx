@@ -80,63 +80,13 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     !STANDARD_PARTS.includes(formData.part) ? String(formData.part || '') : ''
   );
 
-  // 단원 상태 표준 목록 및 토글 상태 관리
-  const STANDARD_STATUSES = ['정단원', '준단원', '휴단원', '퇴단원', '선생님', '객원', '휴단', '퇴단'];
+  const STANDARD_STATUSES = ['정단원', '준단원', '휴단원', '퇴단원', '선생님', '객원'];
   const [isCustomStatus, setIsCustomStatus] = useState(
-    () => Boolean(formData.memberStatus) && !STANDARD_STATUSES.includes(formData.memberStatus as string)
+    () => !STANDARD_STATUSES.includes(formData.memberStatus as string) && Boolean(formData.memberStatus)
   );
   const [customStatusInput, setCustomStatusInput] = useState(() =>
-    Boolean(formData.memberStatus) && !STANDARD_STATUSES.includes(formData.memberStatus as string)
-      ? String(formData.memberStatus || '')
-      : ''
+    !STANDARD_STATUSES.includes(formData.memberStatus as string) ? String(formData.memberStatus || '') : ''
   );
-
-  const STATUS_TOGGLES: { label: string; value: MemberStatus; displayLabel: string; help: string }[] = [
-    { label: '정단원', value: '정단원', displayLabel: '정단원', help: '모든 정규 연습 필참 대상' },
-    { label: '준단원', value: '준단원', displayLabel: '준단원', help: '신입 / 수습 단원 (필참)' },
-    { label: '휴단', value: '휴단원', displayLabel: '휴단', help: '일반 연습 제외 (지정 차출 시 필참)' },
-    { label: '퇴단', value: '퇴단원', displayLabel: '퇴단', help: '출결 의무 영구 제외' },
-    { label: '선생님', value: '선생님', displayLabel: '선생님', help: '지휘자 / 반주자 / 성악 코치' },
-    { label: '객원', value: '객원', displayLabel: '객원', help: '연주 객원 단원' },
-  ];
-
-  const isStatusActive = (val: MemberStatus) => {
-    if (isCustomStatus) return false;
-    if (val === '휴단원') return formData.memberStatus === '휴단원' || formData.memberStatus === '휴단';
-    if (val === '퇴단원') return formData.memberStatus === '퇴단원' || formData.memberStatus === '퇴단';
-    return formData.memberStatus === val;
-  };
-
-  const handleSelectStatus = (newVal: MemberStatus) => {
-    setIsCustomStatus(false);
-    setFormData((prev) => ({ ...prev, memberStatus: newVal }));
-    if (newVal !== initialData.memberStatus) {
-      setRecordHistory(true);
-    }
-  };
-
-  const handleSelectCustomStatus = () => {
-    setIsCustomStatus(true);
-    const val = customStatusInput.trim() || '기타';
-    setFormData((prev) => ({ ...prev, memberStatus: val as MemberStatus }));
-    setRecordHistory(true);
-  };
-
-  const handleCustomStatusInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setCustomStatusInput(val);
-    setFormData((prev) => ({ ...prev, memberStatus: (val.trim() || '기타') as MemberStatus }));
-    setRecordHistory(true);
-  };
-
-  const getStatusAccentColor = (status?: string): string => {
-    if (status === '휴단원' || status === '휴단') return '#d97706';
-    if (status === '퇴단원' || status === '퇴단') return '#dc2626';
-    if (status === '선생님') return '#7c3aed';
-    if (status === '객원') return '#4f46e5';
-    if (status === '준단원') return '#0d9488';
-    return '#2563eb';
-  };
 
   // 신규 이력 추가 폼 상태
   const [recordHistory, setRecordHistory] = useState(false);
@@ -175,13 +125,12 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
       String(formData.phone || '').trim() !== String(initialData.phone || '').trim() ||
       String(formData.phoneLast4 || '').trim() !== String(initialData.phoneLast4 || '').trim() ||
       formData.memberStatus !== initialData.memberStatus ||
-      isCustomStatus ||
       formData.role !== initialData.role ||
       String(formData.joinedAt || '') !== String(initialData.joinedAt || '') ||
       String(formData.note || '').trim() !== String(initialData.note || '').trim() ||
       recordHistory
     );
-  }, [formData, initialData, isCustomStatus, recordHistory]);
+  }, [formData, initialData, recordHistory]);
 
   // 안전 닫기 핸들러 (수정사항 존재 시 확인창 표시)
   const handleAttemptClose = () => {
@@ -249,7 +198,6 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     const finalPhone = formatPhoneNumber(digits);
     const finalLast4 = digits.slice(-4);
     const finalPart = isCustomPart ? (customPartInput.trim() || '기타') : formData.part;
-    const finalStatus = isCustomStatus ? (customStatusInput.trim() || '기타') : (formData.memberStatus || '정단원');
 
     let newHistoryItem: MemberStatusHistory | undefined;
     const currentHistories = formData.statusHistory ? [...formData.statusHistory] : [];
@@ -258,7 +206,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
       newHistoryItem = {
         id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         memberId: formData.id,
-        status: finalStatus as MemberStatus,
+        status: formData.memberStatus || '정단원',
         part: finalPart as PartType,
         startDate: historyStartDate.trim() || todayStr,
         endDate: historyEndDate.trim() || '2999-12-31',
@@ -272,7 +220,6 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
       ...formData,
       name: String(formData.name || '').trim(),
       part: finalPart as PartType,
-      memberStatus: finalStatus as MemberStatus,
       phone: finalPhone,
       phoneLast4: finalLast4,
       note: String(formData.note || '').trim(),
@@ -471,136 +418,126 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
               </div>
 
               <div className="modern-field-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="modern-field-label">단원 상태 구분</label>
-                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                    선택: <strong style={{ color: getStatusAccentColor(formData.memberStatus) }}>{formData.memberStatus || '정단원'}</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label className="modern-field-label" style={{ margin: 0 }}>단원 상태 구분 *</label>
+                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    현재: <strong style={{ color: '#1e293b' }}>{formData.memberStatus || '정단원'}</strong>
                   </span>
                 </div>
 
-                {/* 단원 상태 토글 버튼 바 */}
-                <div className="status-toggle-group">
-                  {STATUS_TOGGLES.map((opt) => {
-                    const active = isStatusActive(opt.value);
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+                    gap: '8px',
+                    marginBottom: '8px',
+                  }}
+                >
+                  {[
+                    { key: '정단원', label: '정단원', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+                    { key: '준단원', label: '준단원', color: '#0284c7', bg: '#f0f9ff', border: '#bae6fd' },
+                    { key: '휴단원', label: '휴단', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+                    { key: '퇴단원', label: '퇴단', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+                    { key: '선생님', label: '선생님', color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
+                    { key: '객원', label: '객원', color: '#0d9488', bg: '#f0fdfa', border: '#99f6e4' },
+                    { key: '__CUSTOM__', label: '✏️ 기타', color: '#475569', bg: '#f8fafc', border: '#cbd5e1' },
+                  ].map((chip) => {
+                    const isSelected = chip.key === '__CUSTOM__' ? isCustomStatus : (!isCustomStatus && formData.memberStatus === chip.key);
                     return (
                       <button
+                        key={chip.key}
                         type="button"
-                        key={opt.value}
-                        className={`status-toggle-btn status-${opt.value} ${active ? 'active' : ''}`}
-                        onClick={() => handleSelectStatus(opt.value)}
-                        title={opt.help}
+                        onClick={() => {
+                          if (chip.key === '__CUSTOM__') {
+                            setIsCustomStatus(true);
+                            if (customStatusInput.trim()) {
+                              setFormData((prev) => ({ ...prev, memberStatus: customStatusInput.trim() as MemberStatus }));
+                            }
+                          } else {
+                            setIsCustomStatus(false);
+                            setFormData((prev) => ({ ...prev, memberStatus: chip.key as MemberStatus }));
+                            // 휴단원이나 퇴단원으로 변경 시 자동으로 상태 이력 기록 활성화
+                            if (chip.key === '휴단원' || chip.key === '퇴단원' || chip.key !== initialData.memberStatus) {
+                              setRecordHistory(true);
+                            }
+                          }
+                        }}
+                        style={{
+                          minHeight: '44px',
+                          padding: '8px 6px',
+                          borderRadius: '8px',
+                          border: isSelected ? `2px solid ${chip.color}` : '1px solid #e2e8f0',
+                          background: isSelected ? chip.bg : '#ffffff',
+                          color: isSelected ? chip.color : '#475569',
+                          fontWeight: isSelected ? 700 : 500,
+                          fontSize: '0.88rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px',
+                          boxShadow: isSelected ? `0 2px 4px ${chip.border}` : 'none',
+                          transition: 'all 0.15s ease-in-out',
+                        }}
                       >
-                        {opt.displayLabel}
+                        {isSelected && <span style={{ fontSize: '0.75rem' }}>✓</span>}
+                        {chip.label}
                       </button>
                     );
                   })}
-                  <button
-                    type="button"
-                    className={`status-toggle-btn status-custom ${isCustomStatus ? 'active' : ''}`}
-                    onClick={handleSelectCustomStatus}
-                    title="기타 상태 직접 입력"
-                  >
-                    ✏️ 기타 (직접입력)
-                  </button>
                 </div>
 
                 {isCustomStatus && (
-                  <input
-                    type="text"
-                    className="modern-input"
-                    style={{ marginTop: '8px' }}
-                    value={customStatusInput}
-                    onChange={handleCustomStatusInputChange}
-                    placeholder="새 상태 구분 직접 입력 (예: 명예단원, 군휴학, 고문)"
-                    required={isCustomStatus}
-                    autoFocus
-                  />
+                  <div style={{ marginTop: '6px' }}>
+                    <input
+                      type="text"
+                      className="modern-input"
+                      value={customStatusInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCustomStatusInput(val);
+                        setFormData((prev) => ({ ...prev, memberStatus: (val.trim() || '기타') as MemberStatus }));
+                        setRecordHistory(true);
+                      }}
+                      placeholder="단원 상태 직접 입력 (예: 임원진, 특별휴단, 명예단원)"
+                      required={isCustomStatus}
+                      autoFocus
+                    />
+                  </div>
                 )}
 
                 {/* 상태/파트 변경 이력 기간 및 사유 설정 */}
-                <div
-                  style={{
-                    marginTop: '12px',
-                    padding: '14px',
-                    background: recordHistory ? '#f0f5ff' : '#f8f9fe',
-                    border: `1.5px solid ${recordHistory ? '#bfdbfe' : '#e2e8f0'}`,
-                    borderRadius: '10px',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  <label
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      fontSize: '0.88rem',
-                      color: recordHistory ? '#1e40af' : '#334155',
-                    }}
-                  >
+                <div style={{ marginTop: '10px', padding: '12px', background: '#f8f9fe', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', color: '#334155' }}>
                     <input
                       type="checkbox"
                       checked={recordHistory}
                       onChange={(e) => setRecordHistory(e.target.checked)}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      style={{ width: '16px', height: '16px' }}
                     />
-                    <span>
-                      🕒 [{formData.memberStatus || '정단원'}] 상태 변경 이력 기록 (시트 DB 저장)
-                    </span>
+                    <span>🕒 [{formData.memberStatus || '상태'}] 상태 변경 이력 기록 (시트 DB 저장)</span>
                   </label>
 
                   {recordHistory && (
-                    <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          padding: '7px 12px',
-                          background: '#ffffff',
-                          borderRadius: '6px',
-                          border: '1px solid #dbeafe',
-                          fontSize: '0.82rem',
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <span style={{ color: '#64748b', fontWeight: 600 }}>적용될 상태:</span>
-                        <span style={{ fontWeight: 800, color: getStatusAccentColor(formData.memberStatus) }}>
-                          {formData.memberStatus || '정단원'}
-                        </span>
-                        {formData.memberStatus !== initialData.memberStatus && (
-                          <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-                            ({initialData.memberStatus || '기존'} ➔ {formData.memberStatus})
-                          </span>
-                        )}
-                        <span style={{ marginLeft: 'auto', fontSize: '0.74rem', color: '#6b7280' }}>
-                          {formData.memberStatus === '휴단원' || formData.memberStatus === '휴단'
-                            ? '출결 모수 제외 (차출 시 필참)'
-                            : formData.memberStatus === '퇴단원' || formData.memberStatus === '퇴단'
-                            ? '출결 의무 영구 제외'
-                            : '정규 필참 대상'}
-                        </span>
-                      </div>
-
+                    <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                         <div style={{ flex: 1, minWidth: '130px' }}>
-                          <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>적용 시작일</span>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>적용 시작일</span>
                           <input
                             type="date"
                             className="modern-input"
-                            style={{ height: '38px', fontSize: '0.85rem', marginTop: '3px' }}
+                            style={{ height: '38px', fontSize: '0.85rem' }}
                             value={historyStartDate}
                             onChange={(e) => setHistoryStartDate(e.target.value)}
                           />
                         </div>
-                        <span style={{ marginTop: '18px', color: '#94a3b8' }}>~</span>
+                        <span style={{ marginTop: '16px', color: '#94a3b8' }}>~</span>
                         <div style={{ flex: 1, minWidth: '130px' }}>
-                          <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>적용 종료일</span>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>적용 종료일</span>
                           <input
                             type="text"
                             className="modern-input"
-                            style={{ height: '38px', fontSize: '0.85rem', marginTop: '3px' }}
+                            style={{ height: '38px', fontSize: '0.85rem' }}
                             value={historyEndDate}
                             onChange={(e) => setHistoryEndDate(e.target.value)}
                             placeholder="YYYY-MM-DD"
@@ -610,7 +547,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                           type="button"
                           onClick={() => setHistoryEndDate('2999-12-31')}
                           style={{
-                            marginTop: '18px',
+                            marginTop: '16px',
                             height: '38px',
                             padding: '0 12px',
                             background: historyEndDate === '2999-12-31' ? '#4f46e5' : '#e2e8f0',
@@ -619,7 +556,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                             borderRadius: '6px',
                             cursor: 'pointer',
                             fontSize: '0.8rem',
-                            fontWeight: 700,
+                            fontWeight: 600,
                             whiteSpace: 'nowrap',
                           }}
                         >
@@ -631,18 +568,10 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                         <input
                           type="text"
                           className="modern-input"
-                          style={{ height: '38px', fontSize: '0.85rem' }}
+                          style={{ height: '36px', fontSize: '0.85rem' }}
                           value={historyReason}
                           onChange={(e) => setHistoryReason(e.target.value)}
-                          placeholder={
-                            formData.memberStatus === '휴단원' || formData.memberStatus === '휴단'
-                              ? '휴단 사유 입력 (예: 개인 사정, 건강, 출산, 학업 등)'
-                              : formData.memberStatus === '퇴단원' || formData.memberStatus === '퇴단'
-                              ? '퇴단 사유 입력 (예: 이사, 개인 사정, 직장 이직 등)'
-                              : initialData.memberStatus === '휴단원' || initialData.memberStatus === '휴단'
-                              ? '복단 사유 입력 (예: 휴단 기간 만료 후 정규 복귀)'
-                              : '변경 사유 입력 (예: 파트 이동, 직책 변경 등)'
-                          }
+                          placeholder="변경 사유 입력 (예: 개인 사정으로 휴단, 파트 이동)"
                         />
                       </div>
                     </div>

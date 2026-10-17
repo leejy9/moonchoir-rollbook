@@ -588,6 +588,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🎵 문콰이어 출석부')
     .addItem('시트 7대 탭 및 기본 데이터 생성', 'manualInitialize')
+    .addItem('누락된 컬럼(phone 등) 헤더 자동 동기화', 'syncMissingHeaders')
     .addItem('기존 기록 날짜/시간을 한국 표준시(KST)로 변환', 'convertExistingTimestampsToKST')
     .addToUi();
 }
@@ -597,6 +598,12 @@ function manualInitialize() {
   ensureSheetStructure(ss);
   seedInitialData(ss);
   SpreadsheetApp.getUi().alert('초기화 완료!\n\n단원명부, 일정캘린더, 출석로그, 사전투표, 장소정보, 단원변경로그, 일정카드 탭이 생성되었습니다.');
+}
+
+function syncMissingHeaders() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureSheetStructure(ss);
+  SpreadsheetApp.getUi().alert('컬럼 동기화 완료!\n누락되었던 phone, boundDeviceId 등의 헤더 컬럼이 안전하게 추가되었습니다.');
 }
 
 function convertExistingTimestampsToKST() {
@@ -637,7 +644,7 @@ function convertExistingTimestampsToKST() {
   SpreadsheetApp.getUi().alert('변환 완료!\n총 ' + convertedCount + '개의 일시 데이터가 한국 표준시(KST: YYYY-MM-DD HH:mm:ss) 형식으로 변환되었습니다.');
 }
 
-// 헬퍼: 7대 탭 및 헤더 자동 생성 (기존 데이터 보존)
+// 헬퍼: 7대 탭 및 헤더 자동 생성 및 누락 컬럼 동기화 (기존 데이터 보존)
 function ensureSheetStructure(ss) {
   const schemas = [
     {
@@ -670,7 +677,7 @@ function ensureSheetStructure(ss) {
     },
   ];
 
-  schemas.forEach((s) => {
+  schemas.forEach(function (s) {
     let sheet = ss.getSheetByName(s.name);
     if (!sheet) {
       sheet = ss.insertSheet(s.name);
@@ -681,6 +688,20 @@ function ensureSheetStructure(ss) {
       headerRange.setBackground('#282C48');
       headerRange.setFontColor('#FFFFFF');
       headerRange.setFontWeight('bold');
+    } else {
+      // 기존 시트가 존재할 경우, 스키마에 정의된 헤더 중 누락된 열을 안전하게 맨 오른쪽 컬럼에 추가
+      const lastCol = sheet.getLastColumn();
+      if (lastCol >= 1) {
+        const currentHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+        const missingHeaders = s.headers.filter(function (h) { return currentHeaders.indexOf(h) === -1; });
+        if (missingHeaders.length > 0) {
+          const newHeaderRange = sheet.getRange(1, lastCol + 1, 1, missingHeaders.length);
+          newHeaderRange.setValues([missingHeaders]);
+          newHeaderRange.setBackground('#282C48');
+          newHeaderRange.setFontColor('#FFFFFF');
+          newHeaderRange.setFontWeight('bold');
+        }
+      }
     }
   });
 }
@@ -762,6 +783,23 @@ function readSheetData(sheet) {
           val = String(val).padStart(4, '0');
         } else if (key === 'phone') {
           val = String(val);
+          if (val.length === 10 && !val.startsWith('0')) {
+            val = '0' + val;
+          }
+          if (val.length === 11 && !val.includes('-')) {
+            val = val.slice(0, 3) + '-' + val.slice(3, 7) + '-' + val.slice(7);
+          }
+        }
+      } else if (typeof val === 'string') {
+        const key = String(headers[j]);
+        if (key === 'phone') {
+          const raw = val.replace(/\D/g, '');
+          if (raw.length === 11 && !val.includes('-')) {
+            val = raw.slice(0, 3) + '-' + raw.slice(3, 7) + '-' + raw.slice(7);
+          } else if (raw.length === 10 && !raw.startsWith('0')) {
+            const padded = '0' + raw;
+            val = padded.slice(0, 3) + '-' + padded.slice(3, 7) + '-' + padded.slice(7);
+          }
         }
       }
       item[headers[j]] = val;

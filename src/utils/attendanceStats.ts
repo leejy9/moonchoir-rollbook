@@ -50,7 +50,7 @@ export function isMemberRequiredForSchedule(
   const effective = getEffectiveMemberStatus(member, scheduleDate);
 
   // 2-1. 퇴단원은 관리자가 직접 지정에 실수로 넣었더라도 절대 의무 대상이 아님 (데이터 오염 및 탈퇴자 결석 방지)
-  if (effective.status === '퇴단원' || effective.status === '퇴단') {
+  if (effective.status === '퇴단원') {
     return false;
   }
 

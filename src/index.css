@@ -77,14 +77,17 @@
 /* ==========================================================================
    CSS Reset & Base Rules
    ========================================================================== */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
 }
 
-html, body {
+html,
+body {
   width: 100%;
   height: 100%;
   background-color: var(--bg-app);
@@ -107,7 +110,9 @@ button {
   touch-action: manipulation;
 }
 
-input, select, textarea {
+input,
+select,
+textarea {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
@@ -364,9 +369,11 @@ a {
 .status-indicator-dot.checked {
   background: var(--status-success);
 }
+
 .status-indicator-dot.attend {
   background: var(--status-info);
 }
+
 .status-indicator-dot.absent {
   background: var(--status-danger);
 }
@@ -591,9 +598,11 @@ a {
 .stat-chip.attend {
   color: var(--status-success);
 }
+
 .stat-chip.absent {
   color: var(--status-danger);
 }
+
 .stat-chip.unvoted {
   color: var(--text-muted);
 }
@@ -603,9 +612,18 @@ a {
   height: 6px;
   border-radius: var(--radius-full);
 }
-.chip-dot.attend { background: var(--status-success); }
-.chip-dot.absent { background: var(--status-danger); }
-.chip-dot.unvoted { background: var(--text-muted); }
+
+.chip-dot.attend {
+  background: var(--status-success);
+}
+
+.chip-dot.absent {
+  background: var(--status-danger);
+}
+
+.chip-dot.unvoted {
+  background: var(--text-muted);
+}
 
 .tally-list-block {
   display: flex;
@@ -906,8 +924,13 @@ a {
   padding: 4px 0;
 }
 
-.weekday-header.sun { color: var(--status-danger); }
-.weekday-header.sat { color: var(--status-info); }
+.weekday-header.sun {
+  color: var(--status-danger);
+}
+
+.weekday-header.sat {
+  color: var(--status-info);
+}
 
 .calendar-grid-cells {
   display: grid;
@@ -977,14 +1000,20 @@ a {
 
 .schedule-dot.dot-practice,
 .schedule-dot.cat-정기연습,
-.schedule-dot.cat-추가연습 { background: var(--brand-accent); }
+.schedule-dot.cat-추가연습 {
+  background: var(--brand-accent);
+}
 
 .schedule-dot.dot-concert,
-.schedule-dot.cat-연주 { background: #ef4444; }
+.schedule-dot.cat-연주 {
+  background: #ef4444;
+}
 
 .schedule-dot.dot-event,
 .schedule-dot.cat-녹음,
-.schedule-dot.cat-기타행사 { background: #10b981; }
+.schedule-dot.cat-기타행사 {
+  background: #10b981;
+}
 
 /* Selected Date Section */
 .selected-date-section {
@@ -1194,6 +1223,7 @@ a {
   background: var(--status-success-light);
   color: var(--status-success);
 }
+
 .my-vote-badge.absent {
   background: var(--status-danger-light);
   color: var(--status-danger);
@@ -1246,13 +1276,25 @@ a {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .modal-header {
@@ -1298,7 +1340,8 @@ a {
   margin-bottom: 4px;
 }
 
-.input-text, .select-input {
+.input-text,
+.select-input {
   width: 100%;
   min-height: 46px;
   background: var(--bg-input);
@@ -1311,7 +1354,8 @@ a {
   transition: all var(--transition-fast);
 }
 
-.input-text:focus, .select-input:focus {
+.input-text:focus,
+.select-input:focus {
   background: var(--bg-card);
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px var(--brand-primary-light);
@@ -1548,10 +1592,21 @@ a {
   color: #cbd5e1;
 }
 
-.text-emerald { color: var(--status-success); }
-.text-amber { color: var(--status-warning); }
-.text-blue { color: var(--status-info); }
-.text-rose { color: var(--status-danger); }
+.text-emerald {
+  color: var(--status-success);
+}
+
+.text-amber {
+  color: var(--status-warning);
+}
+
+.text-blue {
+  color: var(--status-info);
+}
+
+.text-rose {
+  color: var(--status-danger);
+}
 
 /* Part Gauges */
 /* ==========================================================================
@@ -1612,10 +1667,21 @@ a {
   transition: width 0.3s ease;
 }
 
-.toss-progress-fill.part-소프라노 { background: var(--part-soprano); }
-.toss-progress-fill.part-알토 { background: var(--part-alto); }
-.toss-progress-fill.part-테너 { background: var(--part-tenor); }
-.toss-progress-fill.part-베이스 { background: var(--part-bass); }
+.toss-progress-fill.part-소프라노 {
+  background: var(--part-soprano);
+}
+
+.toss-progress-fill.part-알토 {
+  background: var(--part-alto);
+}
+
+.toss-progress-fill.part-테너 {
+  background: var(--part-tenor);
+}
+
+.toss-progress-fill.part-베이스 {
+  background: var(--part-bass);
+}
 
 .toss-part-detail {
   font-size: 11px;
@@ -1634,12 +1700,35 @@ a {
   flex-shrink: 0;
 }
 
-.part-소프라노 { background: var(--part-soprano-bg); color: var(--part-soprano); }
-.part-알토 { background: var(--part-alto-bg); color: var(--part-alto); }
-.part-테너 { background: var(--part-tenor-bg); color: var(--part-tenor); }
-.part-베이스 { background: var(--part-bass-bg); color: var(--part-bass); }
-.part-선생님 { background: var(--part-teacher-bg); color: var(--part-teacher); }
-.part-객원 { background: var(--part-guest-bg); color: var(--part-guest); }
+.part-소프라노 {
+  background: var(--part-soprano-bg);
+  color: var(--part-soprano);
+}
+
+.part-알토 {
+  background: var(--part-alto-bg);
+  color: var(--part-alto);
+}
+
+.part-테너 {
+  background: var(--part-tenor-bg);
+  color: var(--part-tenor);
+}
+
+.part-베이스 {
+  background: var(--part-bass-bg);
+  color: var(--part-bass);
+}
+
+.part-선생님 {
+  background: var(--part-teacher-bg);
+  color: var(--part-teacher);
+}
+
+.part-객원 {
+  background: var(--part-guest-bg);
+  color: var(--part-guest);
+}
 
 /* Toss Filter Chips */
 .toss-filter-row {
@@ -1784,18 +1873,22 @@ a {
   background: var(--status-success-light);
   color: var(--status-success);
 }
+
 .status-pill.status-late {
   background: var(--status-warning-light);
   color: var(--status-warning);
 }
+
 .status-pill.status-excused {
   background: var(--status-info-light);
   color: var(--status-info);
 }
+
 .status-pill.status-absent {
   background: var(--status-danger-light);
   color: var(--status-danger);
 }
+
 .status-pill.status-manual {
   background: #f5f3ff;
   color: #7c3aed;
@@ -1961,8 +2054,13 @@ a {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .guide-card {
@@ -2096,7 +2194,8 @@ a {
 }
 
 /* Filter Chips (Part / Reason) */
-.filter-scroll-row, .reason-chips-row {
+.filter-scroll-row,
+.reason-chips-row {
   display: flex;
   gap: 6px;
   overflow-x: auto;
@@ -2241,8 +2340,13 @@ a {
 }
 
 @keyframes laserScan {
-  0% { top: 5%; }
-  100% { top: 95%; }
+  0% {
+    top: 5%;
+  }
+
+  100% {
+    top: 95%;
+  }
 }
 
 .corner {
@@ -2251,10 +2355,38 @@ a {
   height: 22px;
   border-color: #A855F7;
 }
-.corner.top-left { top: 0; left: 0; border-top: 3.5px solid; border-left: 3.5px solid; border-radius: 4px 0 0 0; }
-.corner.top-right { top: 0; right: 0; border-top: 3.5px solid; border-right: 3.5px solid; border-radius: 0 4px 0 0; }
-.corner.bottom-left { bottom: 0; left: 0; border-bottom: 3.5px solid; border-left: 3.5px solid; border-radius: 0 0 0 4px; }
-.corner.bottom-right { bottom: 0; right: 0; border-bottom: 3.5px solid; border-right: 3.5px solid; border-radius: 0 0 4px 0; }
+
+.corner.top-left {
+  top: 0;
+  left: 0;
+  border-top: 3.5px solid;
+  border-left: 3.5px solid;
+  border-radius: 4px 0 0 0;
+}
+
+.corner.top-right {
+  top: 0;
+  right: 0;
+  border-top: 3.5px solid;
+  border-right: 3.5px solid;
+  border-radius: 0 4px 0 0;
+}
+
+.corner.bottom-left {
+  bottom: 0;
+  left: 0;
+  border-bottom: 3.5px solid;
+  border-left: 3.5px solid;
+  border-radius: 0 0 0 4px;
+}
+
+.corner.bottom-right {
+  bottom: 0;
+  right: 0;
+  border-bottom: 3.5px solid;
+  border-right: 3.5px solid;
+  border-radius: 0 0 4px 0;
+}
 
 .viewfinder-hint-text {
   margin-top: 14px;
@@ -2416,6 +2548,7 @@ a {
 .rsvp-choice-btn.attend.active .rsvp-title {
   color: var(--status-success);
 }
+
 .rsvp-choice-btn.absent.active .rsvp-title {
   color: var(--status-danger);
 }
@@ -2440,13 +2573,21 @@ a {
     background: #ffffff !important;
     color: #000000 !important;
   }
-  .admin-header, .admin-subtabs, .print-action-row, .app-shell {
+
+  .admin-header,
+  .admin-subtabs,
+  .print-action-row,
+  .app-shell {
     box-shadow: none !important;
     max-width: 100% !important;
   }
-  .admin-header, .admin-subtabs, .print-action-row {
+
+  .admin-header,
+  .admin-subtabs,
+  .print-action-row {
     display: none !important;
   }
+
   .printable-qr-container {
     box-shadow: none !important;
     border: none !important;
@@ -2507,15 +2648,31 @@ a {
 }
 
 @keyframes waveShake {
-  0% { transform: translateX(0); }
-  50% { transform: translateX(-25%) translateY(-1px); }
-  100% { transform: translateX(-50%); }
+  0% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(-25%) translateY(-1px);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
 @keyframes waveShakeReverse {
-  0% { transform: translateX(-50%); }
-  50% { transform: translateX(-25%) translateY(1px); }
-  100% { transform: translateX(0); }
+  0% {
+    transform: translateX(-50%);
+  }
+
+  50% {
+    transform: translateX(-25%) translateY(1px);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
 }
 
 .liquid-gauge-label {
@@ -3300,10 +3457,29 @@ a {
   transform: translateX(2px);
 }
 
-.opt-btn.attend:hover { background: #dcfce7; border-color: #86efac; color: #15803d; }
-.opt-btn.late:hover { background: #fef3c7; border-color: #fde68a; color: #b45309; }
-.opt-btn.excused:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
-.opt-btn.manual:hover { background: #e0e7ff; border-color: #c7d2fe; color: #4338ca; }
+.opt-btn.attend:hover {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.opt-btn.late:hover {
+  background: #fef3c7;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.opt-btn.excused:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.opt-btn.manual:hover {
+  background: #e0e7ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
 
 .popover-note-box input {
   width: 100%;
@@ -3818,75 +3994,6 @@ a {
   box-shadow: 0 0 0 3px rgba(107, 70, 193, 0.12);
 }
 
-/* ============================================================== */
-/* Member Status Toggle Group (정단원, 준단원, 휴단, 퇴단 등)        */
-/* ============================================================== */
-.status-toggle-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 4px;
-}
-
-.status-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 700;
-  border-radius: 10px;
-  border: 1.5px solid #e5e8eb;
-  background: #ffffff;
-  color: #4e5968;
-  cursor: pointer;
-  transition: all 0.15s ease-in-out;
-  user-select: none;
-  min-height: 40px;
-}
-
-.status-toggle-btn:hover {
-  background: #f8f9fa;
-  border-color: #d1d6db;
-}
-
-.status-toggle-btn.active {
-  color: #ffffff !important;
-  border-color: transparent !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  transform: translateY(-1px);
-}
-
-.status-toggle-btn.status-정단원.active {
-  background: #2563eb !important;
-}
-
-.status-toggle-btn.status-준단원.active {
-  background: #0d9488 !important;
-}
-
-.status-toggle-btn.status-휴단원.active,
-.status-toggle-btn.status-휴단.active {
-  background: #d97706 !important;
-}
-
-.status-toggle-btn.status-퇴단원.active,
-.status-toggle-btn.status-퇴단.active {
-  background: #dc2626 !important;
-}
-
-.status-toggle-btn.status-선생님.active {
-  background: #7c3aed !important;
-}
-
-.status-toggle-btn.status-객원.active {
-  background: #4f46e5 !important;
-}
-
-.status-toggle-btn.status-custom.active {
-  background: #334155 !important;
-}
-
 .modern-textarea {
   width: 100%;
   background: #f8f9fa;
@@ -4214,7 +4321,8 @@ a {
 /* ============================================================== */
 /* BALANCED QR ACTION BUTTONS                                     */
 /* ============================================================== */
-.btn-qr-action-secondary, .btn-qr-action-primary {
+.btn-qr-action-secondary,
+.btn-qr-action-primary {
   flex: 1;
   min-height: 50px;
   border-radius: 14px;
@@ -4612,21 +4720,26 @@ a {
     align-items: stretch;
     gap: 8px;
   }
+
   .schedule-scope-segmented {
     max-width: 100%;
   }
+
   .schedule-modal-footer {
     flex-direction: column;
     align-items: stretch;
   }
+
   .btn-schedule-delete {
     width: 100%;
     justify-content: center;
   }
+
   .schedule-footer-actions {
     width: 100%;
     margin-left: 0;
   }
+
   .btn-schedule-cancel,
   .btn-schedule-save {
     flex: 1;
@@ -4642,15 +4755,10 @@ a {
     padding: 8px 10px !important;
     font-size: 11px !important;
   }
+
   .scorecard-table-row {
     grid-template-columns: 1fr 85px 75px 65px !important;
     padding: 9px 10px !important;
     font-size: 11.5px !important;
   }
 }
-
-
-
-
-
-
