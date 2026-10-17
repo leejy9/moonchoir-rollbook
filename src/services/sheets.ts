@@ -1349,6 +1349,13 @@ export class SheetsService {
       const localOnly = this.locations.filter((l) => !remoteLocIds.has(l.id));
       this.locations = [...remoteLocations, ...localOnly];
       saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
+
+      // 원격 시트에 장소 데이터가 비어있고 로컬 장소가 있으면 백그라운드로 자동 업로드
+      if (remoteLocations.length === 0 && localOnly.length > 0 && this.config.sheetsWebAppUrl) {
+        localOnly.forEach((loc) => {
+          this.sendToGoogleSheet('SAVE_LOCATION', loc).catch(() => {});
+        });
+      }
     }
 
     if (Array.isArray(data.programCards)) {
@@ -1375,6 +1382,13 @@ export class SheetsService {
       const localOnlyCards = this.programCards.filter((c) => !remoteCardIds.has(c.id));
       this.programCards = [...remoteCards, ...localOnlyCards];
       saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
+
+      // 원격 시트에 일정카드가 비어있고 로컬 카드가 있으면 백그라운드로 자동 업로드
+      if (remoteCards.length === 0 && localOnlyCards.length > 0 && this.config.sheetsWebAppUrl) {
+        localOnlyCards.forEach((card) => {
+          this.sendToGoogleSheet('SAVE_PROGRAM_CARD', card).catch(() => {});
+        });
+      }
     }
 
     return {

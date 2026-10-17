@@ -603,7 +603,8 @@ function manualInitialize() {
 function syncMissingHeaders() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureSheetStructure(ss);
-  SpreadsheetApp.getUi().alert('컬럼 동기화 완료!\n누락되었던 phone, boundDeviceId 등의 헤더 컬럼이 안전하게 추가되었습니다.');
+  seedInitialData(ss);
+  SpreadsheetApp.getUi().alert('컬럼 및 기본 데이터 동기화 완료!\n누락되었던 phone, boundDeviceId 등의 헤더 컬럼이 추가되고, 비어있던 일정카드/장소 기본 데이터가 안전하게 채워졌습니다.');
 }
 
 function convertExistingTimestampsToKST() {
@@ -750,6 +751,56 @@ function seedInitialData(ss) {
       ['sch_20261029', '10월 5주차 정기연습', '2026-10-29', '19:30', '21:30', '문콰이어 제1연습실 (명동)', '정기연습', '1029', '정기 합창 연습']
     ];
     schSheet.getRange(2, 1, defaultSchedules.length, defaultSchedules[0].length).setValues(defaultSchedules);
+  }
+
+  const locSheet = ss.getSheetByName(SHEET_NAMES.LOCATIONS);
+  if (locSheet && locSheet.getLastRow() <= 1) {
+    const defaultLocations = [
+      ['loc_main', '문콰이어 제1연습실 (명동)', '서울 중구 명동길 73', '가톨릭회관 3층 연습실', '정문 엘리베이터 이용 3층 302호', 37.5632, 126.9871, 200, 'TRUE'],
+      ['loc_sub', '세종문화회관 체임버홀 대기실', '서울 종로구 세종대로 175', '세종예술아카데미 리허설룸', '출연자 출입증 지참 후 지하 1층 대기실', 37.5724, 126.9756, 300, 'FALSE']
+    ];
+    locSheet.getRange(2, 1, defaultLocations.length, defaultLocations[0].length).setValues(defaultLocations);
+  }
+
+  const cardSheet = ss.getSheetByName(SHEET_NAMES.PROGRAM_CARDS);
+  if (cardSheet && cardSheet.getLastRow() <= 1) {
+    const defaultCards = [
+      {
+        id: 'card_fall_2026',
+        title: '2026 하반기 정기연습',
+        description: '가을 정기연습 16주 과정 및 제12회 정기연주회 대비',
+        category: '정기연습',
+        defaultLocationId: 'loc_main',
+        defaultStartTime: '19:30',
+        defaultEndTime: '21:30',
+        isArchived: 'FALSE',
+        createdAt: toKSTString('2026-08-01 00:00:00'),
+        targetAudienceType: 'ALL',
+        targetParts: '',
+        targetMemberIds: '',
+      },
+      {
+        id: 'card_special_2026',
+        title: '연주회 집중 리허설',
+        description: '정기연주회 전 파트 집중 점검 및 총 리허설',
+        category: '연주',
+        defaultLocationId: 'loc_main',
+        defaultStartTime: '14:00',
+        defaultEndTime: '18:00',
+        isArchived: 'FALSE',
+        createdAt: toKSTString('2026-09-01 00:00:00'),
+        targetAudienceType: 'ALL',
+        targetParts: '',
+        targetMemberIds: '',
+      }
+    ];
+    const headers = cardSheet.getRange(1, 1, 1, Math.max(cardSheet.getLastColumn(), 1)).getValues()[0];
+    defaultCards.forEach(function (cardObj) {
+      const row = headers.map(function (h) {
+        return cardObj[h] !== undefined ? cardObj[h] : '';
+      });
+      cardSheet.appendRow(row);
+    });
   }
 }
 
