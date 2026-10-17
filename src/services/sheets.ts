@@ -116,28 +116,40 @@ export class SheetsService {
   }
 
   public getMembers(includeMerged = false): Member[] {
-    // Auto-restore bound device profile if missing from member array
+    // Auto-restore or align bound device profile with member array
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        const boundRaw = window.localStorage.getItem('moonchoir_bound_device');
+        const boundRaw =
+          window.localStorage.getItem('moonchoir_bound_device_v1') ||
+          window.localStorage.getItem('moonchoir_bound_device');
         if (boundRaw) {
           const bound = JSON.parse(boundRaw);
-          if (bound && bound.memberId && !this.members.some((m) => m.id === bound.memberId)) {
-            const restored: Member = {
-              id: bound.memberId,
-              name: bound.name,
-              part: bound.part,
-              phoneLast4: bound.phoneLast4 || '0000',
-              role: bound.part === '선생님' ? 'ADMIN' : bound.part === '객원' ? 'GUEST' : 'MEMBER',
-              createdAt: new Date().toISOString(),
-              status: 'ACTIVE',
-              joinedAt: new Date().toISOString().slice(0, 10),
-              memberStatus: bound.part === '선생님' ? '선생님' : bound.part === '객원' ? '객원' : '정단원',
-              note: '',
-            };
-            this.members.push(restored);
-            saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
-            this.sendToGoogleSheet('REGISTER_MEMBER', restored).catch(() => {});
+          if (bound && bound.name) {
+            const existingByName = this.members.find((m) => m.name.trim() === String(bound.name).trim());
+            if (existingByName) {
+              if (bound.memberId !== existingByName.id) {
+                bound.memberId = existingByName.id;
+                bound.part = existingByName.part;
+                window.localStorage.setItem('moonchoir_bound_device_v1', JSON.stringify(bound));
+                window.localStorage.setItem('moonchoir_bound_device', JSON.stringify(bound));
+              }
+            } else if (bound.memberId && !this.members.some((m) => m.id === bound.memberId)) {
+              const restored: Member = {
+                id: bound.memberId,
+                name: bound.name,
+                part: bound.part,
+                phoneLast4: bound.phoneLast4 || '0000',
+                role: bound.part === '선생님' ? 'ADMIN' : bound.part === '객원' ? 'GUEST' : 'MEMBER',
+                createdAt: new Date().toISOString(),
+                status: 'ACTIVE',
+                joinedAt: new Date().toISOString().slice(0, 10),
+                memberStatus: bound.part === '선생님' ? '선생님' : bound.part === '객원' ? '객원' : '정단원',
+                note: '',
+              };
+              this.members.push(restored);
+              saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+              this.sendToGoogleSheet('REGISTER_MEMBER', restored).catch(() => {});
+            }
           }
         }
       }
@@ -211,10 +223,20 @@ export class SheetsService {
           return false;
         })
       : this.rsvpVotes;
+
+    const memberIdSet = new Set(this.members.map((m) => m.id));
+    const memberNameSet = new Set(this.members.map((m) => m.name.trim()));
+
     const map = new Map<string, RSVPVote>();
     list.forEach((v) => {
       if (!v.scheduleId || !v.memberId) return;
-      const key = `${String(v.scheduleId).trim()}_${String(v.memberId).trim()}`;
+      const mId = String(v.memberId).trim();
+      const mName = v.memberName ? String(v.memberName).trim() : '';
+      // Inner Join: exclude orphan/ghost votes from deleted or non-existent members
+      if (!memberIdSet.has(mId) && (!mName || !memberNameSet.has(mName))) {
+        return;
+      }
+      const key = `${String(v.scheduleId).trim()}_${mId}`;
       const existing = map.get(key);
       if (!existing || (v.timestamp && (!existing.timestamp || v.timestamp >= existing.timestamp))) {
         map.set(key, v);
@@ -224,21 +246,33 @@ export class SheetsService {
   }
 
   public getLogs(scheduleId?: string): RawAttendanceLog[] {
-    if (!scheduleId) return [...this.logs];
-    const targetSchedule = this.schedules.find((s) => s.id === scheduleId);
-    return this.logs.filter((l) => {
-      if (l.scheduleId === scheduleId) return true;
-      if (targetSchedule) {
-        // Fallback 1: scheduleId prefix matching (e.g. sch_20261022 vs sch_20261022_klyd)
-        if (l.scheduleId && (scheduleId.startsWith(l.scheduleId) || l.scheduleId.startsWith(scheduleId))) {
-          return true;
-        }
-        // Fallback 2: exact match on schedule date if log has timestamp with YYYY-MM-DD
-        if (l.timestamp && l.timestamp.length >= 10 && l.timestamp.slice(0, 10) === targetSchedule.date) {
-          return true;
-        }
-      }
-      return false;
+    const memberIdSet = new Set(this.members.map((m) => m.id));
+    const memberNameSet = new Set(this.members.map((m) => m.name.trim()));
+
+    const list = scheduleId
+      ? (() => {
+          const targetSchedule = this.schedules.find((s) => s.id === scheduleId);
+          return this.logs.filter((l) => {
+            if (l.scheduleId === scheduleId) return true;
+            if (targetSchedule) {
+              // Fallback 1: scheduleId prefix matching (e.g. sch_20261022 vs sch_20261022_klyd)
+              if (l.scheduleId && (scheduleId.startsWith(l.scheduleId) || l.scheduleId.startsWith(scheduleId))) {
+                return true;
+              }
+              // Fallback 2: exact match on schedule date if log has timestamp with YYYY-MM-DD
+              if (l.timestamp && l.timestamp.length >= 10 && l.timestamp.slice(0, 10) === targetSchedule.date) {
+                return true;
+              }
+            }
+            return false;
+          });
+        })()
+      : this.logs;
+
+    return list.filter((l) => {
+      const mId = String(l.memberId || '').trim();
+      const mName = l.memberName ? String(l.memberName).trim() : '';
+      return memberIdSet.has(mId) || (mName && memberNameSet.has(mName));
     });
   }
 
@@ -280,6 +314,22 @@ export class SheetsService {
 
   // --- Append-Only Write Operations ---
   public async addCheckInLog(log: RawAttendanceLog): Promise<RawAttendanceLog> {
+    if (log.memberId && !this.members.some((m) => m.id === log.memberId)) {
+      this.members.push({
+        id: log.memberId,
+        name: log.memberName || '단원',
+        part: log.part || '소프라노',
+        phoneLast4: '0000',
+        role: 'MEMBER',
+        createdAt: new Date().toISOString(),
+        status: 'ACTIVE',
+        joinedAt: new Date().toISOString().slice(0, 10),
+        memberStatus: '정단원',
+        note: '',
+      });
+      saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+    }
+
     this.logs.push(log);
     saveToStorage(STORAGE_KEYS.LOGS, this.logs);
 
@@ -293,6 +343,22 @@ export class SheetsService {
   }
 
   public async submitRSVP(vote: RSVPVote): Promise<RSVPVote> {
+    if (vote.memberId && !this.members.some((m) => m.id === vote.memberId)) {
+      this.members.push({
+        id: vote.memberId,
+        name: vote.memberName || '단원',
+        part: vote.part || '소프라노',
+        phoneLast4: '0000',
+        role: 'MEMBER',
+        createdAt: new Date().toISOString(),
+        status: 'ACTIVE',
+        joinedAt: new Date().toISOString().slice(0, 10),
+        memberStatus: '정단원',
+        note: '',
+      });
+      saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+    }
+
     const existingIndex = this.rsvpVotes.findIndex(
       (v) => v.scheduleId === vote.scheduleId && v.memberId === vote.memberId
     );
@@ -1220,7 +1286,9 @@ export class SheetsService {
         if (!this.members.some((m) => m.id === memberId) && v.memberName && primaryMemberIdByName.has(String(v.memberName).trim())) {
           memberId = primaryMemberIdByName.get(String(v.memberName).trim())!;
         }
-        if (!memberId) return;
+        // Ghost check: must match a member in this.members
+        const memberExists = this.members.some((m) => m.id === memberId);
+        if (!memberExists) return;
 
         const canonicalVote: RSVPVote = {
           ...v,
@@ -1237,16 +1305,24 @@ export class SheetsService {
     }
     const logList = data.logs || data.recentLogs;
     if (Array.isArray(logList)) {
-      this.logs = logList.map((l: RawAttendanceLog) => {
-        let memberId = String(l.memberId || '').trim();
-        if (!this.members.some((m) => m.id === memberId) && l.memberName && primaryMemberIdByName.has(String(l.memberName).trim())) {
-          memberId = primaryMemberIdByName.get(String(l.memberName).trim())!;
-        }
-        return {
-          ...l,
-          memberId,
-        };
-      });
+      this.logs = logList
+        .filter((l: RawAttendanceLog) => {
+          let memberId = String(l.memberId || '').trim();
+          if (!this.members.some((m) => m.id === memberId) && l.memberName && primaryMemberIdByName.has(String(l.memberName).trim())) {
+            memberId = primaryMemberIdByName.get(String(l.memberName).trim())!;
+          }
+          return this.members.some((m) => m.id === memberId);
+        })
+        .map((l: RawAttendanceLog) => {
+          let memberId = String(l.memberId || '').trim();
+          if (!this.members.some((m) => m.id === memberId) && l.memberName && primaryMemberIdByName.has(String(l.memberName).trim())) {
+            memberId = primaryMemberIdByName.get(String(l.memberName).trim())!;
+          }
+          return {
+            ...l,
+            memberId,
+          };
+        });
       saveToStorage(STORAGE_KEYS.LOGS, this.logs);
     }
     if (data.config && typeof data.config === 'object') {

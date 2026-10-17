@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Schedule } from '../types/rollbook';
+import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
 import { getCalendarGrid } from '../utils/calendar';
 import {
   IconCalendar,
@@ -180,12 +181,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         {selectedSchedules.length > 0 ? (
           <div className="selected-schedules-list">
             {selectedSchedules.map((sch) => {
-              const members = sheetsService.getMembers();
+              const activeMembers = sheetsService.getMembers().filter((m) => m.status === 'ACTIVE');
+              const targetForSch = activeMembers.filter((m) => isMemberRequiredForSchedule(m, sch.date, sch));
               const rsvps = sheetsService.getRSVPVotes(sch.id);
-              const myVote = rsvps.find((v) => v.memberId === profile.memberId);
-              const attendeesCount = rsvps.filter((v) => v.status === 'ATTEND').length;
-              const absenteesCount = rsvps.filter((v) => v.status === 'ABSENT').length;
-              const rate = members.length > 0 ? Math.round((attendeesCount / members.length) * 100) : 0;
+              const myVote = rsvps.find((v) => v.memberId === profile.memberId || (profile.name && v.memberName === profile.name));
+              const attendeesCount = rsvps.filter(
+                (v) =>
+                  v.status === 'ATTEND' &&
+                  targetForSch.some((tm) => tm.id === v.memberId || tm.name.trim() === v.memberName.trim())
+              ).length;
+              const absenteesCount = rsvps.filter(
+                (v) =>
+                  v.status === 'ABSENT' &&
+                  targetForSch.some((tm) => tm.id === v.memberId || tm.name.trim() === v.memberName.trim())
+              ).length;
+              const voluntaryCount = rsvps.filter(
+                (v) =>
+                  v.status === 'ATTEND' &&
+                  !targetForSch.some((tm) => tm.id === v.memberId || tm.name.trim() === v.memberName.trim())
+              ).length;
+              const totalCount = targetForSch.length;
+              const rate = totalCount > 0 ? Math.round((attendeesCount / totalCount) * 100) : (attendeesCount + voluntaryCount > 0 ? 100 : 0);
 
               return (
                 <div key={sch.id} className="selected-schedule-item-card">
@@ -252,11 +268,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
         <div className="month-events-feed compact" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {currentMonthSchedules.map((sch) => {
-            const members = sheetsService.getMembers();
+            const activeMembers = sheetsService.getMembers().filter((m) => m.status === 'ACTIVE');
+            const targetForSch = activeMembers.filter((m) => isMemberRequiredForSchedule(m, sch.date, sch));
             const rsvps = sheetsService.getRSVPVotes(sch.id);
-            const myVote = rsvps.find((v) => v.memberId === profile.memberId);
-            const attendeesCount = rsvps.filter((v) => v.status === 'ATTEND').length;
-            const rate = members.length > 0 ? Math.round((attendeesCount / members.length) * 100) : 0;
+            const myVote = rsvps.find((v) => v.memberId === profile.memberId || (profile.name && v.memberName === profile.name));
+            const attendeesCount = rsvps.filter(
+              (v) =>
+                v.status === 'ATTEND' &&
+                targetForSch.some((tm) => tm.id === v.memberId || tm.name.trim() === v.memberName.trim())
+            ).length;
+            const voluntaryCount = rsvps.filter(
+              (v) =>
+                v.status === 'ATTEND' &&
+                !targetForSch.some((tm) => tm.id === v.memberId || tm.name.trim() === v.memberName.trim())
+            ).length;
+            const totalCount = targetForSch.length;
+            const rate = totalCount > 0 ? Math.round((attendeesCount / totalCount) * 100) : (attendeesCount + voluntaryCount > 0 ? 100 : 0);
             const isSelected = sch.date === selectedDateStr;
 
             return (

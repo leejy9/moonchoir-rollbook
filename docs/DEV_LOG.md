@@ -493,12 +493,42 @@
   - `🔑 당일 현장 출석 PIN: [ 5 0 2 7 ]  [🔄 PIN 재발급]` 단일 체계 개편.
 
 ### 3. 작업 순서
-1. Task 51: 카카오맵 키워드/장소 검색 & 주소 지오코딩 및 엄격한 좌표 검증
-2. Task 52: 장소 프리셋 관계형 단일 진실 공급원(SSOT) 및 중복 버튼 제거
-3. Task 53: 대시보드 Master-Detail 카드 클릭 즉시 바인딩 & 간결한 [저장] 버튼
-4. Task 54: 단원 명부 불변 식별자(PK) 유지 & 선발 단원 릴레이션 동기화
-5. Task 55: 부드러운 워딩([🌿 자율 참여 연습]) & 담백한 미응답자 토글 명단 UI
-6. Task 56: 현장 출석 PIN 단일화 & 전수 통합 검증 (Green Bar)
+1. Task 51: 카카오맵 키워드/장소 검색 & 주소 지오코딩 및 엄격한 좌표 검증 (Completed)
+2. Task 52: 장소 프리셋 관계형 단일 진실 공급원(SSOT) 및 중복 버튼 제거 (Completed)
+3. Task 53: 대시보드 Master-Detail 카드 클릭 즉시 바인딩 & 간결한 [저장] 버튼 (Completed)
+4. Task 54: 단원 명부 불변 식별자(PK) 유지 & 양방향 상태 전이(정단원 ↔ 휴단원) 동적 투영 뷰 (Completed)
+5. Task 55: 부드러운 워딩([🌿 자율 참여 연습]), 분모 정규화 & 담백한 미응답자 토글 명단 UI (Completed)
+6. Task 56: 현장 출석 PIN 단일화 & 전수 통합 검증 (Green Bar) (Completed)
+
+---
+
+## [2026-10-17] Phase 4.8: 유령 레코드 배제(Ghost Purge), 동적 투영 뷰 & 분모 정규화 완료 (Tasks 54, 55, 56)
+
+### 1. 주요 구현 내용
+1. **유령 레코드 배제 (Ghost Record Purge)**:
+   - Google Sheet `사전투표_기록` 및 `출석_로그`에 잔여하는 테스트/고아 레코드(예: `김하은`)를 실존 단원 명부(`members`)와 교차 검증(Inner Join)하여, 명부에 없는 레코드가 화면 통계 및 명단에 노출되는 버그 완벽 차단 (`sheets.ts`).
+   - `fetchRemoteData` 수신 시 및 `getRSVPVotes`, `getLogs` 조회 시 자동 필터링 적용.
+2. **양방향 상태 전이(정단원 ↔ 휴단원) 동적 투영 뷰 (Dynamic Projection)**:
+   - 단원의 상태 변경(정단원 $\rightarrow$ 휴단원, 휴단원 $\rightarrow$ 정단원 복단) 시 원천 로그를 훼손하지 않고 실시간 동적 투영(Event Sourcing View Projection).
+   - 정단원 $\rightarrow$ 휴단원 전환 시: 미래 일정 필수 대상자(`targetMembers`)에서 즉시 제외. 기투표 내역은 `🌿 자율 참여 / 참관`으로 분리되어 정규 분모 및 미응답 명단을 왜곡하지 않음.
+   - 휴단원 $\rightarrow$ 정단원 복단 시: 미래 일정 필수 대상자에 즉시 편입되어 총원 분모(`totalTargetCount`)가 1 증가하고, 기투표 내역은 정규 참석으로 자동 승격되며, 미투표 시 미응답 명단에 등재.
+3. **분모 정규화 & 부드러운 자율 연습 UX**:
+   - `Math.max(targetMembers.length, uniqueVotes.length)` 비정상 코드 전면 제거 $\rightarrow$ `totalTargetCount = targetMembers.length`로 정규화.
+   - 비대상자 로그인 시 `[🌿 자율 참여 연습]` 배지, 부드러운 안내문구, `[개인 연습으로 참여 투표]` 버튼 제공.
+   - 투표 현황에 `mandatoryAttendees`, `mandatoryAbsentees`, `unvotedMembers`, `voluntaryAttendees` 4분할 반영 및 담백한 토글 명단 지원.
+4. **캘린더 뷰 및 다가오는 연습 참석률 산출식 정규화**:
+   - `count / members.length`의 비정상적 분모를 `scheduleTargetMembers.length` 기반으로 전면 교정 (`HomeView.tsx`, `CalendarView.tsx`).
+5. **선발 단원 식별자 보강**:
+   - 프로그램 카드 선발 단원 선택 행에 `(파트 · 뒷자리 4자리)` 병기 (`AdminDashboard.tsx`).
+6. **상설 당일 현장 PIN 단일화**:
+   - 상설 QR 서브탭에서 과거 일정 명칭 꼬리표 없는 단일 현장 PIN 발급 및 검증 체계 확립.
+
+### 2. 센서 검증 결과 (Green Bar)
+- `npm run typecheck`: 0 errors
+- `npm test`: 10 test files, 60/60 tests pass (신규 유령 레코드 배제 및 상태 전이 동적 투영 테스트 포함)
+- `npm run lint`: 0 errors
+- `npm run build`: Production bundle 성공 (818 kB / gzip 238 kB)
+
 
 
 

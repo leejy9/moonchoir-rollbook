@@ -176,15 +176,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
     return Array.from(map.values());
   }, [rsvpVotes]);
 
-  const attendees = useMemo(
-    () => uniqueVotes.filter((v) => v.status === 'ATTEND'),
-    [uniqueVotes]
-  );
-  const absentees = useMemo(
-    () => uniqueVotes.filter((v) => v.status === 'ABSENT'),
-    [uniqueVotes]
-  );
-
   // Target active members required for this schedule (accounting for audience selector & member status)
   const targetMembers = useMemo(() => {
     if (!activeSchedule) return [];
@@ -205,6 +196,41 @@ export const HomeView: React.FC<HomeViewProps> = ({
     }
     return Array.from(uniqueMap.values());
   }, [members, activeSchedule]);
+
+  const targetMemberIds = useMemo(() => new Set(targetMembers.map((m) => m.id)), [targetMembers]);
+  const targetMemberNames = useMemo(() => new Set(targetMembers.map((m) => m.name.trim())), [targetMembers]);
+
+  // Split attendees into mandatory target attendees vs voluntary/guest attendees
+  const mandatoryAttendees = useMemo(
+    () =>
+      uniqueVotes.filter(
+        (v) =>
+          v.status === 'ATTEND' &&
+          (targetMemberIds.has(v.memberId) || (v.memberName && targetMemberNames.has(v.memberName.trim())))
+      ),
+    [uniqueVotes, targetMemberIds, targetMemberNames]
+  );
+
+  const mandatoryAbsentees = useMemo(
+    () =>
+      uniqueVotes.filter(
+        (v) =>
+          v.status === 'ABSENT' &&
+          (targetMemberIds.has(v.memberId) || (v.memberName && targetMemberNames.has(v.memberName.trim())))
+      ),
+    [uniqueVotes, targetMemberIds, targetMemberNames]
+  );
+
+  const voluntaryAttendees = useMemo(
+    () =>
+      uniqueVotes.filter(
+        (v) =>
+          v.status === 'ATTEND' &&
+          !targetMemberIds.has(v.memberId) &&
+          (!v.memberName || !targetMemberNames.has(v.memberName.trim()))
+      ),
+    [uniqueVotes, targetMemberIds, targetMemberNames]
+  );
 
   // Voted names and IDs
   const votedNames = useMemo(
@@ -230,6 +256,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const currentMember = useMemo(() => {
     return (
       members.find((m) => m.id === profile.memberId) ||
+      (profile.name ? members.find((m) => m.name.trim() === profile.name.trim()) : undefined) ||
       ({
         id: profile.memberId,
         name: profile.name,
@@ -247,8 +274,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
     return isMemberRequiredForSchedule(currentMember, activeSchedule.date, activeSchedule);
   }, [currentMember, activeSchedule]);
 
-  const totalTargetCount = Math.max(targetMembers.length, uniqueVotes.length);
-  const attendRate = totalTargetCount > 0 ? Math.round((attendees.length / totalTargetCount) * 100) : 0;
+  // Denominator is strictly targetMembers.length (no artificial Math.max inflating)
+  const totalTargetCount = targetMembers.length;
+  const attendRate =
+    totalTargetCount > 0
+      ? Math.round((mandatoryAttendees.length / totalTargetCount) * 100)
+      : voluntaryAttendees.length > 0
+      ? 100
+      : 0;
 
   // Upcoming future schedules (from today onwards)
   const upcomingSchedules = useMemo(() => {
@@ -758,33 +791,39 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <div className="tally-header">
               <h3 className="tally-title">사전 참석 투표 현황</h3>
               <span className="tally-total">
-                {uniqueVotes.length}명 참여 / 총 {totalTargetCount}명
+                {mandatoryAttendees.length + mandatoryAbsentees.length}명 응답 / 총 {totalTargetCount}명
+                {voluntaryAttendees.length > 0 && ` (🌿 자율 ${voluntaryAttendees.length}명)`}
               </span>
             </div>
 
             <div className="tally-bar">
               <div
                 className="tally-bar-segment attend"
-                style={{ width: `${(attendees.length / Math.max(totalTargetCount, 1)) * 100}%` }}
-                title={`참석 ${attendees.length}명`}
+                style={{ width: `${(mandatoryAttendees.length / Math.max(totalTargetCount, 1)) * 100}%` }}
+                title={`필수 참석 ${mandatoryAttendees.length}명`}
               />
               <div
                 className="tally-bar-segment absent"
-                style={{ width: `${(absentees.length / Math.max(totalTargetCount, 1)) * 100}%` }}
-                title={`불참 ${absentees.length}명`}
+                style={{ width: `${(mandatoryAbsentees.length / Math.max(totalTargetCount, 1)) * 100}%` }}
+                title={`불참 ${mandatoryAbsentees.length}명`}
               />
             </div>
 
             <div className="tally-stat-chips">
               <span className="stat-chip attend">
-                <span className="chip-dot attend" /> 참석 {attendees.length}
+                <span className="chip-dot attend" /> 참석 {mandatoryAttendees.length}
               </span>
               <span className="stat-chip absent">
-                <span className="chip-dot absent" /> 불참 {absentees.length}
+                <span className="chip-dot absent" /> 불참 {mandatoryAbsentees.length}
               </span>
               <span className="stat-chip unvoted">
                 <span className="chip-dot unvoted" /> 미응답 {unvotedMembers.length}
               </span>
+              {voluntaryAttendees.length > 0 && (
+                <span className="stat-chip" style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}>
+                  <span className="chip-dot" style={{ background: '#10B981' }} /> 🌿 자율참관 {voluntaryAttendees.length}
+                </span>
+              )}
             </div>
 
             {/* Clean, Subtle Roster Disclosure Toggle */}
@@ -809,7 +848,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 }}
               >
                 <span>
-                  👥 단원 투표 명단 (참석 {attendees.length} · 불참 {absentees.length} · 미응답 {unvotedMembers.length})
+                  👥 단원 투표 명단 (참석 {mandatoryAttendees.length} · 불참 {mandatoryAbsentees.length} · 미응답 {unvotedMembers.length}
+                  {voluntaryAttendees.length > 0 ? ` · 🌿 자율 ${voluntaryAttendees.length}` : ''})
                 </span>
                 <span style={{ fontSize: '11px', color: '#94A3B8' }}>
                   {isRosterOpen ? '▲ 명단 접기' : '▼ 명단 펼치기'}
@@ -831,28 +871,40 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     gap: '10px',
                   }}
                 >
-                  {/* Attendees */}
+                  {/* Mandatory Attendees */}
                   <div>
                     <span style={{ fontWeight: 700, color: '#059669', display: 'block', marginBottom: '4px' }}>
-                      ✓ 참석 ({attendees.length}명)
+                      ✓ 참석 ({mandatoryAttendees.length}명)
                     </span>
-                    {attendees.length > 0 ? (
+                    {mandatoryAttendees.length > 0 ? (
                       <span style={{ color: '#475569', lineHeight: 1.6 }}>
-                        {attendees.map((a) => a.memberName).join(', ')}
+                        {mandatoryAttendees.map((a) => a.memberName).join(', ')}
                       </span>
                     ) : (
-                      <span style={{ color: '#94A3B8' }}>아직 참석 투표한 단원이 없습니다.</span>
+                      <span style={{ color: '#94A3B8' }}>아직 참석 투표한 필수 대상 단원이 없습니다.</span>
                     )}
                   </div>
 
+                  {/* Voluntary / Guest Attendees */}
+                  {voluntaryAttendees.length > 0 && (
+                    <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '6px', padding: '8px 10px' }}>
+                      <span style={{ fontWeight: 700, color: '#047857', display: 'block', marginBottom: '4px' }}>
+                        🌿 자율 참여 / 참관 ({voluntaryAttendees.length}명)
+                      </span>
+                      <span style={{ color: '#166534', lineHeight: 1.6 }}>
+                        {voluntaryAttendees.map((a) => a.memberName).join(', ')}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Absentees */}
-                  {absentees.length > 0 && (
+                  {mandatoryAbsentees.length > 0 && (
                     <div>
                       <span style={{ fontWeight: 700, color: '#DC2626', display: 'block', marginBottom: '4px' }}>
-                        ✕ 불참 ({absentees.length}명)
+                        ✕ 불참 ({mandatoryAbsentees.length}명)
                       </span>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                        {absentees.map((ab) => (
+                        {mandatoryAbsentees.map((ab) => (
                           <span key={ab.id} style={{ color: '#475569', lineHeight: 1.5 }}>
                             <strong>{ab.memberName}</strong>
                             {ab.reason ? ` (${ab.reason})` : ''}
@@ -872,7 +924,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         {unvotedMembers.map((m) => m.name).join(', ')}
                       </span>
                     ) : (
-                      <span style={{ color: '#059669' }}>모든 대상 단원이 응답을 완료했습니다! 🎉</span>
+                      <span style={{ color: '#059669' }}>모든 필수 대상 단원이 응답을 완료했습니다! 🎉</span>
                     )}
                   </div>
                 </div>
@@ -926,9 +978,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           ) : (
             upcomingSchedules.slice(0, 5).map((s) => {
+              const targetForSch = members.filter((m) => isMemberRequiredForSchedule(m, s.date, s));
               const votes = sheetsService.getRSVPVotes(s.id);
-              const count = votes.filter((v) => v.status === 'ATTEND').length;
-              const rate = members.length > 0 ? Math.round((count / members.length) * 100) : 0;
+              const count = votes.filter(
+                (v) =>
+                  v.status === 'ATTEND' &&
+                  targetForSch.some((tm) => tm.id === v.memberId || tm.name.trim() === v.memberName.trim())
+              ).length;
+              const totalCount = targetForSch.length;
+              const rate = totalCount > 0 ? Math.round((count / totalCount) * 100) : (votes.some((v) => v.status === 'ATTEND') ? 100 : 0);
               const isSelected = s.date === selectedDateStr;
 
               return (

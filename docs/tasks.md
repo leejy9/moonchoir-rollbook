@@ -530,7 +530,7 @@
   - 이재연을 휴단원에서 정단원으로 전환 시, 다음주 정기연습 대상자 목록 및 분모에 즉시 자동 반영됨.
   - 선발 단원 지정 시 `이재연 (테너 · 1234)`와 같이 구별 표기되어 정확한 단원 지정 가능 및 시트 저장 후 상태 100% 보존.
 - **Verification**: `npm test && npm run typecheck`
-- **Status**: [ ] Planned
+- **Status**: [x] Completed
 
 ---
 
@@ -554,7 +554,7 @@
   - 비대상자가 로그인했을 때 소외감 없이 자율 연습 안내 및 개인 연습 참여 버튼 노출.
   - 일정 카드 하단 토글을 누르면 담백한 회색 박스에 미응답자, 참석자, 불참자 명단이 깔끔하게 표시.
 - **Verification**: `npm test && npm run typecheck`
-- **Status**: [ ] Planned
+- **Status**: [x] Completed
 
 ---
 
@@ -568,7 +568,7 @@
   - 과거 일정 명칭 없는 깨끗한 단일 현장 PIN 발급 및 검증 정상 동작.
   - 4대 정적/단위 센서(typecheck, lint, test, build) 0 error 무결성 확인.
 - **Verification**: `npm test && npm run typecheck && npm run lint && npm run build`
-- **Status**: [ ] Planned
+- **Status**: [x] Completed
 
 ---
 

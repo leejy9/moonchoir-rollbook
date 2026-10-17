@@ -4562,7 +4562,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 fontSize: '11.5px',
                               }}
                             >
-                              <span><strong>{m.name}</strong> ({m.part})</span>
+                              <span>
+                                <strong>{m.name}</strong> ({m.part} · {m.phoneLast4 || '0000'})
+                              </span>
                               <span style={{ color: isSel ? '#4F46E5' : '#94A3B8', fontWeight: 600 }}>
                                 {isSel ? '선택됨 ✓' : '+ 추가'}
                               </span>

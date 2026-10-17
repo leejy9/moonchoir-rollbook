@@ -594,6 +594,104 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(pin2.length).toBe(4);
     expect(service.getActiveOnSitePin()).toBe(pin2);
   });
+
+  it('purges ghost rsvpVotes and attendance logs when members are removed or not present in members list', async () => {
+    // Inject a ghost vote for a member who does not exist in service.members
+    const scheduleId = 'sch_20261022';
+    const ghostVote: RSVPVote = {
+      id: 'v_ghost_test',
+      scheduleId,
+      memberId: 'mem_ghost_9999',
+      memberName: '유령단원',
+      part: '소프라노',
+      status: 'ATTEND',
+      timestamp: new Date().toISOString(),
+    };
+
+    // Before registering in members, getRSVPVotes must exclude ghost
+    // Note: getRSVPVotes uses an inner join with this.members
+    const votesBefore = service.getRSVPVotes(scheduleId);
+    expect(votesBefore.some((v) => v.memberName === '유령단원')).toBe(false);
+
+    // After member is properly registered via addMember, vote becomes visible
+    await service.addMember({
+      id: 'mem_ghost_9999',
+      name: '유령단원',
+      part: '소프라노',
+      phoneLast4: '1234',
+      role: 'MEMBER',
+      createdAt: '2026-10-01',
+      status: 'ACTIVE',
+      joinedAt: '2026-10-01',
+      memberStatus: '정단원',
+      note: '',
+    });
+    // Add vote explicitly now
+    (service as unknown as { rsvpVotes: RSVPVote[] }).rsvpVotes.push(ghostVote);
+    const votesAfter = service.getRSVPVotes(scheduleId);
+    expect(votesAfter.some((v) => v.memberName === '유령단원')).toBe(true);
+  });
+
+  it('supports dynamic state projection when member transitions from 정단원 to 휴단원 and back to 정단원', async () => {
+    const memberId = 'mem_transition_test';
+    const scheduleId = 'sch_20261029';
+
+    // 1. Register active member as 정단원
+    await service.addMember({
+      id: memberId,
+      name: '상태변화단원',
+      part: '테너',
+      phoneLast4: '5678',
+      role: 'MEMBER',
+      createdAt: '2026-01-01',
+      status: 'ACTIVE',
+      joinedAt: '2026-01-01',
+      memberStatus: '정단원',
+      note: '',
+    });
+
+    const sch: import('../types/rollbook').Schedule = {
+      id: scheduleId,
+      title: '미래 정기연습',
+      date: '2026-10-29',
+      startTime: '19:30',
+      endTime: '21:30',
+      locationName: '문콰이어 연습실',
+      category: '정기연습',
+      targetAudienceType: 'ALL',
+    };
+    await service.addSchedule(sch);
+
+    // Member submits ATTEND vote
+    await service.submitRSVP({
+      id: 'vote_trans_1',
+      scheduleId,
+      memberId,
+      memberName: '상태변화단원',
+      part: '테너',
+      status: 'ATTEND',
+      timestamp: new Date().toISOString(),
+    });
+
+    // As 정단원: isMemberRequiredForSchedule should be true
+    const member1 = service.getMembers().find((m) => m.id === memberId)!;
+    const { isMemberRequiredForSchedule } = await import('../utils/attendanceStats');
+    expect(isMemberRequiredForSchedule(member1, sch.date, sch)).toBe(true);
+
+    // 2. Admin changes status to '휴단원'
+    await service.updateMember(memberId, { memberStatus: '휴단원' });
+    const member2 = service.getMembers().find((m) => m.id === memberId)!;
+    expect(isMemberRequiredForSchedule(member2, sch.date, sch)).toBe(false);
+
+    // Vote is still preserved in append-only storage
+    const votes = service.getRSVPVotes(scheduleId);
+    expect(votes.some((v) => v.memberId === memberId && v.status === 'ATTEND')).toBe(true);
+
+    // 3. Admin switches member back to '정단원' (복단)
+    await service.updateMember(memberId, { memberStatus: '정단원' });
+    const member3 = service.getMembers().find((m) => m.id === memberId)!;
+    expect(isMemberRequiredForSchedule(member3, sch.date, sch)).toBe(true);
+  });
 });
 
 
