@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, RSVPVote, Schedule } from '../types/rollbook';
 import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
@@ -73,10 +73,27 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [currentYear, setCurrentYear] = useState(() => parseInt(todayStr.slice(0, 4), 10));
   const [currentMonthIndex, setCurrentMonthIndex] = useState(() => parseInt(todayStr.slice(5, 7), 10) - 1);
   const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
+  const [userSelectedScheduleId, setUserSelectedScheduleId] = useState<string | null>(null);
 
   const schedules = sheetsService.getSchedules();
   const members = sheetsService.getMembers().filter((m) => m.status === 'ACTIVE');
   const allLogs = sheetsService.getLogs();
+
+  const currentMember = useMemo(() => {
+    return (
+      members.find((m) => m.id === profile.memberId) ||
+      (profile.name ? members.find((m) => m.name.trim() === profile.name.trim()) : undefined) ||
+      ({
+        id: profile.memberId,
+        name: profile.name,
+        part: profile.part,
+        phoneLast4: profile.phoneLast4,
+        role: 'MEMBER',
+        status: 'ACTIVE',
+        joinedAt: '2020-01-01',
+      } as Member)
+    );
+  }, [members, profile]);
 
   // Map user's attended schedules
   const myLogsByScheduleId = useMemo(() => {
@@ -129,20 +146,103 @@ export const HomeView: React.FC<HomeViewProps> = ({
     }
   };
 
-  // Determine active schedule
-  const activeSchedule: Schedule | undefined = useMemo(() => {
-    const list = schedulesByDate.get(selectedDateStr) || [];
-    // 1. If in Calendar tab and user selected a date that has a schedule
-    if (homeViewTab === 'CALENDAR' && list.length > 0) {
-      return list[0];
+  // Priority score for smart auto-ranking:
+  // 1. Time state urgency: OPEN (300) > UPCOMING (200) > CLOSED (100)
+  // 2. Member target relevance: Mandatory for me (+50) > Voluntary/Guest (+0)
+  const getSchedulePriorityScore = useCallback(
+    (sch: Schedule): number => {
+      const win = getCheckInWindowState(sch, currentNow);
+      let timeScore = 100;
+      if (win.isOpen) {
+        timeScore = 300;
+      } else if (win.status !== 'WINDOW_CLOSED') {
+        timeScore = 200;
+      }
+
+      const isTarget = isMemberRequiredForSchedule(currentMember, sch.date, sch);
+      const targetScore = isTarget ? 50 : 0;
+
+      return timeScore + targetScore;
+    },
+    [currentNow, currentMember]
+  );
+
+  // Candidate schedules for currently focused day, sorted by priority descending
+  const activeDateSchedules = useMemo(() => {
+    let list = schedulesByDate.get(selectedDateStr) || [];
+    if (list.length === 0) {
+      const todayList = schedulesByDate.get(todayStr) || [];
+      if (todayList.length > 0) {
+        list = todayList;
+      } else {
+        const nextSch = schedules.find((s) => s.date >= todayStr);
+        list = nextSch ? schedulesByDate.get(nextSch.date) || [nextSch] : schedules.slice(0, 1);
+      }
     }
-    // 2. Otherwise today's schedule or next upcoming
-    return (
-      schedules.find((s) => s.date === todayStr) ||
-      schedules.find((s) => s.date >= todayStr) ||
-      schedules[0]
-    );
-  }, [homeViewTab, schedulesByDate, selectedDateStr, schedules, todayStr]);
+
+    return [...list].sort((a, b) => {
+      const scoreA = getSchedulePriorityScore(a);
+      const scoreB = getSchedulePriorityScore(b);
+      if (scoreB !== scoreA) {
+        return scoreB - scoreA;
+      }
+      return a.startTime.localeCompare(b.startTime);
+    });
+  }, [schedulesByDate, selectedDateStr, todayStr, schedules, getSchedulePriorityScore]);
+
+  // Safe active schedule resolution (Clamping & Fallback Guard)
+  const activeSchedule: Schedule | undefined = useMemo(() => {
+    if (activeDateSchedules.length === 0) return undefined;
+    if (userSelectedScheduleId) {
+      const found = activeDateSchedules.find((s) => s.id === userSelectedScheduleId);
+      if (found) return found;
+    }
+    // Default to the top-priority schedule
+    return activeDateSchedules[0];
+  }, [activeDateSchedules, userSelectedScheduleId]);
+
+  const activeScheduleIndex = useMemo(() => {
+    if (!activeSchedule) return 0;
+    const idx = activeDateSchedules.findIndex((s) => s.id === activeSchedule.id);
+    return idx >= 0 ? idx : 0;
+  }, [activeDateSchedules, activeSchedule]);
+
+  const handlePrevSchedule = () => {
+    if (activeDateSchedules.length <= 1) return;
+    const prevIdx = activeScheduleIndex > 0 ? activeScheduleIndex - 1 : activeDateSchedules.length - 1;
+    setUserSelectedScheduleId(activeDateSchedules[prevIdx].id);
+  };
+
+  const handleNextSchedule = () => {
+    if (activeDateSchedules.length <= 1) return;
+    const nextIdx = activeScheduleIndex < activeDateSchedules.length - 1 ? activeScheduleIndex + 1 : 0;
+    setUserSelectedScheduleId(activeDateSchedules[nextIdx].id);
+  };
+
+  // Touch Swipe Gesture Handling with vertical scroll guard (threshold 45px)
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+    setTouchStartY(e.touches[0].clientY);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null || touchStartY === null) return;
+    const diffX = e.changedTouches[0].clientX - touchStartX;
+    const diffY = e.changedTouches[0].clientY - touchStartY;
+    setTouchStartX(null);
+    setTouchStartY(null);
+
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 45) {
+      if (diffX < 0) {
+        handleNextSchedule();
+      } else {
+        handlePrevSchedule();
+      }
+    }
+  };
 
   const windowState = activeSchedule
     ? getCheckInWindowState(activeSchedule, currentNow)
@@ -253,21 +353,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
     });
   }, [targetMembers, votedNames, votedIds]);
 
-  const currentMember = useMemo(() => {
-    return (
-      members.find((m) => m.id === profile.memberId) ||
-      (profile.name ? members.find((m) => m.name.trim() === profile.name.trim()) : undefined) ||
-      ({
-        id: profile.memberId,
-        name: profile.name,
-        part: profile.part,
-        phoneLast4: profile.phoneLast4,
-        role: 'MEMBER',
-        status: 'ACTIVE',
-        joinedAt: '2020-01-01',
-      } as Member)
-    );
-  }, [members, profile]);
 
   const isTargetMember = useMemo(() => {
     if (!activeSchedule) return true;
@@ -434,6 +519,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     setCurrentYear(todayYear);
                     setCurrentMonthIndex(todayMonth);
                     setSelectedDateStr(todayStr);
+                    setUserSelectedScheduleId(null);
                   }}
                   style={{
                     fontSize: '0.75rem',
@@ -519,7 +605,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   className={`calendar-cell ${day.isCurrentMonth ? '' : 'dimmed'} ${
                     isToday ? 'today' : ''
                   } ${isSelected ? 'selected' : ''}`}
-                  onClick={() => setSelectedDateStr(day.dateStr)}
+                  onClick={() => {
+                    setSelectedDateStr(day.dateStr);
+                    setUserSelectedScheduleId(null);
+                  }}
                   role="button"
                   tabIndex={0}
                   aria-label={`${day.dateStr} 일정 선택`}
@@ -583,7 +672,100 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
       {/* Main Active / Selected Rehearsal Card */}
       {activeSchedule ? (
-        <section className="active-schedule-card">
+        <section
+          className="active-schedule-card"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Multi-Schedule Carousel Switcher (Rendered only when 2+ schedules exist) */}
+          {activeDateSchedules.length > 1 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                borderRadius: '10px',
+                padding: '6px 12px',
+                marginBottom: '14px',
+              }}
+            >
+              <button
+                type="button"
+                onClick={handlePrevSchedule}
+                style={{
+                  background: '#FFFFFF',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '6px',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  color: '#475569',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                }}
+                title="이전 일정 보기"
+                aria-label="이전 일정 보기"
+              >
+                ◀
+              </button>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B' }}>
+                  {activeSchedule.date === todayStr ? '오늘' : activeSchedule.date} 일정 {activeScheduleIndex + 1}/{activeDateSchedules.length}
+                  <span style={{ color: '#4F46E5', marginLeft: '6px' }}>({activeSchedule.startTime})</span>
+                </span>
+                {/* Dot Indicators */}
+                <div style={{ display: 'flex', gap: '5px' }}>
+                  {activeDateSchedules.map((sch, i) => (
+                    <span
+                      key={sch.id}
+                      onClick={() => setUserSelectedScheduleId(sch.id)}
+                      style={{
+                        width: i === activeScheduleIndex ? '16px' : '6px',
+                        height: '6px',
+                        borderRadius: '3px',
+                        background: i === activeScheduleIndex ? '#4F46E5' : '#CBD5E1',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                      title={`${sch.title} (${sch.startTime})`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleNextSchedule}
+                style={{
+                  background: '#FFFFFF',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '6px',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  color: '#475569',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                }}
+                title="다음 일정 보기"
+                aria-label="다음 일정 보기"
+              >
+                ▶
+              </button>
+            </div>
+          )}
+
           <div className="schedule-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
               <span className="schedule-category-badge">{activeSchedule.category}</span>
@@ -939,7 +1121,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </p>
           <button
             type="button"
-            onClick={() => setSelectedDateStr(todayStr)}
+            onClick={() => {
+              setSelectedDateStr(todayStr);
+              setUserSelectedScheduleId(null);
+            }}
             style={{
               padding: '8px 16px',
               borderRadius: '8px',
@@ -1006,6 +1191,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   }}
                   onClick={() => {
                     setSelectedDateStr(s.date);
+                    setUserSelectedScheduleId(s.id);
                     setHomeViewTab('CALENDAR');
                   }}
                 >
