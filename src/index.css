@@ -3748,6 +3748,17 @@ a {
   gap: 6px;
 }
 
+.modern-field-group.full-width,
+.form-responsive-grid .modern-field-group.full-width {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+}
+
+.modern-field-group.full-width .modern-textarea {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
 .modern-field-label {
   font-size: 13px;
   font-weight: 700;

@@ -30,7 +30,18 @@ function doGet(e) {
 
     const members = readSheetData(ss.getSheetByName(SHEET_NAMES.MEMBERS));
     const schedules = readSheetData(ss.getSheetByName(SHEET_NAMES.SCHEDULES));
-    const rsvpVotes = readSheetData(ss.getSheetByName(SHEET_NAMES.RSVP));
+    const rawRsvpVotes = readSheetData(ss.getSheetByName(SHEET_NAMES.RSVP));
+    // Deduplicate RSVP votes by scheduleId + memberId (keep latest by timestamp or last row)
+    const rsvpMap = {};
+    rawRsvpVotes.forEach(function (v) {
+      if (!v.scheduleId || !v.memberId) return;
+      const key = String(v.scheduleId).trim() + '_' + String(v.memberId).trim();
+      const existing = rsvpMap[key];
+      if (!existing || (v.timestamp && (!existing.timestamp || v.timestamp >= existing.timestamp))) {
+        rsvpMap[key] = v;
+      }
+    });
+    const rsvpVotes = Object.keys(rsvpMap).map(function (k) { return rsvpMap[k]; });
     const logs = readSheetData(ss.getSheetByName(SHEET_NAMES.LOGS));
     const locSheet = ss.getSheetByName(SHEET_NAMES.LOCATIONS);
     const locations = locSheet ? readSheetData(locSheet) : [];
@@ -103,12 +114,16 @@ function doPost(e) {
       const sheet = ss.getSheetByName(SHEET_NAMES.RSVP);
       const rows = sheet.getDataRange().getValues();
       let rowIndex = -1;
+      const duplicateRowIndices = [];
 
       for (let i = 1; i < rows.length; i++) {
         if (String(rows[i][1]).trim() === String(data.scheduleId).trim() &&
             String(rows[i][2]).trim() === String(data.memberId).trim()) {
-          rowIndex = i + 1;
-          break;
+          if (rowIndex === -1) {
+            rowIndex = i + 1;
+          } else {
+            duplicateRowIndices.push(i + 1);
+          }
         }
       }
 
@@ -128,6 +143,12 @@ function doPost(e) {
       } else {
         sheet.appendRow(rowData);
       }
+
+      // 과거 테스트 등으로 인해 혹시 남아있는 중복 행이 있다면 역순으로 자동 정리
+      for (let d = duplicateRowIndices.length - 1; d >= 0; d--) {
+        sheet.deleteRow(duplicateRowIndices[d]);
+      }
+
       return jsonResponse({ success: true, message: '사전 투표 저장 완료' });
     }
 

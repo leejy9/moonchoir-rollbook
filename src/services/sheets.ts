@@ -192,8 +192,17 @@ export class SheetsService {
   }
 
   public getRSVPVotes(scheduleId?: string): RSVPVote[] {
-    if (!scheduleId) return [...this.rsvpVotes];
-    return this.rsvpVotes.filter((v) => v.scheduleId === scheduleId);
+    const list = scheduleId ? this.rsvpVotes.filter((v) => v.scheduleId === scheduleId) : this.rsvpVotes;
+    const map = new Map<string, RSVPVote>();
+    list.forEach((v) => {
+      if (!v.scheduleId || !v.memberId) return;
+      const key = `${String(v.scheduleId).trim()}_${String(v.memberId).trim()}`;
+      const existing = map.get(key);
+      if (!existing || (v.timestamp && (!existing.timestamp || v.timestamp >= existing.timestamp))) {
+        map.set(key, v);
+      }
+    });
+    return Array.from(map.values());
   }
 
   public getLogs(scheduleId?: string): RawAttendanceLog[] {
@@ -938,7 +947,16 @@ export class SheetsService {
       saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
     }
     if (Array.isArray(data.rsvpVotes)) {
-      this.rsvpVotes = data.rsvpVotes;
+      const voteMap = new Map<string, RSVPVote>();
+      data.rsvpVotes.forEach((v) => {
+        if (!v.scheduleId || !v.memberId) return;
+        const key = `${String(v.scheduleId).trim()}_${String(v.memberId).trim()}`;
+        const existing = voteMap.get(key);
+        if (!existing || (v.timestamp && (!existing.timestamp || v.timestamp >= existing.timestamp))) {
+          voteMap.set(key, v);
+        }
+      });
+      this.rsvpVotes = Array.from(voteMap.values());
       saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
     }
     const logList = data.logs || data.recentLogs;

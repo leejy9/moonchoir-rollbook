@@ -240,7 +240,7 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
 
           <form id="schedule-edit-form" onSubmit={handleSubmit} className="modern-form-wrapper">
             <div className="form-responsive-grid">
-              <div className="modern-field-group full-width">
+              <div className="modern-field-group">
                 <label className="modern-field-label">일정 명칭 *</label>
                 <input
                   type="text"
@@ -332,7 +332,7 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
                 />
               </div>
 
-              <div className="modern-field-group full-width">
+              <div className="modern-field-group">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label className="modern-field-label">연습 장소 (장소 프리셋)</label>
                   <button
@@ -348,7 +348,7 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
                       padding: 0,
                     }}
                   >
-                    🗺️ 지도에서 새 장소 검색/등록
+                    🗺️ 새 장소 검색
                   </button>
                 </div>
                 <div className="modern-select-wrapper">
@@ -368,17 +368,20 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
                         {loc.name} ({loc.address || '주소 미입력'} · 반경 {loc.radiusMeters}m)
                       </option>
                     ))}
-                    <option value="__NEW_LOCATION__">🗺️ + 새 연습실 등록 (지도/도로명 검색)...</option>
+                    <option value="__NEW_LOCATION__">🗺️ + 새 연습실 등록...</option>
                   </select>
                 </div>
               </div>
 
-              <div className="modern-field-group full-width">
+              <div
+                className="modern-field-group full-width"
+                style={{ gridColumn: '1 / -1', width: '100%' }}
+              >
                 <label className="modern-field-label">연습 곡목 및 메모</label>
                 <textarea
                   className="modern-textarea"
                   rows={5}
-                  style={{ minHeight: '120px', lineHeight: '1.6' }}
+                  style={{ minHeight: '130px', width: '100%', boxSizing: 'border-box', lineHeight: '1.6' }}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="연습할 곡목이나 단원 공지사항을 입력하세요 (줄바꿈 지원)"

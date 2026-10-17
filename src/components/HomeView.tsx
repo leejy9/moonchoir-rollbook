@@ -186,9 +186,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
             className="profile-pill-btn"
             onClick={handleProfileClick}
             title="내 출결 성적표 및 프로필 열람"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
             <span className={`part-badge part-${profile.part}`}>{profile.part}</span>
             <span className="profile-name">{profile.name}</span>
+            <span style={{ fontSize: '11px', background: '#4338ca', color: '#fff', padding: '2px 6px', borderRadius: '6px', fontWeight: 700 }}>
+              📊 성적표
+            </span>
           </button>
 
           <button
@@ -202,6 +206,58 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </button>
         </div>
       </header>
+
+      {/* Prominent Quick Access Banner: 내 출결 성적표 */}
+      <div
+        className="member-portal-trigger-card"
+        onClick={handleProfileClick}
+        role="button"
+        tabIndex={0}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+          border: '1px solid #c7d2fe',
+          borderRadius: '14px',
+          padding: '12px 16px',
+          margin: '0 0 14px',
+          cursor: 'pointer',
+          transition: 'all 0.15s ease',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '24px' }}>📊</span>
+          <div>
+            <strong style={{ fontSize: '14px', color: '#1e1b4b', display: 'block' }}>
+              {profile.name} 단원 출결 성적표 & 원천 로그
+            </strong>
+            <span style={{ fontSize: '12px', color: '#4338ca' }}>
+              내 출석률, 과거 출석 타임스탬프, 사전 투표 내역 확인하기
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleProfileClick();
+          }}
+          style={{
+            background: '#4f46e5',
+            color: '#ffffff',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '7px 14px',
+            fontSize: '12.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          성적표 열기 ›
+        </button>
+      </div>
 
       {/* View Switcher Tabs: 캘린더 일체형 뷰 vs 리스트 뷰 */}
       <div
