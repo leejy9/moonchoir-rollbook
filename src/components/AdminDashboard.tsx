@@ -22,7 +22,6 @@ import {
 } from '../utils/calendar';
 import {
   generateMasterWallQRPayload,
-  generateRehearsalQRPayload,
 } from '../utils/qr';
 import {
   IconCalendar,
@@ -310,11 +309,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     () => choirConfig.qrPrintNotice || '스마트폰 카메라로 비추거나 문콰이어 앱 [출석하기] 버튼을 눌러 스캔하세요.'
   );
   const [qrTextSavedMsg, setQrTextSavedMsg] = useState(false);
-  const [qrMode, setQrMode] = useState<'MASTER' | 'SESSION'>('MASTER');
   const [pinRegenMsg, setPinRegenMsg] = useState('');
 
   // --- 5. Add Schedule State (4-Mode Engine & Audience Selector) ---
   const [scheduleAddMode, setScheduleAddMode] = useState<ScheduleAddMode>('SINGLE');
+  const [editingScheduleForForm, setEditingScheduleForForm] = useState<Schedule | null>(null);
+  const [showPastSchedules, setShowPastSchedules] = useState(false);
+  const [locationMode, setLocationMode] = useState<'PRESET' | 'DIRECT'>('PRESET');
   const [newTitle, setNewTitle] = useState('');
   const [newDate, setNewDate] = useState(() => getTodayString());
   const [newStartTime, setNewStartTime] = useState('19:30');
@@ -528,9 +529,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [schedules, showArchivedSchedules, locationPresets, defaultLocName]);
 
+  const pastSchedulesCount = useMemo(() => {
+    const todayStr = getTodayString();
+    return schedules.filter((s) => !s.isArchived && s.date < todayStr).length;
+  }, [schedules]);
+
   const filteredAllSchedules = useMemo(() => {
+    const todayStr = getTodayString();
     return schedules.filter((s) => {
       if (!showArchivedSchedules && s.isArchived) return false;
+      if (!showPastSchedules && s.date < todayStr) return false;
       const q = allScheduleSearch.trim().toLowerCase();
       const matchSearch =
         !q ||
@@ -541,7 +549,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const matchCat = allScheduleCatFilter === 'ALL' || s.category === allScheduleCatFilter;
       return matchSearch && matchCat;
     });
-  }, [schedules, allScheduleSearch, allScheduleCatFilter, showArchivedSchedules]);
+  }, [schedules, allScheduleSearch, allScheduleCatFilter, showArchivedSchedules, showPastSchedules]);
 
   const handleAddNewLocationPresetFromModal = async (newPreset: LocationPreset) => {
     await sheetsService.addLocationPreset(newPreset);
@@ -1053,7 +1061,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Create Schedule (4-Mode Engine: Single / Interval / DayOfWeek / CalendarPick)
+  const handleBindScheduleToForm = (sch: Schedule) => {
+    setEditingScheduleForForm(sch);
+    setNewTitle(sch.title);
+    setNewDate(sch.date);
+    setNewStartTime(sch.startTime);
+    setNewEndTime(sch.endTime);
+    setSelectedLocationPresetId(sch.locationId || 'custom');
+    setNewLocName(sch.locationName);
+    setNewLat(sch.targetLat);
+    setNewLon(sch.targetLon);
+    setNewRadius(sch.radiusMeters);
+    setNewCategory(sch.category);
+    setNewDesc(sch.description || '');
+    setSelectedProgramCardId(sch.programId || '');
+    setNewTargetAudienceType(sch.targetAudienceType || 'ALL');
+    setNewTargetParts(sch.targetParts || []);
+    setNewTargetMemberIds(sch.targetMemberIds || []);
+    setScheduleAddMode('SINGLE');
+    setScheduleSuccessMsg(`[${sch.title}] 일정이 우측 수정 폼에 인라인 바인딩되었습니다.`);
+    setTimeout(() => setScheduleSuccessMsg(''), 3000);
+  };
+
+  const handleCloneScheduleToForm = (sch: Schedule) => {
+    setEditingScheduleForForm(null);
+    setNewTitle(`${sch.title} (복제)`);
+    setNewDate(getTodayString());
+    setNewStartTime(sch.startTime);
+    setNewEndTime(sch.endTime);
+    setSelectedLocationPresetId(sch.locationId || 'custom');
+    setNewLocName(sch.locationName);
+    setNewLat(sch.targetLat);
+    setNewLon(sch.targetLon);
+    setNewRadius(sch.radiusMeters);
+    setNewCategory(sch.category);
+    setNewDesc(sch.description || '');
+    setSelectedProgramCardId(sch.programId || '');
+    setNewTargetAudienceType(sch.targetAudienceType || 'ALL');
+    setNewTargetParts(sch.targetParts || []);
+    setNewTargetMemberIds(sch.targetMemberIds || []);
+    setScheduleAddMode('SINGLE');
+    setScheduleSuccessMsg(`[${sch.title}] 일정을 복제하여 오늘 날짜(${getTodayString()}) 기준으로 우측 폼에 세팅했습니다.`);
+    setTimeout(() => setScheduleSuccessMsg(''), 4500);
+  };
+
+  // Create or Update Schedule (In-place & 4-Mode Engine)
   const handleCreateScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
@@ -1071,6 +1123,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
 
     const foundLoc = locationPresets.find((l) => l.id === selectedLocationPresetId);
+
+    // In-place update existing schedule
+    if (editingScheduleForForm) {
+      const updates: Partial<Schedule> = {
+        title: newTitle.trim(),
+        date: newDate,
+        startTime: newStartTime,
+        endTime: newEndTime,
+        locationName: newLocName.trim(),
+        locationId: foundLoc ? foundLoc.id : undefined,
+        detailAddress: foundLoc?.detailAddress,
+        entranceNote: foundLoc?.entranceNote,
+        targetLat: newLat,
+        targetLon: newLon,
+        radiusMeters: newRadius,
+        category: finalCategory,
+        description: newDesc.trim() || undefined,
+        programId: selectedProgramCardId || undefined,
+        targetAudienceType: newTargetAudienceType,
+        targetParts: newTargetAudienceType === 'PARTS' ? newTargetParts : undefined,
+        targetMemberIds: newTargetAudienceType === 'CUSTOM_MEMBERS' ? newTargetMemberIds : undefined,
+      };
+
+      await sheetsService.updateSchedule(editingScheduleForForm.id, updates);
+      setEditingScheduleForForm(null);
+      setScheduleSuccessMsg(`[${newTitle.trim()}] 일정이 인라인으로 즉시 수정되었습니다.`);
+      onDataChanged();
+      setTimeout(() => setScheduleSuccessMsg(''), 4000);
+      return;
+    }
+
     const baseSchedule = {
       title: newTitle.trim(),
       date: newDate,
@@ -1195,13 +1278,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Active QR payload
-  const activeQrPayload =
-    qrMode === 'MASTER'
-      ? generateMasterWallQRPayload(config.masterQrToken || 'mq_master_default')
-      : currentSchedule
-      ? generateRehearsalQRPayload(currentSchedule.id)
-      : '';
+  // Unified Master Wall QR payload
+  const activeQrPayload = generateMasterWallQRPayload(
+    config.masterQrToken || 'mq_master_default'
+  );
 
   return (
     <div className="admin-container">
@@ -1688,7 +1768,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               className={`subsegment-pill ${scheduleSubTab === 'QR' ? 'active' : ''}`}
               onClick={() => setScheduleSubTab('QR')}
             >
-              🖨️ 상설 QR & 출석 PIN 발급
+              🖨️ 출석 QR 코드
             </button>
             <button
               type="button"
@@ -1852,175 +1932,171 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
-          {/* Sub-tab 2: PERMANENT MASTER QR & CUSTOM PRINT & ON-SITE PIN */}
+          {/* Sub-tab 2: 출석 QR 코드 & 현장 PIN 보조 */}
           {scheduleSubTab === 'QR' && (
-        <div className="qr-print-card">
-          {/* Mode Selector */}
-          <div className="toss-filter-row" style={{ marginBottom: '14px' }}>
-            <button
-              type="button"
-              className={`toss-filter-chip ${qrMode === 'MASTER' ? 'active' : ''}`}
-              onClick={() => setQrMode('MASTER')}
-              style={{ flex: 1, justifyContent: 'center' }}
-            >
-              🏢 벽면 상설 마스터 QR (영구 부착용)
-            </button>
-            <button
-              type="button"
-              className={`toss-filter-chip ${qrMode === 'SESSION' ? 'active' : ''}`}
-              onClick={() => setQrMode('SESSION')}
-              style={{ flex: 1, justifyContent: 'center' }}
-            >
-              📅 당일 특정 회차 QR
-            </button>
-          </div>
-
-          {/* On-Site Temporary PIN Banner */}
-          {currentSchedule && (
-            <div
-              className="toss-section-card"
-              style={{
-                backgroundColor: '#f8f9fa',
-                marginBottom: '16px',
-                textAlign: 'center',
-                padding: '16px',
-              }}
-            >
-              <span style={{ fontSize: '13px', color: '#6b7684' }}>
-                외부 연습실 / 임시 출결용 <strong>당일 현장 4자리 PIN</strong>
-              </span>
-              <div
-                style={{
-                  fontSize: '32px',
-                  fontWeight: 800,
-                  color: 'var(--brand-accent)',
-                  letterSpacing: '8px',
-                  margin: '8px 0',
-                }}
-              >
-                {currentSchedule.checkInPin || '1234'}
+            <div className="qr-print-card">
+              <div style={{ marginBottom: '16px' }}>
+                <h2 className="section-title" style={{ margin: 0 }}>출석 QR 코드</h2>
+                <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
+                  연습실 벽면 부착 및 스크린 디스플레이용 QR 코드입니다. 단원들이 스캔하면 진행 중인 일정으로 자동 매칭되어 즉시 출석 체크됩니다.
+                </p>
               </div>
-              <p style={{ fontSize: '12px', color: '#8b95a1', margin: 0 }}>
-                * 단원들이 앱의 [현장 PIN 입력] 탭에서 입력하면 GPS 반경 100m 검증 후 정상 출석 처리됩니다.
-              </p>
-              <button
-                type="button"
-                className="btn-sync"
-                style={{ marginTop: '10px', fontSize: '12px', padding: '6px 12px' }}
-                onClick={handleRegenSessionPin}
-              >
-                PIN 번호 재발급
-              </button>
+
+              {/* Printable Frame */}
+              <div className="printable-qr-container">
+                <h2 className="print-choir-title">{printTitle}</h2>
+                <h3 className="print-schedule-title">{printSubtitle}</h3>
+
+                <div className="printable-qr-frame">
+                  <QRCodeSVG value={activeQrPayload} size={280} level="H" />
+                </div>
+
+                <p className="print-instruction">{printNotice}</p>
+              </div>
+
+              {/* Slim 1-line On-Site PIN Assistance Card */}
+              {currentSchedule && (
+                <div
+                  style={{
+                    marginTop: '16px',
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '10px',
+                    padding: '12px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '10px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+                      🔑 QR 스캔 불가 / 외부 일정 시 <strong>현장 PIN 인증</strong>:
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '22px',
+                        fontWeight: 800,
+                        color: 'var(--brand-accent)',
+                        letterSpacing: '4px',
+                        background: '#EEF2FF',
+                        padding: '2px 12px',
+                        borderRadius: '8px',
+                      }}
+                    >
+                      {currentSchedule.checkInPin || '1234'}
+                    </span>
+                    <span style={{ fontSize: '12px', color: '#64748B' }}>
+                      ({currentSchedule.title})
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {pinRegenMsg && (
+                      <span style={{ fontSize: '11.5px', color: '#059669', fontWeight: 600 }}>
+                        {pinRegenMsg}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-sync"
+                      style={{ fontSize: '12px', padding: '5px 10px', margin: 0 }}
+                      onClick={handleRegenSessionPin}
+                    >
+                      🔄 PIN 재발급
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Customize Text Form (Naver QR Style) */}
+              <div className="admin-form-card" style={{ marginTop: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <h3 className="section-title" style={{ margin: 0 }}>출석 QR 인쇄 문구 커스텀</h3>
+                  <button
+                    type="button"
+                    onClick={handleSaveQrPrintSettings}
+                    style={{
+                      background: '#4F46E5',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '6px 14px',
+                      fontSize: '12.5px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                  >
+                    <span>💾 문구 영구 저장</span>
+                  </button>
+                </div>
+                {qrTextSavedMsg && (
+                  <div className="success-banner" style={{ marginBottom: '12px', fontSize: '13px' }}>
+                    ✅ QR 인쇄 문구가 저장되었습니다. 페이지를 새로고침해도 유지됩니다.
+                  </div>
+                )}
+                <div className="form-stack">
+                  <div>
+                    <label className="form-label">인쇄 상단 타이틀</label>
+                    <input
+                      type="text"
+                      className="input-text"
+                      value={printTitle}
+                      onChange={(e) => {
+                        setPrintTitle(e.target.value);
+                        sheetsService.updateConfig({ qrPrintTitle: e.target.value });
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">부제목 및 장소</label>
+                    <input
+                      type="text"
+                      className="input-text"
+                      value={printSubtitle}
+                      onChange={(e) => {
+                        setPrintSubtitle(e.target.value);
+                        sheetsService.updateConfig({ qrPrintSubtitle: e.target.value });
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">안내 문구</label>
+                    <input
+                      type="text"
+                      className="input-text"
+                      value={printNotice}
+                      onChange={(e) => {
+                        setPrintNotice(e.target.value);
+                        sheetsService.updateConfig({ qrPrintNotice: e.target.value });
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="print-action-row" style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="btn-qr-action-secondary"
+                  onClick={handleRefreshMasterQR}
+                >
+                  <IconRefresh size={18} />
+                  <span>마스터 QR 보안 갱신</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-qr-action-primary"
+                  onClick={() => window.print()}
+                >
+                  🖨️ A4 종이 QR 인쇄하기
+                </button>
+              </div>
             </div>
           )}
-
-          {/* Printable Frame */}
-          <div className="printable-qr-container">
-            <h2 className="print-choir-title">{printTitle}</h2>
-            <h3 className="print-schedule-title">{printSubtitle}</h3>
-            {qrMode !== 'MASTER' && currentSchedule && (
-              <p className="print-schedule-meta">
-                {`${currentSchedule.date} | ${currentSchedule.title}`}
-              </p>
-            )}
-
-            <div className="printable-qr-frame">
-              <QRCodeSVG value={activeQrPayload} size={280} level="H" />
-            </div>
-
-            <p className="print-instruction">{printNotice}</p>
-          </div>
-
-          {/* Customize Text Form (Naver QR Style) */}
-          <div className="admin-form-card" style={{ marginTop: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <h3 className="section-title" style={{ margin: 0 }}>네이버 QR 스타일 인쇄 문구 커스텀</h3>
-              <button
-                type="button"
-                onClick={handleSaveQrPrintSettings}
-                style={{
-                  background: '#4F46E5',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '6px 14px',
-                  fontSize: '12.5px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                }}
-              >
-                <span>💾 문구 영구 저장</span>
-              </button>
-            </div>
-            {qrTextSavedMsg && (
-              <div className="success-banner" style={{ marginBottom: '12px', fontSize: '13px' }}>
-                ✅ QR 인쇄 문구가 저장되었습니다. 페이지를 새로고침해도 유지됩니다.
-              </div>
-            )}
-            <div className="form-stack">
-              <div>
-                <label className="form-label">인쇄 상단 타이틀</label>
-                <input
-                  type="text"
-                  className="input-text"
-                  value={printTitle}
-                  onChange={(e) => {
-                    setPrintTitle(e.target.value);
-                    sheetsService.updateConfig({ qrPrintTitle: e.target.value });
-                  }}
-                />
-              </div>
-              <div>
-                <label className="form-label">부제목 및 장소</label>
-                <input
-                  type="text"
-                  className="input-text"
-                  value={printSubtitle}
-                  onChange={(e) => {
-                    setPrintSubtitle(e.target.value);
-                    sheetsService.updateConfig({ qrPrintSubtitle: e.target.value });
-                  }}
-                />
-              </div>
-              <div>
-                <label className="form-label">안내 문구</label>
-                <input
-                  type="text"
-                  className="input-text"
-                  value={printNotice}
-                  onChange={(e) => {
-                    setPrintNotice(e.target.value);
-                    sheetsService.updateConfig({ qrPrintNotice: e.target.value });
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="print-action-row" style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-            {qrMode === 'MASTER' && (
-              <button
-                type="button"
-                className="btn-qr-action-secondary"
-                onClick={handleRefreshMasterQR}
-              >
-                <IconRefresh size={18} />
-                <span>마스터 QR 보안 갱신</span>
-              </button>
-            )}
-            <button
-              type="button"
-              className="btn-qr-action-primary"
-              onClick={() => window.print()}
-            >
-              🖨️ A4 종이 QR 인쇄하기
-            </button>
-          </div>
-        </div>
-      )}
 
           {/* Sub-tab 3: ADD RECURRING SCHEDULE & INTEGRATED CALENDAR */}
           {scheduleSubTab === 'LIST' && (
@@ -2234,24 +2310,85 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   >
                                     {sch.isArchived ? '📂 복원' : '📦 보관'}
                                   </button>
-                                  <button
-                                    type="button"
-                                    className="btn-edit-sch-mini"
-                                    onClick={() => handleOpenEditSchedule(sch)}
-                                    title="일정 수정"
-                                    style={{
-                                      background: '#EEF2FF',
-                                      color: '#4F46E5',
-                                      border: '1px solid #C7D2FE',
-                                      borderRadius: '6px',
-                                      padding: '4px 8px',
-                                      fontSize: '12px',
-                                      fontWeight: 600,
-                                      cursor: 'pointer',
-                                    }}
-                                  >
-                                    ✏️ 수정
-                                  </button>
+                                  {sch.date < getTodayString() ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="btn-edit-sch-mini"
+                                        onClick={() => handleCloneScheduleToForm(sch)}
+                                        title="오늘 날짜로 복제"
+                                        style={{
+                                          background: '#ECFDF5',
+                                          color: '#059669',
+                                          border: '1px solid #A7F3D0',
+                                          borderRadius: '6px',
+                                          padding: '4px 8px',
+                                          fontSize: '12px',
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                        }}
+                                      >
+                                        📋 오늘로 복제
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-edit-sch-mini"
+                                        onClick={() => handleBindScheduleToForm(sch)}
+                                        title="일정 상세/수정"
+                                        style={{
+                                          background: '#EEF2FF',
+                                          color: '#4F46E5',
+                                          border: '1px solid #C7D2FE',
+                                          borderRadius: '6px',
+                                          padding: '4px 8px',
+                                          fontSize: '12px',
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                        }}
+                                      >
+                                        ✏️ 수정
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="btn-edit-sch-mini"
+                                        onClick={() => handleBindScheduleToForm(sch)}
+                                        title="우측 폼에서 수정"
+                                        style={{
+                                          background: '#EEF2FF',
+                                          color: '#4F46E5',
+                                          border: '1px solid #C7D2FE',
+                                          borderRadius: '6px',
+                                          padding: '4px 8px',
+                                          fontSize: '12px',
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                        }}
+                                      >
+                                        ✏️ 수정
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-edit-sch-mini"
+                                        onClick={() => handleCloneScheduleToForm(sch)}
+                                        title="일정 복제"
+                                        style={{
+                                          background: '#F8FAFC',
+                                          color: '#475569',
+                                          border: '1px solid #CBD5E1',
+                                          borderRadius: '6px',
+                                          padding: '4px 8px',
+                                          fontSize: '12px',
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                        }}
+                                      >
+                                        📋 복제
+                                      </button>
+                                    </>
+                                  )}
                                   <button
                                     type="button"
                                     className="btn-delete-sch-mini"
@@ -2309,6 +2446,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </option>
                           ))}
                         </select>
+                        <button
+                          type="button"
+                          onClick={() => setShowPastSchedules((prev) => !prev)}
+                          style={{
+                            background: showPastSchedules ? '#EFF6FF' : '#F8FAFC',
+                            color: showPastSchedules ? '#2563EB' : '#64748B',
+                            border: `1px solid ${showPastSchedules ? '#93C5FD' : '#CBD5E1'}`,
+                            borderRadius: '8px',
+                            padding: '0 12px',
+                            height: '38px',
+                            fontSize: '12.5px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {showPastSchedules ? '⏱️ 지난 일정 숨기기' : `⏱️ 지난 일정 보기 (${pastSchedulesCount}건)`}
+                        </button>
                         <button
                           type="button"
                           onClick={() => setShowArchivedSchedules((prev) => !prev)}
@@ -2608,24 +2762,89 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   >
                                     {sch.isArchived ? '📂 복원' : '📦 보관'}
                                   </button>
-                                  <button
-                                    type="button"
-                                    className="btn-edit-sch-mini"
-                                    onClick={() => handleOpenEditSchedule(sch)}
-                                    style={{
-                                      background: '#EEF2FF',
-                                      color: '#4F46E5',
-                                      border: '1px solid #C7D2FE',
-                                      borderRadius: '6px',
-                                      padding: '5px 10px',
-                                      fontSize: '12px',
-                                      fontWeight: 600,
-                                      cursor: 'pointer',
-                                      minHeight: '34px',
-                                    }}
-                                  >
-                                    ✏️ 수정
-                                  </button>
+                                  {sch.date < getTodayString() ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="btn-edit-sch-mini"
+                                        onClick={() => handleCloneScheduleToForm(sch)}
+                                        title="오늘 날짜로 복제"
+                                        style={{
+                                          background: '#ECFDF5',
+                                          color: '#059669',
+                                          border: '1px solid #A7F3D0',
+                                          borderRadius: '6px',
+                                          padding: '5px 10px',
+                                          fontSize: '12px',
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          minHeight: '34px',
+                                        }}
+                                      >
+                                        📋 오늘로 복제
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-edit-sch-mini"
+                                        onClick={() => handleBindScheduleToForm(sch)}
+                                        title="일정 상세/수정"
+                                        style={{
+                                          background: '#EEF2FF',
+                                          color: '#4F46E5',
+                                          border: '1px solid #C7D2FE',
+                                          borderRadius: '6px',
+                                          padding: '5px 10px',
+                                          fontSize: '12px',
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          minHeight: '34px',
+                                        }}
+                                      >
+                                        ✏️ 수정
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="btn-edit-sch-mini"
+                                        onClick={() => handleBindScheduleToForm(sch)}
+                                        title="우측 폼에서 수정"
+                                        style={{
+                                          background: '#EEF2FF',
+                                          color: '#4F46E5',
+                                          border: '1px solid #C7D2FE',
+                                          borderRadius: '6px',
+                                          padding: '5px 10px',
+                                          fontSize: '12px',
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          minHeight: '34px',
+                                        }}
+                                      >
+                                        ✏️ 수정
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-edit-sch-mini"
+                                        onClick={() => handleCloneScheduleToForm(sch)}
+                                        title="일정 복제"
+                                        style={{
+                                          background: '#F8FAFC',
+                                          color: '#475569',
+                                          border: '1px solid #CBD5E1',
+                                          borderRadius: '6px',
+                                          padding: '5px 8px',
+                                          fontSize: '12px',
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          minHeight: '34px',
+                                        }}
+                                      >
+                                        📋 복제
+                                      </button>
+                                    </>
+                                  )}
                                   <button
                                     type="button"
                                     className="btn-delete-sch-mini"
@@ -2881,13 +3100,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           <span style={{ color: '#64748B' }}>({sch.startTime}~{sch.endTime})</span>
                                         </div>
                                         <div style={{ display: 'flex', gap: '4px' }}>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleOpenEditSchedule(sch)}
-                                            style={{ background: '#EEF2FF', color: '#4F46E5', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                                          >
-                                            수정
-                                          </button>
+                                          {sch.date < getTodayString() ? (
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleCloneScheduleToForm(sch)}
+                                                style={{ background: '#ECFDF5', color: '#059669', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                                title="오늘 날짜로 복제"
+                                              >
+                                                복제
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleBindScheduleToForm(sch)}
+                                                style={{ background: '#EEF2FF', color: '#4F46E5', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                                title="일정 상세/수정"
+                                              >
+                                                수정
+                                              </button>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleBindScheduleToForm(sch)}
+                                                style={{ background: '#EEF2FF', color: '#4F46E5', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                                title="우측 폼에서 수정"
+                                              >
+                                                수정
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleCloneScheduleToForm(sch)}
+                                                style={{ background: '#F8FAFC', color: '#475569', border: '1px solid #CBD5E1', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                                title="일정 복제"
+                                              >
+                                                복제
+                                              </button>
+                                            </>
+                                          )}
                                           <button
                                             type="button"
                                             onClick={() => handleDeleteSchedule(sch.id, sch.title)}
@@ -2917,10 +3168,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* Right Column: Recurring Schedule Creation Form */}
               <div className="admin-form-col">
                 <div className="admin-form-card">
-                  <h2 className="section-title">연습 및 연주 일정 등록 (반복 엔진 지원)</h2>
-                  <p className="section-subtitle">
-                    네이버/애플 캘린더처럼 매주 특정 요일 반복 일정을 손쉽게 전개하여 등록합니다.
-                  </p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                    <div>
+                      <h2 className="section-title" style={{ margin: 0 }}>
+                        {editingScheduleForForm ? '✏️ 일정 인라인 수정' : '연습 및 연주 일정 등록 (반복 엔진)'}
+                      </h2>
+                      <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
+                        {editingScheduleForForm
+                          ? `선택된 [${editingScheduleForForm.title}] 일정을 수정하여 시트에 즉시 반영합니다.`
+                          : '네이버/애플 캘린더처럼 매주 특정 요일 반복 일정을 손쉽게 전개하여 등록합니다.'}
+                      </p>
+                    </div>
+                    {editingScheduleForForm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingScheduleForForm(null);
+                          setNewTitle('');
+                          setNewDesc('');
+                        }}
+                        style={{
+                          background: '#F1F5F9',
+                          color: '#475569',
+                          border: '1px solid #CBD5E1',
+                          borderRadius: '6px',
+                          padding: '5px 10px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        ✕ 신규 등록으로 복귀
+                      </button>
+                    )}
+                  </div>
 
                   {scheduleSuccessMsg && <div className="success-banner">{scheduleSuccessMsg}</div>}
 
