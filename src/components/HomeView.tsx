@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
-import type { BoundDeviceProfile, Schedule } from '../types/rollbook';
+import type { BoundDeviceProfile, Member, RSVPVote, Schedule } from '../types/rollbook';
+import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
 import { getCalendarGrid } from '../utils/calendar';
 import { getCheckInWindowState } from '../utils/timeWindow';
 import {
@@ -146,21 +147,87 @@ export const HomeView: React.FC<HomeViewProps> = ({
     ? getCheckInWindowState(activeSchedule, currentNow)
     : null;
 
-  const rsvpVotes = activeSchedule ? sheetsService.getRSVPVotes(activeSchedule.id) : [];
-  const logs = activeSchedule ? sheetsService.getLogs(activeSchedule.id) : [];
+  const rsvpVotes = useMemo(() => {
+    void _refreshTrigger;
+    return activeSchedule ? sheetsService.getRSVPVotes(activeSchedule.id) : [];
+  }, [activeSchedule, _refreshTrigger]);
 
-  // Current user's status for this active schedule
-  const myVote = rsvpVotes.find((v) => v.memberId === profile.memberId);
-  const myLog = logs.find((l) => l.memberId === profile.memberId);
+  const logs = useMemo(() => {
+    void _refreshTrigger;
+    return activeSchedule ? sheetsService.getLogs(activeSchedule.id) : [];
+  }, [activeSchedule, _refreshTrigger]);
 
-  // Grouped RSVP lists
-  const attendees = rsvpVotes.filter((v) => v.status === 'ATTEND');
-  const absentees = rsvpVotes.filter((v) => v.status === 'ABSENT');
+  // Current user's status for this active schedule (matching by memberId or name)
+  const myVote = rsvpVotes.find(
+    (v) => v.memberId === profile.memberId || (profile.name && v.memberName === profile.name)
+  );
+  const myLog = logs.find(
+    (l) => l.memberId === profile.memberId || (profile.name && l.memberName === profile.name)
+  );
 
-  const votedMemberIds = new Set(rsvpVotes.map((v) => v.memberId));
-  const unvotedMembers = members.filter((m) => !votedMemberIds.has(m.id));
+  // Grouped RSVP lists with deduplication by name/ID so a single person cannot appear twice
+  const uniqueVotes = useMemo(() => {
+    const map = new Map<string, RSVPVote>();
+    for (const v of rsvpVotes) {
+      const key = v.memberName ? v.memberName.trim() : v.memberId;
+      map.set(key, v);
+    }
+    return Array.from(map.values());
+  }, [rsvpVotes]);
 
-  const attendRate = members.length > 0 ? Math.round((attendees.length / members.length) * 100) : 0;
+  const attendees = useMemo(
+    () => uniqueVotes.filter((v) => v.status === 'ATTEND'),
+    [uniqueVotes]
+  );
+  const absentees = useMemo(
+    () => uniqueVotes.filter((v) => v.status === 'ABSENT'),
+    [uniqueVotes]
+  );
+
+  // Target active members required for this schedule (accounting for audience selector & member status)
+  const targetMembers = useMemo(() => {
+    if (!activeSchedule) return [];
+
+    // Filter active members who are required for this schedule
+    const required = members.filter((m) => {
+      if (m.status === 'MERGED') return false;
+      return isMemberRequiredForSchedule(m, activeSchedule.date, activeSchedule);
+    });
+
+    // Deduplicate by name so duplicate unmerged IDs for the same person don't inflate the denominator
+    const uniqueMap = new Map<string, Member>();
+    for (const m of required) {
+      const key = m.name.trim();
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, m);
+      }
+    }
+    return Array.from(uniqueMap.values());
+  }, [members, activeSchedule]);
+
+  // Voted names and IDs
+  const votedNames = useMemo(
+    () => new Set(uniqueVotes.map((v) => v.memberName.trim())),
+    [uniqueVotes]
+  );
+  const votedIds = useMemo(
+    () => new Set(uniqueVotes.map((v) => v.memberId)),
+    [uniqueVotes]
+  );
+
+  // Unvoted members: Target members who haven't voted yet (neither by ID nor by name)
+  const unvotedMembers = useMemo(() => {
+    return targetMembers.filter((m) => {
+      const nameKey = m.name.trim();
+      if (votedNames.has(nameKey)) return false;
+      if (votedIds.has(m.id)) return false;
+      if (m.mergedIntoId && votedIds.has(m.mergedIntoId)) return false;
+      return true;
+    });
+  }, [targetMembers, votedNames, votedIds]);
+
+  const totalTargetCount = Math.max(targetMembers.length, uniqueVotes.length);
+  const attendRate = totalTargetCount > 0 ? Math.round((attendees.length / totalTargetCount) * 100) : 0;
 
   // Upcoming future schedules (from today onwards)
   const upcomingSchedules = useMemo(() => {
@@ -621,19 +688,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <div className="tally-header">
               <h3 className="tally-title">사전 참석 투표 현황</h3>
               <span className="tally-total">
-                {rsvpVotes.length}명 참여 / 총 {members.length}명
+                {uniqueVotes.length}명 참여 / 총 {totalTargetCount}명
               </span>
             </div>
 
             <div className="tally-bar">
               <div
                 className="tally-bar-segment attend"
-                style={{ width: `${(attendees.length / Math.max(members.length, 1)) * 100}%` }}
+                style={{ width: `${(attendees.length / Math.max(totalTargetCount, 1)) * 100}%` }}
                 title={`참석 ${attendees.length}명`}
               />
               <div
                 className="tally-bar-segment absent"
-                style={{ width: `${(absentees.length / Math.max(members.length, 1)) * 100}%` }}
+                style={{ width: `${(absentees.length / Math.max(totalTargetCount, 1)) * 100}%` }}
                 title={`불참 ${absentees.length}명`}
               />
             </div>
