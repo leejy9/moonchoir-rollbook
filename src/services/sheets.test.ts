@@ -35,9 +35,13 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(jang?.finalStatus).toBe('수동인정');
     expect(jang?.isManualOverride).toBe(true);
 
-    // 미투표 + 노로그 인원 -> 결석
+    // 미투표 + 노로그 정규 단원 (조현아) -> 결석
+    const jo = reconciled.find((r) => r.memberName === '조현아');
+    expect(jo?.finalStatus).toBe('결석');
+
+    // 휴단원 (최지우) -> 모수제외
     const choi = reconciled.find((r) => r.memberName === '최지우');
-    expect(choi?.finalStatus).toBe('결석');
+    expect(choi?.finalStatus).toBe('모수제외');
   });
 
   it('guarantees append-only behavior for check-in logs', async () => {

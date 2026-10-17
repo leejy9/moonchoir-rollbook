@@ -34,10 +34,12 @@ export function getEffectiveMemberStatus(
 
 /**
  * 특정 일정 일자에 해당 단원이 '정규 출결 의무 대상(필참)'인지 판정합니다.
+ * 대상자 지정(targetAudienceType: 'ALL' | 'PARTS' | 'CUSTOM_MEMBERS')을 완벽히 지원합니다.
  */
 export function isMemberRequiredForSchedule(
   member: Member,
-  scheduleDate: string
+  scheduleDate: string,
+  schedule?: Pick<Schedule, 'targetAudienceType' | 'targetParts' | 'targetMemberIds'>
 ): boolean {
   // 1. 입단일 이전의 일정은 출결 의무 없음 (모수 제외)
   if (member.joinedAt && scheduleDate < member.joinedAt) {
@@ -47,7 +49,18 @@ export function isMemberRequiredForSchedule(
   // 2. 해당 일자 시점의 유효 회원 상태 판정
   const effective = getEffectiveMemberStatus(member, scheduleDate);
 
-  // 정단원, 준단원은 기본 필참 대상
+  // 3. 일정 대상자 지정 필터 검사 (Audience Selector)
+  if (schedule?.targetAudienceType === 'PARTS') {
+    if (!schedule.targetParts || !schedule.targetParts.includes(effective.part)) {
+      return false; // 해당 파트가 아니면 의무 제외 (모수 제외)
+    }
+  } else if (schedule?.targetAudienceType === 'CUSTOM_MEMBERS') {
+    if (!schedule.targetMemberIds || !schedule.targetMemberIds.includes(member.id)) {
+      return false; // 지정된 단원이 아니면 의무 제외 (모수 제외)
+    }
+  }
+
+  // 4. 정단원, 준단원은 기본 필참 대상
   if (effective.status === '정단원' || effective.status === '준단원') {
     return true;
   }
@@ -142,7 +155,7 @@ export function calculateCumulativeAttendanceWithLifecycle(
 
     for (const schedule of sortedSchedules) {
       const isPastOrToday = schedule.date <= todayStr;
-      const isRequired = isMemberRequiredForSchedule(member, schedule.date);
+      const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
 
       // 해당 일정에 단원의 출석 원천로그가 존재하는지 조회 (날짜 일치 Fallback 구출)
       const memberLogs = rawLogs.filter((log) => {

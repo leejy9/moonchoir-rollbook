@@ -445,6 +445,7 @@ function doPost(e) {
       const sheet = ss.getSheetByName(SHEET_NAMES.PROGRAM_CARDS);
       if (!sheet) return jsonResponse({ success: false, message: '일정카드 탭이 없습니다.' });
       const rows = sheet.getDataRange().getValues();
+      const headers = rows[0] || ['id', 'title', 'description', 'category', 'defaultLocationId', 'defaultStartTime', 'defaultEndTime', 'isArchived', 'createdAt', 'targetAudienceType', 'targetParts', 'targetMemberIds'];
       let rowIndex = -1;
       for (let i = 1; i < rows.length; i++) {
         if (rows[i][0] === data.id) {
@@ -452,21 +453,16 @@ function doPost(e) {
           break;
         }
       }
-      const rowData = [
-        data.id,
-        data.title || '',
-        data.description || '',
-        data.category || '정기연습',
-        data.defaultLocationId || '',
-        data.defaultStartTime || '19:30',
-        data.defaultEndTime || '22:00',
-        data.isArchived ? 'TRUE' : 'FALSE',
-        data.createdAt || new Date().toISOString(),
-      ];
+      const newRow = headers.map(function (h) {
+        if (h === 'isArchived') return data.isArchived ? 'TRUE' : 'FALSE';
+        if (h === 'targetParts') return Array.isArray(data.targetParts) ? data.targetParts.join(',') : (data.targetParts || '');
+        if (h === 'targetMemberIds') return Array.isArray(data.targetMemberIds) ? data.targetMemberIds.join(',') : (data.targetMemberIds || '');
+        return data[h] !== undefined ? data[h] : '';
+      });
       if (rowIndex > 0) {
-        sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
+        sheet.getRange(rowIndex, 1, 1, newRow.length).setValues([newRow]);
       } else {
-        sheet.appendRow(rowData);
+        sheet.appendRow(newRow);
       }
       return jsonResponse({ success: true, message: '일정카드 저장 완료' });
     }
@@ -514,7 +510,7 @@ function ensureSheetStructure(ss) {
     },
     {
       name: SHEET_NAMES.SCHEDULES,
-      headers: ['id', 'title', 'date', 'startTime', 'endTime', 'locationName', 'category', 'checkInPin', 'description', 'programId', 'seriesId', 'seriesIndex', 'seriesTotal', 'isArchived'],
+      headers: ['id', 'title', 'date', 'startTime', 'endTime', 'locationName', 'category', 'checkInPin', 'description', 'programId', 'seriesId', 'seriesIndex', 'seriesTotal', 'isArchived', 'targetAudienceType', 'targetParts', 'targetMemberIds'],
     },
     {
       name: SHEET_NAMES.RSVP,
@@ -534,7 +530,7 @@ function ensureSheetStructure(ss) {
     },
     {
       name: SHEET_NAMES.PROGRAM_CARDS,
-      headers: ['id', 'title', 'description', 'category', 'defaultLocationId', 'defaultStartTime', 'defaultEndTime', 'isArchived', 'createdAt'],
+      headers: ['id', 'title', 'description', 'category', 'defaultLocationId', 'defaultStartTime', 'defaultEndTime', 'isArchived', 'createdAt', 'targetAudienceType', 'targetParts', 'targetMemberIds'],
     },
   ];
 

@@ -289,5 +289,90 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
     expect(lv15.progressPercent).toBe(100);
     expect(lv15.badgeEmoji).toBe('🌟');
   });
+
+  describe('Audience Selector (대상자 지정 필터)', () => {
+    const sopranoMember: Member = {
+      id: 'm_sop',
+      name: '소프단원',
+      part: '소프라노',
+      phoneLast4: '1111',
+      role: 'MEMBER',
+      createdAt: '2026-01-01T00:00:00Z',
+      status: 'ACTIVE',
+      joinedAt: '2026-01-01',
+      memberStatus: '정단원',
+    };
+
+    const tenorMember: Member = {
+      id: 'm_ten',
+      name: '테너단원',
+      part: '테너',
+      phoneLast4: '2222',
+      role: 'MEMBER',
+      createdAt: '2026-01-01T00:00:00Z',
+      status: 'ACTIVE',
+      joinedAt: '2026-01-01',
+      memberStatus: '정단원',
+    };
+
+    it('특정 파트(소프라노/알토) 한정 일정은 테너 단원의 모수에서 완전 제외되어야 한다', () => {
+      const partSchedule: Schedule = {
+        id: 'sch_sop_part',
+        title: '여성파트 추가연습',
+        date: '2026-10-12',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '제1연습실',
+        category: '추가연습',
+        targetAudienceType: 'PARTS',
+        targetParts: ['소프라노', '알토'],
+      };
+
+      expect(isMemberRequiredForSchedule(sopranoMember, partSchedule.date, partSchedule)).toBe(true);
+      expect(isMemberRequiredForSchedule(tenorMember, partSchedule.date, partSchedule)).toBe(false);
+
+      // 테너 단원은 불참했어도 결석으로 카운트되지 않음
+      const stats = calculateCumulativeAttendanceWithLifecycle(
+        [tenorMember],
+        [partSchedule],
+        [],
+        '2026-10-15'
+      );
+      expect(stats[0].totalSessions).toBe(0);
+      expect(stats[0].absent).toBe(0);
+    });
+
+    it('선발 단원(CUSTOM_MEMBERS) 한정 일정은 미선발 단원의 모수에서 완전 제외되어야 한다', () => {
+      const customSchedule: Schedule = {
+        id: 'sch_solo_rehearsal',
+        title: '솔리스트 특별 연습',
+        date: '2026-10-14',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '제1연습실',
+        category: '추가연습',
+        targetAudienceType: 'CUSTOM_MEMBERS',
+        targetMemberIds: ['m_sop'], // 소프단원만 선발
+      };
+
+      expect(isMemberRequiredForSchedule(sopranoMember, customSchedule.date, customSchedule)).toBe(true);
+      expect(isMemberRequiredForSchedule(tenorMember, customSchedule.date, customSchedule)).toBe(false);
+
+      const stats = calculateCumulativeAttendanceWithLifecycle(
+        [sopranoMember, tenorMember],
+        [customSchedule],
+        [],
+        '2026-10-15'
+      );
+
+      // 소프단원은 대상자이므로 미출석 시 결석 1회
+      expect(stats[0].totalSessions).toBe(1);
+      expect(stats[0].absent).toBe(1);
+
+      // 테너단원은 비대상자이므로 모수 0회, 결석 0회
+      expect(stats[1].totalSessions).toBe(0);
+      expect(stats[1].absent).toBe(0);
+    });
+  });
 });
 

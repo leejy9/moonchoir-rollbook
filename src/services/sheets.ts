@@ -6,6 +6,7 @@ import type {
   LocationPreset,
   Member,
   MemberStatusHistory,
+  ProgramCard,
   RSVPVote,
   RawAttendanceLog,
   Schedule,
@@ -16,6 +17,7 @@ import {
   INITIAL_LOCATION_PRESETS,
   INITIAL_LOGS,
   INITIAL_MEMBERS,
+  INITIAL_PROGRAM_CARDS,
   INITIAL_RSVP_VOTES,
   INITIAL_SCHEDULES,
 } from './mockData';
@@ -28,6 +30,7 @@ const STORAGE_KEYS = {
   CONFIG: 'moonchoir_config_v2',
   LOCATIONS: 'moonchoir_locations_v2',
   PENDING_MEMBERS: 'moonchoir_pending_members_v2',
+  PROGRAM_CARDS: 'moonchoir_program_cards_v2',
 };
 
 class MemoryStorage {
@@ -86,6 +89,7 @@ export class SheetsService {
   private rsvpVotes: RSVPVote[];
   private logs: RawAttendanceLog[];
   private locations: LocationPreset[];
+  private programCards: ProgramCard[];
   private pendingMemberIds: Set<string>;
 
   constructor() {
@@ -99,6 +103,7 @@ export class SheetsService {
     this.rsvpVotes = loadFromStorage(STORAGE_KEYS.RSVP_VOTES, INITIAL_RSVP_VOTES);
     this.logs = loadFromStorage(STORAGE_KEYS.LOGS, INITIAL_LOGS);
     this.locations = loadFromStorage(STORAGE_KEYS.LOCATIONS, INITIAL_LOCATION_PRESETS);
+    this.programCards = loadFromStorage(STORAGE_KEYS.PROGRAM_CARDS, INITIAL_PROGRAM_CARDS);
     this.pendingMemberIds = new Set(loadFromStorage<string[]>(STORAGE_KEYS.PENDING_MEMBERS, []));
   }
 
@@ -235,6 +240,38 @@ export class SheetsService {
 
   public getLocationPresets(): LocationPreset[] {
     return [...this.locations];
+  }
+
+  public getProgramCards(): ProgramCard[] {
+    return [...this.programCards];
+  }
+
+  public async saveProgramCard(card: ProgramCard): Promise<ProgramCard> {
+    const idx = this.programCards.findIndex((c) => c.id === card.id);
+    if (idx >= 0) {
+      this.programCards[idx] = { ...card };
+    } else {
+      this.programCards.push({ ...card });
+    }
+    saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
+
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('SAVE_PROGRAM_CARD', card).catch((err) => {
+        console.error('[Sheets API] SAVE_PROGRAM_CARD background sync failed:', err);
+      });
+    }
+    return card;
+  }
+
+  public async deleteProgramCard(cardId: string): Promise<void> {
+    this.programCards = this.programCards.filter((c) => c.id !== cardId);
+    saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
+
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('DELETE_PROGRAM_CARD', { id: cardId }).catch((err) => {
+        console.error('[Sheets API] DELETE_PROGRAM_CARD background sync failed:', err);
+      });
+    }
   }
 
   // --- Append-Only Write Operations ---
@@ -786,7 +823,8 @@ export class SheetsService {
       let finalStatus: AttendanceStatus = '결석';
       let checkInTime: string | undefined;
 
-      const isExempt = Boolean(member.joinedAt && schedule.date < member.joinedAt);
+      const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
+      const isExempt = !isRequired;
 
       if (log) {
         checkInTime = log.timestamp;
@@ -864,7 +902,7 @@ export class SheetsService {
   }
 
   // --- Remote Google Sheets API Handler ---
-  public async fetchRemoteData(overrideUrl?: string): Promise<{ success: boolean; message: string; count?: { members: number; schedules: number; logs: number; locations?: number } }> {
+  public async fetchRemoteData(overrideUrl?: string): Promise<{ success: boolean; message: string; count?: { members: number; schedules: number; logs: number; locations?: number; programCards?: number } }> {
     const targetUrl = overrideUrl || this.config.sheetsWebAppUrl;
     if (!targetUrl) {
       throw new Error('구글 시트 Web App URL이 설정되지 않았습니다.');
@@ -891,6 +929,7 @@ export class SheetsService {
       recentLogs?: RawAttendanceLog[];
       locations?: LocationPreset[];
       memberHistory?: MemberStatusHistory[];
+      programCards?: ProgramCard[];
       config?: Partial<AppConfig>;
     } };
 
@@ -1076,6 +1115,28 @@ export class SheetsService {
       saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
     }
 
+    if (Array.isArray(data.programCards)) {
+      const remoteCards: ProgramCard[] = data.programCards.map((c) => ({
+        id: String(c.id || `card_${Date.now()}`),
+        title: String(c.title || ''),
+        description: c.description ? String(c.description) : undefined,
+        category: c.category || '정기연습',
+        defaultLocationId: c.defaultLocationId ? String(c.defaultLocationId) : undefined,
+        defaultStartTime: c.defaultStartTime ? String(c.defaultStartTime) : '19:30',
+        defaultEndTime: c.defaultEndTime ? String(c.defaultEndTime) : '21:30',
+        targetAudienceType: c.targetAudienceType || 'ALL',
+        targetParts: Array.isArray(c.targetParts) ? c.targetParts : undefined,
+        targetMemberIds: Array.isArray(c.targetMemberIds) ? c.targetMemberIds : undefined,
+        isArchived: c.isArchived === true || String(c.isArchived).toUpperCase() === 'TRUE',
+        createdAt: c.createdAt ? String(c.createdAt) : new Date().toISOString(),
+      }));
+
+      const remoteCardIds = new Set(remoteCards.map((c) => c.id));
+      const localOnlyCards = this.programCards.filter((c) => !remoteCardIds.has(c.id));
+      this.programCards = [...remoteCards, ...localOnlyCards];
+      saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
+    }
+
     return {
       success: true,
       message: '구글 스프레드시트와 성공적으로 동기화되었습니다.',
@@ -1084,6 +1145,7 @@ export class SheetsService {
         schedules: this.schedules.length,
         logs: this.logs.length,
         locations: this.locations.length,
+        programCards: this.programCards.length,
       },
     };
   }

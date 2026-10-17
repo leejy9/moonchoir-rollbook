@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createSchedulesMultiMode,
   duplicateScheduleSeries,
   expandRecurringSchedules,
   formatYearMonth,
@@ -93,4 +94,74 @@ describe('Calendar Utility', () => {
     expect(duplicated[0].seriesIndex).toBe(1);
     expect(duplicated[2].seriesIndex).toBe(3);
   });
+
+  describe('createSchedulesMultiMode 4-mode schedule creation engine', () => {
+    const base = {
+      title: '프로젝트 일정',
+      date: '2026-10-20',
+      startTime: '19:30',
+      endTime: '21:30',
+      locationName: '서초 리허설룸',
+      category: '추가연습' as const,
+      targetAudienceType: 'PARTS' as const,
+      targetParts: ['소프라노' as const, '알토' as const],
+    };
+
+    it('creates single schedule for SINGLE mode', () => {
+      const res = createSchedulesMultiMode({
+        mode: 'SINGLE',
+        baseSchedule: base,
+      });
+      expect(res.length).toBe(1);
+      expect(res[0].date).toBe('2026-10-20');
+      expect(res[0].seriesId).toBeUndefined();
+      expect(res[0].targetParts).toEqual(['소프라노', '알토']);
+    });
+
+    it('creates recurring dates for INTERVAL mode (every 2 weeks, 3 times)', () => {
+      const res = createSchedulesMultiMode({
+        mode: 'INTERVAL',
+        baseSchedule: base,
+        intervalUnit: 'WEEKS',
+        intervalStep: 2,
+        intervalCount: 3,
+      });
+      expect(res.length).toBe(3);
+      expect(res[0].date).toBe('2026-10-20');
+      expect(res[1].date).toBe('2026-11-03');
+      expect(res[2].date).toBe('2026-11-17');
+      expect(res[0].seriesId).toBeDefined();
+      expect(res[0].seriesTotal).toBe(3);
+    });
+
+    it('creates schedules on selected days of week for DAYS_OF_WEEK mode', () => {
+      // 2026-10-20 is Tuesday. Pick TUE and THU for 2 weeks.
+      const res = createSchedulesMultiMode({
+        mode: 'DAYS_OF_WEEK',
+        baseSchedule: base,
+        byDays: ['TUE', 'THU'],
+        weeksCount: 2,
+      });
+      expect(res.length).toBe(4);
+      expect(res[0].date).toBe('2026-10-20'); // Tue
+      expect(res[1].date).toBe('2026-10-22'); // Thu
+      expect(res[2].date).toBe('2026-10-27'); // Tue
+      expect(res[3].date).toBe('2026-10-29'); // Thu
+    });
+
+    it('creates schedules from picked dates array in CALENDAR_PICK mode', () => {
+      const picked = ['2026-10-22', '2026-11-05', '2026-11-12'];
+      const res = createSchedulesMultiMode({
+        mode: 'CALENDAR_PICK',
+        baseSchedule: base,
+        pickedDates: picked,
+      });
+      expect(res.length).toBe(3);
+      expect(res[0].date).toBe('2026-10-22');
+      expect(res[1].date).toBe('2026-11-05');
+      expect(res[2].date).toBe('2026-11-12');
+      expect(res[0].seriesTotal).toBe(3);
+    });
+  });
 });
+

@@ -7,14 +7,18 @@ import type {
   LocationPreset,
   Member,
   MemberStatusHistory,
+  PartType,
+  ProgramCard,
   RawAttendanceLog,
   Schedule,
   ScheduleCategory,
+  TargetAudienceType,
 } from '../types/rollbook';
 import {
+  createSchedulesMultiMode,
   duplicateScheduleSeries,
-  expandRecurringSchedules,
   getCalendarGrid,
+  type ScheduleAddMode,
 } from '../utils/calendar';
 import {
   generateMasterWallQRPayload,
@@ -70,10 +74,6 @@ function generateRandomPin(): string {
   return String(Math.floor(1000 + Math.random() * 9000));
 }
 
-function createScheduleId(dateStr: string): string {
-  return `sch_${dateStr.replace(/-/g, '')}_${Date.now().toString().slice(-4)}`;
-}
-
 function createManualLogMeta(): { id: string; timestamp: string } {
   const now = new Date();
   return {
@@ -123,6 +123,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const config = sheetsService.getConfig();
   const locationPresets = sheetsService.getLocationPresets();
   const members = sheetsService.getMembers();
+  const programCards = sheetsService.getProgramCards();
 
   // Member Modal Handlers
   const handleOpenAddMemberModal = () => {
@@ -312,7 +313,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [qrMode, setQrMode] = useState<'MASTER' | 'SESSION'>('MASTER');
   const [pinRegenMsg, setPinRegenMsg] = useState('');
 
-  // --- 5. Add Schedule State (Recurring Engine) ---
+  // --- 5. Add Schedule State (4-Mode Engine & Audience Selector) ---
+  const [scheduleAddMode, setScheduleAddMode] = useState<ScheduleAddMode>('SINGLE');
   const [newTitle, setNewTitle] = useState('');
   const [newDate, setNewDate] = useState(() => getTodayString());
   const [newStartTime, setNewStartTime] = useState('19:30');
@@ -331,9 +333,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [customNewCategoryInput, setCustomNewCategoryInput] = useState('');
   const [isScheduleLocationModalOpen, setIsScheduleLocationModalOpen] = useState(false);
   const [newDesc, setNewDesc] = useState('');
-  const [recurrenceFreq, setRecurrenceFreq] = useState<'NONE' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'>('WEEKLY');
+  const [selectedProgramCardId, setSelectedProgramCardId] = useState<string>('');
+
+  // 4-Mode parameters
+  const [intervalUnit, setIntervalUnit] = useState<'DAYS' | 'WEEKS' | 'MONTHS'>('WEEKS');
+  const [intervalStep, setIntervalStep] = useState<number>(1);
+  const [intervalCount, setIntervalCount] = useState<number>(4);
   const [selectedDays, setSelectedDays] = useState<('MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN')[]>(['THU']);
-  const [repeatCount, setRepeatCount] = useState<number>(12);
+  const [weeksCount, setWeeksCount] = useState<number>(4);
+  const [pickedDates, setPickedDates] = useState<string[]>([]);
+  const [pickCalYear, setPickCalYear] = useState(() => new Date().getFullYear());
+  const [pickCalMonth, setPickCalMonth] = useState(() => new Date().getMonth());
+
+  // Audience selector parameters
+  const [newTargetAudienceType, setNewTargetAudienceType] = useState<TargetAudienceType>('ALL');
+  const [newTargetParts, setNewTargetParts] = useState<PartType[]>([]);
+  const [newTargetMemberIds, setNewTargetMemberIds] = useState<string[]>([]);
+  const [customMemberSearch, setCustomMemberSearch] = useState('');
+  const [cardMemberSearch, setCardMemberSearch] = useState('');
+
+  const handlePickCalPrevMonth = () => {
+    if (pickCalMonth === 0) {
+      setPickCalMonth(11);
+      setPickCalYear((y) => y - 1);
+    } else {
+      setPickCalMonth((m) => m - 1);
+    }
+  };
+
+  const handlePickCalNextMonth = () => {
+    if (pickCalMonth === 11) {
+      setPickCalMonth(0);
+      setPickCalYear((y) => y + 1);
+    } else {
+      setPickCalMonth((m) => m + 1);
+    }
+  };
+
+  const togglePickedDate = (dateStr: string) => {
+    setPickedDates((prev) => {
+      if (prev.includes(dateStr)) {
+        return prev.filter((d) => d !== dateStr);
+      }
+      return [...prev, dateStr].sort();
+    });
+  };
+
+  // Program Card Management Modal State
+  const [isProgramCardModalOpen, setIsProgramCardModalOpen] = useState(false);
+  const [editingProgramCard, setEditingProgramCard] = useState<ProgramCard | null>(null);
+  const [cardTitle, setCardTitle] = useState('');
+  const [cardCategory, setCardCategory] = useState<ScheduleCategory>('정기연습');
+  const [cardDesc, setCardDesc] = useState('');
+  const [cardDefaultLocationId, setCardDefaultLocationId] = useState('');
+  const [cardDefaultStartTime, setCardDefaultStartTime] = useState('19:30');
+  const [cardDefaultEndTime, setCardDefaultEndTime] = useState('21:30');
+  const [cardAudienceType, setCardAudienceType] = useState<TargetAudienceType>('ALL');
+  const [cardTargetParts, setCardTargetParts] = useState<PartType[]>([]);
+  const [cardTargetMemberIds, setCardTargetMemberIds] = useState<string[]>([]);
+
   const [scheduleSuccessMsg, setScheduleSuccessMsg] = useState('');
   const [showArchivedSchedules, setShowArchivedSchedules] = useState(false);
 
@@ -386,8 +444,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [allScheduleSearch, setAllScheduleSearch] = useState('');
   const [allScheduleCatFilter, setAllScheduleCatFilter] = useState('ALL');
 
-  // 일정 카드(Program Card) 컨테이너 그룹핑 (시리즈/프로젝트 단위 묶음)
+  // 일정 카드(Program Card) 컨테이너 그룹핑 (시트 DB 카드 + 미분류 일정)
   const programGroups = useMemo(() => {
+    const cards = sheetsService.getProgramCards();
     const groups = new Map<string, {
       cardId: string;
       title: string;
@@ -396,15 +455,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       locationName: string;
       startTime: string;
       endTime: string;
+      targetAudienceType?: TargetAudienceType;
+      targetParts?: PartType[];
+      targetMemberIds?: string[];
       schedules: Schedule[];
       startDate: string;
       endDate: string;
       isArchived: boolean;
+      isRegisteredCard: boolean;
+      rawCard?: ProgramCard;
     }>();
 
+    // 1. 등록된 카드들 먼저 세팅
+    for (const card of cards) {
+      if (!showArchivedSchedules && card.isArchived) continue;
+      const cardLoc = locationPresets.find((l) => l.id === card.defaultLocationId);
+      groups.set(card.id, {
+        cardId: card.id,
+        title: card.title,
+        category: card.category,
+        description: card.description,
+        locationName: cardLoc?.name || defaultLocName,
+        startTime: card.defaultStartTime || '19:30',
+        endTime: card.defaultEndTime || '21:30',
+        targetAudienceType: card.targetAudienceType || 'ALL',
+        targetParts: card.targetParts,
+        targetMemberIds: card.targetMemberIds,
+        schedules: [],
+        startDate: '',
+        endDate: '',
+        isArchived: Boolean(card.isArchived),
+        isRegisteredCard: true,
+        rawCard: card,
+      });
+    }
+
+    // 2. 일정들을 카드에 매핑 또는 독립 그룹으로 수납
     for (const sch of schedules) {
       if (!showArchivedSchedules && sch.isArchived) continue;
-      const key = sch.programId || sch.seriesId || sch.title;
+      let key = sch.programId;
+      if (!key || !groups.has(key)) {
+        key = sch.programId || sch.seriesId || sch.title;
+      }
       if (!groups.has(key)) {
         groups.set(key, {
           cardId: key,
@@ -414,23 +506,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           locationName: sch.locationName,
           startTime: sch.startTime,
           endTime: sch.endTime,
+          targetAudienceType: sch.targetAudienceType || 'ALL',
+          targetParts: sch.targetParts,
+          targetMemberIds: sch.targetMemberIds,
           schedules: [],
           startDate: sch.date,
           endDate: sch.date,
           isArchived: Boolean(sch.isArchived),
+          isRegisteredCard: false,
         });
       }
       const g = groups.get(key)!;
       g.schedules.push(sch);
-      if (sch.date < g.startDate) g.startDate = sch.date;
-      if (sch.date > g.endDate) g.endDate = sch.date;
+      if (!g.startDate || sch.date < g.startDate) g.startDate = sch.date;
+      if (!g.endDate || sch.date > g.endDate) g.endDate = sch.date;
     }
 
     return Array.from(groups.values()).map((g) => {
       g.schedules.sort((a, b) => a.date.localeCompare(b.date));
       return g;
     });
-  }, [schedules, showArchivedSchedules]);
+  }, [schedules, showArchivedSchedules, locationPresets, defaultLocName]);
 
   const filteredAllSchedules = useMemo(() => {
     return schedules.filter((s) => {
@@ -884,10 +980,88 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
 
-  // Create Schedule (Single or Recurring Batch)
+  // Program Card CRUD Handlers
+  const handleOpenCreateProgramCard = () => {
+    setEditingProgramCard(null);
+    setCardTitle('');
+    setCardCategory('정기연습');
+    setCardDesc('');
+    setCardDefaultLocationId(locationPresets[0]?.id || '');
+    setCardDefaultStartTime('19:30');
+    setCardDefaultEndTime('21:30');
+    setCardAudienceType('ALL');
+    setCardTargetParts([]);
+    setCardTargetMemberIds([]);
+    setIsProgramCardModalOpen(true);
+  };
+
+  const handleOpenEditProgramCard = (card: ProgramCard) => {
+    setEditingProgramCard(card);
+    setCardTitle(card.title);
+    setCardCategory(card.category);
+    setCardDesc(card.description || '');
+    setCardDefaultLocationId(card.defaultLocationId || locationPresets[0]?.id || '');
+    setCardDefaultStartTime(card.defaultStartTime || '19:30');
+    setCardDefaultEndTime(card.defaultEndTime || '21:30');
+    setCardAudienceType(card.targetAudienceType || 'ALL');
+    setCardTargetParts(card.targetParts || []);
+    setCardTargetMemberIds(card.targetMemberIds || []);
+    setIsProgramCardModalOpen(true);
+  };
+
+  const handleSaveProgramCardSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cardTitle.trim()) return;
+
+    const cardData: ProgramCard = {
+      id: editingProgramCard?.id || `card_${Date.now()}`,
+      title: cardTitle.trim(),
+      category: cardCategory,
+      description: cardDesc.trim() || undefined,
+      defaultLocationId: cardDefaultLocationId || undefined,
+      defaultStartTime: cardDefaultStartTime || '19:30',
+      defaultEndTime: cardDefaultEndTime || '21:30',
+      targetAudienceType: cardAudienceType,
+      targetParts: cardAudienceType === 'PARTS' ? cardTargetParts : undefined,
+      targetMemberIds: cardAudienceType === 'CUSTOM_MEMBERS' ? cardTargetMemberIds : undefined,
+      isArchived: editingProgramCard?.isArchived || false,
+      createdAt: editingProgramCard?.createdAt || new Date().toISOString(),
+    };
+
+    try {
+      await sheetsService.saveProgramCard(cardData);
+      setScheduleSuccessMsg(`일정 카드 [${cardData.title}]가 구글 시트에 영구 저장되었습니다.`);
+      setIsProgramCardModalOpen(false);
+      onDataChanged();
+      setTimeout(() => setScheduleSuccessMsg(''), 4000);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : '일정 카드 저장 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDeleteProgramCard = async (cardId: string, title: string) => {
+    if (!window.confirm(`정말로 일정 카드 [${title}]를 삭제하시겠습니까?\n구글 시트 일정카드 탭에서도 제거됩니다.`)) {
+      return;
+    }
+    try {
+      await sheetsService.deleteProgramCard(cardId);
+      setScheduleSuccessMsg(`일정 카드 [${title}]가 삭제되었습니다.`);
+      onDataChanged();
+      setTimeout(() => setScheduleSuccessMsg(''), 4000);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : '일정 카드 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  // Create Schedule (4-Mode Engine: Single / Interval / DayOfWeek / CalendarPick)
   const handleCreateScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newDate.trim()) return;
+    if (!newTitle.trim()) return;
+    if (scheduleAddMode !== 'CALENDAR_PICK' && !newDate.trim()) return;
+    if (scheduleAddMode === 'CALENDAR_PICK' && pickedDates.length === 0) {
+      alert('달력에서 최소 1개 이상의 날짜를 선택해주세요.');
+      return;
+    }
 
     const finalCategory = isCustomNewCategory
       ? ((customNewCategoryInput.trim() || '기타행사') as ScheduleCategory)
@@ -911,27 +1085,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       radiusMeters: newRadius,
       category: finalCategory,
       description: newDesc.trim() || undefined,
-      checkInPin: generateRandomPin(),
+      programId: selectedProgramCardId || undefined,
+      targetAudienceType: newTargetAudienceType,
+      targetParts: newTargetAudienceType === 'PARTS' ? newTargetParts : undefined,
+      targetMemberIds: newTargetAudienceType === 'CUSTOM_MEMBERS' ? newTargetMemberIds : undefined,
     };
 
-    if (recurrenceFreq === 'NONE') {
-      const newSch: Schedule = {
-        ...baseSchedule,
-        id: createScheduleId(newDate),
-      };
-      await sheetsService.addSchedule(newSch);
-      setSelectedScheduleId(newSch.id);
-      setScheduleSuccessMsg(`새 일정 [${newSch.title}]이 등록되었습니다.`);
+    const generated = createSchedulesMultiMode({
+      mode: scheduleAddMode,
+      baseSchedule,
+      intervalUnit,
+      intervalStep,
+      intervalCount,
+      byDays: selectedDays,
+      weeksCount,
+      pickedDates,
+    });
+
+    if (generated.length === 1) {
+      await sheetsService.addSchedule(generated[0]);
+      setSelectedScheduleId(generated[0].id);
+      setScheduleSuccessMsg(`새 일정 [${generated[0].title}]이 등록되었습니다.`);
     } else {
-      const expanded = expandRecurringSchedules(baseSchedule, {
-        frequency: recurrenceFreq,
-        byDays: selectedDays,
-        count: repeatCount,
-      });
-      await sheetsService.addSchedules(expanded);
-      setSelectedScheduleId(expanded[0]?.id || '');
+      await sheetsService.addSchedules(generated);
+      setSelectedScheduleId(generated[0]?.id || '');
       setScheduleSuccessMsg(
-        `반복 엔진을 통해 ${expanded.length}개 회차의 일정이 일괄 전개되어 캘린더에 생성되었습니다!`
+        `4대 다채널 엔진을 통해 ${generated.length}개의 일정이 일괄 생성되어 등록되었습니다!`
       );
     }
 
@@ -2469,25 +2648,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   ) : (
                     /* PROGRAM_CARDS CONTAINER VIEW */
                     <div>
-                      <div style={{ marginBottom: '14px' }}>
-                        <h2 className="section-title" style={{ margin: 0 }}>
-                          📦 일정 카드(프로젝트) 묶음 관리
-                        </h2>
-                        <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
-                          학기/프로젝트 단위로 정기연습과 추가연습을 묶어 관리하고, 원클릭으로 추가 연습 등록 및 다음 학기 복제를 수행합니다.
-                        </p>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                        <div>
+                          <h2 className="section-title" style={{ margin: 0 }}>
+                            📦 일정 카드(프로젝트) 묶음 관리
+                          </h2>
+                          <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
+                            구글 시트 [일정카드] 탭과 실시간 동기화되어 학기별 정기연습과 추가연습을 영구 보존 관리합니다.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleOpenCreateProgramCard}
+                          style={{
+                            background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '8px 14px',
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 5px rgba(79, 70, 229, 0.25)',
+                          }}
+                        >
+                          ➕ 새 일정 카드 만들기
+                        </button>
                       </div>
 
                       {programGroups.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '520px', overflowY: 'auto' }}>
                           {programGroups.map((group) => {
                             const isExpanded = expandedCardIds.has(group.cardId);
+                            const audienceLabel =
+                              group.targetAudienceType === 'PARTS'
+                                ? `👥 파트: ${group.targetParts?.join(', ') || '지정 없음'}`
+                                : group.targetAudienceType === 'CUSTOM_MEMBERS'
+                                ? `🎯 선발단원: ${group.targetMemberIds?.length || 0}명`
+                                : '🌐 전체 단원 필참';
+
                             return (
                               <div
                                 key={group.cardId}
                                 style={{
                                   background: '#FFFFFF',
-                                  border: '1px solid #E2E8F0',
+                                  border: group.isRegisteredCard ? '1.5px solid #C7D2FE' : '1px solid #E2E8F0',
                                   borderRadius: '12px',
                                   padding: '16px',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
@@ -2495,7 +2703,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               >
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                                   <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                       <span className="schedule-category-badge">{group.category}</span>
                                       <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#1E293B' }}>
                                         {group.title}
@@ -2503,9 +2711,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       <span style={{ fontSize: '12px', color: '#6366F1', background: '#EEF2FF', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
                                         총 {group.schedules.length}회차
                                       </span>
+                                      <span style={{ fontSize: '11px', color: '#047857', background: '#D1FAE5', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                        {audienceLabel}
+                                      </span>
+                                      {group.isRegisteredCard && (
+                                        <span style={{ fontSize: '10.5px', color: '#4338CA', background: '#E0E7FF', padding: '1px 5px', borderRadius: '4px' }}>
+                                          시트 저장됨
+                                        </span>
+                                      )}
                                     </div>
                                     <p style={{ margin: '6px 0 0', fontSize: '12.5px', color: '#64748B' }}>
-                                      📅 {group.startDate} ~ {group.endDate} · 🕒 {group.startTime}~{group.endTime} · 📍 {group.locationName}
+                                      {group.startDate ? `📅 ${group.startDate} ~ ${group.endDate}` : '📅 등록된 회차 일정 없음'} · 🕒 {group.startTime}~{group.endTime} · 📍 {group.locationName}
                                     </p>
                                     {group.description && (
                                       <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#94A3B8' }}>
@@ -2515,6 +2731,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </div>
 
                                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                    {group.isRegisteredCard && group.rawCard && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditProgramCard(group.rawCard!)}
+                                          style={{
+                                            background: '#F8FAFC',
+                                            color: '#334155',
+                                            border: '1px solid #CBD5E1',
+                                            borderRadius: '6px',
+                                            padding: '6px 8px',
+                                            fontSize: '11.5px',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                          }}
+                                          title="일정 카드 속성 수정"
+                                        >
+                                          ✏️ 카드 수정
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteProgramCard(group.cardId, group.title)}
+                                          style={{
+                                            background: '#FFF1F2',
+                                            color: '#E11D48',
+                                            border: '1px solid #FECDD3',
+                                            borderRadius: '6px',
+                                            padding: '6px 8px',
+                                            fontSize: '11.5px',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                          }}
+                                          title="일정 카드 삭제"
+                                        >
+                                          🗑️ 카드 삭제
+                                        </button>
+                                      </>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -2526,6 +2780,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         setNewStartTime(group.startTime);
                                         setNewEndTime(group.endTime);
                                         setNewCategory('추가연습');
+                                        setSelectedProgramCardId(group.cardId);
+                                        if (group.targetAudienceType) {
+                                          setNewTargetAudienceType(group.targetAudienceType);
+                                          setNewTargetParts(group.targetParts || []);
+                                          setNewTargetMemberIds(group.targetMemberIds || []);
+                                        }
                                         setScheduleSuccessMsg(`[${group.title}]에 등록할 추가연습 정보를 우측 폼에 세팅했습니다. 날짜를 확인하고 등록을 눌러주세요.`);
                                         setTimeout(() => setScheduleSuccessMsg(''), 4500);
                                       }}
@@ -2572,7 +2832,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         cursor: 'pointer',
                                       }}
                                     >
-                                      {group.isArchived ? '📂 묶음 보관 해제' : '📦 묶음 아카이브'}
+                                      {group.isArchived ? '📂 보관 해제' : '📦 아카이브'}
                                     </button>
                                     <button
                                       type="button"
@@ -2665,7 +2925,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {scheduleSuccessMsg && <div className="success-banner">{scheduleSuccessMsg}</div>}
 
                   <form onSubmit={handleCreateScheduleSubmit} className="form-stack">
-                    <label className="form-label" htmlFor="sch-title">
+                    {/* Program Card Container Selector */}
+                    <div>
+                      <label className="form-label" htmlFor="sch-program-card">
+                        소속 일정 카드 (컨테이너)
+                      </label>
+                      <select
+                        id="sch-program-card"
+                        className="select-input"
+                        value={selectedProgramCardId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedProgramCardId(val);
+                          const found = programCards.find((c) => c.id === val);
+                          if (found) {
+                            if (found.category) setNewCategory(found.category);
+                            if (found.defaultLocationId) handleLocationPresetChange(found.defaultLocationId);
+                            if (found.defaultStartTime) setNewStartTime(found.defaultStartTime);
+                            if (found.defaultEndTime) setNewEndTime(found.defaultEndTime);
+                            if (found.targetAudienceType) {
+                              setNewTargetAudienceType(found.targetAudienceType);
+                              setNewTargetParts(found.targetParts || []);
+                              setNewTargetMemberIds(found.targetMemberIds || []);
+                            }
+                          }
+                        }}
+                      >
+                        <option value="">📌 소속 없음 (독립 일정)</option>
+                        {programCards.map((card) => (
+                          <option key={card.id} value={card.id}>
+                            📦 [{card.category}] {card.title}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="form-hint" style={{ fontSize: '11.5px', color: '#64748B' }}>
+                        * 일정 카드를 선택하면 해당 카드의 기본 시간/장소/대상자 설정이 자동으로 반영됩니다.
+                      </span>
+                    </div>
+
+                    <label className="form-label" htmlFor="sch-title" style={{ marginTop: '4px' }}>
                       일정 명칭
                     </label>
                     <input
@@ -2678,37 +2976,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       required
                     />
 
-                    {/* Recurrence Rule Picker */}
+                    {/* 4-Mode Recurrence Engine Selector */}
                     <div className="toss-section-card" style={{ padding: '14px', margin: '4px 0' }}>
                       <span className="form-label" style={{ marginBottom: '8px', display: 'block' }}>
-                        반복 주기 설정
+                        일정 생성 방식 선택 (4대 다채널 엔진)
                       </span>
-                      <div className="toss-filter-row" style={{ marginBottom: '10px' }}>
+                      <div className="toss-filter-row" style={{ marginBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
                         {(
                           [
-                            { key: 'NONE', label: '반복 없음 (단일 일정)' },
-                            { key: 'WEEKLY', label: '매주' },
-                            { key: 'BIWEEKLY', label: '격주 (2주)' },
-                            { key: 'MONTHLY', label: '매월' },
+                            { key: 'SINGLE', label: '📌 단일 일정 (1회)' },
+                            { key: 'INTERVAL', label: '🔁 주기 반복 (매 N일/주/월)' },
+                            { key: 'DAYS_OF_WEEK', label: '🗓️ 요일 지정 (특정 요일 N주간)' },
+                            { key: 'CALENDAR_PICK', label: '📅 달력 직접 픽 (날짜 복수 선택)' },
                           ] as const
-                        ).map((rf) => (
+                        ).map((mode) => (
                           <button
-                            key={rf.key}
+                            key={mode.key}
                             type="button"
-                            className={`toss-filter-chip ${recurrenceFreq === rf.key ? 'active' : ''}`}
-                            onClick={() => setRecurrenceFreq(rf.key)}
+                            className={`toss-filter-chip ${scheduleAddMode === mode.key ? 'active' : ''}`}
+                            onClick={() => setScheduleAddMode(mode.key)}
                           >
-                            <span>{rf.label}</span>
+                            <span>{mode.label}</span>
                           </button>
                         ))}
                       </div>
 
-                      {recurrenceFreq !== 'NONE' && (
-                        <>
-                          <label className="form-label" style={{ fontSize: '13px' }}>
+                      {/* Mode: INTERVAL */}
+                      {scheduleAddMode === 'INTERVAL' && (
+                        <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0', marginTop: '6px' }}>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>매</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={365}
+                              className="input-text"
+                              style={{ width: '70px', padding: '6px 8px' }}
+                              value={intervalStep}
+                              onChange={(e) => setIntervalStep(Math.max(1, Number(e.target.value)))}
+                            />
+                            <select
+                              className="select-input"
+                              style={{ width: '100px', padding: '6px 8px' }}
+                              value={intervalUnit}
+                              onChange={(e) => setIntervalUnit(e.target.value as 'DAYS' | 'WEEKS' | 'MONTHS')}
+                            >
+                              <option value="DAYS">일마다</option>
+                              <option value="WEEKS">주마다</option>
+                              <option value="MONTHS">개월마다</option>
+                            </select>
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>총</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={52}
+                              className="input-text"
+                              style={{ width: '70px', padding: '6px 8px' }}
+                              value={intervalCount}
+                              onChange={(e) => setIntervalCount(Math.max(1, Number(e.target.value)))}
+                            />
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>회차 전개</span>
+                          </div>
+                          <span className="form-hint" style={{ marginTop: '8px', display: 'block', color: '#6366F1' }}>
+                            💡 {newDate}부터 {intervalStep}{intervalUnit === 'DAYS' ? '일' : intervalUnit === 'WEEKS' ? '주' : '개월'} 간격으로 총 {intervalCount}개의 일정이 자동 일괄 생성됩니다.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Mode: DAYS_OF_WEEK */}
+                      {scheduleAddMode === 'DAYS_OF_WEEK' && (
+                        <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0', marginTop: '6px' }}>
+                          <label className="form-label" style={{ fontSize: '13px', marginBottom: '6px' }}>
                             반복 요일 다중 선택
                           </label>
-                          <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+                          <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
                             {DAYS_OF_WEEK.map((d) => {
                               const isSel = selectedDays.includes(d.key);
                               return (
@@ -2732,42 +3073,283 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               );
                             })}
                           </div>
-
-                          <div className="form-row-2">
-                            <div>
-                              <label className="form-label">반복 횟수 (회차 전개)</label>
-                              <input
-                                type="number"
-                                min={1}
-                                max={52}
-                                className="input-text"
-                                value={repeatCount}
-                                onChange={(e) => setRepeatCount(Number(e.target.value))}
-                              />
-                              <span className="form-hint">* {repeatCount}개 일정이 자동 일괄 생성됩니다.</span>
-                            </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>반복 주수: 총</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={52}
+                              className="input-text"
+                              style={{ width: '80px', padding: '6px 8px' }}
+                              value={weeksCount}
+                              onChange={(e) => setWeeksCount(Math.max(1, Number(e.target.value)))}
+                            />
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>주 동안 전개</span>
                           </div>
-                        </>
+                          <span className="form-hint" style={{ marginTop: '8px', display: 'block', color: '#6366F1' }}>
+                            💡 {newDate} 주차부터 {selectedDays.length}개 요일에 맞춰 {weeksCount}주간 총 {selectedDays.length * weeksCount}개 일정이 자동 일괄 생성됩니다.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Mode: CALENDAR_PICK */}
+                      {scheduleAddMode === 'CALENDAR_PICK' && (
+                        <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0', marginTop: '6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={handlePickCalPrevMonth}
+                              style={{ background: '#fff', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}
+                            >
+                              ◀ 이전 달
+                            </button>
+                            <span style={{ fontWeight: 700, fontSize: '14px', color: '#1E293B' }}>
+                              {pickCalYear}년 {pickCalMonth + 1}월
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handlePickCalNextMonth}
+                              style={{ background: '#fff', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}
+                            >
+                              다음 달 ▶
+                            </button>
+                          </div>
+
+                          {/* Calendar Grid */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', marginBottom: '8px' }}>
+                            {['일', '월', '화', '수', '목', '금', '토'].map((dw, idx) => (
+                              <div key={dw} style={{ fontSize: '11px', fontWeight: 600, color: idx === 0 ? '#EF4444' : idx === 6 ? '#3B82F6' : '#64748B', padding: '4px 0' }}>
+                                {dw}
+                              </div>
+                            ))}
+                            {getCalendarGrid(pickCalYear, pickCalMonth).map((day) => {
+                              const isPicked = pickedDates.includes(day.dateStr);
+                              return (
+                                <button
+                                  key={day.dateStr}
+                                  type="button"
+                                  onClick={() => togglePickedDate(day.dateStr)}
+                                  style={{
+                                    minHeight: '34px',
+                                    borderRadius: '6px',
+                                    border: isPicked ? '1.5px solid var(--brand-accent)' : '1px solid #E2E8F0',
+                                    background: isPicked ? 'var(--brand-accent)' : '#FFFFFF',
+                                    color: isPicked ? '#FFFFFF' : day.isCurrentMonth ? '#1E293B' : '#94A3B8',
+                                    fontWeight: isPicked ? 700 : 500,
+                                    fontSize: '12.5px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease',
+                                    opacity: day.isCurrentMonth ? 1 : 0.45,
+                                  }}
+                                >
+                                  {day.dayNumber}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Picked Dates Chips */}
+                          <div style={{ marginTop: '8px', borderTop: '1px dashed #CBD5E1', paddingTop: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                                선택된 날짜 ({pickedDates.length}개)
+                              </span>
+                              {pickedDates.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPickedDates([])}
+                                  style={{ fontSize: '11px', color: '#EF4444', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                                >
+                                  전체 선택 해제
+                                </button>
+                              )}
+                            </div>
+                            {pickedDates.length === 0 ? (
+                              <span style={{ fontSize: '12px', color: '#94A3B8' }}>달력에서 일정을 추가할 날짜들을 클릭하세요.</span>
+                            ) : (
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxHeight: '100px', overflowY: 'auto' }}>
+                                {pickedDates.map((pDate) => (
+                                  <span
+                                    key={pDate}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      background: '#EEF2FF',
+                                      color: '#4338CA',
+                                      padding: '2px 8px',
+                                      borderRadius: '12px',
+                                      fontSize: '11.5px',
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {pDate}
+                                    <button
+                                      type="button"
+                                      onClick={() => togglePickedDate(pDate)}
+                                      style={{ background: 'transparent', border: 'none', color: '#4338CA', cursor: 'pointer', padding: 0, fontSize: '12px' }}
+                                    >
+                                      ✕
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Attendance Target Audience Selector */}
+                    <div className="toss-section-card" style={{ padding: '14px', margin: '4px 0' }}>
+                      <span className="form-label" style={{ marginBottom: '8px', display: 'block' }}>
+                        참석 대상자 지정 (통계 모수 필터)
+                      </span>
+                      <div className="toss-filter-row" style={{ marginBottom: '10px', gap: '6px', flexWrap: 'wrap' }}>
+                        {(
+                          [
+                            { key: 'ALL', label: '🌐 전체 단원 필참' },
+                            { key: 'PARTS', label: '👥 특정 파트 한정' },
+                            { key: 'CUSTOM_MEMBERS', label: '🎯 선발 단원 (수동 지정)' },
+                          ] as const
+                        ).map((aud) => (
+                          <button
+                            key={aud.key}
+                            type="button"
+                            className={`toss-filter-chip ${newTargetAudienceType === aud.key ? 'active' : ''}`}
+                            onClick={() => setNewTargetAudienceType(aud.key)}
+                          >
+                            <span>{aud.label}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Audience Type: PARTS */}
+                      {newTargetAudienceType === 'PARTS' && (
+                        <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                          <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                            참석 대상 파트 선택 (복수 선택 가능)
+                          </span>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            {dynamicParts.map((part) => {
+                              const isSel = newTargetParts.includes(part);
+                              return (
+                                <button
+                                  key={part}
+                                  type="button"
+                                  onClick={() => {
+                                    setNewTargetParts((prev) =>
+                                      prev.includes(part) ? prev.filter((p) => p !== part) : [...prev, part]
+                                    );
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    border: isSel ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                                    background: isSel ? '#D1FAE5' : '#FFFFFF',
+                                    color: isSel ? '#047857' : '#334155',
+                                    fontWeight: isSel ? 700 : 500,
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  {part} {isSel ? '✓' : ''}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <span className="form-hint" style={{ marginTop: '8px', display: 'block', color: '#047857' }}>
+                            * 선택되지 않은 파트 단원은 출결 통계에서 자동으로 '모수제외' 처리됩니다.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Audience Type: CUSTOM_MEMBERS */}
+                      {newTargetAudienceType === 'CUSTOM_MEMBERS' && (
+                        <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                          <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                            선발 단원 지정 ({newTargetMemberIds.length}명 선택됨)
+                          </span>
+                          <input
+                            type="text"
+                            className="input-text"
+                            placeholder="이름 또는 파트로 단원 검색..."
+                            value={customMemberSearch}
+                            onChange={(e) => setCustomMemberSearch(e.target.value)}
+                            style={{ marginBottom: '8px', fontSize: '12px', padding: '6px 8px' }}
+                          />
+                          {/* Member Selection List */}
+                          <div style={{ maxHeight: '140px', overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '6px' }}>
+                            {members
+                              .filter((m) => {
+                                if (!customMemberSearch.trim()) return true;
+                                const q = customMemberSearch.toLowerCase();
+                                return m.name.toLowerCase().includes(q) || m.part.toLowerCase().includes(q);
+                              })
+                              .map((m) => {
+                                const isSel = newTargetMemberIds.includes(m.id);
+                                return (
+                                  <div
+                                    key={m.id}
+                                    onClick={() => {
+                                      setNewTargetMemberIds((prev) =>
+                                        isSel ? prev.filter((id) => id !== m.id) : [...prev, m.id]
+                                      );
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      padding: '5px 8px',
+                                      borderRadius: '4px',
+                                      background: isSel ? '#EEF2FF' : 'transparent',
+                                      cursor: 'pointer',
+                                      fontSize: '12px',
+                                    }}
+                                  >
+                                    <span>
+                                      <strong>{m.name}</strong> ({m.part})
+                                    </span>
+                                    <span style={{ color: isSel ? '#4F46E5' : '#94A3B8', fontWeight: 700 }}>
+                                      {isSel ? '선택됨 ✓' : '+ 추가'}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                          <span className="form-hint" style={{ marginTop: '8px', display: 'block', color: '#4F46E5' }}>
+                            * 지정된 선발 단원 외에는 출결 통계에서 자동으로 '모수제외' 처리됩니다.
+                          </span>
+                        </div>
                       )}
                     </div>
 
                     <div className="form-row-2">
-                      <div>
-                        <label className="form-label" htmlFor="sch-date">
-                          시작 기준 날짜
-                        </label>
-                        <input
-                          id="sch-date"
-                          type="date"
-                          className="input-text"
-                          value={newDate}
-                          onChange={(e) => {
-                            setNewDate(e.target.value);
-                            setAdminSelectedDate(e.target.value);
-                          }}
-                          required
-                        />
-                      </div>
+                      {scheduleAddMode !== 'CALENDAR_PICK' ? (
+                        <div>
+                          <label className="form-label" htmlFor="sch-date">
+                            시작 기준 날짜
+                          </label>
+                          <input
+                            id="sch-date"
+                            type="date"
+                            className="input-text"
+                            value={newDate}
+                            onChange={(e) => {
+                              setNewDate(e.target.value);
+                              setAdminSelectedDate(e.target.value);
+                            }}
+                            required
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="form-label">달력 선택 날짜</label>
+                          <div style={{ padding: '10px 12px', background: '#F1F5F9', borderRadius: '8px', fontSize: '13px', color: '#475569' }}>
+                            {pickedDates.length > 0 ? `선택된 ${pickedDates.length}개 날짜로 전개` : '달력에서 날짜를 1개 이상 선택하세요.'}
+                          </div>
+                        </div>
+                      )}
 
                       <div>
                         <label className="form-label">일정 구분</label>
@@ -2894,10 +3476,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       rows={3}
                     />
 
-                    <button type="submit" className="btn-primary-large">
-                      {recurrenceFreq === 'NONE'
-                        ? '단일 일정 등록 완료'
-                        : `${repeatCount}회차 반복 일정 일괄 생성`}
+                    <button type="submit" className="btn-primary-large" style={{ minHeight: '44px' }}>
+                      {scheduleAddMode === 'SINGLE' && '단일 일정 등록 완료'}
+                      {scheduleAddMode === 'INTERVAL' && `${intervalCount}회차 주기 반복 일정 일괄 생성`}
+                      {scheduleAddMode === 'DAYS_OF_WEEK' && `${selectedDays.length * weeksCount}개 요일 반복 일정 일괄 생성`}
+                      {scheduleAddMode === 'CALENDAR_PICK' && `선택한 ${pickedDates.length}개 날짜 일정 일괄 생성`}
                     </button>
                   </form>
                 </div>
@@ -3510,6 +4093,230 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onClose={() => setIsScheduleLocationModalOpen(false)}
           onSave={handleAddNewLocationPresetFromModal}
         />
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: Program Card (Container) Create / Edit Modal            */}
+      {/* ============================================================== */}
+      {isProgramCardModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal-card" style={{ maxWidth: '540px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="modal-header">
+              <div className="modal-badge" style={{ color: '#4F46E5', borderColor: '#C7D2FE', background: '#EEF2FF' }}>
+                {editingProgramCard ? '일정 카드 속성 수정' : '새 일정 카드 (프로그램) 생성'}
+              </div>
+              <h2 className="modal-title" style={{ fontSize: '18px', marginTop: '8px' }}>
+                {editingProgramCard ? `[${editingProgramCard.title}] 속성 변경` : '새로운 일정 묶음 카드 만들기'}
+              </h2>
+              <p className="modal-desc" style={{ marginTop: '4px', fontSize: '13px', color: '#64748B' }}>
+                정기연주회, 특별행사, 특정 연습 시리즈를 카드 하나로 묶고 구글 시트에 영구 저장합니다.
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveProgramCardSubmit} className="form-stack" style={{ marginTop: '16px' }}>
+              <label className="form-label" htmlFor="card-title">
+                카드 명칭 (프로그램/행사명)
+              </label>
+              <input
+                id="card-title"
+                type="text"
+                className="input-text"
+                placeholder="예: 2026 봄 정기연주회, 10월 경찰의 날 행사"
+                value={cardTitle}
+                onChange={(e) => setCardTitle(e.target.value)}
+                required
+              />
+
+              <div className="form-row-2">
+                <div>
+                  <label className="form-label">기본 일정 구분</label>
+                  <select
+                    className="select-input"
+                    value={cardCategory}
+                    onChange={(e) => setCardCategory(e.target.value as ScheduleCategory)}
+                  >
+                    {dynamicCategories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">기본 연습실 장소</label>
+                  <select
+                    className="select-input"
+                    value={cardDefaultLocationId}
+                    onChange={(e) => setCardDefaultLocationId(e.target.value)}
+                  >
+                    <option value="">선택 안 함 (회차별 개별 지정)</option>
+                    {locationPresets.map((loc) => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row-2">
+                <div>
+                  <label className="form-label">기본 시작 시각</label>
+                  <input
+                    type="time"
+                    className="input-text"
+                    value={cardDefaultStartTime}
+                    onChange={(e) => setCardDefaultStartTime(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">기본 종료 시각</label>
+                  <input
+                    type="time"
+                    className="input-text"
+                    value={cardDefaultEndTime}
+                    onChange={(e) => setCardDefaultEndTime(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Card Default Audience Selector */}
+              <div className="toss-section-card" style={{ padding: '12px', margin: '4px 0' }}>
+                <span className="form-label" style={{ marginBottom: '6px', display: 'block', fontSize: '13px' }}>
+                  기본 참석 대상자 (통계 모수 필터)
+                </span>
+                <div className="toss-filter-row" style={{ marginBottom: '8px', gap: '6px', flexWrap: 'wrap' }}>
+                  {(
+                    [
+                      { key: 'ALL', label: '🌐 전체 단원 필참' },
+                      { key: 'PARTS', label: '👥 특정 파트 한정' },
+                      { key: 'CUSTOM_MEMBERS', label: '🎯 선발 단원' },
+                    ] as const
+                  ).map((aud) => (
+                    <button
+                      key={aud.key}
+                      type="button"
+                      className={`toss-filter-chip ${cardAudienceType === aud.key ? 'active' : ''}`}
+                      onClick={() => setCardAudienceType(aud.key)}
+                    >
+                      <span>{aud.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {cardAudienceType === 'PARTS' && (
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                    {dynamicParts.map((part) => {
+                      const isSel = cardTargetParts.includes(part);
+                      return (
+                        <button
+                          key={part}
+                          type="button"
+                          onClick={() => {
+                            setCardTargetParts((prev) =>
+                              prev.includes(part) ? prev.filter((p) => p !== part) : [...prev, part]
+                            );
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            border: isSel ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                            background: isSel ? '#D1FAE5' : '#FFFFFF',
+                            color: isSel ? '#047857' : '#334155',
+                            fontWeight: isSel ? 700 : 500,
+                            fontSize: '11.5px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {part} {isSel ? '✓' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {cardAudienceType === 'CUSTOM_MEMBERS' && (
+                  <div style={{ marginTop: '6px' }}>
+                    <input
+                      type="text"
+                      className="input-text"
+                      placeholder="이름 또는 파트로 검색..."
+                      value={cardMemberSearch}
+                      onChange={(e) => setCardMemberSearch(e.target.value)}
+                      style={{ marginBottom: '6px', fontSize: '12px', padding: '5px 8px' }}
+                    />
+                    <div style={{ maxHeight: '120px', overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '4px' }}>
+                      {members
+                        .filter((m) => {
+                          if (!cardMemberSearch.trim()) return true;
+                          const q = cardMemberSearch.toLowerCase();
+                          return m.name.toLowerCase().includes(q) || m.part.toLowerCase().includes(q);
+                        })
+                        .map((m) => {
+                          const isSel = cardTargetMemberIds.includes(m.id);
+                          return (
+                            <div
+                              key={m.id}
+                              onClick={() => {
+                                setCardTargetMemberIds((prev) =>
+                                  isSel ? prev.filter((id) => id !== m.id) : [...prev, m.id]
+                                );
+                              }}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '4px 6px',
+                                borderRadius: '4px',
+                                background: isSel ? '#EEF2FF' : 'transparent',
+                                cursor: 'pointer',
+                                fontSize: '11.5px',
+                              }}
+                            >
+                              <span><strong>{m.name}</strong> ({m.part})</span>
+                              <span style={{ color: isSel ? '#4F46E5' : '#94A3B8', fontWeight: 600 }}>
+                                {isSel ? '선택됨 ✓' : '+ 추가'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <label className="form-label" htmlFor="card-desc">
+                카드 상세 설명 (선택)
+              </label>
+              <textarea
+                id="card-desc"
+                className="input-textarea"
+                placeholder="예: 2026년 정기연주회 준비를 위한 총 12회차 집중 연습 및 본공연"
+                value={cardDesc}
+                onChange={(e) => setCardDesc(e.target.value)}
+                rows={2}
+              />
+
+              <div className="modal-button-group" style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
+                <button
+                  type="submit"
+                  className="btn-primary-large"
+                  style={{ minHeight: '44px' }}
+                >
+                  💾 구글 시트에 카드 저장
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary-cancel"
+                  style={{ minHeight: '44px' }}
+                  onClick={() => setIsProgramCardModalOpen(false)}
+                >
+                  취소
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

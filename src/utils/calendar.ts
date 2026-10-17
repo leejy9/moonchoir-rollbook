@@ -229,3 +229,128 @@ export function duplicateScheduleSeries(
   });
 }
 
+export type ScheduleAddMode = 'SINGLE' | 'INTERVAL' | 'DAYS_OF_WEEK' | 'CALENDAR_PICK';
+
+export interface MultiModeScheduleOptions {
+  mode: ScheduleAddMode;
+  baseSchedule: Omit<import('../types/rollbook').Schedule, 'id'> & { date?: string };
+  // INTERVAL mode
+  intervalUnit?: 'DAYS' | 'WEEKS' | 'MONTHS';
+  intervalStep?: number; // e.g. every 2 weeks
+  intervalCount?: number; // total count e.g. 8
+  // DAYS_OF_WEEK mode
+  byDays?: ('MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN')[];
+  weeksCount?: number; // repeat for N weeks
+  // CALENDAR_PICK mode
+  pickedDates?: string[]; // e.g. ['2026-10-22', '2026-10-29', '2026-11-05']
+}
+
+/**
+ * 4대 다채널 일정 추가 엔진 (단일 일정 / 간격 반복 / 요일 지정 / 캘린더 직접 날짜 복수 픽)
+ */
+export function createSchedulesMultiMode(
+  options: MultiModeScheduleOptions
+): import('../types/rollbook').Schedule[] {
+  const { mode, baseSchedule } = options;
+  const initialDateStr = baseSchedule.date || new Date().toISOString().slice(0, 10);
+  let targetDates: string[] = [];
+
+  switch (mode) {
+    case 'SINGLE': {
+      targetDates = [initialDateStr];
+      break;
+    }
+
+    case 'CALENDAR_PICK': {
+      if (options.pickedDates && options.pickedDates.length > 0) {
+        targetDates = Array.from(new Set(options.pickedDates)).sort();
+      } else {
+        targetDates = [initialDateStr];
+      }
+      break;
+    }
+
+    case 'INTERVAL': {
+      const step = Math.max(1, options.intervalStep || 1);
+      const count = Math.max(1, options.intervalCount || 4);
+      const unit = options.intervalUnit || 'WEEKS';
+      const startDate = new Date(initialDateStr + 'T00:00:00');
+
+      targetDates = [];
+      for (let i = 0; i < count; i++) {
+        const d = new Date(startDate);
+        if (unit === 'DAYS') {
+          d.setDate(d.getDate() + i * step);
+        } else if (unit === 'WEEKS') {
+          d.setDate(d.getDate() + i * step * 7);
+        } else if (unit === 'MONTHS') {
+          d.setMonth(d.getMonth() + i * step);
+        }
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        targetDates.push(`${y}-${m}-${day}`);
+      }
+      break;
+    }
+
+    case 'DAYS_OF_WEEK': {
+      const selectedDays =
+        options.byDays && options.byDays.length > 0
+          ? options.byDays.map((k) => DAY_MAP[k])
+          : [new Date(initialDateStr + 'T00:00:00').getDay()];
+      const weeks = Math.max(1, options.weeksCount || 4);
+
+      const startDate = new Date(initialDateStr + 'T00:00:00');
+      let currentWeekStart = new Date(startDate);
+      // Roll back to Sunday
+      currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay());
+
+      targetDates = [];
+      for (let w = 0; w < weeks; w++) {
+        for (const dayNum of selectedDays) {
+          const d = new Date(currentWeekStart);
+          d.setDate(d.getDate() + dayNum);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const dateStr = `${y}-${m}-${day}`;
+          if (dateStr >= initialDateStr) {
+            targetDates.push(dateStr);
+          }
+        }
+        currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+      }
+      targetDates = Array.from(new Set(targetDates)).sort();
+      break;
+    }
+  }
+
+  if (targetDates.length === 0) {
+    targetDates = [initialDateStr];
+  }
+
+  const seriesId =
+    targetDates.length > 1
+      ? `series_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+      : undefined;
+  const seriesTotal = targetDates.length;
+
+  return targetDates.map((dateStr, idx) => {
+    const pin =
+      baseSchedule.checkInPin ||
+      Math.floor(1000 + Math.random() * 9000).toString();
+
+    return {
+      ...baseSchedule,
+      id: `sch_${dateStr.replace(/-/g, '')}_${Math.random().toString(36).slice(2, 6)}`,
+      date: dateStr,
+      checkInPin: pin,
+      seriesId,
+      seriesIndex: seriesId ? idx + 1 : undefined,
+      seriesTotal: seriesId ? seriesTotal : undefined,
+    };
+  });
+}
+
+

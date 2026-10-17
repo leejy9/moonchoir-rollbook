@@ -83,6 +83,8 @@ export interface Member {
   boundDeviceAt?: string; // 기기 바인딩 일시
 }
 
+export type TargetAudienceType = 'ALL' | 'PARTS' | 'CUSTOM_MEMBERS';
+
 /**
  * 1-2. Program Card Container for grouping schedules (e.g., 2026 가을 정기연습, 연주회 프로젝트)
  */
@@ -94,6 +96,9 @@ export interface ProgramCard {
   defaultLocationId?: string;
   defaultStartTime?: string; // HH:mm
   defaultEndTime?: string; // HH:mm
+  targetAudienceType?: TargetAudienceType; // 전체 / 특정 파트 / 특정 단원
+  targetParts?: PartType[]; // 파트 한정 일정 시 대상 파트 목록
+  targetMemberIds?: string[]; // 지정 단원 한정 일정 시 대상 단원 ID 목록
   isArchived?: boolean;
   createdAt: string; // ISO 8601
 }
@@ -147,9 +152,12 @@ export interface Schedule {
   seriesId?: string; // Grouping ID for recurring series (e.g. series_20261017_abcd)
   seriesIndex?: number; // 1-based occurrence index (e.g. 1)
   seriesTotal?: number; // Total count of occurrences in the series (e.g. 16)
-  isArchived?: boolean; // Archived/hidden state for past semesters
-  checkInPin?: string; // 4-digit temporary PIN for on-site check-in
+  targetAudienceType?: TargetAudienceType; // 대상자 구분 ('ALL' | 'PARTS' | 'CUSTOM_MEMBERS')
+  targetParts?: PartType[]; // 대상 파트 목록
+  targetMemberIds?: string[]; // 대상 단원 ID 목록
+  checkInPin?: string; // 현장 4자리 인증 PIN
   description?: string;
+  isArchived?: boolean; // Archived/hidden state for past semesters
 }
 
 /**

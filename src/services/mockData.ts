@@ -1,4 +1,4 @@
-import type { AppConfig, LocationPreset, Member, RSVPVote, RawAttendanceLog, Schedule } from '../types/rollbook';
+import type { AppConfig, LocationPreset, Member, ProgramCard, RSVPVote, RawAttendanceLog, Schedule } from '../types/rollbook';
 
 export const INITIAL_LOCATION_PRESETS: LocationPreset[] = [
   {
@@ -455,3 +455,19 @@ export const INITIAL_LOGS: RawAttendanceLog[] = [
     adminNote: '휴대폰 배터리 방전으로 현장 확인 후 수동 체크인',
   },
 ];
+
+export const INITIAL_PROGRAM_CARDS: ProgramCard[] = [
+  {
+    id: 'card_fall_2026',
+    title: '2026 하반기 정기연습',
+    description: '가을 정기연습 16주 과정 및 제12회 정기연주회 대비',
+    category: '정기연습',
+    defaultLocationId: 'loc_main',
+    defaultStartTime: '19:30',
+    defaultEndTime: '21:30',
+    targetAudienceType: 'ALL',
+    isArchived: false,
+    createdAt: '2026-08-01T00:00:00Z',
+  },
+];
+
