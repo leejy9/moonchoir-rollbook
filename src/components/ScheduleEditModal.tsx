@@ -49,8 +49,6 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
     !categories.includes(schedule?.category || '') ? String(schedule?.category || '') : ''
   );
   const [description, setDescription] = useState(schedule?.description || '');
-  const [checkInPin, setCheckInPin] = useState(schedule?.checkInPin || '');
-  const [isArchived, setIsArchived] = useState(Boolean(schedule?.isArchived));
   const [editScope, setEditScope] = useState<EditScope>('THIS_ONLY');
   const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -87,8 +85,6 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
       endTime,
       category: finalCategory,
       description: description.trim() || undefined,
-      checkInPin: checkInPin.trim() || undefined,
-      isArchived,
       locationName: foundLoc ? foundLoc.name : schedule.locationName,
       locationId: foundLoc ? foundLoc.id : schedule.locationId,
       detailAddress: foundLoc?.detailAddress,
@@ -127,7 +123,7 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
 
   const handleDeleteThisOnly = async () => {
     if (!onDeleteSingle) return;
-    if (window.confirm(`'${schedule.date} ${schedule.title}' 이 일정만 삭제하시겠습니까?`)) {
+    if (window.confirm(`'${schedule.date} ${schedule.title}' 이 일정을 삭제하시겠습니까?`)) {
       try {
         setIsSubmitting(true);
         await onDeleteSingle(schedule.id, schedule.title);
@@ -145,7 +141,7 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
     const targetCount = futureCompanions.length + 1;
     if (
       window.confirm(
-        `'${schedule.date}' 일정을 포함하여 이후 남은 ${targetCount}개 회차를 모두 일괄 삭제하시겠습니까?\n과거의 연습 및 출결 기록은 안전하게 보존됩니다.`
+        `'${schedule.date}' 일정을 포함하여 이후 남은 ${targetCount}개 회차를 모두 일괄 삭제하시겠습니까?\n(과거의 연습 및 출결 기록은 안전하게 보존됩니다)`
       )
     ) {
       try {
@@ -166,7 +162,7 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
     const totalCount = companions.length + 1;
     if (
       window.confirm(
-        `'${schedule.title}' 전체 ${totalCount}개 회차 일정을 모두 일괄 삭제하시겠습니까?\n구글 스프레드시트에서도 해당 일정들이 모두 삭제됩니다.`
+        `'${schedule.title}' 전체 ${totalCount}개 회차 일정을 모두 삭제하시겠습니까?`
       )
     ) {
       try {
@@ -179,6 +175,16 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
       } finally {
         setIsSubmitting(false);
       }
+    }
+  };
+
+  const handleDeleteByScope = async () => {
+    if (!isRecurringSeries || editScope === 'THIS_ONLY') {
+      await handleDeleteThisOnly();
+    } else if (editScope === 'THIS_AND_FUTURE') {
+      await handleDeleteThisAndFuture();
+    } else {
+      await handleDeleteAllInSeries();
     }
   };
 
@@ -232,103 +238,6 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
             </div>
           )}
 
-          {/* 3-Tier Recurrence Scope Selector (Google Calendar Style) */}
-          {isRecurringSeries && (
-            <div
-              style={{
-                backgroundColor: '#F0FDF4',
-                border: '1px solid #BBF7D0',
-                borderRadius: '12px',
-                padding: '14px',
-                marginBottom: '16px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <span style={{ fontSize: '18px' }}>🔁</span>
-                <div>
-                  <strong style={{ fontSize: '13px', color: '#166534' }}>
-                    반복 일정 3단 변경 범위 설정
-                  </strong>
-                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#15803D' }}>
-                    연관된 정기 일정이 총 {companions.length + 1}회차 등록되어 있습니다.
-                  </p>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    color: editScope === 'THIS_ONLY' ? '#166534' : '#475569',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="editScope"
-                    value="THIS_ONLY"
-                    checked={editScope === 'THIS_ONLY'}
-                    onChange={() => setEditScope('THIS_ONLY')}
-                    style={{ accentColor: '#10B981', cursor: 'pointer' }}
-                  />
-                  <span>📌 <strong>이 일정만 변경</strong> ({schedule.date} 회차만 적용)</span>
-                </label>
-
-                {futureCompanions.length > 0 && (
-                  <label
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      color: editScope === 'THIS_AND_FUTURE' ? '#166534' : '#475569',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="editScope"
-                      value="THIS_AND_FUTURE"
-                      checked={editScope === 'THIS_AND_FUTURE'}
-                      onChange={() => setEditScope('THIS_AND_FUTURE')}
-                      style={{ accentColor: '#10B981', cursor: 'pointer' }}
-                    />
-                    <span>
-                      ⏩ <strong>이 일정 및 향후 모든 일정 일괄 변경</strong> (앞으로 남은 {futureCompanions.length + 1}개 회차에 반영, 과거 출결 보존!)
-                    </span>
-                  </label>
-                )}
-
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    color: editScope === 'ALL' ? '#166534' : '#475569',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="editScope"
-                    value="ALL"
-                    checked={editScope === 'ALL'}
-                    onChange={() => setEditScope('ALL')}
-                    style={{ accentColor: '#10B981', cursor: 'pointer' }}
-                  />
-                  <span>🔁 <strong>전체 {companions.length + 1}개 회차 일괄 변경</strong> (시리즈 전체 적용)</span>
-                </label>
-              </div>
-            </div>
-          )}
-
           <form id="schedule-edit-form" onSubmit={handleSubmit} className="modern-form-wrapper">
             <div className="form-responsive-grid">
               <div className="modern-field-group full-width">
@@ -353,8 +262,8 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
                   required
                 />
                 {isRecurringSeries && editScope !== 'THIS_ONLY' && (
-                  <span style={{ fontSize: '11px', color: '#6b7684', marginTop: '4px' }}>
-                    ※ 일괄 수정 시 각 회차의 고유 날짜는 유지됩니다.
+                  <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
+                    ※ 일괄 변경 시 각 회차의 고유 날짜는 유지됩니다.
                   </span>
                 )}
               </div>
@@ -468,123 +377,101 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
                 <label className="modern-field-label">연습 곡목 및 메모</label>
                 <textarea
                   className="modern-textarea"
-                  rows={3}
+                  rows={5}
+                  style={{ minHeight: '120px', lineHeight: '1.6' }}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="연습할 곡목이나 단원 공지사항을 입력하세요."
+                  placeholder="연습할 곡목이나 단원 공지사항을 입력하세요 (줄바꿈 지원)"
                 />
-              </div>
-
-              <div className="modern-field-group">
-                <label className="modern-field-label">현장 출석 PIN (4자리)</label>
-                <input
-                  type="text"
-                  maxLength={4}
-                  className="modern-input"
-                  value={checkInPin}
-                  onChange={(e) => setCheckInPin(e.target.value.replace(/\D/g, ''))}
-                  placeholder="예: 1022"
-                />
-              </div>
-
-              <div className="modern-field-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '6px 0' }}>
-                  <input
-                    type="checkbox"
-                    checked={isArchived}
-                    onChange={(e) => setIsArchived(e.target.checked)}
-                    style={{ width: '18px', height: '18px', accentColor: '#8B5CF6' }}
-                  />
-                  <span style={{ fontSize: '13.5px', fontWeight: 600, color: '#334155' }}>
-                    📦 지난 시즌 아카이브로 보관 (일반 캘린더 및 활성 목록에서 숨김)
-                  </span>
-                </label>
               </div>
             </div>
           </form>
-        </div>
 
-        {/* Modal Footer */}
-        <div
-          className="modal-footer-sticky"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '10px',
-          }}
-        >
-          <div>
-            {isRecurringSeries ? (
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Scope Selector: placed cleanly at bottom */}
+          {isRecurringSeries && (
+            <div className="schedule-scope-container">
+              <span className="schedule-scope-label">적용 범위</span>
+              <div className="schedule-scope-segmented" role="radiogroup" aria-label="적용 범위">
                 <button
                   type="button"
-                  className="btn-modal-delete"
-                  onClick={handleDeleteThisOnly}
-                  disabled={isSubmitting}
-                  style={{ minHeight: '44px', padding: '0 12px', fontSize: '13px' }}
+                  className={`schedule-scope-pill ${editScope === 'THIS_ONLY' ? 'active' : ''}`}
+                  onClick={() => setEditScope('THIS_ONLY')}
                 >
-                  이 회차만 삭제
+                  이 일정만 변경
                 </button>
                 {futureCompanions.length > 0 && (
                   <button
                     type="button"
-                    className="btn-modal-delete"
-                    onClick={handleDeleteThisAndFuture}
-                    disabled={isSubmitting}
-                    style={{ minHeight: '44px', padding: '0 12px', fontSize: '13px', background: '#F97316' }}
-                    title="과거 출결은 남기고 오늘 이후 회차만 삭제"
+                    className={`schedule-scope-pill ${editScope === 'THIS_AND_FUTURE' ? 'active' : ''}`}
+                    onClick={() => setEditScope('THIS_AND_FUTURE')}
                   >
-                    ⏩ 향후 {futureCompanions.length + 1}회차 삭제
+                    이후 일정 변경
                   </button>
                 )}
                 <button
                   type="button"
-                  className="btn-modal-delete"
-                  onClick={handleDeleteAllInSeries}
-                  disabled={isSubmitting}
-                  style={{ minHeight: '44px', padding: '0 12px', fontSize: '13px', background: '#DC2626' }}
+                  className={`schedule-scope-pill ${editScope === 'ALL' ? 'active' : ''}`}
+                  onClick={() => setEditScope('ALL')}
                 >
-                  전체 일괄 삭제
+                  모든 일정 변경
                 </button>
               </div>
-            ) : (
-              <button
-                type="button"
-                className="btn-modal-delete"
-                onClick={handleDeleteThisOnly}
-                disabled={isSubmitting}
-                style={{ minHeight: '44px' }}
-              >
-                🗑️ 일정 삭제
-              </button>
-            )}
-          </div>
+            </div>
+          )}
+        </div>
 
-          <div style={{ display: 'flex', gap: '10px' }}>
+        {/* Modal Footer */}
+        <div className="schedule-modal-footer">
+          <button
+            type="button"
+            className="btn-schedule-delete"
+            onClick={handleDeleteByScope}
+            disabled={isSubmitting}
+            title={
+              isRecurringSeries
+                ? editScope === 'THIS_ONLY'
+                  ? '현재 이 회차만 삭제합니다'
+                  : editScope === 'THIS_AND_FUTURE'
+                  ? `오늘 포함 이후 ${futureCompanions.length + 1}개 회차를 삭제합니다`
+                  : `시리즈 전체 ${companions.length + 1}개 회차를 모두 삭제합니다`
+                : '이 일정을 삭제합니다'
+            }
+          >
+            <span>🗑️</span>
+            <span>
+              {isRecurringSeries
+                ? editScope === 'THIS_ONLY'
+                  ? '이 일정 삭제'
+                  : editScope === 'THIS_AND_FUTURE'
+                  ? '이후 일정 삭제'
+                  : '모든 일정 삭제'
+                : '일정 삭제'}
+            </span>
+          </button>
+
+          <div className="schedule-footer-actions">
             <button
               type="button"
-              className="btn-modal-cancel"
+              className="btn-schedule-cancel"
               onClick={onClose}
               disabled={isSubmitting}
-              style={{ minHeight: '44px' }}
             >
               취소
             </button>
             <button
               type="submit"
               form="schedule-edit-form"
-              className="btn-modal-save"
+              className="btn-schedule-save"
               disabled={isSubmitting}
-              style={{ minHeight: '44px' }}
             >
               {isSubmitting
                 ? '저장 중...'
-                : isRecurringSeries && editScope === 'THIS_AND_FUTURE'
-                ? `향후 ${futureCompanions.length + 1}회차 일괄 저장`
-                : isRecurringSeries && editScope === 'ALL'
-                ? `전체 ${companions.length + 1}회차 일괄 저장`
+                : isRecurringSeries
+                ? editScope === 'THIS_ONLY'
+                  ? '이 일정만 저장'
+                  : editScope === 'THIS_AND_FUTURE'
+                  ? '이후 일정 일괄 저장'
+                  : '모든 일정 일괄 저장'
                 : '변경사항 저장'}
             </button>
           </div>
