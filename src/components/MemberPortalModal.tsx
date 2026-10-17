@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
-import type { BoundDeviceProfile, Member, RawAttendanceLog, RSVPVote, Schedule } from '../types/rollbook';
+import type { BoundDeviceProfile, Member, RawAttendanceLog, RSVPVote } from '../types/rollbook';
 import { calculateCumulativeAttendanceWithLifecycle } from '../utils/attendanceStats';
-import { LiquidGauge } from './LiquidGauge';
 
 interface MemberPortalModalProps {
   profile: BoundDeviceProfile;
@@ -21,7 +20,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   onLogout,
   onRefreshData,
 }) => {
-  const [activeTab, setActiveTab] = useState<'LOGS' | 'VOTES' | 'TIMELINE'>('LOGS');
+  const [activeTab, setActiveTab] = useState<'RECORDS' | 'DASHBOARD'>('RECORDS');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [todayStr] = useState(getTodayDateString);
@@ -51,57 +50,79 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   // 2. 단원 생애주기 & 입단일 반영 누적 통계 산출
   const memberSummary = useMemo(() => {
     const summaries = calculateCumulativeAttendanceWithLifecycle([currentMember], schedules, allLogs);
-    return summaries[0] || {
-      attendanceRate: 100,
-      totalSessions: 0,
-      attended: 0,
-      late: 0,
-      excused: 0,
-      absent: 0,
-      badges: [],
-      guestAttended: 0,
-    };
+    return (
+      summaries[0] || {
+        attendanceRate: 100,
+        totalSessions: 0,
+        attended: 0,
+        late: 0,
+        excused: 0,
+        absent: 0,
+        badges: [],
+        guestAttended: 0,
+      }
+    );
   }, [currentMember, schedules, allLogs]);
 
-  // 3. 내 원천 출석 로그 (최신순)
-  const myLogs: (RawAttendanceLog & { scheduleTitle?: string; scheduleDate?: string })[] = useMemo(() => {
-    const scheduleMap = new Map<string, Schedule>();
-    schedules.forEach((s) => scheduleMap.set(s.id, s));
-
-    return allLogs
+  // 3. 탭 1용: 회차별 통합 리스트 데이터 조립 [연습명칭 / 연습일 / 투표 상태 / 출결 시간]
+  const scheduleRecords = useMemo(() => {
+    const logMap = new Map<string, RawAttendanceLog>();
+    allLogs
       .filter((l) => l.memberId === profile.memberId)
-      .map((l) => {
-        const sch = scheduleMap.get(l.scheduleId);
-        return {
-          ...l,
-          scheduleTitle: sch?.title || '연습 일정',
-          scheduleDate: sch?.date || l.timestamp.slice(0, 10),
-        };
-      })
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [allLogs, profile.memberId, schedules]);
+      .forEach((l) => logMap.set(l.scheduleId, l));
 
-  // 4. 내 사전 투표 내역 (날짜순 정렬)
-  const myVotes: (RSVPVote & { scheduleTitle?: string; scheduleDate?: string; isUpcoming?: boolean })[] = useMemo(() => {
-    const scheduleMap = new Map<string, Schedule>();
-    schedules.forEach((s) => scheduleMap.set(s.id, s));
-
-    return allVotes
+    const voteMap = new Map<string, RSVPVote>();
+    allVotes
       .filter((v) => v.memberId === profile.memberId)
-      .map((v) => {
-        const sch = scheduleMap.get(v.scheduleId);
-        const date = sch?.date || '';
-        return {
-          ...v,
-          scheduleTitle: sch?.title || '연습 일정',
-          scheduleDate: date,
-          isUpcoming: Boolean(date && date >= todayStr),
-        };
-      })
-      .sort((a, b) => (b.scheduleDate || '').localeCompare(a.scheduleDate || ''));
-  }, [allVotes, profile.memberId, schedules, todayStr]);
+      .forEach((v) => voteMap.set(v.scheduleId, v));
 
-  // 5. 시트 동기화 핸들러
+    // 최신 연습일정이 상단에 오도록 내림차순 정렬
+    const sortedSchedules = [...schedules].sort((a, b) => b.date.localeCompare(a.date));
+
+    return sortedSchedules.map((s) => {
+      const log = logMap.get(s.id);
+      const vote = voteMap.get(s.id);
+      const isPast = s.date < todayStr;
+      const isToday = s.date === todayStr;
+      const isExempt = Boolean(currentMember.joinedAt && s.date < currentMember.joinedAt);
+
+      let checkInTime = '-';
+      let isAttended = false;
+      if (log) {
+        isAttended = true;
+        try {
+          const d = new Date(log.timestamp);
+          if (!isNaN(d.getTime())) {
+            checkInTime = d.toLocaleTimeString('ko-KR', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            });
+          } else {
+            checkInTime = log.timestamp.slice(11, 16);
+          }
+        } catch {
+          checkInTime = log.timestamp;
+        }
+      }
+
+      return {
+        id: s.id,
+        title: s.title,
+        date: s.date,
+        category: s.category || '정기연습',
+        voteStatus: vote ? vote.status : null,
+        voteReason: vote?.reason || '',
+        isAttended,
+        checkInTime,
+        isPast,
+        isToday,
+        isExempt,
+      };
+    });
+  }, [schedules, allLogs, allVotes, profile.memberId, currentMember.joinedAt, todayStr]);
+
+  // 4. 시트 동기화 핸들러
   const handleSyncRemote = async () => {
     setIsSyncing(true);
     setSyncFeedback(null);
@@ -117,537 +138,513 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     }
   };
 
-  // 포맷 헬퍼: KST 타임스탬프
-  const formatTimestamp = (ts: string) => {
-    if (!ts) return '-';
-    try {
-      const d = new Date(ts);
-      if (isNaN(d.getTime())) return ts;
-      return d.toLocaleString('ko-KR', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
-    } catch {
-      return ts;
-    }
-  };
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="modal-container member-portal-container"
+        className="modal-container member-portal-container-modern"
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: '520px',
+          maxWidth: '560px',
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
           background: '#ffffff',
           borderRadius: '20px',
           overflow: 'hidden',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.18)',
+          boxShadow: '0 20px 45px rgba(0,0,0,0.2)',
         }}
       >
-        {/* Header */}
+        {/* Modal Top Header */}
         <div
           style={{
-            padding: '20px 24px 16px',
-            background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
+            padding: '18px 22px 14px',
+            background: 'linear-gradient(135deg, #1e1b4b 0%, #2e2a72 100%)',
             color: '#ffffff',
-            position: 'relative',
           }}
         >
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              position: 'absolute',
-              top: '16px',
-              right: '16px',
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.15)',
-              border: 'none',
-              color: '#ffffff',
-              fontSize: '18px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            aria-label="닫기"
-          >
-            ✕
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                padding: '3px 10px',
-                borderRadius: '999px',
-                background: '#4f46e5',
-                color: '#ffffff',
-              }}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span className={`part-badge part-${profile.part}`}>{profile.part}</span>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#ffffff' }}>
+                  {profile.name} <span style={{ fontSize: '13px', fontWeight: 500, color: '#cbd5e1' }}>단원 성적표</span>
+                </h2>
+                <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                  {currentMember.memberStatus || '정단원'} · 입단일 {currentMember.joinedAt || '미등록'}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn-modal-round-close"
+              onClick={onClose}
+              aria-label="닫기"
+              style={{ background: 'rgba(255,255,255,0.15)', color: '#ffffff', border: 'none' }}
             >
-              {currentMember.part || profile.part}
-            </span>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                padding: '3px 10px',
-                borderRadius: '999px',
-                background: 'rgba(255,255,255,0.2)',
-                color: '#e0e7ff',
-              }}
-            >
-              {currentMember.memberStatus || '정단원'}
-            </span>
+              ✕
+            </button>
           </div>
 
-          <h2 style={{ margin: '0 0 4px', fontSize: '1.45rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
-            {profile.name} <span style={{ fontSize: '0.95rem', fontWeight: 400, opacity: 0.85 }}>단원님</span>
-          </h2>
-          <div style={{ fontSize: '0.8rem', color: '#c7d2fe', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            {currentMember.joinedAt && <span>입단일: {currentMember.joinedAt}</span>}
-            <span>인증번호: 뒷자리 {profile.phoneLast4}</span>
+          {/* 2-Tab Segmented Control */}
+          <div
+            style={{
+              display: 'flex',
+              background: 'rgba(0, 0, 0, 0.25)',
+              padding: '4px',
+              borderRadius: '12px',
+              marginTop: '14px',
+              gap: '4px',
+            }}
+            role="tablist"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'RECORDS'}
+              onClick={() => setActiveTab('RECORDS')}
+              style={{
+                flex: 1,
+                minHeight: '38px',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '13.5px',
+                fontWeight: activeTab === 'RECORDS' ? 700 : 500,
+                cursor: 'pointer',
+                background: activeTab === 'RECORDS' ? '#ffffff' : 'transparent',
+                color: activeTab === 'RECORDS' ? '#1e1b4b' : '#cbd5e1',
+                boxShadow: activeTab === 'RECORDS' ? '0 2px 5px rgba(0,0,0,0.12)' : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              📋 출결 기록 표
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'DASHBOARD'}
+              onClick={() => setActiveTab('DASHBOARD')}
+              style={{
+                flex: 1,
+                minHeight: '38px',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '13.5px',
+                fontWeight: activeTab === 'DASHBOARD' ? 700 : 500,
+                cursor: 'pointer',
+                background: activeTab === 'DASHBOARD' ? '#ffffff' : 'transparent',
+                color: activeTab === 'DASHBOARD' ? '#1e1b4b' : '#cbd5e1',
+                boxShadow: activeTab === 'DASHBOARD' ? '0 2px 5px rgba(0,0,0,0.12)' : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              👤 개인 대시보드
+            </button>
           </div>
         </div>
 
-        {/* Scrollable Body */}
-        <div style={{ padding: '20px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        {/* Modal Scrollable Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {syncFeedback && (
             <div
               style={{
                 padding: '10px 14px',
                 borderRadius: '10px',
-                fontSize: '0.85rem',
-                background: syncFeedback.startsWith('✅') ? '#ecfdf5' : '#fef2f2',
-                color: syncFeedback.startsWith('✅') ? '#065f46' : '#991b1b',
-                border: syncFeedback.startsWith('✅') ? '1px solid #a7f3d0' : '1px solid #fecaca',
+                background: syncFeedback.startsWith('✅') ? '#ecfdf5' : '#fff1f2',
+                color: syncFeedback.startsWith('✅') ? '#065f46' : '#9f1239',
+                fontSize: '13px',
+                fontWeight: 600,
               }}
             >
               {syncFeedback}
             </div>
           )}
 
-          {/* Quick Scorecard Card (Toss Minimalist) */}
-          <div
-            style={{
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0',
-              borderRadius: '16px',
-              padding: '16px 18px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '16px',
-            }}
-          >
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>
-                누적 출석률 (실시간 투영)
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                <span style={{ fontSize: '1.8rem', fontWeight: 800, color: '#1e293b' }}>
-                  {memberSummary.attendanceRate}%
-                </span>
-                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                  ({memberSummary.attended}회 출석 / {memberSummary.totalSessions}회 의무)
-                </span>
-              </div>
-
-              {/* Badges row */}
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
-                {memberSummary.badges.map((b) => (
-                  <span
-                    key={b}
-                    style={{
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '6px',
-                      background: b.includes('개근')
-                        ? '#fef3c7'
-                        : b.includes('우수')
-                        ? '#dcfce7'
-                        : b.includes('게스트')
-                        ? '#ede9fe'
-                        : '#fee2e2',
-                      color: b.includes('개근')
-                        ? '#92400e'
-                        : b.includes('우수')
-                        ? '#166534'
-                        : b.includes('게스트')
-                        ? '#5b21b6'
-                        : '#991b1b',
-                    }}
-                  >
-                    {b}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ width: 56, height: 56 }}>
-              <LiquidGauge percentage={memberSummary.attendanceRate} size={56} subText="출석" />
-            </div>
-          </div>
-
-          {/* Tab Selector */}
-          <div
-            style={{
-              display: 'flex',
-              background: '#f1f5f9',
-              padding: '4px',
-              borderRadius: '12px',
-              gap: '4px',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setActiveTab('LOGS')}
-              style={{
-                flex: 1,
-                minHeight: '40px',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                background: activeTab === 'LOGS' ? '#ffffff' : 'transparent',
-                color: activeTab === 'LOGS' ? '#1e293b' : '#64748b',
-                boxShadow: activeTab === 'LOGS' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              🕒 출석 원천 로그 ({myLogs.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('VOTES')}
-              style={{
-                flex: 1,
-                minHeight: '40px',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                background: activeTab === 'VOTES' ? '#ffffff' : 'transparent',
-                color: activeTab === 'VOTES' ? '#1e293b' : '#64748b',
-                boxShadow: activeTab === 'VOTES' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              📝 사전 투표 ({myVotes.length})
-            </button>
-            {currentMember.statusHistory && currentMember.statusHistory.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('TIMELINE')}
+          {/* TAB 1: 출결 기록 표 [연습명칭 / 연습일 / 투표 상태 / 출결 시간] */}
+          {activeTab === 'RECORDS' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* Top Slim Attendance Summary Bar */}
+              <div
                 style={{
-                  flex: 1,
-                  minHeight: '40px',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  background: activeTab === 'TIMELINE' ? '#ffffff' : 'transparent',
-                  color: activeTab === 'TIMELINE' ? '#1e293b' : '#64748b',
-                  boxShadow: activeTab === 'TIMELINE' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
-                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '12px',
+                  padding: '10px 14px',
+                  fontSize: '13px',
                 }}
               >
-                📜 신분 이력 ({currentMember.statusHistory.length})
-              </button>
-            )}
-          </div>
-
-          {/* Tab 1: Raw Attendance Logs */}
-          {activeTab === 'LOGS' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500 }}>
-                💡 구글 시트 <code>출석원천로그</code>에 불변으로 영구 기록된 출석 타임스탬프입니다.
-              </div>
-
-              {myLogs.length === 0 ? (
-                <div
-                  style={{
-                    padding: '32px 16px',
-                    textAlign: 'center',
-                    background: '#f8fafc',
-                    borderRadius: '12px',
-                    color: '#94a3b8',
-                    fontSize: '0.9rem',
-                  }}
-                >
-                  아직 출석 체크 기록이 없습니다.
-                </div>
-              ) : (
-                myLogs.map((log) => (
-                  <div
-                    key={log.id}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span
                     style={{
-                      padding: '12px 14px',
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '12px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px',
+                      background: memberSummary.attendanceRate >= 80 ? '#10b981' : '#f59e0b',
+                      color: '#ffffff',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      padding: '2px 8px',
+                      borderRadius: '8px',
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: '0.92rem', color: '#1e293b' }}>
-                        {log.scheduleTitle}
-                      </strong>
-                      <span
-                        style={{
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          background: log.isVerifiedLocation ? '#ecfdf5' : '#fffbeb',
-                          color: log.isVerifiedLocation ? '#059669' : '#d97706',
-                        }}
-                      >
-                        {log.isVerifiedLocation ? '📍 위치 인증' : '⚠️ GPS 미검증'}
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
-                      <span>체크인: {formatTimestamp(log.timestamp)}</span>
-                      <span>인증: {log.authMethod === 'QR_WEB_CAM' ? '📷 QR스캔' : log.authMethod === 'MANUAL_PIN' ? '🔢 PIN입력' : '👑 수동인정'}</span>
-                    </div>
-
-                    {log.distanceMeters !== undefined && (
-                      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                        연습실과의 실측 오차: {Math.round(log.distanceMeters)}m
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* Tab 2: RSVP Votes */}
-          {activeTab === 'VOTES' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500 }}>
-                💡 구글 시트 <code>사전투표_RSVP</code>에 등록된 내 투표 내역입니다.
+                    출석률 {memberSummary.attendanceRate}%
+                  </span>
+                  <span style={{ color: '#334155', fontWeight: 600 }}>
+                    총 {memberSummary.totalSessions}회 중 {memberSummary.attended}회 출석
+                  </span>
+                </div>
+                <span style={{ color: '#64748b', fontSize: '12px' }}>
+                  결석 {memberSummary.absent}회 · 지각 {memberSummary.late}회
+                </span>
               </div>
 
-              {myVotes.length === 0 ? (
+              {/* Attendance Log Table */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                {/* Table Column Headers */}
                 <div
+                  className="scorecard-table-header"
                   style={{
-                    padding: '32px 16px',
-                    textAlign: 'center',
-                    background: '#f8fafc',
-                    borderRadius: '12px',
-                    color: '#94a3b8',
-                    fontSize: '0.9rem',
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(140px, 1.8fr) 100px 85px 85px',
+                    background: '#f1f5f9',
+                    padding: '10px 12px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: '#475569',
+                    borderBottom: '1px solid #e2e8f0',
                   }}
                 >
-                  아직 등록된 사전 투표 내역이 없습니다.
+                  <span>연습명칭</span>
+                  <span>연습일</span>
+                  <span style={{ textAlign: 'center' }}>투표 상태</span>
+                  <span style={{ textAlign: 'right' }}>출결 시간</span>
                 </div>
-              ) : (
-                myVotes.map((vote) => (
-                  <div
-                    key={vote.id}
-                    style={{
-                      padding: '12px 14px',
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '12px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: '0.92rem', color: '#1e293b' }}>
-                        {vote.scheduleTitle}
-                      </strong>
-                      <span
-                        style={{
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: '6px',
-                          background: vote.status === 'ATTEND' ? '#dcfce7' : '#fee2e2',
-                          color: vote.status === 'ATTEND' ? '#15803d' : '#b91c1c',
-                        }}
-                      >
-                        {vote.status === 'ATTEND' ? '🟢 참석' : '🔴 불참'}
-                      </span>
-                    </div>
 
-                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                      연습 일자: {vote.scheduleDate}
+                {/* Table Body */}
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {scheduleRecords.length === 0 ? (
+                    <div style={{ padding: '30px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                      등록된 연습 일정이 없습니다.
                     </div>
-
-                    {vote.reason && (
+                  ) : (
+                    scheduleRecords.map((r, idx) => (
                       <div
+                        key={r.id}
+                        className="scorecard-table-row"
                         style={{
-                          marginTop: '4px',
-                          padding: '6px 10px',
-                          borderRadius: '6px',
-                          background: '#f8fafc',
-                          fontSize: '0.8rem',
-                          color: '#475569',
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(140px, 1.8fr) 100px 85px 85px',
+                          alignItems: 'center',
+                          padding: '11px 12px',
+                          borderBottom: idx === scheduleRecords.length - 1 ? 'none' : '1px solid #f1f5f9',
+                          background: r.isToday ? '#f0fdf4' : idx % 2 === 0 ? '#ffffff' : '#fafafa',
+                          fontSize: '12.5px',
                         }}
                       >
-                        💬 "{vote.reason}"
+                        {/* 1. 연습명칭 */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              background: '#e0e7ff',
+                              color: '#3730a3',
+                              padding: '2px 5px',
+                              borderRadius: '4px',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {r.category}
+                          </span>
+                          <span
+                            style={{
+                              fontWeight: 600,
+                              color: '#1e293b',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={r.title}
+                          >
+                            {r.title}
+                          </span>
+                        </div>
+
+                        {/* 2. 연습일 */}
+                        <span style={{ color: '#64748b', fontSize: '12px', fontFamily: 'monospace' }}>
+                          {r.date}
+                        </span>
+
+                        {/* 3. 투표 상태 */}
+                        <div style={{ textAlign: 'center' }}>
+                          {r.voteStatus === 'ATTEND' ? (
+                            <span
+                              style={{
+                                background: '#dcfce7',
+                                color: '#15803d',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontWeight: 700,
+                                fontSize: '11.5px',
+                              }}
+                            >
+                              참석
+                            </span>
+                          ) : r.voteStatus === 'ABSENT' ? (
+                            <span
+                              style={{
+                                background: '#ffedd5',
+                                color: '#c2410c',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontWeight: 700,
+                                fontSize: '11.5px',
+                              }}
+                              title={r.voteReason ? `사유: ${r.voteReason}` : undefined}
+                            >
+                              불참
+                            </span>
+                          ) : r.voteStatus === 'LATE' ? (
+                            <span
+                              style={{
+                                background: '#fef3c7',
+                                color: '#b45309',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontWeight: 700,
+                                fontSize: '11.5px',
+                              }}
+                            >
+                              지각
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                background: '#f1f5f9',
+                                color: '#94a3b8',
+                                padding: '3px 7px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                              }}
+                            >
+                              미투표
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 4. 출결 시간 */}
+                        <div style={{ textAlign: 'right' }}>
+                          {r.isAttended ? (
+                            <span
+                              style={{
+                                color: '#16a34a',
+                                fontWeight: 700,
+                                fontSize: '12px',
+                                fontFamily: 'monospace',
+                              }}
+                            >
+                              {r.checkInTime}
+                            </span>
+                          ) : r.isExempt ? (
+                            <span style={{ color: '#94a3b8', fontSize: '11px' }}>모수제외</span>
+                          ) : r.isPast ? (
+                            <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '11.5px' }}>결석 (-)</span>
+                          ) : (
+                            <span style={{ color: '#94a3b8', fontSize: '11.5px' }}>대기</span>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* Tab 3: Member Status History */}
-          {activeTab === 'TIMELINE' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500 }}>
-                💡 구글 시트 <code>단원변경로그</code>에 기록된 내 상태 및 파트 변경 이력입니다.
-              </div>
-
-              {(currentMember.statusHistory || []).map((h) => (
-                <div
-                  key={h.id}
-                  style={{
-                    padding: '12px 14px',
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 700, color: '#334155', fontSize: '0.88rem' }}>
-                      {h.status} ({h.part})
-                    </span>
-                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                      {h.startDate} ~ {h.endDate === '2999-12-31' ? '영구' : h.endDate}
-                    </span>
-                  </div>
-                  {h.reason && (
-                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                      사유: {h.reason}
-                    </div>
+                    ))
                   )}
                 </div>
-              ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: 개인 대시보드 (자연어 브리핑 & 계정 관리) */}
+          {activeTab === 'DASHBOARD' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* 자연어 출결 브리핑 카드 */}
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '16px',
+                  padding: '18px 20px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '20px' }}>📝</span>
+                  <strong style={{ fontSize: '15px', color: '#166534' }}>
+                    {profile.name} 단원 출결 브리핑
+                  </strong>
+                </div>
+                <div style={{ fontSize: '13.5px', color: '#15803d', lineHeight: '1.65' }}>
+                  <p style={{ margin: '0 0 6px' }}>
+                    문콰이어 정기연습 총 <strong>{memberSummary.totalSessions}회</strong> 중{' '}
+                    <strong>{memberSummary.attended}회</strong> 출석하셨습니다.
+                  </p>
+                  <p style={{ margin: '0 0 6px' }}>
+                    현재 누적 출석률은 <strong>{memberSummary.attendanceRate}%</strong>이며,{' '}
+                    {memberSummary.attendanceRate >= 80 ? (
+                      <span>정단원 출석 기준(80% 이상)을 안정적으로 달성하고 계십니다. 🎉</span>
+                    ) : (
+                      <span>출석률 80% 달성을 위해 적극적인 참석을 권장드립니다. 💪</span>
+                    )}
+                  </p>
+                  {memberSummary.absent > 0 ? (
+                    <p style={{ margin: 0, color: '#b45309' }}>
+                      ※ 결석 기록이 <strong>{memberSummary.absent}회</strong> 확인됩니다.
+                    </p>
+                  ) : (
+                    <p style={{ margin: 0, color: '#166534', fontWeight: 700 }}>
+                      🌟 현재 결석 없이 전 회차 성실히 출석 중입니다!
+                    </p>
+                  )}
+                  {(memberSummary.guestAttended ?? 0) > 0 && (
+                    <p style={{ margin: '6px 0 0', color: '#4338ca', fontSize: '12.5px' }}>
+                      💡 비의무/게스트 연습에 {memberSummary.guestAttended}회 추가 참석하여 기여하셨습니다.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* 기본 소속 프로필 정보 */}
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '16px 18px',
+                }}
+              >
+                <h3 style={{ margin: '0 0 12px', fontSize: '13.5px', color: '#475569', fontWeight: 700 }}>
+                  소속 및 인적사항
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '12px', display: 'block' }}>소속 파트</span>
+                    <strong style={{ color: '#1e293b' }}>{profile.part}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '12px', display: 'block' }}>회원 구분</span>
+                    <strong style={{ color: '#1e293b' }}>{currentMember.memberStatus || '정단원'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '12px', display: 'block' }}>입단 일자</span>
+                    <strong style={{ color: '#1e293b' }}>{currentMember.joinedAt || '미등록'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '12px', display: 'block' }}>본인인증 PIN</span>
+                    <strong style={{ color: '#1e293b' }}>끝자리 {profile.phoneLast4}</strong>
+                  </div>
+                </div>
+                {currentMember.note && (
+                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', fontSize: '12.5px', color: '#64748b' }}>
+                    비고: {currentMember.note}
+                  </div>
+                )}
+              </div>
+
+              {/* 기기 연동 및 계정 관리 */}
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '16px 18px',
+                }}
+              >
+                <h3 style={{ margin: '0 0 8px', fontSize: '13.5px', color: '#475569', fontWeight: 700 }}>
+                  기기 연동 및 계정 관리
+                </h3>
+                <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#64748b' }}>
+                  현재 사용 중인 스마트폰 기기가 본인 계정에 1인 1기기 락(Lock)으로 등록되어 있습니다.
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={handleSyncRemote}
+                    disabled={isSyncing}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      background: '#ffffff',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '10px',
+                      padding: '10px 14px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: '#334155',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span>🔄</span>
+                    <span>{isSyncing ? '동기화 중...' : '구글 시트 최신 데이터 동기화'}</span>
+                  </button>
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={onChangeBinding}
+                      style={{
+                        flex: 1,
+                        background: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        fontSize: '12.5px',
+                        fontWeight: 600,
+                        color: '#475569',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      다른 단원으로 재연동
+                    </button>
+                    {onLogout && (
+                      <button
+                        type="button"
+                        onClick={onLogout}
+                        style={{
+                          flex: 1,
+                          background: '#fff1f2',
+                          border: '1px solid #fecdd3',
+                          borderRadius: '10px',
+                          padding: '10px',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          color: '#e11d48',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🔓 기기 연동 해제
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Footer Actions */}
+        {/* Modal Bottom Footer */}
         <div
           style={{
-            padding: '14px 20px',
-            background: '#f8fafc',
+            padding: '14px 22px',
             borderTop: '1px solid #e2e8f0',
+            background: '#ffffff',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '10px',
-            flexWrap: 'wrap',
+            justifyContent: 'flex-end',
           }}
         >
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              type="button"
-              onClick={handleSyncRemote}
-              disabled={isSyncing}
-              style={{
-                height: '42px',
-                padding: '0 12px',
-                borderRadius: '8px',
-                background: '#ffffff',
-                border: '1px solid #cbd5e1',
-                fontSize: '0.82rem',
-                fontWeight: 600,
-                color: '#334155',
-                cursor: 'pointer',
-              }}
-            >
-              {isSyncing ? '동기화 중...' : '🔄 시트 동기화'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onChangeBinding();
-              }}
-              style={{
-                height: '42px',
-                padding: '0 12px',
-                borderRadius: '8px',
-                background: '#ffffff',
-                border: '1px solid #cbd5e1',
-                fontSize: '0.82rem',
-                fontWeight: 600,
-                color: '#64748b',
-                cursor: 'pointer',
-              }}
-            >
-              ⚙️ 기기 재바인딩
-            </button>
-            {onLogout && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('이 기기에서 로그아웃(연동 해제)하시겠습니까?\n출석 체크를 하려면 다시 본인 인증(이름+전화번호)을 해야 합니다.')) {
-                    onClose();
-                    onLogout();
-                  }
-                }}
-                style={{
-                  height: '42px',
-                  padding: '0 12px',
-                  borderRadius: '8px',
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                  color: '#dc2626',
-                  cursor: 'pointer',
-                }}
-              >
-                🚪 연동 해제
-              </button>
-            )}
-          </div>
-
           <button
             type="button"
+            className="btn-modal-cancel"
             onClick={onClose}
-            style={{
-              height: '42px',
-              padding: '0 20px',
-              borderRadius: '8px',
-              background: '#1e293b',
-              border: 'none',
-              fontSize: '0.9rem',
-              fontWeight: 600,
-              color: '#ffffff',
-              cursor: 'pointer',
-              minWidth: '80px',
-            }}
+            style={{ minHeight: '42px', padding: '0 24px', fontSize: '13.5px' }}
           >
             닫기
           </button>
@@ -656,4 +653,5 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     </div>
   );
 };
+
 export default MemberPortalModal;
