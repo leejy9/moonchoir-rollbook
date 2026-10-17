@@ -12,6 +12,7 @@ import type {
   Schedule,
 } from '../types/rollbook';
 import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
+import { getKSTTimestampString } from '../utils/date';
 import {
   INITIAL_CONFIG,
   INITIAL_LOCATION_PRESETS,
@@ -140,9 +141,9 @@ export class SheetsService {
                 part: bound.part,
                 phoneLast4: bound.phoneLast4 || '0000',
                 role: bound.part === '선생님' ? 'ADMIN' : bound.part === '객원' ? 'GUEST' : 'MEMBER',
-                createdAt: new Date().toISOString(),
+                createdAt: getKSTTimestampString(),
                 status: 'ACTIVE',
-                joinedAt: new Date().toISOString().slice(0, 10),
+                joinedAt: getKSTTimestampString().slice(0, 10),
                 memberStatus: bound.part === '선생님' ? '선생님' : bound.part === '객원' ? '객원' : '정단원',
                 note: '',
               };
@@ -321,9 +322,9 @@ export class SheetsService {
         part: log.part || '소프라노',
         phoneLast4: '0000',
         role: 'MEMBER',
-        createdAt: new Date().toISOString(),
+        createdAt: getKSTTimestampString(),
         status: 'ACTIVE',
-        joinedAt: new Date().toISOString().slice(0, 10),
+        joinedAt: getKSTTimestampString().slice(0, 10),
         memberStatus: '정단원',
         note: '',
       });
@@ -350,9 +351,9 @@ export class SheetsService {
         part: vote.part || '소프라노',
         phoneLast4: '0000',
         role: 'MEMBER',
-        createdAt: new Date().toISOString(),
+        createdAt: getKSTTimestampString(),
         status: 'ACTIVE',
-        joinedAt: new Date().toISOString().slice(0, 10),
+        joinedAt: getKSTTimestampString().slice(0, 10),
         memberStatus: '정단원',
         note: '',
       });
@@ -479,7 +480,7 @@ export class SheetsService {
     }
     const updated = await this.updateMember(memberId, {
       boundDeviceId: deviceId,
-      boundDeviceAt: new Date().toISOString(),
+      boundDeviceAt: getKSTTimestampString(),
     });
     if (this.config.sheetsWebAppUrl) {
       this.sendToGoogleSheet('BIND_DEVICE', { memberId, deviceId }).catch((err) => {
@@ -852,7 +853,7 @@ export class SheetsService {
   }
 
   public getActiveOnSitePin(): string {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getKSTTimestampString().slice(0, 10);
     const todaySch = this.schedules.find((s) => s.date === todayStr);
     return this.config.activeOnSitePin || todaySch?.checkInPin || '5027';
   }
@@ -860,7 +861,7 @@ export class SheetsService {
   public refreshActiveOnSitePin(): string {
     const newPin = String(Math.floor(1000 + Math.random() * 9000));
     this.updateConfig({ activeOnSitePin: newPin });
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getKSTTimestampString().slice(0, 10);
     const todaySch = this.schedules.find((s) => s.date === todayStr);
     if (todaySch) {
       this.updateSchedule(todaySch.id, { checkInPin: newPin }).catch(() => {});
@@ -1172,7 +1173,9 @@ export class SheetsService {
       }
 
       const remoteMembers = data.members.map((m) => {
-        const phone = m.phone ? String(m.phone).trim() : '';
+        const localExisting = this.members.find((cur) => cur.id === m.id);
+        const rawPhone = m.phone ? String(m.phone).trim() : '';
+        const phone = rawPhone || (localExisting?.phone ? String(localExisting.phone).trim() : '');
         const rawLast4 = m.phoneLast4 !== undefined && m.phoneLast4 !== null ? String(m.phoneLast4).trim() : '';
         const phoneLast4 = rawLast4 ? rawLast4.padStart(4, '0') : (phone ? phone.replace(/\D/g, '').slice(-4) : '0000');
         const history = historyByMember.get(m.id) || m.statusHistory;
@@ -1365,7 +1368,7 @@ export class SheetsService {
           ? (((c as unknown as Record<string, unknown>).targetMemberIds as string).split(',').map((id: string) => id.trim()).filter(Boolean) as string[])
           : Array.isArray((c as unknown as Record<string, unknown>).targetMemberIds) ? ((c as unknown as Record<string, unknown>).targetMemberIds as string[]) : undefined,
         isArchived: c.isArchived === true || String(c.isArchived).toUpperCase() === 'TRUE',
-        createdAt: c.createdAt ? String(c.createdAt) : new Date().toISOString(),
+        createdAt: c.createdAt ? String(c.createdAt) : getKSTTimestampString(),
       }));
 
       const remoteCardIds = new Set(remoteCards.map((c) => c.id));

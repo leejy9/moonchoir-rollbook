@@ -562,6 +562,43 @@
 - `npm run lint`: 0 errors (1 harmless warning)
 - `npm run build`: Production bundle 성공 (821 kB / gzip 239 kB)
 
+---
+
+## [2026-10-18] Phase 4.8 Task 58: 휴단원 CUSTOM_MEMBERS 직접 지정 시 필참 우선순위 & 전체 연락처(010) 필수화 & 구글 시트 KST 타임스탬프 표준화
+
+### 1. 배경 및 문제 의식
+1. **차출 인원 우선순위 충돌**:
+   - 관리자가 '직접 지정(CUSTOM_MEMBERS)'으로 특정 단원을 필수 인원으로 지정했음에도 해당 단원의 기본 상태가 '휴단원'일 때 모수에서 제외되어 필참이 무효화되는 문제 발생.
+   - 반대로 '퇴단원'은 관리자가 실수로 선발 명단에 넣더라도 합창단 운영 원칙상 절대 필참이 되어서는 안 되는 안전 가드 필요.
+2. **연락처 유실 현상(이재연 단원 케이스)**:
+   - 기기 연동 시 뒷 4자리만 입력받아 바인딩을 완료하면서 `phone` 필드가 빈 문자열(`""`)로 구글 시트에 전송되어, `google-apps-script.js`의 `UPDATE_MEMBER`가 기존 시트에 있던 온전한 휴대폰 번호를 빈 값으로 덮어써버리는 치명적 데이터 오염 발생.
+3. **UTC 타임스탬프(`Z`) 혼란**:
+   - 구글 시트의 출석원천로그, 사전투표, 기기바인딩, 단원변경이력 등에 `2026-10-17T13:15:36.799Z`와 같은 UTC ISO 문자열이 그대로 기록되어, 시트에서 직접 볼 때 한국 시간보다 9시간 늦게 표시되어 관리자 가독성을 심각하게 저해함.
+
+### 2. 아키텍처 및 구현 내용
+1. **차출 인원 우선순위 엔진 (`src/utils/attendanceStats.ts`)**:
+   - 최상위 가드: `effective.status === '퇴단원'` $\rightarrow$ 즉시 `false` (관리자 실수 완벽 차단).
+   - 2순위: `schedule?.targetAudienceType === 'CUSTOM_MEMBERS'` $\rightarrow$ 대상자 ID 배열에 포함되어 있다면 휴단원이라도 관리자의 명시적 차출 의도를 인정하여 `true` (필참 및 출결 모수 포함).
+   - 기본 규칙: `ALL` 및 `PARTS` 일정에서는 정단원/준단원만 필참(`true`), 휴단원/객원/선생님은 비의무(`false`).
+2. **전체 연락처(010-XXXX-XXXX) 필수화 & 2중 Fallback 보호**:
+   - `BindingModal.tsx`: '기존 명부에서 찾기' 탭에서 뒷 4자리 입력 방식 완전 폐지 $\rightarrow$ `010-XXXX-XXXX` 전체 10~11자리 필수 입력 및 자동 포맷팅. 바인딩 완료 시 `sheetsService.updateMember(memberId, { phone, phoneLast4 })`를 즉시 호출하여 시트와 로컬에 전체 번호 동기화.
+   - `MemberProfileModal.tsx`: 연락처 수정 시 10~11자리 미만 입력 시 저장 차단 유효성 검사 추가.
+   - `sheets.ts`: `fetchRemoteData` 시 원격 시트의 `phone`이 비어 있더라도 로컬에 이미 저장된 전화번호가 있으면 덮어쓰지 않고 fallback 보존.
+   - `google-apps-script.js`: `UPDATE_MEMBER` 시 수신된 `data.phone`이 비어있으면 기존 시트 행의 전화번호를 그대로 유지하는 보호막 탑재.
+3. **한국 표준시(KST: `YYYY-MM-DD HH:mm:ss`) 전면 표준화**:
+   - `src/utils/date.ts`: `getKSTTimestampString(date?: Date)` 유틸 구현 (`Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul' })` 기반).
+   - `parseKSTDate`: 공백 구분 KST 문자열(`YYYY-MM-DD HH:mm:ss`) 파싱 완벽 지원.
+   - 클라이언트 전역(`sheets.ts`, `QRScannerModal.tsx`, `RSVPModal.tsx`, `AdminDashboard.tsx`, `AdminMatrixGrid.tsx`, `auth.ts`): 모든 `new Date().toISOString()` 생성부를 `getKSTTimestampString()`으로 교체.
+   - `google-apps-script.js`: `toKSTString` 헬퍼 함수 구현 및 시트 저장부(`RECORD_ATTENDANCE`, `SUBMIT_RSVP`, `BIND_DEVICE`, `REGISTER_MEMBER`, `UPDATE_MEMBER`, `MEMBER_HISTORY`, `PROGRAM_CARDS`)에 적용.
+   - 구글 시트 커스텀 메뉴에 `[기존 기록 날짜/시간을 한국 표준시(KST)로 변환]` (`convertExistingTimestampsToKST`) 기능 신설: 클릭 한 번으로 시트에 누적되어 있던 과거 `Z` 문자열들을 모두 KST로 일괄 변환 가능.
+
+### 3. 센서 검증 결과 (Green Bar)
+- `npm run typecheck`: 0 errors
+- `npm test`: 11 test files, 68/68 tests pass (100% 통과, 신규 연락처 fallback 및 KST 포맷 테스트 2건 통과)
+- `npm run lint`: 0 errors (1 harmless warning)
+- `npm run build`: Production bundle 성공 (821 kB / gzip 239 kB)
+
+
 
 
 

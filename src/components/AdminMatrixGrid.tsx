@@ -6,7 +6,7 @@ import type {
   Schedule,
 } from '../types/rollbook';
 import { LiquidGauge } from './LiquidGauge';
-import { formatMatrixHeaderDate } from '../utils/date';
+import { formatMatrixHeaderDate, getKSTTimestampString } from '../utils/date';
 
 interface AdminMatrixGridProps {
   members: Member[];
@@ -177,7 +177,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           part: member.part,
           status: 'ABSENT',
           reason: customNote || '관리자 지정 사유결석',
-          timestamp: new Date().toISOString(),
+          timestamp: getKSTTimestampString(),
         });
       }
 
@@ -215,7 +215,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `문콰이어_출결매트릭스_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `문콰이어_출결매트릭스_${getKSTTimestampString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

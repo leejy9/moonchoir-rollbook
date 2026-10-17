@@ -23,6 +23,7 @@ import {
 import {
   generateMasterWallQRPayload,
 } from '../utils/qr';
+import { getKSTTimestampString } from '../utils/date';
 import {
   IconCalendar,
   IconClose,
@@ -71,10 +72,9 @@ function getTodayString(): string {
 }
 
 function createManualLogMeta(): { id: string; timestamp: string } {
-  const now = new Date();
   return {
-    id: `log_manual_${now.getTime()}`,
-    timestamp: now.toISOString(),
+    id: `log_manual_${Date.now()}`,
+    timestamp: getKSTTimestampString(),
   };
 }
 
@@ -133,7 +133,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       joinedAt: getTodayString(),
       memberStatus: '정단원',
       note: '',
-      createdAt: new Date().toISOString(),
+      createdAt: getKSTTimestampString(),
     };
     setSelectedMemberForModal(newMember);
     setIsProfileModalOpen(true);
@@ -1040,7 +1040,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       targetParts: cardAudienceType === 'PARTS' ? cardTargetParts : undefined,
       targetMemberIds: cardAudienceType === 'CUSTOM_MEMBERS' ? cardTargetMemberIds : undefined,
       isArchived: editingProgramCard?.isArchived || false,
-      createdAt: editingProgramCard?.createdAt || new Date().toISOString(),
+      createdAt: editingProgramCard?.createdAt || getKSTTimestampString(),
     };
 
     try {

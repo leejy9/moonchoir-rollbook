@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, RSVPStatus, RSVPVote, Schedule } from '../types/rollbook';
+import { getKSTTimestampString } from '../utils/date';
 
 interface RSVPModalProps {
   schedule: Schedule;
@@ -43,7 +44,7 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
       part: profile.part,
       status,
       reason: status === 'ABSENT' ? reason.trim() : undefined,
-      timestamp: new Date().toISOString(),
+      timestamp: getKSTTimestampString(),
     };
 
     await sheetsService.submitRSVP(vote);

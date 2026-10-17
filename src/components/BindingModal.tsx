@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { bindDeviceProfile, getOrCreateDeviceId } from '../services/auth';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, PartType } from '../types/rollbook';
+import { getKSTTimestampString } from '../utils/date';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface BindingModalProps {
@@ -23,20 +24,20 @@ function buildNewMember(
   phoneLast4: string,
   deviceId: string
 ): Member {
-  const now = new Date();
+  const kstNow = getKSTTimestampString();
   return {
-    id: `mem_new_${now.getTime()}`,
+    id: `mem_new_${Date.now()}`,
     name,
     part,
     phone,
     phoneLast4,
     role: part === '선생님' ? 'ADMIN' : part === '객원' ? 'GUEST' : 'MEMBER',
-    createdAt: now.toISOString(),
+    createdAt: kstNow,
     status: 'ACTIVE',
-    joinedAt: now.toISOString().slice(0, 10),
+    joinedAt: kstNow.slice(0, 10),
     memberStatus: part === '선생님' ? '선생님' : part === '객원' ? '객원' : '정단원',
     boundDeviceId: deviceId,
-    boundDeviceAt: now.toISOString(),
+    boundDeviceAt: kstNow,
   };
 }
 
@@ -73,14 +74,9 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
     setNewPhone(formatPhoneNumber(e.target.value));
   };
 
-  // Handle phone input formatting in select mode (allow full or last 4 digits)
+  // Handle phone input formatting in select mode (require full 010 number)
   const handleSelectPhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    if (val.replace(/\D/g, '').length > 4) {
-      setPhoneInput(formatPhoneNumber(val));
-    } else {
-      setPhoneInput(val);
-    }
+    setPhoneInput(formatPhoneNumber(e.target.value));
   };
 
   const handleSelectMemberSubmit = async (e: React.FormEvent) => {
@@ -93,28 +89,22 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
     }
 
     const inputDigits = phoneInput.replace(/\D/g, '');
-    if (inputDigits.length < 4) {
-      setErrorMsg('연락처(전체 번호 또는 뒷 4자리)를 올바르게 입력해 주세요.');
+    if (inputDigits.length < 10) {
+      setErrorMsg('연락처는 010으로 시작하는 전체 휴대폰 번호(10~11자리)를 정확히 입력해 주세요.');
       return;
     }
 
     const inputLast4 = inputDigits.slice(-4);
     const targetLast4 = String(selectedMember.phoneLast4 || '').trim();
 
-    // Self-healing / Rescue: If targetLast4 is '0000', empty, or '----',
-    // allow updating member's phoneLast4 with the valid 4 digits provided by the member!
+    // Check last 4 digits against registered member
     const isUnsetLast4 = !targetLast4 || targetLast4 === '0000' || targetLast4 === '----';
     let effectiveLast4 = targetLast4;
 
     if (isUnsetLast4) {
       effectiveLast4 = inputLast4;
-      const updatedMember: Partial<Member> = {
-        phoneLast4: inputLast4,
-        phone: inputDigits.length >= 10 ? formatPhoneNumber(inputDigits) : selectedMember.phone,
-      };
-      await sheetsService.updateMember(selectedMember.id, updatedMember).catch(console.warn);
     } else if (inputLast4 !== targetLast4) {
-      setErrorMsg(`연락처 뒷자리(4자리)가 등록된 정보와 일치하지 않습니다. (관리자에게 문의해주세요)`);
+      setErrorMsg(`입력하신 번호의 뒷자리(${inputLast4})가 단원 명부에 등록된 정보(${targetLast4})와 일치하지 않습니다.`);
       return;
     }
 
@@ -128,6 +118,13 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
 
     try {
       setIsSubmitting(true);
+      // Always store full formatted phone number and last4
+      const fullPhoneFormatted = formatPhoneNumber(inputDigits);
+      await sheetsService.updateMember(selectedMember.id, {
+        phone: fullPhoneFormatted,
+        phoneLast4: inputLast4,
+      }).catch(console.warn);
+
       await sheetsService.bindMemberDevice(selectedMember.id, currentDeviceId);
       const profile = bindDeviceProfile(
         selectedMember.id,
@@ -207,6 +204,7 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
   const handleConfirmExistingBinding = async (targetMember: Member) => {
     const currentDeviceId = getOrCreateDeviceId();
     const digits = newPhone.replace(/\D/g, '');
+    const finalPhone = formatPhoneNumber(digits);
     const finalLast4 = digits.length >= 4 ? digits.slice(-4) : (targetMember.phoneLast4 || '0000');
 
     try {
@@ -220,7 +218,7 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
 
       const updated: Partial<Member> = {
         phoneLast4: finalLast4,
-        phone: newPhone.trim() || targetMember.phone,
+        phone: finalPhone || targetMember.phone,
       };
       await sheetsService.updateMember(targetMember.id, updated).catch(console.warn);
       await sheetsService.bindMemberDevice(targetMember.id, currentDeviceId);
@@ -362,20 +360,21 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
                 </div>
 
                 <label className="form-label" htmlFor="phone-last4" style={{ fontWeight: 600, fontSize: '13.5px' }}>
-                  연락처 확인 (전체 번호 또는 뒷 4자리) *
+                  연락처 확인 (휴대폰 전체 번호 입력) *
                 </label>
                 <input
                   id="phone-last4"
                   type="tel"
                   className="modern-input"
-                  placeholder="010-0000-0000 또는 뒷 4자리 입력"
+                  placeholder="010-0000-0000"
                   value={phoneInput}
                   onChange={handleSelectPhoneChange}
+                  maxLength={13}
                   autoFocus
                   required
                 />
                 <span className="binding-input-hint">
-                  ℹ️ 등록된 연락처의 뒷 4자리로 본인 여부를 안전하게 검증합니다.
+                  ℹ️ 전체 연락처가 시트에 온전히 저장되며, 뒷 4자리로 본인 여부를 안전하게 확인합니다.
                 </span>
 
                 <button type="submit" className="btn-primary-large" style={{ marginTop: '16px' }}>

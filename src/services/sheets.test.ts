@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RawAttendanceLog, RSVPVote } from '../types/rollbook';
 import { SheetsService, resetStorage } from './sheets';
 
@@ -691,6 +691,84 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     await service.updateMember(memberId, { memberStatus: '정단원' });
     const member3 = service.getMembers().find((m) => m.id === memberId)!;
     expect(isMemberRequiredForSchedule(member3, sch.date, sch)).toBe(true);
+  });
+
+  it('원격 시트에 phone 정보가 빈 문자열이어도 기존 로컬 연락처를 유실하지 않고 fallback 보존한다', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    const testMemberId = 'mem_preserve_phone';
+
+    await service.addMember({
+      id: testMemberId,
+      name: '이재연',
+      part: '베이스',
+      phone: '010-1234-5678',
+      phoneLast4: '5678',
+      role: 'MEMBER',
+      createdAt: '2026-01-01 00:00:00',
+      status: 'ACTIVE',
+      joinedAt: '2026-01-01',
+      memberStatus: '정단원',
+      note: '',
+    });
+
+    // Mock remote returning empty phone string for this member
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            data: {
+              members: [
+                {
+                  id: testMemberId,
+                  name: '이재연',
+                  part: '베이스',
+                  phone: '', // empty in remote sheet!
+                  phoneLast4: '5678',
+                  role: 'MEMBER',
+                  status: 'ACTIVE',
+                  joinedAt: '2026-01-01',
+                  memberStatus: '정단원',
+                },
+              ],
+              schedules: [],
+              rsvpVotes: [],
+              logs: [],
+              locations: [],
+              memberHistory: [],
+              programCards: [],
+            },
+          }),
+      } as Response)
+    );
+
+    await service.fetchRemoteData();
+
+    const preserved = service.getMembers().find((m) => m.id === testMemberId);
+    expect(preserved).toBeDefined();
+    expect(preserved?.phone).toBe('010-1234-5678');
+    expect(preserved?.phoneLast4).toBe('5678');
+  });
+
+  it('출석 로그와 사전투표의 기본 타임스탬프가 한국 표준시(KST: YYYY-MM-DD HH:mm:ss) 형식으로 기록된다', async () => {
+    const { getKSTTimestampString } = await import('../utils/date');
+    const kstNow = getKSTTimestampString();
+
+    const log = await service.addCheckInLog({
+      id: 'log_kst_test',
+      timestamp: kstNow,
+      scheduleId: 'sch_test',
+      memberId: 'mem_test',
+      memberName: '단원',
+      part: '소프라노',
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    });
+
+    expect(log.timestamp).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    expect(log.timestamp.includes('T')).toBe(false);
+    expect(log.timestamp.endsWith('Z')).toBe(false);
   });
 });
 

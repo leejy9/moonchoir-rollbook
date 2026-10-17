@@ -1,5 +1,6 @@
 import type { BoundDeviceProfile, PartType } from '../types/rollbook';
 import { sheetsService } from './sheets';
+import { getKSTTimestampString } from '../utils/date';
 
 const AUTH_KEYS = {
   DEVICE_PROFILE: 'moonchoir_bound_device_v1',
@@ -74,7 +75,7 @@ export function bindDeviceProfile(
     name,
     part,
     phoneLast4,
-    boundAt: new Date().toISOString(),
+    boundAt: getKSTTimestampString(),
     deviceId: deviceId || getOrCreateDeviceId(),
   };
 

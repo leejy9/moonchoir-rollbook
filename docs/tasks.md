@@ -600,6 +600,33 @@
 
 ---
 
+#### Task 58: 휴단원 CUSTOM_MEMBERS 직접 지정 시 필참 우선순위 & 전체 연락처(010) 필수화 & 구글 시트 KST 타임스탬프 표준화
+- **User Needs & Motivation**:
+  1. 관리자가 특정 일정에 '직접 지정(CUSTOM_MEMBERS)'한 경우, 휴단원이라도 관리자의 명시적 차출 의도를 최우선으로 인정하여 필참(모수 포함)으로 승격. 단, 퇴단원은 실수로 지정했더라도 절대 필참이 되지 않도록 안전 가드 유지.
+  2. 단원 등록 및 기기 연동 시 휴대폰 번호 전체(010-XXXX-XXXX, 10~11자리)를 필수로 입력 및 저장하도록 변경하여, 시트 업데이트 시 기존 연락처가 지워지는 현상(이재연 케이스) 원천 방지 및 양방향 fallback 보호.
+  3. 구글 시트에 기록되는 모든 시간 데이터(`2026-10-17T13:15:36.799Z` 등 UTC 형식)를 한국 표준시(KST: `YYYY-MM-DD HH:mm:ss`)로 완전 통일하고, 기존 데이터 일괄 변환 Apps Script 기능 추가.
+- **Touched Files**:
+  - `src/utils/date.ts`: `getKSTTimestampString(date?: Date): string` 추가 및 `parseKSTDate`에 공백 구분 포맷(`YYYY-MM-DD HH:mm:ss`) 파싱 지원
+  - `src/utils/date.test.ts`: KST 변환 및 파싱 단위 테스트 6건 구축
+  - `src/utils/attendanceStats.ts`: `isMemberRequiredForSchedule` 우선순위 개편 (퇴단원 제외 -> CUSTOM_MEMBERS 지정자 필참 승격 -> ALL/PARTS 정단원/준단원 판정)
+  - `src/utils/attendanceStats.test.ts`: CUSTOM_MEMBERS 휴단원/퇴단원 판정 단위 테스트 추가
+  - `src/components/BindingModal.tsx`: 뒷 4자리만 입력받던 방식 폐지 -> 전체 10~11자리 번호 입력 및 시트 영구 저장 연계
+  - `src/components/MemberProfileModal.tsx`: 연락처 10~11자리 필수 유효성 검사 및 이력 타임스탬프 KST 적용
+  - `src/services/sheets.ts`: 신규 생성/수정/연동/바인딩 타임스탬프 KST 표준화 및 원격 시트 동기화 시 로컬 연락처 유실 방지 fallback 탑재
+  - `src/services/sheets.test.ts`: 연락처 fallback 보존 및 KST 타임스탬프 포맷 검증 단위 테스트 2건 추가
+  - `src/components/QRScannerModal.tsx`, `src/components/RSVPModal.tsx`, `src/components/AdminDashboard.tsx`, `src/components/AdminMatrixGrid.tsx`, `src/services/auth.ts`: KST 타임스탬프 생성으로 통일
+  - `google-apps-script.js`: `toKSTString` 헬퍼 함수 도입, `RECORD_ATTENDANCE`, `SUBMIT_RSVP`, `BIND_DEVICE`, `REGISTER_MEMBER`, `UPDATE_MEMBER` KST 저장 및 phone 누락 덮어쓰기 방지 보호, `convertExistingTimestampsToKST` 메뉴 기능 추가
+  - `docs/DEV_LOG.md`, `docs/tasks.md`
+- **Acceptance Criteria**:
+  - `isMemberRequiredForSchedule`에서 `CUSTOM_MEMBERS`에 포함된 휴단원은 필참(`true`) 판정, 퇴단원은 포함되어도 필참 제외(`false`).
+  - 기기 연동 모달 및 프로필 모달에서 휴대폰 번호는 전체(10~11자리)를 정확히 입력해야 저장 가능.
+  - 구글 시트 원격 동기화 시 기존 연락처가 빈 문자열로 지워지지 않고 보존.
+  - 출석 원천 로그, 사전 투표, 기기 바인딩, 단원 변경 이력 등 모든 일시가 `YYYY-MM-DD HH:mm:ss` (KST) 형식으로 시트에 저장.
+- **Verification**: `npm test && npm run typecheck && npm run lint && npm run build` (68/68 tests pass, 0 errors)
+- **Status**: [x] Completed
+
+---
+
 ### Phase 5: [기획 & 백로그] 단원 음악적 역량 풀 & 맞춤형 코칭/격려 엔진 (Future RFC / Backlog)
 > **사용자 요구사항**: "장기적인 관점에선 단원 관리 풀로 사용해볼 생각이야. 인적관리처럼 데이터화 할 수 있는 요소들(출석률, 음감, 피치, 호흡, 악보 리딩 능력, 악상 표현력)을 데이터화하고, 그에 맞춘 메시지나 조언/영상자료를 추천하려고 해. 아직 어떤 식으로 진행할지 미정이므로 코드는 추가하지 말고 기획 및 투두리스트로 정리해둘 것."
 

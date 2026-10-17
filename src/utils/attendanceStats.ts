@@ -49,6 +49,11 @@ export function isMemberRequiredForSchedule(
   // 2. 해당 일자 시점의 유효 회원 상태 판정
   const effective = getEffectiveMemberStatus(member, scheduleDate);
 
+  // 2-1. 퇴단원은 관리자가 직접 지정에 실수로 넣었더라도 절대 의무 대상이 아님 (데이터 오염 및 탈퇴자 결석 방지)
+  if (effective.status === '퇴단원') {
+    return false;
+  }
+
   // 3. 일정 대상자 지정 필터 검사 (Audience Selector)
   if (schedule?.targetAudienceType === 'PARTS') {
     if (!schedule.targetParts || !schedule.targetParts.includes(effective.part)) {
@@ -58,14 +63,17 @@ export function isMemberRequiredForSchedule(
     if (!schedule.targetMemberIds || !schedule.targetMemberIds.includes(member.id)) {
       return false; // 지정된 단원이 아니면 의무 제외 (모수 제외)
     }
+    // 관리자가 명시적으로 직접 지정한 단원(CUSTOM_MEMBERS)인 경우:
+    // 휴단원이더라도 관리자의 명시적 차출 의도를 최상위로 인정하여 필참 대상자로 승격
+    return true;
   }
 
-  // 4. 정단원, 준단원은 기본 필참 대상
+  // 4. 전체(ALL) 또는 파트(PARTS) 일정의 경우: 정단원, 준단원만 기본 필참 대상
   if (effective.status === '정단원' || effective.status === '준단원') {
     return true;
   }
 
-  // 휴단원, 퇴단원, 객원 등은 의무 제외
+  // 휴단원, 객원 등은 전체/파트 일정에서 의무 제외 (자율 대상자)
   return false;
 }
 

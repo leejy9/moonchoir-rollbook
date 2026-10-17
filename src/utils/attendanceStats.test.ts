@@ -373,6 +373,64 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
       expect(stats[1].totalSessions).toBe(0);
       expect(stats[1].absent).toBe(0);
     });
+
+    it('관리자가 직접 지정(CUSTOM_MEMBERS)한 경우 휴단원도 필참으로 인정하되, 퇴단원은 실수로 지정해도 제외한다', () => {
+      const inactiveMember: Member = {
+        id: 'm_inactive',
+        name: '휴단원',
+        part: '소프라노',
+        phoneLast4: '9999',
+        role: 'MEMBER',
+        status: 'ACTIVE',
+        joinedAt: '2025-01-01',
+        memberStatus: '휴단원',
+        createdAt: '2025-01-01 00:00:00',
+      };
+
+      const withdrawnMember: Member = {
+        id: 'm_withdrawn',
+        name: '퇴단원',
+        part: '베이스',
+        phoneLast4: '8888',
+        role: 'MEMBER',
+        status: 'ACTIVE',
+        joinedAt: '2025-01-01',
+        memberStatus: '퇴단원',
+        createdAt: '2025-01-01 00:00:00',
+      };
+
+      const customSch: Schedule = {
+        id: 'sch_special_callup',
+        title: '특별 차출 연습',
+        date: '2026-10-18',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '제1연습실',
+        category: '추가연습',
+        targetAudienceType: 'CUSTOM_MEMBERS',
+        targetMemberIds: ['m_inactive', 'm_withdrawn'], // 관리자가 휴단원과 실수로 퇴단원을 지정
+      };
+
+      const normalSch: Schedule = {
+        id: 'sch_regular_all',
+        title: '전체 정기연습',
+        date: '2026-10-22',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '제1연습실',
+        category: '정기연습',
+        targetAudienceType: 'ALL',
+      };
+
+      // 1. CUSTOM_MEMBERS 일정: 휴단원은 관리자의 명시적 차출로 필참 인정
+      expect(isMemberRequiredForSchedule(inactiveMember, customSch.date, customSch)).toBe(true);
+
+      // 2. CUSTOM_MEMBERS 일정: 퇴단원은 실수로 지정되었어도 안전하게 의무 제외
+      expect(isMemberRequiredForSchedule(withdrawnMember, customSch.date, customSch)).toBe(false);
+
+      // 3. ALL 정기 일정: 휴단원은 일반 일정에선 의무 제외(자율 대상자)
+      expect(isMemberRequiredForSchedule(inactiveMember, normalSch.date, normalSch)).toBe(false);
+    });
   });
 });
 

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { Member, Schedule, RawAttendanceLog, PartType, MemberStatus, RoleType, MemberStatusHistory } from '../types/rollbook';
-import { formatMatrixHeaderDate } from '../utils/date';
+import { formatMatrixHeaderDate, getKSTTimestampString } from '../utils/date';
 import { sheetsService } from '../services/sheets';
 
 interface MemberProfileModalProps {
@@ -25,7 +25,7 @@ function formatPhoneNumber(val: string): string {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 }
 
-const getTodayDateString = () => new Date().toISOString().slice(0, 10);
+const getTodayDateString = () => getKSTTimestampString().slice(0, 10);
 
 const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Member }> = ({
   member,
@@ -182,11 +182,12 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     }
 
     const digits = String(formData.phone || formData.phoneLast4 || '').replace(/\D/g, '');
-    if (digits.length < 4) {
-      setErrorMessage('연락처는 최소 4자리 이상(인증용 뒷자리) 입력해야 합니다.');
+    if (digits.length < 10) {
+      setErrorMessage('연락처는 전체 휴대폰 번호(10~11자리, 예: 010-1234-5678)를 정확히 입력해주세요.');
       return;
     }
 
+    const finalPhone = formatPhoneNumber(digits);
     const finalLast4 = digits.slice(-4);
     const finalPart = isCustomPart ? (customPartInput.trim() || '기타') : formData.part;
 
@@ -202,7 +203,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
         startDate: historyStartDate.trim() || todayStr,
         endDate: historyEndDate.trim() || '2999-12-31',
         reason: historyReason.trim(),
-        createdAt: new Date().toISOString(),
+        createdAt: getKSTTimestampString(),
       };
       currentHistories.push(newHistoryItem);
     }
@@ -211,7 +212,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
       ...formData,
       name: String(formData.name || '').trim(),
       part: finalPart as PartType,
-      phone: String(formData.phone || '').trim(),
+      phone: finalPhone,
       phoneLast4: finalLast4,
       note: String(formData.note || '').trim(),
       statusHistory: currentHistories,
@@ -393,7 +394,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
               </div>
 
               <div className="modern-field-group">
-                <label className="modern-field-label">연락처 (휴대폰 번호) *</label>
+                <label className="modern-field-label">연락처 (전체 휴대폰 번호) *</label>
                 <input
                   type="tel"
                   className="modern-input"
@@ -401,9 +402,10 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                   onChange={handlePhoneInputChange}
                   placeholder="010-0000-0000"
                   maxLength={13}
+                  required
                 />
                 <span className="modern-input-hint">
-                  ℹ️ 본인 확인 및 기기 연결 시에는 뒷 4자리(<strong>{formData.phoneLast4 || '----'}</strong>)로 인증합니다.
+                  ℹ️ 전체 휴대폰 번호를 저장합니다. 기기 인증 시에는 뒷 4자리(<strong>{formData.phoneLast4 || '----'}</strong>)를 사용합니다.
                 </span>
               </div>
 

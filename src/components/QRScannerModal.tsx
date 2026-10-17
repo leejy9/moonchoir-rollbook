@@ -4,6 +4,7 @@ import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, RawAttendanceLog, Schedule } from '../types/rollbook';
 import { calculateDistanceMeters, isWithinRadius } from '../utils/geo';
 import { findActiveScheduleForMasterQR, parseQRPayload, playScanSuccessSound, verifySchedulePin } from '../utils/qr';
+import { getKSTTimestampString } from '../utils/date';
 import { IconKeypad, IconQrScan } from './Icons';
 
 interface QRScannerModalProps {
@@ -112,7 +113,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     const log: RawAttendanceLog = {
       id: `log_${Date.now()}`,
-      timestamp: new Date().toISOString(),
+      timestamp: getKSTTimestampString(),
       scheduleId: targetSchedule.id,
       memberId: profile.memberId,
       memberName: profile.name,

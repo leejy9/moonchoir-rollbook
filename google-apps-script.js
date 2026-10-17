@@ -22,6 +22,30 @@ const SHEET_NAMES = {
   PROGRAM_CARDS: '일정카드',
 };
 
+// 헬퍼: 한국 표준시(KST, Asia/Seoul) YYYY-MM-DD HH:mm:ss 포맷팅
+function toKSTString(val) {
+  if (!val) {
+    return Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
+  }
+  let d;
+  if (val instanceof Date) {
+    d = val;
+  } else if (typeof val === 'string') {
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(val)) {
+      return val;
+    }
+    d = new Date(val);
+  } else if (typeof val === 'number') {
+    d = new Date(val);
+  } else {
+    d = new Date();
+  }
+  if (isNaN(d.getTime())) {
+    return String(val);
+  }
+  return Utilities.formatDate(d, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
+}
+
 // 1. GET: 전체 데이터 로드 및 헬스체크
 function doGet(e) {
   try {
@@ -52,7 +76,7 @@ function doGet(e) {
 
     const response = {
       success: true,
-      timestamp: new Date().toISOString(),
+      timestamp: toKSTString(new Date()),
       data: {
         members,
         schedules,
@@ -97,7 +121,7 @@ function doPost(e) {
       const sheet = ss.getSheetByName(SHEET_NAMES.LOGS);
       sheet.appendRow([
         data.id || ('log_' + new Date().getTime()),
-        data.timestamp || new Date().toISOString(),
+        toKSTString(data.timestamp),
         data.scheduleId || '',
         data.memberId || '',
         data.memberName || '',
@@ -135,7 +159,7 @@ function doPost(e) {
         data.part,
         data.status,
         data.reason || '',
-        data.timestamp || new Date().toISOString(),
+        toKSTString(data.timestamp),
       ];
 
       if (rowIndex > 0) {
@@ -177,7 +201,7 @@ function doPost(e) {
       for (let i = 1; i < rows.length; i++) {
         if (String(rows[i][idCol]) === String(data.memberId)) {
           if (devCol >= 0) sheet.getRange(i + 1, devCol + 1).setValue(data.deviceId || '');
-          if (timeCol >= 0) sheet.getRange(i + 1, timeCol + 1).setValue(new Date().toISOString());
+          if (timeCol >= 0) sheet.getRange(i + 1, timeCol + 1).setValue(toKSTString(new Date()));
           return jsonResponse({ success: true, message: '기기 바인딩 완료' });
         }
       }
@@ -209,15 +233,15 @@ function doPost(e) {
         if (h === 'id') return data.id;
         if (h === 'name') return data.name;
         if (h === 'part') return data.part;
-        if (h === 'phoneLast4') return data.phoneLast4 || (data.phone ? String(data.phone).replace(/\D/g, '').slice(-4) : '');
         if (h === 'phone') return data.phone || '';
+        if (h === 'phoneLast4') return data.phoneLast4 || (data.phone ? String(data.phone).replace(/\D/g, '').slice(-4) : '');
         if (h === 'role') return data.role || 'MEMBER';
         if (h === 'status') return data.status || 'ACTIVE';
-        if (h === 'joinedAt') return data.joinedAt || new Date().toISOString().slice(0, 10);
+        if (h === 'joinedAt') return data.joinedAt || toKSTString(new Date()).slice(0, 10);
         if (h === 'memberStatus') return data.memberStatus || '정단원';
         if (h === 'note') return data.note || '';
         if (h === 'boundDeviceId') return data.boundDeviceId || '';
-        if (h === 'boundDeviceAt') return data.boundDeviceAt || '';
+        if (h === 'boundDeviceAt') return data.boundDeviceAt ? toKSTString(data.boundDeviceAt) : '';
         return data[h] !== undefined ? data[h] : '';
       });
       sheet.appendRow(newRow);
@@ -236,20 +260,34 @@ function doPost(e) {
         }
       }
       if (rowIndex > 0) {
-        const updateRow = headers.map(function (h) {
+        const existingRow = rows[rowIndex - 1];
+        const phoneIdx = headers.indexOf('phone');
+        const phoneLast4Idx = headers.indexOf('phoneLast4');
+        const boundDeviceAtIdx = headers.indexOf('boundDeviceAt');
+        const existingPhone = phoneIdx >= 0 ? existingRow[phoneIdx] : '';
+        const existingLast4 = phoneLast4Idx >= 0 ? existingRow[phoneLast4Idx] : '';
+
+        const updateRow = headers.map(function (h, colIdx) {
           if (h === 'id') return data.id;
-          if (h === 'name') return data.name;
-          if (h === 'part') return data.part;
-          if (h === 'phoneLast4') return data.phoneLast4 || (data.phone ? String(data.phone).replace(/\D/g, '').slice(-4) : '');
-          if (h === 'phone') return data.phone !== undefined ? data.phone : '';
-          if (h === 'role') return data.role || 'MEMBER';
-          if (h === 'status') return data.status || 'ACTIVE';
-          if (h === 'joinedAt') return data.joinedAt || '';
-          if (h === 'memberStatus') return data.memberStatus || '정단원';
-          if (h === 'note') return data.note !== undefined ? data.note : '';
-          if (h === 'boundDeviceId') return data.boundDeviceId !== undefined ? data.boundDeviceId : '';
-          if (h === 'boundDeviceAt') return data.boundDeviceAt !== undefined ? data.boundDeviceAt : '';
-          return data[h] !== undefined ? data[h] : '';
+          if (h === 'name') return data.name !== undefined ? data.name : existingRow[colIdx];
+          if (h === 'part') return data.part !== undefined ? data.part : existingRow[colIdx];
+          if (h === 'phone') {
+            if (data.phone && String(data.phone).trim()) return String(data.phone).trim();
+            return existingPhone || '';
+          }
+          if (h === 'phoneLast4') {
+            if (data.phoneLast4 && String(data.phoneLast4).trim()) return String(data.phoneLast4).trim();
+            if (data.phone && String(data.phone).trim()) return String(data.phone).replace(/\D/g, '').slice(-4);
+            return existingLast4 || (existingPhone ? String(existingPhone).replace(/\D/g, '').slice(-4) : '');
+          }
+          if (h === 'role') return data.role !== undefined ? data.role : (existingRow[colIdx] || 'MEMBER');
+          if (h === 'status') return data.status !== undefined ? data.status : (existingRow[colIdx] || 'ACTIVE');
+          if (h === 'joinedAt') return data.joinedAt || (existingRow[colIdx] || '');
+          if (h === 'memberStatus') return data.memberStatus || (existingRow[colIdx] || '정단원');
+          if (h === 'note') return data.note !== undefined ? data.note : (existingRow[colIdx] || '');
+          if (h === 'boundDeviceId') return data.boundDeviceId !== undefined ? data.boundDeviceId : (existingRow[colIdx] || '');
+          if (h === 'boundDeviceAt') return data.boundDeviceAt !== undefined ? (data.boundDeviceAt ? toKSTString(data.boundDeviceAt) : '') : (boundDeviceAtIdx >= 0 ? existingRow[boundDeviceAtIdx] : '');
+          return data[h] !== undefined ? data[h] : (existingRow[colIdx] !== undefined ? existingRow[colIdx] : '');
         });
         sheet.getRange(rowIndex, 1, 1, updateRow.length).setValues([updateRow]);
 
@@ -267,7 +305,7 @@ function doPost(e) {
               h.startDate || '',
               h.endDate || '2999-12-31',
               h.reason || '',
-              h.createdAt || new Date().toISOString(),
+              toKSTString(h.createdAt),
             ]);
           }
         }
@@ -289,7 +327,7 @@ function doPost(e) {
           data.startDate,
           data.endDate || '2999-12-31',
           data.reason || '',
-          data.createdAt || new Date().toISOString(),
+          toKSTString(data.createdAt),
         ]);
         return jsonResponse({ success: true, message: '단원 변경 이력 기록 완료' });
       }
@@ -515,6 +553,7 @@ function doPost(e) {
         if (h === 'isArchived') return data.isArchived ? 'TRUE' : 'FALSE';
         if (h === 'targetParts') return Array.isArray(data.targetParts) ? data.targetParts.join(',') : (data.targetParts || '');
         if (h === 'targetMemberIds') return Array.isArray(data.targetMemberIds) ? data.targetMemberIds.join(',') : (data.targetMemberIds || '');
+        if (h === 'createdAt') return toKSTString(data.createdAt);
         return data[h] !== undefined ? data[h] : '';
       });
       if (rowIndex > 0) {
@@ -548,7 +587,8 @@ function doPost(e) {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🎵 문콰이어 출석부')
-    .addItem('시트 5대 탭 및 기본 데이터 생성', 'manualInitialize')
+    .addItem('시트 7대 탭 및 기본 데이터 생성', 'manualInitialize')
+    .addItem('기존 기록 날짜/시간을 한국 표준시(KST)로 변환', 'convertExistingTimestampsToKST')
     .addToUi();
 }
 
@@ -557,6 +597,44 @@ function manualInitialize() {
   ensureSheetStructure(ss);
   seedInitialData(ss);
   SpreadsheetApp.getUi().alert('초기화 완료!\n\n단원명부, 일정캘린더, 출석로그, 사전투표, 장소정보, 단원변경로그, 일정카드 탭이 생성되었습니다.');
+}
+
+function convertExistingTimestampsToKST() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const tabsToProcess = [
+    { name: SHEET_NAMES.LOGS, timeCols: ['timestamp'] },
+    { name: SHEET_NAMES.RSVP, timeCols: ['timestamp'] },
+    { name: SHEET_NAMES.MEMBERS, timeCols: ['boundDeviceAt', 'joinedAt'] },
+    { name: SHEET_NAMES.MEMBER_HISTORY, timeCols: ['createdAt'] },
+    { name: SHEET_NAMES.PROGRAM_CARDS, timeCols: ['createdAt'] },
+  ];
+
+  let convertedCount = 0;
+  tabsToProcess.forEach(function (tabInfo) {
+    const sheet = ss.getSheetByName(tabInfo.name);
+    if (!sheet) return;
+    const values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return;
+    const headers = values[0];
+    const colIndices = tabInfo.timeCols
+      .map(function (tc) { return headers.indexOf(tc); })
+      .filter(function (idx) { return idx >= 0; });
+    if (colIndices.length === 0) return;
+
+    for (let r = 1; r < values.length; r++) {
+      colIndices.forEach(function (cIdx) {
+        const cellVal = values[r][cIdx];
+        if (!cellVal) return;
+        if (cellVal instanceof Date || (typeof cellVal === 'string' && (cellVal.includes('T') || cellVal.endsWith('Z')))) {
+          const kst = toKSTString(cellVal);
+          sheet.getRange(r + 1, cIdx + 1).setValue(kst);
+          convertedCount++;
+        }
+      });
+    }
+  });
+
+  SpreadsheetApp.getUi().alert('변환 완료!\n총 ' + convertedCount + '개의 일시 데이터가 한국 표준시(KST: YYYY-MM-DD HH:mm:ss) 형식으로 변환되었습니다.');
 }
 
 // 헬퍼: 7대 탭 및 헤더 자동 생성 (기존 데이터 보존)
@@ -676,7 +754,7 @@ function readSheetData(sheet) {
         } else if (headerKey === 'date' || headerKey === 'startdate' || headerKey === 'enddate' || headerKey === 'joinedat') {
           val = Utilities.formatDate(val, 'Asia/Seoul', 'yyyy-MM-dd');
         } else {
-          val = Utilities.formatDate(val, 'Asia/Seoul', "yyyy-MM-dd'T'HH:mm:ssXXX");
+          val = Utilities.formatDate(val, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
         }
       } else if (typeof val === 'number') {
         const key = String(headers[j]);

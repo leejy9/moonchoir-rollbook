@@ -10,10 +10,21 @@ const KOREAN_DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 export function parseKSTDate(dateStr: string): Date {
   if (!dateStr) return new Date();
 
-  // 이미 YYYY-MM-DD 포맷인 경우 타임존 오프셋 왜곡 방지
+  // 1. 이미 YYYY-MM-DD 포맷인 경우 타임존 오프셋 왜곡 방지
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     const [y, m, d] = dateStr.split('-').map(Number);
     return new Date(y, m - 1, d, 12, 0, 0); // 낮 12시로 고정하여 경계값 오류 방지
+  }
+
+  // 2. KST 표준 문자열 YYYY-MM-DD HH:mm:ss 형태 처리
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(dateStr)) {
+    const [dPart, tPart] = dateStr.split(' ');
+    const [y, m, d] = dPart.split('-').map(Number);
+    const timeTokens = tPart.split(':').map(Number);
+    const hh = timeTokens[0] || 0;
+    const mm = timeTokens[1] || 0;
+    const ss = timeTokens[2] || 0;
+    return new Date(y, m - 1, d, hh, mm, ss);
   }
 
   const d = new Date(dateStr);
@@ -21,6 +32,34 @@ export function parseKSTDate(dateStr: string): Date {
     return new Date();
   }
   return d;
+}
+
+/**
+ * 한국 표준시(KST, Asia/Seoul) 기준 'YYYY-MM-DD HH:mm:ss' 표준 포맷 문자열을 반환합니다.
+ * 구글 시트 저장 및 사람이 직접 열람할 때 UTC 오프셋 왜곡 없이 정확한 한국 시각을 제공합니다.
+ */
+export function getKSTTimestampString(date: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  let y = '', m = '', d = '', hh = '', mm = '', ss = '';
+  for (const p of parts) {
+    if (p.type === 'year') y = p.value;
+    if (p.type === 'month') m = p.value;
+    if (p.type === 'day') d = p.value;
+    if (p.type === 'hour') hh = p.value;
+    if (p.type === 'minute') mm = p.value;
+    if (p.type === 'second') ss = p.value;
+  }
+  return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
 }
 
 /**
