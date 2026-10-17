@@ -74,7 +74,8 @@ export interface Member {
   phoneLast4: string; // 뒤 4자리 (본인 인증 및 PIN용)
   role: RoleType;
   createdAt: string; // ISO 8601
-  status: 'ACTIVE' | 'INACTIVE';
+  status: 'ACTIVE' | 'INACTIVE' | 'MERGED';
+  mergedIntoId?: string; // 표준 ID로 통합된 경우 대상 ID
   joinedAt?: string; // YYYY-MM-DD
   memberStatus?: MemberStatus; // 정단원, 준단원, 휴단원, 퇴단원, 선생님, 객원
   note?: string; // 비고 / 특이사항

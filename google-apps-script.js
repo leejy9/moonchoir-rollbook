@@ -308,6 +308,64 @@ function doPost(e) {
       return jsonResponse({ success: false, message: '해당 단원을 찾을 수 없습니다: ' + data.id });
     }
 
+    if (action === 'MERGE_MEMBERS') {
+      const canonicalId = data.canonicalId;
+      const secondaryId = data.secondaryId;
+
+      // 1. Update Logs memberId to canonicalId
+      const logSheet = ss.getSheetByName(SHEET_NAMES.LOGS);
+      if (logSheet) {
+        const logData = logSheet.getDataRange().getValues();
+        const logHeaders = logData[0];
+        const mIdCol = logHeaders.indexOf('memberId');
+        const noteCol = logHeaders.indexOf('adminNote');
+        if (mIdCol >= 0) {
+          for (let i = 1; i < logData.length; i++) {
+            if (logData[i][mIdCol] === secondaryId) {
+              logSheet.getRange(i + 1, mIdCol + 1).setValue(canonicalId);
+              if (noteCol >= 0) {
+                const currentNote = logData[i][noteCol] || '';
+                logSheet.getRange(i + 1, noteCol + 1).setValue((currentNote ? currentNote + ' ' : '') + '[통합:' + secondaryId + ']');
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Update RSVP memberId to canonicalId
+      const rsvpSheet = ss.getSheetByName(SHEET_NAMES.RSVP);
+      if (rsvpSheet) {
+        const rsvpData = rsvpSheet.getDataRange().getValues();
+        const rsvpHeaders = rsvpData[0];
+        const rMIdCol = rsvpHeaders.indexOf('memberId');
+        if (rMIdCol >= 0) {
+          for (let i = 1; i < rsvpData.length; i++) {
+            if (rsvpData[i][rMIdCol] === secondaryId) {
+              rsvpSheet.getRange(i + 1, rMIdCol + 1).setValue(canonicalId);
+            }
+          }
+        }
+      }
+
+      // 3. Mark secondary member as MERGED in MEMBERS sheet
+      const memberSheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
+      if (memberSheet) {
+        const mData = memberSheet.getDataRange().getValues();
+        const mHeaders = mData[0];
+        const idCol = mHeaders.indexOf('id');
+        const statusCol = mHeaders.indexOf('status');
+        const mergedIntoCol = mHeaders.indexOf('mergedIntoId');
+        for (let i = 1; i < mData.length; i++) {
+          if (mData[i][idCol] === secondaryId) {
+            if (statusCol >= 0) memberSheet.getRange(i + 1, statusCol + 1).setValue('MERGED');
+            if (mergedIntoCol >= 0) memberSheet.getRange(i + 1, mergedIntoCol + 1).setValue(canonicalId);
+          }
+        }
+      }
+
+      return jsonResponse({ success: true, message: '단원 식별자 안전 통합 완료' });
+    }
+
     if (action === 'CREATE_SCHEDULE' || action === 'REGISTER_SCHEDULE') {
       const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
       const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
@@ -506,7 +564,7 @@ function ensureSheetStructure(ss) {
   const schemas = [
     {
       name: SHEET_NAMES.MEMBERS,
-      headers: ['id', 'name', 'part', 'phoneLast4', 'phone', 'role', 'status', 'joinedAt', 'memberStatus', 'note', 'boundDeviceId', 'boundDeviceAt'],
+      headers: ['id', 'name', 'part', 'phoneLast4', 'phone', 'role', 'status', 'joinedAt', 'memberStatus', 'note', 'boundDeviceId', 'boundDeviceAt', 'mergedIntoId'],
     },
     {
       name: SHEET_NAMES.SCHEDULES,

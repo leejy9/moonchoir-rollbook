@@ -42,6 +42,7 @@ import { LocationPickerMap } from './LocationPickerMap';
 import { LocationPickerModal } from './LocationPickerModal';
 import { ScheduleEditModal } from './ScheduleEditModal';
 import { BatchScheduleEditModal } from './BatchScheduleEditModal';
+import { MemberMergeModal } from './MemberMergeModal';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface AdminDashboardProps {
@@ -293,6 +294,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [overrideReason, setOverrideReason] = useState('현장 확인 완료 (배터리 방전)');
 
   const [memberActionMsg, setMemberActionMsg] = useState('');
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
+  const duplicateMemberGroups = useMemo(() => {
+    if (!members) return [];
+    return sheetsService.findDuplicateMemberGroups();
+  }, [members]);
 
   // --- 4. QR & PIN Management State ---
   const choirConfig = sheetsService.getConfig();
@@ -1069,9 +1075,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewEndTime(sch.endTime);
     setSelectedLocationPresetId(sch.locationId || 'custom');
     setNewLocName(sch.locationName);
-    setNewLat(sch.targetLat);
-    setNewLon(sch.targetLon);
-    setNewRadius(sch.radiusMeters);
+    setNewLat(sch.targetLat ?? defaultLoc?.latitude ?? 37.5665);
+    setNewLon(sch.targetLon ?? defaultLoc?.longitude ?? 126.9780);
+    setNewRadius(sch.radiusMeters ?? defaultLoc?.radiusMeters ?? 100);
     setNewCategory(sch.category);
     setNewDesc(sch.description || '');
     setSelectedProgramCardId(sch.programId || '');
@@ -1091,9 +1097,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewEndTime(sch.endTime);
     setSelectedLocationPresetId(sch.locationId || 'custom');
     setNewLocName(sch.locationName);
-    setNewLat(sch.targetLat);
-    setNewLon(sch.targetLon);
-    setNewRadius(sch.radiusMeters);
+    setNewLat(sch.targetLat ?? defaultLoc?.latitude ?? 37.5665);
+    setNewLon(sch.targetLon ?? defaultLoc?.longitude ?? 126.9780);
+    setNewRadius(sch.radiusMeters ?? defaultLoc?.radiusMeters ?? 100);
     setNewCategory(sch.category);
     setNewDesc(sch.description || '');
     setSelectedProgramCardId(sch.programId || '');
@@ -1365,6 +1371,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* ============================================================== */}
       {adminTab === 'ROSTER' && (
         <div className="admin-tab-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Duplicate Member Detection Warning Banner */}
+          {duplicateMemberGroups.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#FFFBEB',
+                border: '1.5px solid #FCD34D',
+                borderRadius: '12px',
+                padding: '12px 18px',
+                gap: '12px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '20px' }}>⚠️</span>
+                <div>
+                  <strong style={{ fontSize: '13.5px', color: '#B45309', display: 'block' }}>
+                    중복 등록 의심 단원 {duplicateMemberGroups.length}건 감지 ({duplicateMemberGroups.map((g) => g.name).join(', ')})
+                  </strong>
+                  <span style={{ fontSize: '12px', color: '#78350F' }}>
+                    동일한 이름과 전화번호 뒤 4자리를 가진 계정이 중복 감지되었습니다. 출결 로그가 분산되지 않도록 하나로 안전하게 통합할 수 있습니다.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMergeModalOpen(true)}
+                style={{
+                  background: '#D97706',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  minHeight: '38px',
+                }}
+              >
+                🔍 이력 대조 및 통합
+              </button>
+            </div>
+          )}
+
           <AdminNotionFilterBar
             filters={matrixFilters}
             onChangeFilters={setMatrixFilters}
@@ -1391,6 +1443,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             onDelete={handleDeleteMemberProfile}
             schedules={schedules}
             logs={sheetsService.getLogs()}
+          />
+
+          <MemberMergeModal
+            isOpen={isMergeModalOpen}
+            onClose={() => setIsMergeModalOpen(false)}
+            onMerged={onDataChanged}
+            schedules={schedules}
           />
         </div>
       )}
@@ -3699,52 +3758,119 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Location Preset Selector */}
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <label className="form-label" style={{ margin: 0 }}>연습실 장소 프리셋</label>
+                    {/* Location Selection 2-Step Toggle */}
+                    <div style={{ marginTop: '4px' }}>
+                      <label className="form-label">연습 장소 선택 방식</label>
+                      <div className="toss-filter-row" style={{ gap: '6px', marginBottom: '8px' }}>
                         <button
                           type="button"
-                          onClick={() => setIsScheduleLocationModalOpen(true)}
-                          style={{
-                            fontSize: '11.5px',
-                            color: '#4F46E5',
-                            fontWeight: 600,
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            padding: 0,
+                          className={`toss-filter-chip ${locationMode === 'PRESET' ? 'active' : ''}`}
+                          onClick={() => setLocationMode('PRESET')}
+                        >
+                          <span>🏢 기존 연습실 프리셋</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`toss-filter-chip ${locationMode === 'DIRECT' ? 'active' : ''}`}
+                          onClick={() => {
+                            setLocationMode('DIRECT');
+                            setSelectedLocationPresetId('custom');
                           }}
                         >
-                          🗺️ 지도에서 새 장소 검색/등록
+                          <span>🗺️ 새 장소 직접 등록 / 검색</span>
                         </button>
                       </div>
-                      <select
-                        className="select-input"
-                        value={selectedLocationPresetId}
-                        onChange={(e) => handleLocationPresetChange(e.target.value)}
-                      >
-                        {locationPresets.map((loc) => (
-                          <option key={loc.id} value={loc.id}>
-                            {loc.name} (반경 {loc.radiusMeters}m)
-                          </option>
-                        ))}
-                        <option value="__NEW_LOCATION__">🗺️ + 새 연습실 등록 (지도/도로명 검색)...</option>
-                        <option value="custom">직접 장소명 입력</option>
-                      </select>
+
+                      {locationMode === 'PRESET' ? (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '12px', color: '#64748B' }}>등록된 연습실 목록</span>
+                            <button
+                              type="button"
+                              onClick={() => setIsScheduleLocationModalOpen(true)}
+                              style={{
+                                fontSize: '11.5px',
+                                color: '#4F46E5',
+                                fontWeight: 600,
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: 0,
+                              }}
+                            >
+                              🗺️ 지도에서 새 장소 검색/등록
+                            </button>
+                          </div>
+                          <select
+                            className="select-input"
+                            value={selectedLocationPresetId}
+                            onChange={(e) => {
+                              if (e.target.value === '__NEW_LOCATION__') {
+                                setIsScheduleLocationModalOpen(true);
+                              } else {
+                                handleLocationPresetChange(e.target.value);
+                              }
+                            }}
+                          >
+                            {locationPresets.map((loc) => (
+                              <option key={loc.id} value={loc.id}>
+                                {loc.name} (반경 {loc.radiusMeters}m)
+                              </option>
+                            ))}
+                            <option value="__NEW_LOCATION__">🗺️ + 새 연습실 등록 (지도/도로명 검색)...</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <input
+                              type="text"
+                              className="input-text"
+                              placeholder="직접 입력할 장소명 (예: 예술의전당 리허설룸)"
+                              value={newLocName}
+                              onChange={(e) => setNewLocName(e.target.value)}
+                              style={{ flex: 1 }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setIsScheduleLocationModalOpen(true)}
+                              style={{
+                                background: '#4F46E5',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '0 14px',
+                                fontSize: '12.5px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              🗺️ 지도 검색
+                            </button>
+                          </div>
+                          <span className="form-hint" style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px', display: 'block' }}>
+                            * 지도 검색 버튼을 누르면 카카오맵/주소 검색으로 GPS 좌표를 자동 설정할 수 있습니다.
+                          </span>
+                        </div>
+                      )}
                     </div>
 
-                    <label className="form-label" htmlFor="sch-loc">
-                      연습 장소 명칭
-                    </label>
-                    <input
-                      id="sch-loc"
-                      type="text"
-                      className="input-text"
-                      value={newLocName}
-                      onChange={(e) => setNewLocName(e.target.value)}
-                      required
-                    />
+                    {locationMode === 'PRESET' && (
+                      <div>
+                        <label className="form-label" htmlFor="sch-loc">
+                          연습 장소 명칭 (표기용)
+                        </label>
+                        <input
+                          id="sch-loc"
+                          type="text"
+                          className="input-text"
+                          value={newLocName}
+                          onChange={(e) => setNewLocName(e.target.value)}
+                          required
+                        />
+                      </div>
+                    )}
 
                     <label className="form-label" htmlFor="sch-desc">
                       상세 설명 / 연습 곡목 (선택)
@@ -3755,15 +3881,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       placeholder="예: 모차르트 레퀴엠 파트 연습 및 암보 런스루"
                       value={newDesc}
                       onChange={(e) => setNewDesc(e.target.value)}
-                      rows={3}
+                      rows={5}
                     />
 
-                    <button type="submit" className="btn-primary-large" style={{ minHeight: '44px' }}>
-                      {scheduleAddMode === 'SINGLE' && '단일 일정 등록 완료'}
-                      {scheduleAddMode === 'INTERVAL' && `${intervalCount}회차 주기 반복 일정 일괄 생성`}
-                      {scheduleAddMode === 'DAYS_OF_WEEK' && `${selectedDays.length * weeksCount}개 요일 반복 일정 일괄 생성`}
-                      {scheduleAddMode === 'CALENDAR_PICK' && `선택한 ${pickedDates.length}개 날짜 일정 일괄 생성`}
-                    </button>
+                    {editingScheduleForForm ? (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button type="submit" className="btn-primary-large" style={{ minHeight: '44px', flex: 1 }}>
+                          💾 수정 완료 및 시트 반영
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingScheduleForForm(null);
+                            setNewTitle('');
+                            setNewDesc('');
+                          }}
+                          style={{
+                            minHeight: '44px',
+                            padding: '0 18px',
+                            background: '#F1F5F9',
+                            border: '1px solid #CBD5E1',
+                            borderRadius: '8px',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            color: '#475569',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          취소
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="submit" className="btn-primary-large" style={{ minHeight: '44px' }}>
+                        {scheduleAddMode === 'SINGLE' && '단일 일정 등록 완료'}
+                        {scheduleAddMode === 'INTERVAL' && `${intervalCount}회차 주기 반복 일정 일괄 생성`}
+                        {scheduleAddMode === 'DAYS_OF_WEEK' && `${selectedDays.length * weeksCount}개 요일 반복 일정 일괄 생성`}
+                        {scheduleAddMode === 'CALENDAR_PICK' && `선택한 ${pickedDates.length}개 날짜 일정 일괄 생성`}
+                      </button>
+                    )}
                   </form>
                 </div>
               </div>

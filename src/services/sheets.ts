@@ -115,7 +115,7 @@ export class SheetsService {
     };
   }
 
-  public getMembers(): Member[] {
+  public getMembers(includeMerged = false): Member[] {
     // Auto-restore bound device profile if missing from member array
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
@@ -145,8 +145,12 @@ export class SheetsService {
       // ignore storage access errors
     }
 
+    const targetMembers = includeMerged
+      ? this.members
+      : this.members.filter((m) => m.status !== 'MERGED');
+
     // Backward compatibility adapter (Schema Evolution Invariant)
-    return this.members.map((m) => ({
+    return targetMembers.map((m) => ({
       ...m,
       joinedAt: m.joinedAt || m.createdAt.slice(0, 10),
       memberStatus: m.memberStatus || (m.role === 'ADMIN' ? '선생님' : m.role === 'GUEST' ? '객원' : '정단원'),
@@ -432,6 +436,112 @@ export class SheetsService {
       });
     }
     return updated;
+  }
+
+  /**
+   * Scans for members with duplicate names and matching/missing phone numbers.
+   * Useful for administrative review and safe consolidation.
+   */
+  public findDuplicateMemberGroups(): {
+    key: string;
+    name: string;
+    phoneLast4: string;
+    members: Member[];
+  }[] {
+    const activeMembers = this.members.filter((m) => m.status !== 'MERGED');
+    const groupMap = new Map<string, Member[]>();
+
+    activeMembers.forEach((m) => {
+      const pLast4 = (m.phoneLast4 || '').trim();
+      const normName = m.name.trim().toLowerCase();
+      const key = `${normName}__${pLast4 || '0000'}`;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, []);
+      }
+      groupMap.get(key)!.push(m);
+    });
+
+    const results: { key: string; name: string; phoneLast4: string; members: Member[] }[] = [];
+    groupMap.forEach((membersList, key) => {
+      if (membersList.length > 1) {
+        results.push({
+          key,
+          name: membersList[0].name,
+          phoneLast4: membersList[0].phoneLast4,
+          members: membersList,
+        });
+      }
+    });
+
+    return results;
+  }
+
+  /**
+   * Merges duplicate member record into canonical standard ID without deleting any raw logs.
+   * Re-points raw attendance logs & RSVP votes to canonical ID, marks duplicate as MERGED.
+   */
+  public async mergeDuplicateMembers(
+    canonicalId: string,
+    secondaryId: string
+  ): Promise<{ affectedLogsCount: number; affectedRsvpCount: number }> {
+    const canonical = this.members.find((m) => m.id === canonicalId);
+    const secondary = this.members.find((m) => m.id === secondaryId);
+    if (!canonical || !secondary) {
+      throw new Error('통합 대상 단원 정보를 찾을 수 없습니다.');
+    }
+
+    // 1. Re-point raw attendance logs from secondaryId to canonicalId
+    let affectedLogsCount = 0;
+    this.logs.forEach((log) => {
+      if (log.memberId === secondaryId) {
+        log.memberId = canonicalId;
+        log.memberName = canonical.name;
+        log.adminNote = log.adminNote
+          ? `${log.adminNote} (통합: ${secondaryId})`
+          : `[ID통합: ${secondaryId} -> ${canonicalId}]`;
+        affectedLogsCount += 1;
+      }
+    });
+    saveToStorage(STORAGE_KEYS.LOGS, this.logs);
+
+    // 2. Re-point RSVP votes from secondaryId to canonicalId
+    let affectedRsvpCount = 0;
+    this.rsvpVotes.forEach((vote) => {
+      if (vote.memberId === secondaryId) {
+        vote.memberId = canonicalId;
+        vote.memberName = canonical.name;
+        affectedRsvpCount += 1;
+      }
+    });
+    saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
+
+    // 3. Mark secondary member as MERGED (preserves record, hides from active view)
+    secondary.status = 'MERGED';
+    secondary.mergedIntoId = canonicalId;
+
+    // Carry over device binding if canonical didn't have one
+    if (!canonical.boundDeviceId && secondary.boundDeviceId) {
+      canonical.boundDeviceId = secondary.boundDeviceId;
+      canonical.boundDeviceAt = secondary.boundDeviceAt;
+    }
+    // Carry over phone number if canonical didn't have full phone
+    if (!canonical.phone && secondary.phone) {
+      canonical.phone = secondary.phone;
+    }
+
+    saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+
+    // 4. Sync with Google Sheets backend
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('MERGE_MEMBERS', {
+        canonicalId,
+        secondaryId,
+      }).catch((err) => {
+        console.error('[Sheets API] Member merge sync failed:', err);
+      });
+    }
+
+    return { affectedLogsCount, affectedRsvpCount };
   }
 
   public async addSchedule(schedule: Schedule): Promise<Schedule> {

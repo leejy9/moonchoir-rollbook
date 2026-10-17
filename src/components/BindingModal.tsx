@@ -50,6 +50,7 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
   const [phoneInput, setPhoneInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [duplicatePromptMember, setDuplicatePromptMember] = useState<Member | null>(null);
 
   // Register mode state
   const [newName, setNewName] = useState('');
@@ -171,36 +172,8 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
     );
 
     if (existingMember) {
-      // Re-use existing member instead of creating duplicate fragmented ID
-      if (existingMember.boundDeviceId && existingMember.boundDeviceId !== currentDeviceId) {
-        setErrorMsg(
-          `해당 정보의 단원 계정이 이미 다른 기기(스마트폰)에 연동되어 있습니다.\n기존 기기에서 [연동 해제]를 먼저 진행하셨거나 관리자에게 초기화를 요청하세요.`
-        );
-        return;
-      }
-      try {
-        setIsSubmitting(true);
-        const updated: Partial<Member> = {
-          phoneLast4: finalLast4,
-          phone: newPhone.trim(),
-        };
-        await sheetsService.updateMember(existingMember.id, updated).catch(console.warn);
-        await sheetsService.bindMemberDevice(existingMember.id, currentDeviceId);
-        const profile = bindDeviceProfile(
-          existingMember.id,
-          existingMember.name,
-          existingMember.part,
-          finalLast4,
-          currentDeviceId
-        );
-        onSuccess(profile);
-        return;
-      } catch (err: unknown) {
-        setErrorMsg(err instanceof Error ? err.message : '기존 단원 계정 연동 중 오류가 발생했습니다.');
-        return;
-      } finally {
-        setIsSubmitting(false);
-      }
+      setDuplicatePromptMember(existingMember);
+      return;
     }
 
     const newMember: Member = buildNewMember(
@@ -226,6 +199,41 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
       onSuccess(profile);
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : '등록 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmExistingBinding = async (targetMember: Member) => {
+    const currentDeviceId = getOrCreateDeviceId();
+    const digits = newPhone.replace(/\D/g, '');
+    const finalLast4 = digits.length >= 4 ? digits.slice(-4) : (targetMember.phoneLast4 || '0000');
+
+    try {
+      setIsSubmitting(true);
+      setErrorMsg('');
+
+      // Transfer device binding if needed
+      if (targetMember.boundDeviceId && targetMember.boundDeviceId !== currentDeviceId) {
+        await sheetsService.unbindMemberDevice(targetMember.id).catch(console.warn);
+      }
+
+      const updated: Partial<Member> = {
+        phoneLast4: finalLast4,
+        phone: newPhone.trim() || targetMember.phone,
+      };
+      await sheetsService.updateMember(targetMember.id, updated).catch(console.warn);
+      await sheetsService.bindMemberDevice(targetMember.id, currentDeviceId);
+      const profile = bindDeviceProfile(
+        targetMember.id,
+        targetMember.name,
+        targetMember.part,
+        finalLast4,
+        currentDeviceId
+      );
+      onSuccess(profile);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : '기존 단원 계정 연동 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -378,6 +386,72 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
           </div>
         ) : (
           <form onSubmit={handleRegisterSubmit} className="form-stack">
+            {duplicatePromptMember && (
+              <div
+                style={{
+                  background: '#FFFBEB',
+                  border: '1.5px solid #FCD34D',
+                  padding: '16px',
+                  borderRadius: '12px',
+                  marginBottom: '16px',
+                }}
+              >
+                <h4 style={{ margin: '0 0 6px', color: '#B45309', fontSize: '15px', fontWeight: 800 }}>
+                  ⚠️ 이미 등록된 단원 계정 감지
+                </h4>
+                <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#78350F', lineHeight: 1.5 }}>
+                  <strong>[{duplicatePromptMember.name}]</strong> 단원님 ({duplicatePromptMember.part}, 뒷자리 {duplicatePromptMember.phoneLast4 || derivedLast4}) 계정이 이미 명부에 존재합니다.
+                  {duplicatePromptMember.boundDeviceId && duplicatePromptMember.boundDeviceId !== getOrCreateDeviceId() ? (
+                    <span style={{ display: 'block', marginTop: '6px', color: '#DC2626', fontWeight: 600 }}>
+                      * 이전에 다른 브라우저/기기에 연동된 이력이 있습니다. 현재 사용 중인 이 기기로 연동을 이전(재인증)하시겠습니까?
+                    </span>
+                  ) : (
+                    <span style={{ display: 'block', marginTop: '6px' }}>
+                      * 새로운 중복 계정을 생성하지 않고, 기존 계정에 내 기기를 안전하게 연결합니다.
+                    </span>
+                  )}
+                </p>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmExistingBinding(duplicatePromptMember)}
+                    disabled={isSubmitting}
+                    style={{
+                      background: '#D97706',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '10px 16px',
+                      fontSize: '13.5px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      flex: 1,
+                      minHeight: '44px',
+                    }}
+                  >
+                    🔗 예, 내 계정으로 연동하기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDuplicatePromptMember(null)}
+                    disabled={isSubmitting}
+                    style={{
+                      background: '#FFFFFF',
+                      color: '#475569',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '8px',
+                      padding: '10px 16px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      minHeight: '44px',
+                    }}
+                  >
+                    취소 및 다시 입력
+                  </button>
+                </div>
+              </div>
+            )}
             <div style={{ marginBottom: '14px' }}>
               <label className="form-label" htmlFor="reg-name" style={{ fontWeight: 600, fontSize: '13.5px' }}>
                 이름 (실명) *

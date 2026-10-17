@@ -8,6 +8,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
   beforeEach(() => {
     resetStorage();
     service = new SheetsService();
+    service.updateConfig({ sheetsWebAppUrl: '' });
   });
 
   it('correctly reconciles on-time attendance, late, excused absence, and unexcused absence', () => {
@@ -417,6 +418,129 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it('detects duplicate member groups and performs safe consolidation without log deletion', async () => {
+    // 1. Add duplicate member with same name and phone
+    const memberA = await service.addMember({
+      id: 'mem_jaeyeon_old',
+      name: '이재연',
+      part: '베이스',
+      phoneLast4: '4240',
+      phone: '010-1234-4240',
+      role: 'MEMBER',
+      createdAt: '2026-09-01T00:00:00Z',
+      status: 'ACTIVE',
+      joinedAt: '2026-09-01',
+      memberStatus: '정단원',
+    });
+
+    const memberB = await service.addMember({
+      id: 'mem_jaeyeon_new',
+      name: '이재연',
+      part: '베이스',
+      phoneLast4: '4240',
+      phone: '010-1234-4240',
+      role: 'MEMBER',
+      createdAt: '2026-10-15T00:00:00Z',
+      status: 'ACTIVE',
+      joinedAt: '2026-10-15',
+      memberStatus: '정단원',
+      boundDeviceId: 'device_uuid_9999',
+    });
+
+    // Add a schedule and logs for each ID
+    await service.addSchedule({
+      id: 'sch_sept_01',
+      title: '9월 1차 연습',
+      date: '2026-09-05',
+      startTime: '19:30',
+      endTime: '21:30',
+      locationName: '문콰이어 연습실',
+      category: '정기연습',
+    });
+
+    await service.addSchedule({
+      id: 'sch_oct_01',
+      title: '10월 1차 연습',
+      date: '2026-10-16',
+      startTime: '19:30',
+      endTime: '21:30',
+      locationName: '문콰이어 연습실',
+      category: '정기연습',
+    });
+
+    // Log under ID A
+    await service.addCheckInLog({
+      id: 'log_a_1',
+      scheduleId: 'sch_sept_01',
+      timestamp: '2026-09-05T19:20:00',
+      memberId: memberA.id,
+      memberName: memberA.name,
+      part: memberA.part,
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    });
+
+    // Log and RSVP under ID B
+    await service.addCheckInLog({
+      id: 'log_b_1',
+      scheduleId: 'sch_oct_01',
+      timestamp: '2026-10-16T19:25:00',
+      memberId: memberB.id,
+      memberName: memberB.name,
+      part: memberB.part,
+      authMethod: 'MANUAL_BY_ADMIN',
+      isVerifiedLocation: false,
+    });
+
+    await service.submitRSVP({
+      id: 'rsvp_b_1',
+      scheduleId: 'sch_oct_01',
+      memberId: memberB.id,
+      memberName: memberB.name,
+      part: memberB.part,
+      status: 'ATTEND',
+      timestamp: '2026-10-15T10:00:00',
+    });
+
+    // 2. Duplicate detection
+    const duplicateGroups = service.findDuplicateMemberGroups();
+    const jaeyeonGroup = duplicateGroups.find((g) => g.name === '이재연' && g.phoneLast4 === '4240');
+    expect(jaeyeonGroup).toBeDefined();
+    expect(jaeyeonGroup?.members.length).toBe(2);
+
+    // 3. Merge duplicate member B into canonical member A
+    const result = await service.mergeDuplicateMembers(memberA.id, memberB.id);
+    expect(result.affectedLogsCount).toBe(1);
+    expect(result.affectedRsvpCount).toBe(1);
+
+    // Active members should no longer show memberB
+    const activeMembers = service.getMembers(false);
+    expect(activeMembers.some((m) => m.id === memberB.id)).toBe(false);
+    expect(activeMembers.some((m) => m.id === memberA.id)).toBe(true);
+
+    // Full members list with includeMerged=true should show memberB as MERGED
+    const allMembers = service.getMembers(true);
+    const mergedB = allMembers.find((m) => m.id === memberB.id);
+    expect(mergedB?.status).toBe('MERGED');
+    expect(mergedB?.mergedIntoId).toBe(memberA.id);
+
+    // Canonical member A inherited device binding from B
+    const updatedA = allMembers.find((m) => m.id === memberA.id);
+    expect(updatedA?.boundDeviceId).toBe('device_uuid_9999');
+
+    // Attendance logs for sch_oct_01 now reference canonical ID
+    const octLogs = service.getLogs('sch_oct_01');
+    expect(octLogs[0].memberId).toBe(memberA.id);
+    expect(octLogs[0].adminNote).toContain(`[ID통합: ${memberB.id} -> ${memberA.id}]`);
+
+    // Projection view reflects both attendances under memberA
+    const recSept = service.reconcileAttendance('sch_sept_01').find((r) => r.memberId === memberA.id);
+    expect(recSept?.finalStatus).toBe('출석');
+
+    const recOct = service.reconcileAttendance('sch_oct_01').find((r) => r.memberId === memberA.id);
+    expect(recOct?.finalStatus).toBe('수동인정');
   });
 });
 
