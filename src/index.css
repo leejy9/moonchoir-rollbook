@@ -4794,3 +4794,247 @@ a {
     font-size: 11.5px !important;
   }
 }
+
+/* ==========================================================================
+   Round Date Picker & Beautiful Form Textarea Styles
+   ========================================================================== */
+.round-date-picker-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.round-date-picker-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1.5px solid var(--border-subtle, #e2e8f0);
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #1e293b);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+}
+
+.round-date-picker-btn:hover {
+  border-color: var(--brand-accent, #6366f1);
+  background: #f8fafc;
+}
+
+.round-date-picker-btn.active,
+.round-date-picker-btn:focus {
+  outline: none;
+  border-color: var(--brand-accent, #6366f1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.round-date-picker-btn .picker-icon {
+  margin-right: 8px;
+  font-size: 15px;
+}
+
+.round-date-picker-btn .picker-label {
+  flex: 1;
+  text-align: left;
+}
+
+.round-date-picker-btn .picker-arrow {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-left: 6px;
+}
+
+/* Floating Popover */
+.round-date-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1050;
+  width: 310px;
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 16px 36px -6px rgba(15, 23, 42, 0.14), 0 0 0 1px rgba(15, 23, 42, 0.05);
+  padding: 16px;
+  box-sizing: border-box;
+  animation: popoverFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.popover-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.popover-month-nav .popover-month-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.popover-month-nav .month-nav-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.popover-month-nav .month-nav-btn:hover {
+  background: #e0e7ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
+}
+
+/* Quick chips */
+.popover-quick-chips {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.popover-quick-chips button {
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid #e0e7ff;
+  background: #eef2ff;
+  color: #4f46e5;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.popover-quick-chips button:hover {
+  background: #4f46e5;
+  color: #ffffff;
+}
+
+/* Weekday header */
+.popover-weekdays-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.popover-weekday {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #64748b;
+  padding: 2px 0;
+}
+
+.popover-weekday.sun {
+  color: #ef4444;
+}
+
+.popover-weekday.sat {
+  color: #3b82f6;
+}
+
+/* Days grid */
+.popover-days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.popover-day-cell {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
+}
+
+.popover-day-cell:hover:not(.selected) {
+  background: #f1f5f9;
+  transform: scale(1.08);
+}
+
+.popover-day-cell.other-month {
+  color: #cbd5e1;
+}
+
+.popover-day-cell.today:not(.selected) {
+  border: 1.5px solid #6366f1;
+  color: #6366f1;
+  font-weight: 800;
+}
+
+.popover-day-cell.selected {
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.38);
+  transform: scale(1.05);
+}
+
+/* --- Beautiful Textarea Styling --- */
+.input-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-primary, #1e293b);
+  background: #f8fafc;
+  border: 1.5px solid var(--border-subtle, #e2e8f0);
+  border-radius: 14px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  resize: vertical;
+  min-height: 100px;
+}
+
+.input-textarea:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+.input-textarea:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: var(--brand-accent, #6366f1);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+}
+
+.input-textarea::placeholder {
+  color: #94a3b8;
+  font-size: 13px;
+}

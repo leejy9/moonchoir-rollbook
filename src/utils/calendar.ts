@@ -242,11 +242,14 @@ export interface MultiModeScheduleOptions {
   mode: ScheduleAddMode;
   baseSchedule: Omit<import('../types/rollbook').Schedule, 'id'> & { date?: string };
   // INTERVAL mode
-  intervalUnit?: 'DAYS' | 'WEEKS' | 'MONTHS';
-  intervalStep?: number; // e.g. every 2 weeks
+  intervalUnit?: 'DAYS' | 'WEEKS' | 'MONTHS' | 'YEARS';
+  intervalStep?: number; // e.g. every 2 weeks/months/years
   intervalCount?: number; // total count e.g. 8
+  // Recurrence selectors:
+  byDays?: ('MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN')[]; // 요일 복수 선택
+  byMonthDays?: number[]; // 매달 며칠 복수 선택 (1~31)
+  byYearDates?: { month: number; day: number }[]; // 매년 몇월 며칠 복수 선택
   // DAYS_OF_WEEK mode
-  byDays?: ('MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN')[];
   weeksCount?: number; // repeat for N weeks
   // CALENDAR_PICK mode
   pickedDates?: string[]; // e.g. ['2026-10-22', '2026-10-29', '2026-11-05']
@@ -284,20 +287,92 @@ export function createSchedulesMultiMode(
       const startDate = new Date(initialDateStr + 'T00:00:00');
 
       targetDates = [];
-      for (let i = 0; i < count; i++) {
-        const d = new Date(startDate);
-        if (unit === 'DAYS') {
+      if (unit === 'DAYS') {
+        for (let i = 0; i < count; i++) {
+          const d = new Date(startDate);
           d.setDate(d.getDate() + i * step);
-        } else if (unit === 'WEEKS') {
-          d.setDate(d.getDate() + i * step * 7);
-        } else if (unit === 'MONTHS') {
-          d.setMonth(d.getMonth() + i * step);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          targetDates.push(`${y}-${m}-${day}`);
         }
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        targetDates.push(`${y}-${m}-${day}`);
+      } else if (unit === 'WEEKS') {
+        // Multi-day selection within repeated weeks
+        const selectedDays =
+          options.byDays && options.byDays.length > 0
+            ? options.byDays.map((k) => DAY_MAP[k])
+            : [startDate.getDay()];
+
+        let currentWeekStart = new Date(startDate);
+        currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay()); // Sunday
+
+        for (let cycle = 0; cycle < count; cycle++) {
+          for (const dayNum of selectedDays) {
+            const d = new Date(currentWeekStart);
+            d.setDate(d.getDate() + dayNum);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const dateStr = `${y}-${m}-${day}`;
+            if (dateStr >= initialDateStr) {
+              targetDates.push(dateStr);
+            }
+          }
+          currentWeekStart.setDate(currentWeekStart.getDate() + step * 7);
+        }
+      } else if (unit === 'MONTHS') {
+        // Multi-day selection within repeated months (e.g. 15th and 30th)
+        const selectedMonthDays =
+          options.byMonthDays && options.byMonthDays.length > 0
+            ? [...options.byMonthDays].sort((a, b) => a - b)
+            : [startDate.getDate()];
+
+        const startYear = startDate.getFullYear();
+        const startMonthIndex = startDate.getMonth();
+
+        for (let cycle = 0; cycle < count; cycle++) {
+          const totalMonths = startMonthIndex + cycle * step;
+          const cycleYear = startYear + Math.floor(totalMonths / 12);
+          const cycleMonthIndex = totalMonths % 12;
+          const lastDayOfCycleMonth = new Date(cycleYear, cycleMonthIndex + 1, 0).getDate();
+
+          for (const targetDay of selectedMonthDays) {
+            const actualDay = Math.min(targetDay, lastDayOfCycleMonth);
+            const y = cycleYear;
+            const m = String(cycleMonthIndex + 1).padStart(2, '0');
+            const day = String(actualDay).padStart(2, '0');
+            const dateStr = `${y}-${m}-${day}`;
+            if (dateStr >= initialDateStr) {
+              targetDates.push(dateStr);
+            }
+          }
+        }
+      } else if (unit === 'YEARS') {
+        // Multi-month/day selection within repeated years (e.g. Oct 18, Dec 25)
+        const selectedYearDates =
+          options.byYearDates && options.byYearDates.length > 0
+            ? options.byYearDates
+            : [{ month: startDate.getMonth() + 1, day: startDate.getDate() }];
+
+        const startYear = startDate.getFullYear();
+
+        for (let cycle = 0; cycle < count; cycle++) {
+          const cycleYear = startYear + cycle * step;
+
+          for (const item of selectedYearDates) {
+            const lastDay = new Date(cycleYear, item.month, 0).getDate();
+            const actualDay = Math.min(item.day, lastDay);
+            const y = cycleYear;
+            const m = String(item.month).padStart(2, '0');
+            const day = String(actualDay).padStart(2, '0');
+            const dateStr = `${y}-${m}-${day}`;
+            if (dateStr >= initialDateStr) {
+              targetDates.push(dateStr);
+            }
+          }
+        }
       }
+      targetDates = Array.from(new Set(targetDates)).sort();
       break;
     }
 

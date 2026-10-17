@@ -174,6 +174,64 @@ describe('Calendar Utility', () => {
       expect(res[2].date).toBe('2026-11-12');
       expect(res[0].seriesTotal).toBe(3);
     });
+
+    it('creates multi-day weekly schedules in INTERVAL mode with byDays', () => {
+      // 2026-10-20 is Tuesday. Every 1 week on TUE and THU for 2 weeks.
+      const res = createSchedulesMultiMode({
+        mode: 'INTERVAL',
+        baseSchedule: base,
+        intervalUnit: 'WEEKS',
+        intervalStep: 1,
+        intervalCount: 2,
+        byDays: ['TUE', 'THU'],
+      });
+      expect(res.length).toBe(4);
+      expect(res.map((s) => s.date)).toEqual([
+        '2026-10-20',
+        '2026-10-22',
+        '2026-10-27',
+        '2026-10-29',
+      ]);
+    });
+
+    it('creates multi-day monthly schedules in INTERVAL mode with byMonthDays', () => {
+      // Starts 2026-10-20. Every 1 month on the 10th and 25th for 2 months.
+      // In Oct 2026: only 25th is >= 20th. In Nov 2026: 10th and 25th.
+      const res = createSchedulesMultiMode({
+        mode: 'INTERVAL',
+        baseSchedule: base,
+        intervalUnit: 'MONTHS',
+        intervalStep: 1,
+        intervalCount: 2,
+        byMonthDays: [10, 25],
+      });
+      expect(res.map((s) => s.date)).toEqual([
+        '2026-10-25',
+        '2026-11-10',
+        '2026-11-25',
+      ]);
+    });
+
+    it('creates multi-date yearly schedules in INTERVAL mode with byYearDates', () => {
+      // Starts 2026-10-20. Every 1 year on 10/18 and 12/25 for 2 years.
+      // In 2026: only 12/25 is >= 10/20. In 2027: 10/18 and 12/25.
+      const res = createSchedulesMultiMode({
+        mode: 'INTERVAL',
+        baseSchedule: base,
+        intervalUnit: 'YEARS',
+        intervalStep: 1,
+        intervalCount: 2,
+        byYearDates: [
+          { month: 10, day: 18 },
+          { month: 12, day: 25 },
+        ],
+      });
+      expect(res.map((s) => s.date)).toEqual([
+        '2026-12-25',
+        '2027-10-18',
+        '2027-12-25',
+      ]);
+    });
   });
 });
 
