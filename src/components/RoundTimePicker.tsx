@@ -22,7 +22,7 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
 
   // Parse initial 24h string into AM/PM, 12h hour, and minute
   const parsed = useMemo(() => {
-    if (!value || !/^\d{1,2}:\d{2}$/.test(value)) {
+    if (!value || !/^\d{1,2}:\d{2}(:\d{2})?$/.test(value)) {
       return { isPM: true, hour12: 7, minute: 30 };
     }
     const [h24, m] = value.split(':').map(Number);
@@ -229,7 +229,12 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
             <button
               type="button"
               className="time-done-btn"
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                if (!value) {
+                  emitChange(period, selectedHour, selectedMinute);
+                }
+                setIsOpen(false);
+              }}
             >
               선택 완료
             </button>

@@ -598,6 +598,48 @@
 - `npm run lint`: 0 errors (1 harmless warning)
 - `npm run build`: Production bundle 성공 (821 kB / gzip 239 kB)
 
+---
+
+## [2026-10-18] Phase 4.9: 관리자 일정 카드 묶음 인라인 에디터, 다채널 반복 생성 엔진 & 모던 터치 피커 개편 (Tasks 59~69)
+
+### 1. 배경 및 문제 의식
+1. **일정 카드 묶음 관리의 팝업 모달 마찰**:
+   - 기존에는 일정 카드를 편집하거나 추가할 때 레이어 팝업이 떠서 캘린더나 일정 목록의 맥락을 가리는 불편 발생.
+   - 우측 패널(Split-View)에서 즉시 열려 수정할 수 있는 인라인 에디터 및 복제 버튼 단순화 요구.
+2. **반복 생성 주기 표현의 유연성 한계**:
+   - 매주 특정 요일(월/목 등 복수 요일), 매달 특정 일자(15일/30일 등 복수 일자), 매년 특정 월일 복수 선택을 정밀하게 지정할 수 있는 규칙 엔진 필요.
+3. **OS 기본 Date/Time Picker의 시각적·터치적 불협화음**:
+   - 브라우저 기본 `<input type="date">`와 `<input type="time">`은 OS별로 투박한 직사각형 스크롤러(파란색 선택 영역 등)를 띄워 모바일 감성 웹앱의 심미성과 터치 편의성을 심각하게 해침.
+   - 동글동글한 모던 카드 무드에 맞춘 `RoundDatePicker`와 `RoundTimePicker` 전면 교체 요구.
+
+### 2. 핵심 아키텍처 및 구현 내용
+1. **일정 카드 묶음 인라인 에디터 & 복제 격리 (`AdminDashboard.tsx`)**:
+   - 팝업 모달 대신 우측 패널에서 카드 명칭, 기본 카테고리, 연습실, 시작/종료 시각, 기본 참석 대상자를 실시간으로 편집하는 Split-View 에디터 구현.
+   - 복제 시 `group.cardId` 기반으로 기존 소속 일정 및 새로운 ProgramCard(`[복제]`)를 자동 발급하여 기존 카드에 일정이 중복 적재되는 결함 원천 차단.
+2. **4대 다채널 일정 생성 엔진 (`src/utils/calendar.ts`)**:
+   - `SINGLE`: 단일 일정 1회 생성.
+   - `INTERVAL`: 매 N일/주/월/년 주기 반복 생성.
+     - `WEEKS`: 반복 요일(월~일) 복수 선택 지원.
+     - `MONTHS`: 매달 며칠(1~31일) 복수 선택 지원 (말일 자동 클램핑).
+     - `YEARS`: 매년 특정 월/일 복수 선택 지원.
+   - `DAYS_OF_WEEK`: 특정 요일 N주간 전개.
+   - `CALENDAR_PICK`: 미니 달력에서 여러 날짜를 직접 클릭하여 일괄 등록.
+3. **감각적인 둥근 달력 & 상세설명창 (`RoundDatePicker.tsx` & Modern Textarea)**:
+   - 둥근 모서리(border-radius: 20px), 부드러운 호버 애니메이션, 오늘/다가오는 목요일 퀵 칩, 이전/다음달 탐색 지원.
+   - 포커스 링과 글자 수 카운터가 포함된 모던 텍스트에어리어 적용.
+4. **감각적인 둥근 시간 선택기 (`RoundTimePicker.tsx`)**:
+   - `⏰ 오후 07:30 ▾` 알약형 트리거 버튼.
+   - 합창단 주요 연습 시간대 프리셋 칩 6종(`오후 7:30 (기본)`, `오후 9:30 (종료)` 등)으로 원터치 입력.
+   - 오전/오후 세그먼트 토글, 1~12시 및 00~55분(5분 간격) 스쿼클 터치 그리드.
+   - `ScheduleEditModal`, `BatchScheduleEditModal`, `AdminDashboard` 전 영역 100% 교체 완료.
+
+### 3. 센서 검증 결과 (Green Bar)
+- `npm run typecheck`: 0 errors
+- `npm test`: 13 test files, 82/82 tests pass (100% 통과, `RoundTimePicker.test.tsx` 포함)
+- `npm run lint`: 0 errors
+- `npm run build`: Production bundle 성공 (842 kB / gzip 245 kB)
+- `gh-pages` 배포 및 라이브 렌더링 검증 완료.
+
 
 
 

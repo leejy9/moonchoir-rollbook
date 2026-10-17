@@ -627,6 +627,65 @@
 
 ---
 
+### Phase 4.9: 관리자 일정 카드 묶음, 다채널 반복 엔진 & 모던 터치 피커 개편 (Tasks 59~69)
+
+#### Task 59: 단원 상태 구분 버튼형 토글 & 이력 기록 상태 표기 강화
+- **Goal**: 셀렉트 드롭다운 방식에서 직관적인 칩 버튼형 토글(정단원, 준단원, 휴단원, 퇴단원, 선생님, 객원)로 개편하여 터치 실수 방지 및 상태 변경 시 이력 자동 기록.
+- **Touched Files**: `src/components/MemberProfileModal.tsx`, `src/components/AdminDashboard.tsx`
+- **Status**: [x] Completed
+
+#### Task 60: 구글 시트 연락처 헤더 자동 복구 & 프로그램 카드 시딩 및 동기화
+- **Goal**: 원격 구글 시트에 `연락처` 헤더가 누락되어도 자동으로 복구·동기화하고, `PROGRAM_CARDS` 탭 양방향 연동 및 기본 카드 3종 자동 시딩.
+- **Touched Files**: `src/services/sheets.ts`, `google-apps-script.js`
+- **Status**: [x] Completed
+
+#### Task 61: 카카오 로컬 검색 키보드 엔터 부모 폼 서브밋 방지
+- **Goal**: 장소 검색 모달에서 키보드 엔터 입력 시 상위 폼이 submit되어 홈 화면으로 튕기던 버그 원천 차단 (`e.preventDefault()` 및 button `type="button"`).
+- **Touched Files**: `src/components/LocationPickerMap.tsx`, `src/components/LocationPickerModal.tsx`
+- **Status**: [x] Completed
+
+#### Task 62: 이력 기반 동적 출결 모수 판정 안정화 (statusHistory 최신 우선순위 & auto-close)
+- **Goal**: 단원 상태 변경 시 이전 오픈 이력의 종료일을 자동 기록(`auto-close`)하고, 모수 판정 시 최신 이력 우선순위를 확립하여 출석률 분모 왜곡 방지.
+- **Touched Files**: `src/utils/attendanceStats.ts`, `src/services/sheets.ts`
+- **Status**: [x] Completed
+
+#### Task 63: 자정 전후 날짜 불일치 방지 KST 날짜 표준화
+- **Goal**: 브라우저 로컬 타임존과 UTC 변환 간 자정 직전/직후 날짜가 하루 전/후로 어긋나는 현상 방지 (`getKSTDateString` 전면 도입).
+- **Touched Files**: `src/utils/date.ts`, `src/utils/timeWindow.ts`
+- **Status**: [x] Completed
+
+#### Task 64: 출결 매트릭스 '결석 오버라이드' 버튼 및 비참석자 '미참' 명확화
+- **Goal**: 관리자 매트릭스에서 수동 출석/지각 외 결석 오버라이드 버튼 신설 및 대상자가 아닌 단원은 '결석'이 아닌 '미참'으로 명확히 구분.
+- **Touched Files**: `src/components/AdminMatrixGrid.tsx`
+- **Status**: [x] Completed
+
+#### Task 65: 일정 회차 수(일정 N회차) 캘린더 반응형 렌더링 수정
+- **Goal**: 필터바의 '일정 N회차' 지표가 캘린더 날짜/범위 변경 시 즉시 동적으로 재계산되도록 반응형 상태 연결.
+- **Touched Files**: `src/components/AdminDashboard.tsx`, `src/components/AdminNotionFilterBar.tsx`
+- **Status**: [x] Completed
+
+#### Task 66: 일정 카드 묶음 인라인 에디터(Split-View) & 복제 UX 개선
+- **Goal**: 팝업 모달 대신 우측 화면에 카드 데이터가 바로 뜨는 인라인 편집창 제공, '다음학기로 복제'를 '복제'로 간소화하고 대상 일정 및 카드 복제 격리 지원.
+- **Touched Files**: `src/components/AdminDashboard.tsx`
+- **Status**: [x] Completed
+
+#### Task 67: 4대 다채널 일정 생성 엔진 (반복 주기 다중 선택 지원)
+- **Goal**: 단일 일정, 주기 반복(매주 요일 복수 선택, 매달 일자 복수 선택, 매년 월/일 복수 선택), 요일 지정(N주간), 달력 직접 픽(복수 날짜 클릭) 다채널 엔진 구축.
+- **Touched Files**: `src/utils/calendar.ts`, `src/utils/calendar.test.ts`, `src/components/AdminDashboard.tsx`
+- **Status**: [x] Completed
+
+#### Task 68: 감각적인 둥근 달력 & 상세설명창 (`RoundDatePicker` & Modern Textarea)
+- **Goal**: 브라우저 기본 각진 date input을 대체하는 동글동글한 모던 달력 팝오버 컴포넌트(`RoundDatePicker`) 구축 및 글자 수 카운터가 포함된 모던 상세설명창 적용.
+- **Touched Files**: `src/components/RoundDatePicker.tsx`, `src/components/AdminDashboard.tsx`, `src/index.css`
+- **Status**: [x] Completed
+
+#### Task 69: 감각적인 둥근 시간 선택기 (`RoundTimePicker`)
+- **Goal**: 브라우저 기본 `<input type="time">`을 대체하는 감각적인 알약형 버튼 + 합창단 연습 퀵 프리셋(6종) + 오전/오후 토글 + 12시간/5분 터치 그리드 팝오버 구축 및 전면 교체.
+- **Touched Files**: `src/components/RoundTimePicker.tsx`, `src/components/RoundTimePicker.test.tsx`, `src/components/AdminDashboard.tsx`, `src/components/ScheduleEditModal.tsx`, `src/components/BatchScheduleEditModal.tsx`, `src/index.css`
+- **Status**: [x] Completed
+
+---
+
 ### Phase 5: [기획 & 백로그] 단원 음악적 역량 풀 & 맞춤형 코칭/격려 엔진 (Future RFC / Backlog)
 > **사용자 요구사항**: "장기적인 관점에선 단원 관리 풀로 사용해볼 생각이야. 인적관리처럼 데이터화 할 수 있는 요소들(출석률, 음감, 피치, 호흡, 악보 리딩 능력, 악상 표현력)을 데이터화하고, 그에 맞춘 메시지나 조언/영상자료를 추천하려고 해. 아직 어떤 식으로 진행할지 미정이므로 코드는 추가하지 말고 기획 및 투두리스트로 정리해둘 것."
 

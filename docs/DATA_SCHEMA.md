@@ -1,7 +1,7 @@
 # Moonchoir Rollbook — 마스터 데이터 스키마 & 릴레이션 (DATA_SCHEMA.md)
 
-> **버전**: 1.1.0  
-> **최종 수정일**: 2026-10-17  
+> **버전**: 1.2.0  
+> **최종 수정일**: 2026-10-18  
 > **단일 진실 공급원 (SSOT)**: 본 문서는 프론트엔드 TypeScript 모델, 구글 시트 7대 탭 구조, 구글 앱스 스크립트(GAS), 그리고 단위 테스트 간의 데이터 계약(Contract) 및 연쇄 영향도(Cascade & Dependency)를 정의합니다.  
 > **핵심 원칙**: 모든 데이터베이스는 구글 시트에 저장/연동되며, 출석 및 단원 상태 변경 이력은 **시트에 원천 로그(DB 형식)로 영구 보존(Append-Only)**됩니다.
 
@@ -139,8 +139,11 @@ erDiagram
 | `defaultLocationId` | `defaultLocationId` | 기본 연습 장소 ID (예: `loc_secho_1`) | `string` (선택) | **외래키 (FK)** $\rightarrow$ `장소정보.id` | • 기본 장소 수정 시, 카드 내에서 `➕ 추가연습 등록` 시 해당 장소가 기본값으로 자동 입력됨. |
 | `defaultStartTime` | `defaultStartTime` | 기본 시작 시간 (`HH:mm`, 예: `19:30`) | `string` (선택) | 신규 회차 일정 생성 기본값 | • 수정 시 향후 추가되는 일정의 시작시간 기본값 변경. |
 | `defaultEndTime` | `defaultEndTime` | 기본 종료 시간 (`HH:mm`, 예: `22:00`) | `string` (선택) | 신규 회차 일정 생성 기본값 | • 수정 시 향후 추가되는 일정의 종료시간 기본값 변경. |
+| `targetAudienceType`| `targetAudienceType`| 기본 대상자 (`ALL`, `PARTS`, `CUSTOM_MEMBERS`) | `string` (선택) | 신규 회차 일정 생성 기본값 | • 회차 생성 시 기본 대상자 필터로 자동 적용. |
+| `targetParts` | `targetParts` | 기본 대상 파트 (예: `소프라노,알토`) | `string[]` (선택)| 신규 회차 생성 기본값 | • 쉼표 구분 CSV 문자열로 저장 및 파싱. |
+| `targetMemberIds` | `targetMemberIds` | 기본 선발 단원 ID 목록 | `string[]` (선택)| 신규 회차 생성 기본값 | • 쉼표 구분 CSV 문자열로 저장 및 파싱. |
 | `isArchived` | `isArchived` | 아카이브 여부 (`true` / `false`) | `boolean` (필수) | 대시보드 뷰 필터링 | • `true` 전환 시 지난 학기 일정 카드가 목록에서 숨김 처리됨 (단, 출결 데이터는 100% 보존). |
-| `createdAt` | `createdAt` | 카드 생성 일시 (ISO 타임스탬프) | `string` (필수) | 정렬 기준 | • 카드 생성 순 정렬. |
+| `createdAt` | `createdAt` | 카드 생성 일시 (KST 타임스탬프) | `string` (필수) | 정렬 기준 | • 카드 생성 순 정렬. |
 
 ---
 

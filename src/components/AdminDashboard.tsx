@@ -595,7 +595,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleDuplicateSelectedSeries = async (preferredSeriesId?: string) => {
     let targetItems = schedules.filter((s) => selectedBatchScheduleIds.includes(s.id));
     if (preferredSeriesId) {
-      targetItems = schedules.filter((s) => s.seriesId === preferredSeriesId);
+      targetItems = schedules.filter(
+        (s) => s.seriesId === preferredSeriesId || s.programId === preferredSeriesId
+      );
     }
     if (targetItems.length === 0) {
       alert('복제할 일정을 선택해주세요.');
@@ -620,6 +622,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
 
     try {
+      const matchingCard = programCards.find((c) => c.id === preferredSeriesId);
+      let newProgramCardId: string | undefined = undefined;
+
+      if (matchingCard) {
+        newProgramCardId = `card_${Date.now()}`;
+        const newCard: ProgramCard = {
+          ...matchingCard,
+          id: newProgramCardId,
+          title: `${matchingCard.title} (복제)`,
+          createdAt: getKSTTimestampString(),
+        };
+        await sheetsService.saveProgramCard(newCard);
+      }
+
       const duplicated = duplicateScheduleSeries(
         schedules.some((s) => s.seriesId === seriesIdToDup)
           ? schedules
@@ -633,9 +649,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return;
       }
 
-      await sheetsService.addSchedules(duplicated);
+      const finalDuplicated = newProgramCardId
+        ? duplicated.map((s) => ({ ...s, programId: newProgramCardId }))
+        : duplicated;
+
+      await sheetsService.addSchedules(finalDuplicated);
       setSelectedBatchScheduleIds([]);
-      setScheduleSuccessMsg(`🎉 ${duplicated.length}개 회차가 새 학기(${newStartDate}~) 일정으로 복제 생성되었습니다!`);
+      setScheduleSuccessMsg(
+        `🎉 ${finalDuplicated.length}개 회차가 새 학기(${newStartDate}~) 일정으로 복제 생성되었습니다!`
+      );
       onDataChanged();
       setTimeout(() => setScheduleSuccessMsg(''), 4500);
     } catch (err: unknown) {
