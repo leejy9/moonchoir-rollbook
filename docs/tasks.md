@@ -84,6 +84,22 @@
   - 일정별 대상자(전체, 파트별, 임원 등) 선택 및 설명 기재
   - 휴단원/퇴단원/선생님의 출석률 분모(모수) 자동 제외 및 사유불참 분류
 
+### Phase 4.5: 단원 마이페이지(MemberPortalModal) 2탭 구조 개편 (Completed - [계획서 05](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/05_member_scorecard_streamline.md))
+- [x] **Task 41**: 마이페이지 2탭 구조화 (`[연습명칭 / 연습일 / 투표 상태 / 출결 시간]` 표 + 개인 대시보드 & 기기 관리)
+  - 불일치 유발 자연어 출결 브리핑 글 완전 배제 및 간결한 4열 대조 테이블 구현
+  - 기기 연동 해제(로그아웃) 및 원클릭 구글 시트 동기화 액션 배치
+
+### Phase 4.6: 데이터 파이프라인 정합성 복원 & 3대 구조 개혁 (Completed - [계획서 06](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/06_data_pipeline_reform.md))
+- [x] **Task 42**: 단원 식별자(PK) 무결성 & 전화번호 뒷자리 자가 치유(Self-healing)
+  - 시트 `phoneLast4 = '0000'` 고착 단원 로그인 시 실제 번호(4240)로 자동 시트 갱신(`UPDATE_MEMBER`)
+  - 신규 등록 시 동일 단원 존재 시 기존 ID 재사용하여 다중 ID 생성 원천 차단
+- [x] **Task 43**: Apps Script 타임스탬프 포맷 패치 및 고아 로그/투표 2단계 구출 Fallback 어댑터
+  - `headerKey.includes('time')`로 인한 날짜 잘림(`HH:mm`) 버그 수정 (`google-apps-script.js`)
+  - 일정 ID 불일치(`sch_20261022` vs `sch_20261022_klyd`) 시 ID prefix 및 `timestamp` 날짜 매칭 2단계 Fallback 어댑터 구현
+- [x] **Task 44**: `reconcileAttendance` 중앙 엔진 SSOT 일원화 및 최신 관리자 액션 우선 판정 (Recency Resolution)
+  - 마이페이지, 프로필 모달, 홈 화면 모두 `reconcileAttendance` 엔진으로 출결 판정 통합
+  - 동일 일정 다중 로그 시 최신 관리자 수동 인정(`findLast`)을 최종 상태로 채택하고 모수제외(`isExempt`) 지원
+
 ---
 
 ## Detailed Task Specifications
@@ -285,6 +301,64 @@
   - "명동 제1연습실" 등 하드코딩 제거, 등록된 장소 프리셋 연동, `[💾 문구 영구 저장]` 지원
 - [x] **Task 37**: 연습 일정 아카이브 3종 기능 신설 (`AdminDashboard.tsx`, `ScheduleEditModal.tsx`)
   - 단일 일정 `[📦 보관]` / `[📂 복원]`, 다중 선택 일괄 아카이브, 프로그램 카드 묶음 전체 아카이브
+
+---
+
+### Phase 4.5: 단원 마이페이지(MemberPortalModal) 2탭 구조 개편
+
+### Task 41: 마이페이지 2탭 구조화 및 실시간 출결 대조 표 구현
+- **Goal**: 번잡했던 마이페이지를 2개 탭(`[연습명칭 / 연습일 / 투표 상태 / 출결 시간]` 표 + `개인 대시보드 & 기기 연동 관리`)으로 전면 재구성하고, 자연어 브리핑 글을 완전 배제하여 투명성 확보.
+- **Touched Files**:
+  - `src/components/MemberPortalModal.tsx`
+  - `docs/plans/05_member_scorecard_streamline.md`
+- **Acceptance Criteria**:
+  - 탭 1: 회차별 연습명칭, 일자, 나의 사전투표 상태(참석/불참/미응답), 출결 인정 상태 및 체크인 시간(`HH:mm`)을 한 줄에 대조.
+  - 탭 2: 단원 인적사항 확인, `[🚪 기기 연동 해제]`, `[🔄 시트 동기화]` 제공.
+  - 자연어 출결 브리핑 글을 완전히 제거.
+- **Status**: [x] Completed
+
+---
+
+### Phase 4.6: 데이터 파이프라인 정합성 복원 & 3대 구조 개혁
+
+### Task 42: 단원 식별자(PK) 무결성 & 전화번호 뒷자리 자가 치유(Self-healing)
+- **Goal**: 구글 시트에 `phoneLast4 = '0000'`으로 고착된 단원이 로그인 시도시 입력한 본인 뒷자리로 자동 갱신하고, 동일 단원에 대한 다중 ID 생성을 원천 차단.
+- **Touched Files**:
+  - `src/components/BindingModal.tsx`
+  - `src/services/sheets.ts`
+  - `src/services/sheets.test.ts`
+- **Acceptance Criteria**:
+  - `BindingModal`에서 대상 단원의 `phoneLast4`가 `'0000'`이거나 비어있을 경우, 입력한 유효 4자리로 시트에 `UPDATE_MEMBER`를 쏘고 즉시 바인딩 성공.
+  - `buildNewMember` 헬퍼를 분리하여 React 컴포넌트 순수성 린트 규칙 준수.
+- **Status**: [x] Completed
+
+---
+
+### Task 43: Apps Script 타임스탬프 포맷 패치 및 고아 로그/투표 2단계 구출 Fallback 어댑터
+- **Goal**: GAS 웹앱에서 `timestamp` 날짜가 `HH:mm`으로 잘리던 치명적 버그를 수정하고, 일정 ID가 변경되어 분리된 고아 로그/투표를 2단계 Fallback 어댑터로 복원.
+- **Touched Files**:
+  - `google-apps-script.js` & `docs/google_apps_script.js`
+  - `src/services/sheets.ts`
+  - `src/services/sheets.test.ts`
+- **Acceptance Criteria**:
+  - GAS `readSheetData`: `timestamp` 열에 대해 온전한 ISO 타임스탬프(`yyyy-MM-dd'T'HH:mm:ssXXX`) 보존.
+  - `getLogs` 및 `getRSVPVotes`: 1단계 ID Prefix 일치 확인 $\rightarrow$ 2단계 일정 날짜(`YYYY-MM-DD`) 일치 확인으로 고아 레코드 구출.
+- **Status**: [x] Completed
+
+---
+
+### Task 44: `reconcileAttendance` 중앙 엔진 SSOT 일원화 및 최신 관리자 액션 우선 판정 (Recency Resolution)
+- **Goal**: 4대 UI(관리자 매트릭스, 단원 마이페이지, 프로필 팝업, 메인 홈)의 출결 판정 로직을 `reconcileAttendance` 중앙 엔진으로 100% 통합.
+- **Touched Files**:
+  - `src/services/sheets.ts`
+  - `src/components/MemberPortalModal.tsx`
+  - `src/components/MemberProfileModal.tsx`
+  - `src/components/HomeView.tsx`
+- **Acceptance Criteria**:
+  - 관리자가 임의로 결석을 출석(수동인정)으로 변경한 최신 액션이 단원 마이페이지 표에 즉시 반영.
+  - 동일 일정에 여러 개의 로그가 쌓였을 때 최신 로그(`findLast`)를 최종 상태로 판정.
+  - `isExempt`(모수 제외) 플래그를 지원하여 입단일 이전/휴단 기간의 일정이 결석으로 잡히지 않음.
+- **Status**: [x] Completed
 
 ---
 

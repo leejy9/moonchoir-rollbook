@@ -440,3 +440,81 @@ if (val instanceof Date) {
 ```
 * **수정 후 배포 필수**: Apps Script 코드 창에서 위 내용을 수정한 후, **[배포] > [배포 관리] > [수정(연필 아이콘)] > [새 버전] 선택 후 [배포]**를 완료해야 라이브 웹앱 URL에 반영됩니다.
 
+---
+
+## 📌 10. 데이터 파이프라인 구조 개혁 & 자가 치유(Self-Healing) 아키텍처 (2026-10-17 확립)
+
+데이터 파이프라인의 5대 취약점을 해결하고 데이터 무결성을 보장하기 위해 확립된 3대 구조 개혁의 상세 동작 사양입니다.
+
+```mermaid
+flowchart TD
+    subgraph Client ["클라이언트 UI & 데이터 어댑터"]
+        UI1["단원 마이페이지 (MemberPortalModal)"]
+        UI2["관리자 매트릭스 (AdminMatrixGrid)"]
+        UI3["단원 프로필 팝업 (MemberProfileModal)"]
+        UI4["메인 홈 화면 (HomeView)"]
+        
+        SSOT["중앙 판정 엔진<br>reconcileMemberAttendance()"]
+        
+        UI1 --> SSOT
+        UI2 --> SSOT
+        UI3 --> SSOT
+        UI4 --> SSOT
+    end
+
+    subgraph Adapters ["데이터 어댑터 (Self-Healing & Fallback)"]
+        Fallback["고아 로그 2단계 구출 어댑터<br>1) schId prefix 매칭<br>2) 일정 date vs 로그 timestamp 매칭"]
+        Normalize["다중 ID 정규화 어댑터<br>동일 단원명의 구 ID 투표를 주 ID로 병합"]
+        SelfHeal["전화번호 자가 치유<br>0000 단원 로그인 시 유효번호로 시트 UPDATE"]
+    end
+
+    subgraph GoogleSheets ["구글 스프레드시트 (SSOT 원천 DB)"]
+        S_Logs[("출석원천로그<br>(Append-Only)")]
+        S_Members[("단원명부<br>(In-place Upsert)")]
+        S_RSVP[("사전투표_RSVP<br>(1인 1투표 Upsert)")]
+        S_Schedules[("일정캘린더")]
+    end
+
+    SSOT --> Fallback
+    Fallback --> S_Logs
+    Fallback --> S_RSVP
+    Normalize --> S_RSVP
+    SelfHeal --> S_Members
+```
+
+### 10.1 단원 식별자(PK) 자가 치유(Self-Healing) 사양
+- **대상**: 구글 시트 `단원명부`에서 `phoneLast4`가 `'0000'`이거나 비어있는 레코드.
+- **동작 메커니즘**:
+  1. 단원이 로그인 창(`BindingModal`)에서 본인 이름을 선택하고 본인의 실제 전화번호 뒷자리 4자리(예: `4240`)를 입력.
+  2. 대상 단원의 현재 `phoneLast4`가 `'0000'` 또는 비어있을 경우, 불일치 에러로 튕겨내지 않고 **자가 치유 플래그(`isUnsetLast4`)를 발동**.
+  3. 클라이언트는 즉시 구글 시트에 `UPDATE_MEMBER` 액션을 쏘아 해당 단원 행의 `phoneLast4`를 `4240`으로 자동 갱신.
+  4. 로컬 명부 캐시를 즉시 갱신하고 단원 기기 바인딩을 성공 처리.
+- **다중 ID 방지 룰**:
+  - 신규 단원 등록 창에서 입력한 이름과 전화번호가 이미 명부에 존재할 경우, 새 `mem_new_...` PK를 발급하지 않고 기존 레코드를 그대로 재사용하여 1인 다중 ID 분리를 원천 차단.
+
+### 10.2 고아 일정 로그(Orphan Log) 2단계 구출 Fallback 어댑터
+- **문제**: 관리자의 일정 수정/복제 과정에서 일정 ID가 변경(`sch_20261022` $\rightarrow$ `sch_20261022_klyd`)되면, 과거에 작성된 출석 로그 및 투표 내역의 `scheduleId` 외래키가 어긋나 고아화됨.
+- **해결 알고리즘 (`src/services/sheets.ts`)**:
+  ```typescript
+  // 1단계: 완전 일치 또는 접두사(Prefix) 일치
+  const prefix = targetScheduleId.replace(/_[a-z0-9]+$/, '');
+  let matched = (l.scheduleId === targetScheduleId || l.scheduleId.startsWith(prefix));
+
+  // 2단계: 1단계 실패 시 일정 날짜와 로그 타임스탬프 날짜 일치 확인
+  if (!matched && schedDate) {
+    const logDate = l.timestamp ? l.timestamp.slice(0, 10) : '';
+    if (logDate && logDate === schedDate) {
+      matched = true;
+    }
+  }
+  ```
+
+### 10.3 중앙 출결 판정 엔진(SSOT) 및 최신 액션 우선 채택(Recency Resolution)
+- **SSOT 원칙**: 모든 화면(`MemberPortalModal`, `AdminMatrixGrid`, `MemberProfileModal`, `HomeView`)은 반드시 `sheetsService.reconcileAttendance()` 및 `sheetsService.reconcileMemberAttendance()` 단일 함수만을 호출하여 출결을 판정.
+- **다중 로그 누적 시 최신 액션 우선 채택 (Recency Resolution)**:
+  - 도메인 불변식에 따라 출석 로그는 Append-only로 계속 누적됨 (예: 현장 결석/지각 로그 생성 후 $\rightarrow$ 관리자가 나중에 수동 인정 로그 추가).
+  - 배열 검색 시 단순 `find()`가 아닌 역순 최신 로그(`findLast`)를 우선 탐색하여, 관리자의 최신 수동 인정(`MANUAL_BY_ADMIN`)이 과거 상태를 덮어쓰고 최종 출결 상태로 확정됨.
+- **모수 제외(`isExempt`) 판정**:
+  - 단원의 입단일(`joinedAt`) 이전 일정이거나, 휴단원/퇴단원 기간인 경우 결석으로 집계하지 않고 `isExempt: true`로 판정하여 출결 표에 `모수제외`로 표기.
+
+
