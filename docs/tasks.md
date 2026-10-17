@@ -100,6 +100,14 @@
   - 마이페이지, 프로필 모달, 홈 화면 모두 `reconcileAttendance` 엔진으로 출결 판정 통합
   - 동일 일정 다중 로그 시 최신 관리자 수동 인정(`findLast`)을 최종 상태로 채택하고 모수제외(`isExempt`) 지원
 
+### Phase 4.7: 단원 식별자 검토형 무결성, 2대 출결 지표 & 일정/QR 전면 개편 (Planned)
+- [ ] **Task 45**: 단원 식별자(PK) 중복 감지 및 관리자 검토 기반 안전 통합 UI/엔진
+- [ ] **Task 46**: 출석률 통계 모수 미래 일정 제외 & 2대 출석 지표(약속 이행률 vs 전체 참여율) 개편
+- [ ] **Task 47**: 대시보드 일정 관리 Master-Detail 2열 인라인 바인딩 & [지난 일정 보기]/[복제] 개편
+- [ ] **Task 48**: 4대 다채널 일정 추가 엔진(다중 날짜 픽 포함) 및 일정 카드 구글 시트 저장 연동
+- [ ] **Task 49**: 출석 QR 코드 워딩 단일화 & PIN 보조 UI 슬림화
+- [ ] **Task 50**: 실시간 시간 윈도우 기반 실전 테스트 시나리오 및 프로토콜 구축
+
 ---
 
 ## Detailed Task Specifications
@@ -359,6 +367,97 @@
   - 동일 일정에 여러 개의 로그가 쌓였을 때 최신 로그(`findLast`)를 최종 상태로 판정.
   - `isExempt`(모수 제외) 플래그를 지원하여 입단일 이전/휴단 기간의 일정이 결석으로 잡히지 않음.
 - **Status**: [x] Completed
+
+---
+
+### Phase 4.7: 단원 식별자 검토형 무결성, 2대 출결 지표 & 일정/QR 전면 개편
+
+### Task 45: 단원 식별자(PK) 중복 감지 및 관리자 검토 기반 안전 통합 UI/엔진
+- **Goal**: 기계적 자동 통합이나 맹목적 차단 대신, [이름 + 전화번호 뒤4자리] 기준 중복 의심 단원을 감지하여 관리자에게 안내하고, 회차별 행동로그를 대조하여 관리자 확인 하에 최신값 기준으로 안전하게 원천로그 외래키를 정규화.
+- **Touched Files**:
+  - `src/services/sheets.ts`
+  - `src/components/AdminDashboard.tsx`
+  - `src/components/BindingModal.tsx`
+- **Acceptance Criteria**:
+  - 신규 등록 시 무조건 에러 차단 대신 "이미 등록된 이재연(4240) 단원님이 존재합니다. 이 계정으로 바인딩할까요?" 확인형 모달 제공.
+  - 관리자 단원 명부에 "⚠️ 중복 등록 단원 감지" 뱃지 및 [이력 대조 및 통합] 모달 제공.
+  - 과거 행이나 ID를 임의 삭제하지 않고, 불변 원천로그의 유효성을 보존하면서 통합된 뷰 제공.
+- **Status**: [ ] Planned
+
+---
+
+### Task 46: 출석률 통계 모수 미래 일정 제외 & 2대 출석 지표(약속 이행률 vs 전체 참여율) 개편
+- **Goal**: 미래 일정(`schedule.date > today`)이 결석으로 집계되어 0%로 추락하는 버그를 원천 해결하고, 단원의 성실도와 전체 기여도를 분리 평가하는 2대 출석 지표 도입.
+- **Touched Files**:
+  - `src/utils/attendanceStats.ts`
+  - `src/services/sheets.ts`
+  - `src/components/MemberPortalModal.tsx`
+  - `src/components/AdminDashboard.tsx`
+- **Acceptance Criteria**:
+  - 모수(분모) 계산 시 `schedule.date <= today` 조건 필수 적용.
+  - 지표 1 (**약속 이행률**): $\frac{\text{실제 출석 회차}}{\text{사전투표에서 '참석'으로 응답한 과거 회차}} \times 100$
+  - 지표 2 (**전체 일정 참여율**): $\frac{\text{실제 출석 회차}}{\text{현재까지 열린 전체 과거 유효 회차}} \times 100$
+  - 10/16 경찰의날 녹음 등 과거 수동인정 로그가 마이페이지 및 관리자 화면에 '출석(수동인정)'으로 정상 표기.
+- **Status**: [ ] Planned
+
+---
+
+### Task 47: 대시보드 일정 관리 Master-Detail 2열 인라인 바인딩 & [지난 일정 보기]/[복제] 개편
+- **Goal**: 별도 수정 팝업을 제거하고 좌측 목록 클릭 시 우측 인라인 입력창에 즉시 값이 연동되는 2열 UX를 구축하며, 지난 일정 자동 보관 및 오늘 날짜 기준 복제 지원.
+- **Touched Files**:
+  - `src/components/AdminDashboard.tsx`
+  - `src/components/ScheduleEditModal.tsx` (인라인 대체 또는 슬림화)
+- **Acceptance Criteria**:
+  - 좌측 일정 카드 클릭/수정 선택 시 우측 상주 입력 폼에 필드 값 즉시 바인딩(In-place Edit).
+  - 오늘 이전 일정은 자동으로 `[지난 일정 보기]` 토글 뒤로 배치(수정 불가 View-only).
+  - 지난 일정에서 `[복제]` 클릭 시 "오늘 날짜"를 기본값으로 하여 우측 폼에 그대로 복사 채우기.
+  - 제목 명칭 `[일정 등록]`으로 간소화, `세부내용(선택)` textarea 상하 높이 대폭 확장.
+  - 장소 선택: `[기존 연습실 선택]` vs `[새 장소 직접 등록]` 토글 분리.
+- **Status**: [ ] Planned
+
+---
+
+### Task 48: 4대 다채널 일정 추가 엔진(다중 날짜 픽 포함) 및 일정 카드 구글 시트 저장 연동
+- **Goal**: 애플/네이버 캘린더 스타일의 다채널 반복 엔진을 완비하고, 시트 저장이 누락되어 있던 `일정카드` 탭 양방향 동기화 파이프라인 정식 연결.
+- **Touched Files**:
+  - `src/utils/calendar.ts`
+  - `src/services/sheets.ts`
+  - `src/components/AdminDashboard.tsx`
+  - `google-apps-script.js`
+- **Acceptance Criteria**:
+  - 4대 추가 옵션:
+    1) 단일 일정
+    2) 매 N일 / N주 / N개월 반복
+    3) 요일 다중 선택 (월~일 칩)
+    4) **캘린더 직접 날짜 복수 픽**: 하나의 일정 속성에 대해 달력에서 여러 날짜를 콕콕 찍어 한 번에 생성
+  - 일정 카드(컨테이너) 생성/수정/삭제 시 구글 시트 `일정카드` 탭에 `SAVE_PROGRAM_CARD`가 실제로 호출되어 영구 저장.
+- **Status**: [ ] Planned
+
+---
+
+### Task 49: 출석 QR 코드 워딩 단일화 & PIN 보조 UI 슬림화
+- **Goal**: 하드코딩된 회차별 QR 및 복잡한 버튼을 제거하고, 정기연습실 상설 QR을 `출석 QR 코드`로 단일화하며 PIN을 슬림한 보조 수단으로 재배치.
+- **Touched Files**:
+  - `src/components/AdminDashboard.tsx`
+  - `src/components/QRScannerModal.tsx`
+- **Acceptance Criteria**:
+  - 명칭을 `출석 QR 코드`로 전면 통일.
+  - "10-16 경찰의날 녹음" 등 하드코딩 회차 텍스트 삭제.
+  - QR 코드가 메인 시각 중심이 되고, 하단에 "QR 스캔 불가 시 현장 PIN 인증" 1줄 슬림 카드 배치.
+  - 외부 일정(공연/녹음 등)은 현장 PIN 출석으로 일원화.
+- **Status**: [ ] Planned
+
+---
+
+### Task 50: 실시간 시간 윈도우 기반 실전 테스트 시나리오 및 프로토콜 구축
+- **Goal**: 테스트 바이패스 버튼을 없애고, 실제 서비스 시간 윈도우(연습 시작 1시간 전 ~ 종료)에 맞춰 일정이 등록되고 상태가 실시간 전환되는 테스트 프로토콜 수립.
+- **Touched Files**:
+  - `src/components/HomeView.tsx`
+  - `src/utils/timeWindow.ts`
+  - `docs/plans/07_realtime_testing_and_ux_refinement.md`
+- **Acceptance Criteria**:
+  - 관리자가 실시간으로 10분 뒤 일정을 생성하여 [사전투표] $\rightarrow$ [QR 활성화] $\rightarrow$ [출석 마감]의 상태 전이 정상 동작 검증.
+- **Status**: [ ] Planned
 
 ---
 
