@@ -2328,135 +2328,94 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                         {schedulesOnSelectedDate.length > 0 ? (
                           <div className="admin-selected-sch-list" style={{ marginTop: '10px' }}>
-                            {schedulesOnSelectedDate.map((sch) => (
-                              <div key={sch.id} className="admin-sch-item-card">
-                                <div className="sch-item-info">
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <span className="schedule-category-badge">{sch.category}</span>
-                                    <strong style={{ fontSize: '14px', color: '#191f28' }}>{sch.title}</strong>
-                                    {sch.checkInPin && (
-                                      <span style={{ fontSize: '11px', color: '#64748B', background: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
-                                        PIN: {sch.checkInPin}
-                                      </span>
+                            {schedulesOnSelectedDate.map((sch) => {
+                              const isSelectedForEdit = editingScheduleForForm?.id === sch.id;
+                              return (
+                                <div
+                                  key={sch.id}
+                                  className="admin-sch-item-card"
+                                  onClick={() => handleBindScheduleToForm(sch)}
+                                  style={{
+                                    cursor: 'pointer',
+                                    border: isSelectedForEdit ? '1.5px solid #6366F1' : '1px solid #E2E8F0',
+                                    background: isSelectedForEdit ? '#EEF2FF' : '#FFFFFF',
+                                    boxShadow: isSelectedForEdit ? '0 0 0 2px rgba(99, 102, 241, 0.2)' : 'none',
+                                    transition: 'all 0.15s ease',
+                                  }}
+                                  title="클릭하여 우측에서 일정 정보 수정"
+                                >
+                                  <div className="sch-item-info">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      {isSelectedForEdit && (
+                                        <span style={{ fontSize: '11px', color: '#4F46E5', fontWeight: 700 }}>
+                                          ✏️ 편집 중:
+                                        </span>
+                                      )}
+                                      <span className="schedule-category-badge">{sch.category}</span>
+                                      <strong style={{ fontSize: '14px', color: '#191f28' }}>{sch.title}</strong>
+                                      {sch.checkInPin && (
+                                        <span style={{ fontSize: '11px', color: '#64748B', background: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
+                                          PIN: {sch.checkInPin}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7684' }}>
+                                      🕒 {sch.startTime} ~ {sch.endTime} · 📍 {sch.locationName}
+                                    </p>
+                                    {sch.description && (
+                                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b95a1' }}>
+                                        곡목: {sch.description}
+                                      </p>
                                     )}
                                   </div>
-                                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7684' }}>
-                                    🕒 {sch.startTime} ~ {sch.endTime} · 📍 {sch.locationName}
-                                  </p>
-                                  {sch.description && (
-                                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b95a1' }}>
-                                      곡목: {sch.description}
-                                    </p>
-                                  )}
+                                  <div style={{ display: 'flex', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleArchiveSchedule(sch.id, !sch.isArchived)}
+                                      title={sch.isArchived ? '일반 목록으로 복원' : '지난 시즌 아카이브로 보관'}
+                                      style={{
+                                        background: sch.isArchived ? '#EDE9FE' : '#F1F5F9',
+                                        color: sch.isArchived ? '#6D28D9' : '#475569',
+                                        border: `1px solid ${sch.isArchived ? '#C4B5FD' : '#CBD5E1'}`,
+                                        borderRadius: '6px',
+                                        padding: '4px 8px',
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      {sch.isArchived ? '📂 복원' : '📦 보관'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn-edit-sch-mini"
+                                      onClick={() => handleCloneScheduleToForm(sch)}
+                                      title={sch.date < getTodayString() ? "오늘 날짜로 복제" : "일정 복제"}
+                                      style={{
+                                        background: sch.date < getTodayString() ? '#ECFDF5' : '#F8FAFC',
+                                        color: sch.date < getTodayString() ? '#059669' : '#475569',
+                                        border: `1px solid ${sch.date < getTodayString() ? '#A7F3D0' : '#CBD5E1'}`,
+                                        borderRadius: '6px',
+                                        padding: '4px 8px',
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      {sch.date < getTodayString() ? '📋 오늘로 복제' : '📋 복제'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn-delete-sch-mini"
+                                      onClick={() => handleDeleteSchedule(sch.id, sch.title)}
+                                      title="일정 삭제"
+                                    >
+                                      🗑️ 삭제
+                                    </button>
+                                  </div>
                                 </div>
-                                <div style={{ display: 'flex', gap: '6px' }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleArchiveSchedule(sch.id, !sch.isArchived)}
-                                    title={sch.isArchived ? '일반 목록으로 복원' : '지난 시즌 아카이브로 보관'}
-                                    style={{
-                                      background: sch.isArchived ? '#EDE9FE' : '#F1F5F9',
-                                      color: sch.isArchived ? '#6D28D9' : '#475569',
-                                      border: `1px solid ${sch.isArchived ? '#C4B5FD' : '#CBD5E1'}`,
-                                      borderRadius: '6px',
-                                      padding: '4px 8px',
-                                      fontSize: '12px',
-                                      fontWeight: 600,
-                                      cursor: 'pointer',
-                                    }}
-                                  >
-                                    {sch.isArchived ? '📂 복원' : '📦 보관'}
-                                  </button>
-                                  {sch.date < getTodayString() ? (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className="btn-edit-sch-mini"
-                                        onClick={() => handleCloneScheduleToForm(sch)}
-                                        title="오늘 날짜로 복제"
-                                        style={{
-                                          background: '#ECFDF5',
-                                          color: '#059669',
-                                          border: '1px solid #A7F3D0',
-                                          borderRadius: '6px',
-                                          padding: '4px 8px',
-                                          fontSize: '12px',
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                        }}
-                                      >
-                                        📋 오늘로 복제
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="btn-edit-sch-mini"
-                                        onClick={() => handleBindScheduleToForm(sch)}
-                                        title="일정 상세/수정"
-                                        style={{
-                                          background: '#EEF2FF',
-                                          color: '#4F46E5',
-                                          border: '1px solid #C7D2FE',
-                                          borderRadius: '6px',
-                                          padding: '4px 8px',
-                                          fontSize: '12px',
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                        }}
-                                      >
-                                        ✏️ 수정
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className="btn-edit-sch-mini"
-                                        onClick={() => handleBindScheduleToForm(sch)}
-                                        title="우측 폼에서 수정"
-                                        style={{
-                                          background: '#EEF2FF',
-                                          color: '#4F46E5',
-                                          border: '1px solid #C7D2FE',
-                                          borderRadius: '6px',
-                                          padding: '4px 8px',
-                                          fontSize: '12px',
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                        }}
-                                      >
-                                        ✏️ 수정
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="btn-edit-sch-mini"
-                                        onClick={() => handleCloneScheduleToForm(sch)}
-                                        title="일정 복제"
-                                        style={{
-                                          background: '#F8FAFC',
-                                          color: '#475569',
-                                          border: '1px solid #CBD5E1',
-                                          borderRadius: '6px',
-                                          padding: '4px 8px',
-                                          fontSize: '12px',
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                        }}
-                                      >
-                                        📋 복제
-                                      </button>
-                                    </>
-                                  )}
-                                  <button
-                                    type="button"
-                                    className="btn-delete-sch-mini"
-                                    onClick={() => handleDeleteSchedule(sch.id, sch.title)}
-                                    title="일정 삭제"
-                                  >
-                                    🗑️ 삭제
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         ) : (
                           <p className="empty-subtext" style={{ padding: '16px 0', textAlign: 'center', margin: 0 }}>
@@ -2709,30 +2668,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '520px', overflowY: 'auto' }}>
                           {filteredAllSchedules.map((sch) => {
                             const isChecked = selectedBatchScheduleIds.includes(sch.id);
+                            const isSelectedForEdit = editingScheduleForForm?.id === sch.id;
                             return (
                               <div
                                 key={sch.id}
+                                onClick={() => handleBindScheduleToForm(sch)}
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'space-between',
-                                  background: isChecked ? '#F5F3FF' : '#FFFFFF',
-                                  border: `1px solid ${isChecked ? '#DDD6FE' : '#E2E8F0'}`,
+                                  background: isSelectedForEdit ? '#EEF2FF' : isChecked ? '#F5F3FF' : '#FFFFFF',
+                                  border: isSelectedForEdit ? '1.5px solid #6366F1' : `1px solid ${isChecked ? '#DDD6FE' : '#E2E8F0'}`,
+                                  boxShadow: isSelectedForEdit ? '0 0 0 2px rgba(99, 102, 241, 0.2)' : 'none',
                                   borderRadius: '10px',
                                   padding: '10px 14px',
                                   gap: '12px',
                                   transition: 'all 0.15s ease',
+                                  cursor: 'pointer',
                                 }}
+                                title="클릭하여 우측에서 일정 정보 수정"
                               >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
                                   <input
                                     type="checkbox"
                                     checked={isChecked}
                                     onChange={() => handleToggleSelectSchedule(sch.id)}
+                                    onClick={(e) => e.stopPropagation()}
                                     style={{ width: '18px', height: '18px', accentColor: '#4F46E5', cursor: 'pointer' }}
                                   />
                                   <div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                      {isSelectedForEdit && (
+                                        <span style={{ fontSize: '11px', color: '#4F46E5', fontWeight: 700 }}>
+                                          ✏️ 편집 중:
+                                        </span>
+                                      )}
                                       <span
                                         style={{
                                           fontSize: '12px',
@@ -2779,7 +2749,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </div>
                                 </div>
 
-                                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                                   {sch.seriesId && (
                                     <button
                                       type="button"
@@ -2819,89 +2789,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   >
                                     {sch.isArchived ? '📂 복원' : '📦 보관'}
                                   </button>
-                                  {sch.date < getTodayString() ? (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className="btn-edit-sch-mini"
-                                        onClick={() => handleCloneScheduleToForm(sch)}
-                                        title="오늘 날짜로 복제"
-                                        style={{
-                                          background: '#ECFDF5',
-                                          color: '#059669',
-                                          border: '1px solid #A7F3D0',
-                                          borderRadius: '6px',
-                                          padding: '5px 10px',
-                                          fontSize: '12px',
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                          minHeight: '34px',
-                                        }}
-                                      >
-                                        📋 오늘로 복제
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="btn-edit-sch-mini"
-                                        onClick={() => handleBindScheduleToForm(sch)}
-                                        title="일정 상세/수정"
-                                        style={{
-                                          background: '#EEF2FF',
-                                          color: '#4F46E5',
-                                          border: '1px solid #C7D2FE',
-                                          borderRadius: '6px',
-                                          padding: '5px 10px',
-                                          fontSize: '12px',
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                          minHeight: '34px',
-                                        }}
-                                      >
-                                        ✏️ 수정
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className="btn-edit-sch-mini"
-                                        onClick={() => handleBindScheduleToForm(sch)}
-                                        title="우측 폼에서 수정"
-                                        style={{
-                                          background: '#EEF2FF',
-                                          color: '#4F46E5',
-                                          border: '1px solid #C7D2FE',
-                                          borderRadius: '6px',
-                                          padding: '5px 10px',
-                                          fontSize: '12px',
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                          minHeight: '34px',
-                                        }}
-                                      >
-                                        ✏️ 수정
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="btn-edit-sch-mini"
-                                        onClick={() => handleCloneScheduleToForm(sch)}
-                                        title="일정 복제"
-                                        style={{
-                                          background: '#F8FAFC',
-                                          color: '#475569',
-                                          border: '1px solid #CBD5E1',
-                                          borderRadius: '6px',
-                                          padding: '5px 8px',
-                                          fontSize: '12px',
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                          minHeight: '34px',
-                                        }}
-                                      >
-                                        📋 복제
-                                      </button>
-                                    </>
-                                  )}
+                                  <button
+                                    type="button"
+                                    className="btn-edit-sch-mini"
+                                    onClick={() => handleCloneScheduleToForm(sch)}
+                                    title={sch.date < getTodayString() ? "오늘 날짜로 복제" : "일정 복제"}
+                                    style={{
+                                      background: sch.date < getTodayString() ? '#ECFDF5' : '#F8FAFC',
+                                      color: sch.date < getTodayString() ? '#059669' : '#475569',
+                                      border: `1px solid ${sch.date < getTodayString() ? '#A7F3D0' : '#CBD5E1'}`,
+                                      borderRadius: '6px',
+                                      padding: '5px 10px',
+                                      fontSize: '12px',
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      minHeight: '34px',
+                                    }}
+                                  >
+                                    {sch.date < getTodayString() ? '📋 오늘로 복제' : '📋 복제'}
+                                  </button>
                                   <button
                                     type="button"
                                     className="btn-delete-sch-mini"
