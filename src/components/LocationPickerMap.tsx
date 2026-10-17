@@ -196,8 +196,11 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
   }, [radius]);
 
   // 3. Search Kakao Places Keyword
-  const handleSearchKakaoPlaces = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleSearchKakaoPlaces = (e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const query = searchKeyword.trim();
     if (!query) {
       alert('검색할 장소명 또는 도로명 주소를 입력해주세요.');
@@ -212,8 +215,8 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
     if (kakao && kakao.maps && kakao.maps.services) {
       const ps = new kakao.maps.services.Places();
       ps.keywordSearch(query, (data: KakaoPlaceItem[], status: string) => {
-        setIsSearching(false);
         if (status === kakao.maps.services.Status.OK && data && data.length > 0) {
+          setIsSearching(false);
           setSearchResults(data.slice(0, 6));
         } else {
           // If keyword search fails, try geocoder as fallback
@@ -233,8 +236,8 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
       const geocoder = new kakao.maps.services.Geocoder();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       geocoder.addressSearch(addressStr, (result: any[], status: string) => {
-        setIsSearching(false);
         if (status === kakao.maps.services.Status.OK && result && result.length > 0) {
+          setIsSearching(false);
           const item: KakaoPlaceItem = {
             id: `addr_${Date.now()}`,
             place_name: addressStr,
@@ -246,7 +249,21 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
           };
           setSearchResults([item]);
         } else {
-          tryGeocodeWithNominatim(addressStr);
+          // 2차 시도: 복합 명사 분리 검색 (예: 서해문화회관 -> 서해 문화회관)
+          const splitted = addressStr.replace(/([가-힣a-zA-Z0-9]+)(문화회관|연습실|아트홀|체육관|센터|성당|교회|회관|극장|스튜디오)/, '$1 $2').trim();
+          if (splitted !== addressStr) {
+            const ps = new kakao.maps.services.Places();
+            ps.keywordSearch(splitted, (data: KakaoPlaceItem[], st: string) => {
+              if (st === kakao.maps.services.Status.OK && data && data.length > 0) {
+                setIsSearching(false);
+                setSearchResults(data.slice(0, 6));
+              } else {
+                tryGeocodeWithNominatim(addressStr);
+              }
+            });
+          } else {
+            tryGeocodeWithNominatim(addressStr);
+          }
         }
       });
     } else {
@@ -426,7 +443,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
             {kakaoLoaded ? '⚡ 카카오맵 연동' : '🌐 검색 연동'}
           </span>
         </div>
-        <form onSubmit={handleSearchKakaoPlaces} style={{ display: 'flex', gap: '6px' }}>
+        <div style={{ display: 'flex', gap: '6px' }}>
           <input
             type="text"
             className="modern-input"
@@ -434,11 +451,23 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
             placeholder="예: 예술의전당, 서해문화회관, 연수구 한나루로"
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                handleSearchKakaoPlaces(e);
+              }
+            }}
           />
           <button
-            type="submit"
+            type="button"
             className="btn-qr-action-primary"
             style={{ width: 'auto', padding: '0 16px', minHeight: '42px', fontSize: '13px', whiteSpace: 'nowrap' }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSearchKakaoPlaces(e);
+            }}
             disabled={isSearching}
           >
             {isSearching ? '검색 중...' : '검색'}
@@ -446,13 +475,17 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
           <button
             type="button"
             className="btn-qr-action-secondary"
-            onClick={handleOpenDaumPostcode}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleOpenDaumPostcode();
+            }}
             style={{ width: 'auto', padding: '0 12px', minHeight: '42px', fontSize: '12.5px', whiteSpace: 'nowrap' }}
             title="다음 우편번호 팝업 열기"
           >
             우편번호
           </button>
-        </form>
+        </div>
 
         {/* Search feedback note */}
         {searchFeedback && (
@@ -465,9 +498,36 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
               background: searchFeedback.startsWith('✓') ? '#ECFDF5' : searchFeedback.startsWith('⚠️') ? '#FEF2F2' : '#EEF2FF',
               padding: '6px 10px',
               borderRadius: '6px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '6px',
             }}
           >
-            {searchFeedback}
+            <span>{searchFeedback}</span>
+            {searchFeedback.startsWith('⚠️') && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleOpenDaumPostcode();
+                }}
+                style={{
+                  background: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '3px 8px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                우편번호로 정확한 주소 찾기 ↗
+              </button>
+            )}
           </div>
         )}
 
