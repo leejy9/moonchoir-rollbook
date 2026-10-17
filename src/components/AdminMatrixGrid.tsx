@@ -7,6 +7,7 @@ import type {
 } from '../types/rollbook';
 import { LiquidGauge } from './LiquidGauge';
 import { formatMatrixHeaderDate, getKSTTimestampString } from '../utils/date';
+import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
 
 interface AdminMatrixGridProps {
   members: Member[];
@@ -52,7 +53,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
   const memberStats = React.useMemo(() => {
     const map = new Map<
       string,
-      { attended: number; late: number; excused: number; absent: number; rate: number }
+      { attended: number; late: number; excused: number; absent: number; exempt: number; rate: number }
     >();
 
     members.forEach((m) => {
@@ -60,11 +61,18 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
       let late = 0;
       let excused = 0;
       let absent = 0;
+      let exempt = 0;
+      let requiredSessions = 0;
 
       schedules.forEach((s) => {
         const recList = reconciliationsBySchedule.get(s.id) || [];
         const item = recList.find((r) => r.memberId === m.id);
-        const status = item?.finalStatus || '결석';
+        const isRequired = isMemberRequiredForSchedule(m, s.date, s);
+        const status = item?.finalStatus || (isRequired ? '결석' : '미참');
+
+        if (isRequired) {
+          requiredSessions += 1;
+        }
 
         if (status === '출석' || status === '수동인정') {
           attended += 1;
@@ -72,16 +80,18 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           late += 1;
         } else if (status === '사유결석') {
           excused += 1;
+        } else if (status === '미참' || status === '모수제외') {
+          exempt += 1;
         } else {
           absent += 1;
         }
       });
 
-      // Standard rate formula: attended + late*0.5, or attended / total
-      const totalSessions = schedules.length;
-      const rate = totalSessions > 0 ? Math.round(((attended + late * 0.7) / totalSessions) * 100) : 0;
+      // Standard rate formula: (attended + late*0.7) / requiredSessions
+      const denominator = requiredSessions > 0 ? requiredSessions : (attended > 0 ? attended : 0);
+      const rate = denominator > 0 ? Math.round(((attended + late * 0.7) / denominator) * 100) : 0;
 
-      map.set(m.id, { attended, late, excused, absent, rate });
+      map.set(m.id, { attended, late, excused, absent, exempt, rate });
     });
 
     return map;
@@ -122,11 +132,12 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
     const recList = reconciliationsBySchedule.get(schedule.id) || [];
     const item = recList.find((r) => r.memberId === member.id);
     const rect = e.currentTarget.getBoundingClientRect();
+    const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
 
     setPopoverTarget({
       member,
       schedule,
-      currentStatus: item?.finalStatus || '결석',
+      currentStatus: item?.finalStatus || (isRequired ? '결석' : '미참'),
       checkInTime: item?.checkInTime,
       rsvpReason: item?.rsvpReason,
       x: rect.left,
@@ -136,7 +147,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
   };
 
   // Quick Status Override Handler
-  const handleSetStatus = async (targetStatus: AttendanceStatus) => {
+  const handleSetStatus = async (targetStatus: AttendanceStatus | '초기화') => {
     if (!popoverTarget) return;
     setIsUpdating(true);
 
@@ -179,6 +190,22 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           reason: customNote || '관리자 지정 사유결석',
           timestamp: getKSTTimestampString(),
         });
+      } else if (targetStatus === '결석') {
+        // 관리자 결석 처리 (명시적 결석 로그 추가)
+        await sheetsService.addCheckInLog({
+          id: `log_absent_${Date.now()}`,
+          scheduleId: schedule.id,
+          memberId: member.id,
+          memberName: member.name,
+          part: member.part,
+          timestamp: `${schedule.date}T${schedule.startTime}:00`,
+          authMethod: 'MANUAL_BY_ADMIN',
+          isVerifiedLocation: true,
+          adminNote: customNote || '관리자 결석 처리',
+        });
+      } else if (targetStatus === '초기화') {
+        // 기존 수동 보정 및 로그 초기화 (원래 상태로 복귀)
+        await sheetsService.clearAttendanceLog(schedule.id, member.id);
       }
 
       setPopoverTarget(null);
@@ -335,7 +362,8 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                   {schedules.map((s) => {
                     const recList = reconciliationsBySchedule.get(s.id) || [];
                     const item = recList.find((r) => r.memberId === m.id);
-                    const status = item?.finalStatus || '결석';
+                    const isRequired = isMemberRequiredForSchedule(m, s.date, s);
+                    const status = item?.finalStatus || (isRequired ? '결석' : '미참');
 
                     let badgeClass = 'cell-absent';
                     let statusLabel = '결석';
@@ -355,6 +383,9 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                     } else if (status === '사유결석') {
                       badgeClass = 'cell-excused';
                       statusLabel = '사유';
+                    } else if (status === '미참' || status === '모수제외') {
+                      badgeClass = 'cell-exempt';
+                      statusLabel = '미참';
                     }
 
                     return (
@@ -444,6 +475,23 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                 disabled={isUpdating}
               >
                 🔵 수동 인정 (관리자 확인)
+              </button>
+              <button
+                type="button"
+                className="opt-btn absent"
+                onClick={() => handleSetStatus('결석')}
+                disabled={isUpdating}
+              >
+                ⚪ 결석으로 변경 (무단결석 처리)
+              </button>
+              <button
+                type="button"
+                className="opt-btn reset"
+                onClick={() => handleSetStatus('초기화')}
+                disabled={isUpdating}
+                style={{ color: '#64748b' }}
+              >
+                🔄 보정 초기화 (기본 상태로)
               </button>
             </div>
 

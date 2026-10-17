@@ -3393,6 +3393,12 @@ a {
   color: #9ca3af;
 }
 
+.matrix-cell.cell-exempt .cell-status-tag {
+  background: #f8fafc;
+  color: #94a3b8;
+  border: 1px dashed #cbd5e1;
+}
+
 .matrix-cell.cell-manual .cell-status-tag {
   background: #e0e7ff;
   color: #4338ca;
@@ -3479,6 +3485,12 @@ a {
   background: #e0e7ff;
   border-color: #c7d2fe;
   color: #4338ca;
+}
+
+.opt-btn.absent:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
 }
 
 .popover-note-box input {

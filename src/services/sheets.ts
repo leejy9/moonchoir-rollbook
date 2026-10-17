@@ -380,6 +380,25 @@ export class SheetsService {
     return vote;
   }
 
+  /**
+   * 특정 세션에 대한 단원의 출결 보정 기록 및 로그를 초기화하여 원래 상태로 되돌립니다.
+   */
+  public async clearAttendanceLog(scheduleId: string, memberId: string): Promise<void> {
+    const targetMember = this.members.find((m) => m.id === memberId);
+    const siblingIds = new Set(
+      this.members
+        .filter((m) => m.name === targetMember?.name && (m.phoneLast4 === targetMember?.phoneLast4 || !m.phoneLast4 || !targetMember?.phoneLast4))
+        .map((m) => m.id)
+    );
+    siblingIds.add(memberId);
+
+    this.logs = this.logs.filter((l) => !(l.scheduleId === scheduleId && siblingIds.has(l.memberId)));
+    saveToStorage(STORAGE_KEYS.LOGS, this.logs);
+
+    this.rsvpVotes = this.rsvpVotes.filter((v) => !(v.scheduleId === scheduleId && siblingIds.has(v.memberId)));
+    saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
+  }
+
   public async cancelRSVP(scheduleId: string, memberId: string): Promise<boolean> {
     const existingIndex = this.rsvpVotes.findIndex(
       (v) => v.scheduleId === scheduleId && v.memberId === memberId
@@ -1058,7 +1077,9 @@ export class SheetsService {
       const rsvp = scheduleRSVPs.find((v) => siblingIds.has(v.memberId));
 
       // Recency Resolution: 동일 단원의 다중 로그 중 가장 최신 액션 우선 채택
-      const matchingLogs = scheduleLogs.filter((l) => siblingIds.has(l.memberId));
+      const matchingLogs = scheduleLogs
+        .filter((l) => siblingIds.has(l.memberId))
+        .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
       const log = matchingLogs.length > 0 ? matchingLogs[matchingLogs.length - 1] : undefined;
 
       let finalStatus: AttendanceStatus = '결석';
@@ -1069,7 +1090,13 @@ export class SheetsService {
 
       if (log) {
         checkInTime = log.timestamp;
-        if (log.authMethod === 'MANUAL_BY_ADMIN') {
+        if (
+          log.adminNote?.includes('결석 처리') ||
+          log.adminNote === '관리자 결석 처리' ||
+          (log as any).status === '결석'
+        ) {
+          finalStatus = '결석';
+        } else if (log.authMethod === 'MANUAL_BY_ADMIN') {
           finalStatus = '수동인정';
         } else {
           // Check timestamp against schedule start time
@@ -1097,7 +1124,7 @@ export class SheetsService {
       } else {
         // No log found: evaluate exemption or RSVP status
         if (isExempt) {
-          finalStatus = '모수제외';
+          finalStatus = '미참';
         } else if (rsvp && rsvp.status === 'ABSENT' && rsvp.reason) {
           finalStatus = '사유결석';
         } else {

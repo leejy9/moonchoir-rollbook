@@ -40,9 +40,48 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     const jo = reconciled.find((r) => r.memberName === '조현아');
     expect(jo?.finalStatus).toBe('결석');
 
-    // 휴단원 (최지우) -> 모수제외
+    // 휴단원/비대상자 (최지우) -> 미참
     const choi = reconciled.find((r) => r.memberName === '최지우');
-    expect(choi?.finalStatus).toBe('모수제외');
+    expect(choi?.finalStatus).toBe('미참');
+  });
+
+  it('supports admin manual absent override and clearAttendanceLog', async () => {
+    // 1. 관리자가 수동으로 출석 인정
+    await service.addCheckInLog({
+      id: 'log_manual_override',
+      scheduleId: 'sch_20261022',
+      memberId: 'mem_s01',
+      memberName: '김하은',
+      part: '소프라노',
+      timestamp: '2026-10-22T19:30:00',
+      authMethod: 'MANUAL_BY_ADMIN',
+      adminNote: '수동 인정',
+      isVerifiedLocation: true,
+    });
+
+    let rec = service.reconcileAttendance('sch_20261022').find((r) => r.memberName === '김하은');
+    expect(rec?.finalStatus).toBe('수동인정');
+
+    // 2. 관리자가 결석으로 변경 (오버라이드)
+    await service.addCheckInLog({
+      id: 'log_absent_override',
+      scheduleId: 'sch_20261022',
+      memberId: 'mem_s01',
+      memberName: '김하은',
+      part: '소프라노',
+      timestamp: '2026-10-22T19:35:00',
+      authMethod: 'MANUAL_BY_ADMIN',
+      adminNote: '관리자 결석 처리',
+      isVerifiedLocation: true,
+    });
+
+    rec = service.reconcileAttendance('sch_20261022').find((r) => r.memberName === '김하은');
+    expect(rec?.finalStatus).toBe('결석');
+
+    // 3. 보정 초기화
+    await service.clearAttendanceLog('sch_20261022', 'mem_s01');
+    rec = service.reconcileAttendance('sch_20261022').find((r) => r.memberName === '김하은');
+    expect(rec?.finalStatus).toBe('결석'); // 의무 대상자이므로 기본 결석으로 복귀
   });
 
   it('guarantees append-only behavior for check-in logs', async () => {

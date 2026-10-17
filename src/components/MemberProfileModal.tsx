@@ -148,7 +148,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
 
     schedules.forEach((s) => {
       const rec = sheetsService.reconcileMemberAttendance(formData.id, s.id);
-      const isExempt = rec?.finalStatus === '모수제외' || Boolean(formData.joinedAt && s.date < formData.joinedAt);
+      const isExempt = rec?.finalStatus === '미참' || rec?.finalStatus === '모수제외' || Boolean(formData.joinedAt && s.date < formData.joinedAt);
       if (!isExempt) {
         requiredSessions++;
         if (rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정') {
@@ -726,7 +726,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                     const isAttend = status === '출석' || status === '수동인정';
                     const isLate = status === '지각';
                     const isExcused = status === '사유결석';
-                    const isExempt = status === '모수제외';
+                    const isExempt = status === '미참' || status === '모수제외';
 
                     let badgeClass = 'badge-absent';
                     if (isAttend) badgeClass = 'badge-attend';
@@ -745,7 +745,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                         </div>
                         <div className="col-cell col-status">
                           <span className={`record-badge ${badgeClass}`}>
-                            {status}
+                            {isExempt ? '미참' : status}
                           </span>
                         </div>
                       </div>

@@ -83,7 +83,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       const rec = sheetsService.reconcileMemberAttendance(profile.memberId, s.id, profile.name);
       const isPast = s.date < todayStr;
       const isToday = s.date === todayStr;
-      const isExempt = rec?.finalStatus === '모수제외' || Boolean(currentMember.joinedAt && s.date < currentMember.joinedAt);
+      const isExempt = rec?.finalStatus === '미참' || rec?.finalStatus === '모수제외' || Boolean(currentMember.joinedAt && s.date < currentMember.joinedAt);
 
       let checkInTime = '-';
       const isAttended = rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정' || rec?.finalStatus === '지각';
@@ -458,7 +458,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                               {r.checkInTime}
                             </span>
                           ) : r.isExempt ? (
-                            <span style={{ color: '#94a3b8', fontSize: '11px' }}>모수제외</span>
+                            <span style={{ color: '#94a3b8', fontSize: '11px' }}>미참</span>
                           ) : r.isPast ? (
                             <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '11.5px' }}>결석 (-)</span>
                           ) : (
