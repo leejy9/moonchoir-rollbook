@@ -57,13 +57,72 @@ export function isMemberRequiredForSchedule(
 }
 
 /**
+ * 단원의 누적 출석 횟수에 따른 게이미피케이션 레벨 및 뱃지 상태를 계산합니다.
+ */
+export interface GamifiedLevel {
+  currentLevelName: string;
+  nextLevelName: string | null;
+  currentCount: number;
+  targetCount: number;
+  progressPercent: number;
+  badgeEmoji: string;
+}
+
+export function getGamifiedAttendanceLevel(attendedCount: number, part: string = '단원'): GamifiedLevel {
+  const safeCount = Math.max(0, attendedCount);
+  if (safeCount < 4) {
+    return {
+      currentLevelName: `새싹 ${part}`,
+      nextLevelName: `성실한 ${part}`,
+      currentCount: safeCount,
+      targetCount: 4,
+      progressPercent: Math.min(100, Math.round((safeCount / 4) * 100)),
+      badgeEmoji: '🌱',
+    };
+  }
+  if (safeCount < 8) {
+    return {
+      currentLevelName: `성실한 ${part}`,
+      nextLevelName: `빛나는 ${part}`,
+      currentCount: safeCount,
+      targetCount: 8,
+      progressPercent: Math.min(100, Math.round(((safeCount - 4) / 4) * 100)),
+      badgeEmoji: '🥉',
+    };
+  }
+  if (safeCount < 12) {
+    return {
+      currentLevelName: `빛나는 ${part}`,
+      nextLevelName: `개근 마스터`,
+      currentCount: safeCount,
+      targetCount: 12,
+      progressPercent: Math.min(100, Math.round(((safeCount - 8) / 4) * 100)),
+      badgeEmoji: '🥈',
+    };
+  }
+  return {
+    currentLevelName: `개근 마스터`,
+    nextLevelName: null,
+    currentCount: safeCount,
+    targetCount: safeCount,
+    progressPercent: 100,
+    badgeEmoji: '🌟',
+  };
+}
+
+/**
  * 단원 생애주기 이력과 입단일을 반영하여 단원별 누적 출결 통계를 산출합니다.
+ * 도메인 불변식: 미래 일정(schedule.date > referenceDate)은 결석 및 모수에서 완전 제외합니다.
  */
 export function calculateCumulativeAttendanceWithLifecycle(
   members: Member[],
   schedules: Schedule[],
-  rawLogs: RawAttendanceLog[]
+  rawLogs: RawAttendanceLog[],
+  referenceDate?: string
 ): CumulativeMemberAttendance[] {
+  // 기준 날짜 (기본: 오늘 YYYY-MM-DD)
+  const todayStr = referenceDate || new Date().toLocaleDateString('sv-SE');
+
   // 숨김 처리되지 않은 활성 일정만 필터
   const activeSchedules = schedules.filter((s) => !s.isArchived);
 
@@ -82,23 +141,35 @@ export function calculateCumulativeAttendanceWithLifecycle(
     );
 
     for (const schedule of sortedSchedules) {
+      const isPastOrToday = schedule.date <= todayStr;
       const isRequired = isMemberRequiredForSchedule(member, schedule.date);
 
-      // 해당 일정에 단원의 출석 원천로그가 존재하는지 조회
-      const memberLogs = rawLogs.filter(
-        (log) => log.scheduleId === schedule.id && log.memberId === member.id
-      );
+      // 해당 일정에 단원의 출석 원천로그가 존재하는지 조회 (날짜 일치 Fallback 구출)
+      const memberLogs = rawLogs.filter((log) => {
+        if (log.memberId !== member.id) return false;
+        if (log.scheduleId === schedule.id) return true;
+        if (log.timestamp && log.timestamp.slice(0, 10) === schedule.date) return true;
+        return false;
+      });
+
       const hasCheckedIn = memberLogs.length > 0;
+      const lastLog = memberLogs[memberLogs.length - 1]; // 최신 액션 우선 채택
 
       if (isRequired) {
-        // 정규 필참 일정인 경우
-        totalSessions++;
-        if (hasCheckedIn) {
-          attended++;
-          recentStatusList.push('출석');
-        } else {
-          absent++;
-          recentStatusList.push('결석');
+        // 정규 필참 일정인 경우: 오직 과거 또는 오늘 일정만 모수 및 결석에 반영!
+        if (isPastOrToday) {
+          totalSessions++;
+          if (hasCheckedIn) {
+            attended++;
+            if (lastLog?.authMethod === 'MANUAL_BY_ADMIN') {
+              recentStatusList.push('수동인정');
+            } else {
+              recentStatusList.push('출석');
+            }
+          } else {
+            absent++;
+            recentStatusList.push('결석');
+          }
         }
       } else {
         // 필참 일정이 아닌 경우 (입단 전, 휴단/퇴단/객원 기간)
@@ -151,3 +222,4 @@ export function calculateCumulativeAttendanceWithLifecycle(
     };
   });
 }
+

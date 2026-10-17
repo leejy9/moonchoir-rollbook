@@ -35,7 +35,9 @@ describe('MemberPortalModal Component (2-Tab Streamlined Scorecard)', () => {
     expect(html).toContain('투표 상태');
     expect(html).toContain('출결 시간');
 
-    // Slim Attendance Summary
-    expect(html).toContain('출석률');
+    // Slim Attendance Summary & Gamification
+    expect(html).toContain('이번 시즌 연습');
+    expect(html).toContain('새싹 소프라노');
   });
 });
+

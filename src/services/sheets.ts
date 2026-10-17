@@ -769,8 +769,19 @@ export class SheetsService {
     const lateThresholdMinutes = startMinutes + lateGraceMinutes;
 
     return this.members.map((member) => {
-      const rsvp = scheduleRSVPs.find((v) => v.memberId === member.id);
-      const log = scheduleLogs.find((l) => l.memberId === member.id);
+      // 자연키(이름+전화번호) 기반 다중 ID 세트 (파편화된 과거 ID 구출)
+      const siblingIds = new Set(
+        this.members
+          .filter((m) => m.name === member.name && (m.phoneLast4 === member.phoneLast4 || !m.phoneLast4 || !member.phoneLast4))
+          .map((m) => m.id)
+      );
+      siblingIds.add(member.id);
+
+      const rsvp = scheduleRSVPs.find((v) => siblingIds.has(v.memberId));
+
+      // Recency Resolution: 동일 단원의 다중 로그 중 가장 최신 액션 우선 채택
+      const matchingLogs = scheduleLogs.filter((l) => siblingIds.has(l.memberId));
+      const log = matchingLogs.length > 0 ? matchingLogs[matchingLogs.length - 1] : undefined;
 
       let finalStatus: AttendanceStatus = '결석';
       let checkInTime: string | undefined;
@@ -835,8 +846,20 @@ export class SheetsService {
   /**
    * Reconciles attendance for a single member on a single schedule.
    */
-  public reconcileMemberAttendance(memberId: string, scheduleId: string): AttendanceReconciliation | null {
+  public reconcileMemberAttendance(memberId: string, scheduleId: string, memberName?: string): AttendanceReconciliation | null {
     const list = this.reconcileAttendance(scheduleId);
+    if (memberName) {
+      const byName = list.find((r) => r.memberName === memberName);
+      if (byName) return byName;
+    }
+    const targetMember = this.members.find((m) => m.id === memberId || (memberName && m.name === memberName));
+    if (targetMember) {
+      return (
+        list.find((r) => r.memberId === targetMember.id) ||
+        list.find((r) => r.memberName === targetMember.name) ||
+        null
+      );
+    }
     return list.find((r) => r.memberId === memberId) || null;
   }
 

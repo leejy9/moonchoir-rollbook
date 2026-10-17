@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member } from '../types/rollbook';
-import { calculateCumulativeAttendanceWithLifecycle } from '../utils/attendanceStats';
+import {
+  calculateCumulativeAttendanceWithLifecycle,
+  getGamifiedAttendanceLevel,
+} from '../utils/attendanceStats';
 
 interface MemberPortalModalProps {
   profile: BoundDeviceProfile;
@@ -25,11 +28,13 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [todayStr] = useState(getTodayDateString);
 
-  // 1. 단원 프로필 조회
+  // 1. 단원 프로필 조회 (ID 일치 우선, 실패 시 이름 일치로 구출)
   const members = sheetsService.getMembers();
   const currentMember: Member = useMemo(() => {
-    const found = members.find((m) => m.id === profile.memberId);
-    if (found) return found;
+    const foundById = members.find((m) => m.id === profile.memberId);
+    if (foundById) return foundById;
+    const foundByName = members.find((m) => m.name === profile.name);
+    if (foundByName) return foundByName;
     return {
       id: profile.memberId,
       name: profile.name,
@@ -63,13 +68,18 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     );
   }, [currentMember, schedules, allLogs]);
 
+  // 게이미피케이션 레벨 계산
+  const gamifiedLevel = useMemo(() => {
+    return getGamifiedAttendanceLevel(memberSummary.attended, currentMember.part || '단원');
+  }, [memberSummary.attended, currentMember.part]);
+
   // 3. 탭 1용: 회차별 통합 리스트 데이터 조립 [연습명칭 / 연습일 / 투표 상태 / 출결 시간]
   const scheduleRecords = useMemo(() => {
     // 최신 연습일정이 상단에 오도록 내림차순 정렬
     const sortedSchedules = [...schedules].sort((a, b) => b.date.localeCompare(a.date));
 
     return sortedSchedules.map((s) => {
-      const rec = sheetsService.reconcileMemberAttendance(profile.memberId, s.id);
+      const rec = sheetsService.reconcileMemberAttendance(profile.memberId, s.id, profile.name);
       const isPast = s.date < todayStr;
       const isToday = s.date === todayStr;
       const isExempt = rec?.finalStatus === '모수제외' || Boolean(currentMember.joinedAt && s.date < currentMember.joinedAt);
@@ -113,7 +123,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         isExempt,
       };
     });
-  }, [schedules, profile.memberId, currentMember.joinedAt, todayStr]);
+  }, [schedules, profile.memberId, profile.name, currentMember.joinedAt, todayStr]);
 
   // 4. 시트 동기화 핸들러
   const handleSyncRemote = async () => {
@@ -256,39 +266,47 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
           {/* TAB 1: 출결 기록 표 [연습명칭 / 연습일 / 투표 상태 / 출결 시간] */}
           {activeTab === 'RECORDS' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {/* Top Slim Attendance Summary Bar */}
+              {/* Gamified Cumulative Attendance Card */}
               <div
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  background: '#f8fafc',
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
                   border: '1px solid #e2e8f0',
-                  borderRadius: '12px',
-                  padding: '10px 14px',
-                  fontSize: '13px',
+                  borderRadius: '14px',
+                  padding: '14px 16px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span
-                    style={{
-                      background: memberSummary.attendanceRate >= 80 ? '#10b981' : '#f59e0b',
-                      color: '#ffffff',
-                      fontWeight: 800,
-                      fontSize: '12px',
-                      padding: '2px 8px',
-                      borderRadius: '8px',
-                    }}
-                  >
-                    출석률 {memberSummary.attendanceRate}%
-                  </span>
-                  <span style={{ color: '#334155', fontWeight: 600 }}>
-                    총 {memberSummary.totalSessions}회 중 {memberSummary.attended}회 출석
-                  </span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>{gamifiedLevel.badgeEmoji}</span>
+                    <div>
+                      <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#1e293b' }}>
+                        이번 시즌 연습: 총 {memberSummary.attended}회 출석
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 700 }}>
+                        현재 칭호: {gamifiedLevel.currentLevelName}
+                      </div>
+                    </div>
+                  </div>
+                  {gamifiedLevel.nextLevelName && (
+                    <span style={{ fontSize: '11.5px', color: '#64748b', background: '#ffffff', padding: '3px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', fontWeight: 600 }}>
+                      다음 레벨까지 {gamifiedLevel.targetCount - gamifiedLevel.currentCount}회 남음
+                    </span>
+                  )}
                 </div>
-                <span style={{ color: '#64748b', fontSize: '12px' }}>
-                  결석 {memberSummary.absent}회 · 지각 {memberSummary.late}회
-                </span>
+
+                {/* Progress Bar */}
+                <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: `${gamifiedLevel.progressPercent}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, #6366f1, #8b5cf6)',
+                      borderRadius: '4px',
+                      transition: 'width 0.4s ease',
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Attendance Log Table */}
