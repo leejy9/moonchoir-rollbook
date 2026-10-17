@@ -100,13 +100,13 @@
   - 마이페이지, 프로필 모달, 홈 화면 모두 `reconcileAttendance` 엔진으로 출결 판정 통합
   - 동일 일정 다중 로그 시 최신 관리자 수동 인정(`findLast`)을 최종 상태로 채택하고 모수제외(`isExempt`) 지원
 
-### Phase 4.7: 단원 식별자 검토형 무결성, 2대 출결 지표 & 일정/QR 전면 개편 (In Progress)
+### Phase 4.7: 단원 식별자 검토형 무결성, 2대 출결 지표 & 일정/QR 전면 개편 (Completed - [계획서 07](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/07_streamlined_attendance_and_program_cards.md) & [계획서 07-B](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/07_realtime_testing_and_ux_refinement.md))
 - [x] **Task 45**: 단원 식별자(PK) 중복 감지 및 관리자 검토 기반 안전 통합 UI/엔진 (Completed)
 - [x] **Task 46**: 마이페이지 게이미피케이션 개편(누적 출석 횟수 & 레벨 뱃지) 및 출결 데이터 정상화 (Completed)
 - [x] **Task 47**: 대시보드 일정 관리 Master-Detail 2열 인라인 바인딩 & [지난 일정 보기]/[복제] 개편 (Completed)
 - [x] **Task 48**: 4대 다채널 일정 추가 엔진(다중 날짜 픽 포함) 및 일정 카드 구글 시트 저장 연동 (Completed)
 - [x] **Task 49**: 출석 QR 코드 워딩 단일화 & PIN 보조 UI 슬림화 (Completed)
-- [ ] **Task 50**: 실시간 시간 윈도우 기반 실전 테스트 시나리오 및 프로토콜 구축
+- [x] **Task 50**: 실시간 시간 윈도우 기반 실전 테스트 시나리오 및 프로토콜 구축 (Completed)
 
 ---
 
@@ -456,7 +456,7 @@
   - `docs/plans/07_realtime_testing_and_ux_refinement.md`
 - **Acceptance Criteria**:
   - 관리자가 실시간으로 10분 뒤 일정을 생성하여 [사전투표] $\rightarrow$ [QR 활성화] $\rightarrow$ [출석 마감]의 상태 전이 정상 동작 검증.
-- **Status**: [ ] Planned
+- **Status**: [x] Completed
 
 ---
 

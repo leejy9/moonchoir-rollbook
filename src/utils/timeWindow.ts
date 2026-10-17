@@ -10,15 +10,27 @@ export interface CheckInWindowState {
   windowStartTimeStr: string;
 }
 
+export interface CheckInWindowOptions {
+  openBeforeMinutes?: number; // default: 60 (1 hour)
+  forceBypassForTesting?: boolean; // default: false
+}
+
 /**
  * Calculates whether the QR check-in window is open for a schedule.
- * Rule: Opens exactly 2 hours before rehearsal startTime and closes at endTime on rehearsal day.
+ * Rule: Opens 1 hour (60 minutes) before rehearsal startTime and closes at endTime on rehearsal day.
  */
 export function getCheckInWindowState(
   schedule: Schedule,
   currentDate: Date = new Date(),
-  forceBypassForTesting: boolean = false
+  optionsOrBypass: CheckInWindowOptions | boolean = false
 ): CheckInWindowState {
+  const options: CheckInWindowOptions =
+    typeof optionsOrBypass === 'boolean'
+      ? { forceBypassForTesting: optionsOrBypass, openBeforeMinutes: 60 }
+      : { openBeforeMinutes: 60, ...optionsOrBypass };
+
+  const { openBeforeMinutes = 60, forceBypassForTesting = false } = options;
+
   if (forceBypassForTesting) {
     return {
       isOpen: true,
@@ -36,15 +48,21 @@ export function getCheckInWindowState(
     // Rehearsal start date-time
     const scheduleStart = new Date(`${schedule.date}T${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}:00`);
     
-    // Window opens 2 hours before rehearsal start
-    const windowStart = new Date(scheduleStart.getTime() - 2 * 60 * 60 * 1000);
+    // Window opens N minutes (default 60m = 1 hour) before rehearsal start
+    const windowStart = new Date(scheduleStart.getTime() - openBeforeMinutes * 60 * 1000);
     const windowEnd = new Date(`${schedule.date}T${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}:00`);
+
+    // Handle cross-midnight rehearsals if endTime <= startTime
+    if (windowEnd.getTime() <= scheduleStart.getTime()) {
+      windowEnd.setDate(windowEnd.getDate() + 1);
+    }
 
     const openTimeHour = String(windowStart.getHours()).padStart(2, '0');
     const openTimeMin = String(windowStart.getMinutes()).padStart(2, '0');
     const windowStartTimeStr = `${openTimeHour}:${openTimeMin}`;
 
     const nowTime = currentDate.getTime();
+    const hoursLabel = openBeforeMinutes === 60 ? '1시간' : `${Math.round(openBeforeMinutes / 60)}시간`;
 
     if (nowTime < windowStart.getTime()) {
       const todayYMD = currentDate.toISOString().slice(0, 10);
@@ -52,7 +70,7 @@ export function getCheckInWindowState(
         return {
           isOpen: false,
           status: 'UPCOMING_DATE',
-          message: `${schedule.date} 연습 시작 2시간 전(${windowStartTimeStr})에 오픈됩니다.`,
+          message: `${schedule.date} 연습 시작 ${hoursLabel} 전(${windowStartTimeStr})에 오픈됩니다.`,
           badgeLabel: `연습 당일 ${windowStartTimeStr} 오픈`,
           windowStartTimeStr,
         };
@@ -60,7 +78,7 @@ export function getCheckInWindowState(
       return {
         isOpen: false,
         status: 'TODAY_BEFORE_WINDOW',
-        message: `오늘 ${windowStartTimeStr} (연습 시작 2시간 전)부터 QR 출석이 가능합니다.`,
+        message: `오늘 ${windowStartTimeStr} (연습 시작 ${hoursLabel} 전)부터 QR 출석이 가능합니다.`,
         badgeLabel: `오늘 ${windowStartTimeStr} 오픈 예정`,
         windowStartTimeStr,
       };

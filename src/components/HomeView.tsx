@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Schedule } from '../types/rollbook';
 import { getCalendarGrid } from '../utils/calendar';
@@ -55,11 +55,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onViewCalendar,
   refreshTrigger: _refreshTrigger,
 }) => {
-  const [testWindowBypass, setTestWindowBypass] = useState(false);
   const [homeViewTab, setHomeViewTab] = useState<'CALENDAR' | 'LIST'>('CALENDAR');
 
   const [todayStr] = useState(getTodayDateString);
-  const [currentNow] = useState(() => new Date());
+  const [currentNow, setCurrentNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentNow(new Date());
+    }, 10000); // 10s tick for smooth, real-time window transition
+    return () => clearInterval(timer);
+  }, []);
 
   // Month navigation state (default to current year/month)
   const [currentYear, setCurrentYear] = useState(() => parseInt(todayStr.slice(0, 4), 10));
@@ -137,7 +143,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   }, [homeViewTab, schedulesByDate, selectedDateStr, schedules, todayStr]);
 
   const windowState = activeSchedule
-    ? getCheckInWindowState(activeSchedule, currentNow, testWindowBypass)
+    ? getCheckInWindowState(activeSchedule, currentNow)
     : null;
 
   const rsvpVotes = activeSchedule ? sheetsService.getRSVPVotes(activeSchedule.id) : [];
@@ -533,7 +539,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           ) : null}
 
-          {/* Action Buttons: 2-Hour Time Window Driven */}
+          {/* Action Buttons: Time Window Driven */}
           <div className="action-buttons-stack">
             {windowState?.isOpen ? (
               <>
@@ -560,6 +566,21 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <span>{myVote ? '사전 참석/불참 투표 수정' : '사전 참석/불참 투표하기'}</span>
                 </button>
               </>
+            ) : windowState?.status === 'WINDOW_CLOSED' ? (
+              /* Concluded Schedule: Closed State */
+              <div className="qr-locked-card window-closed" style={{ borderLeft: '4px solid #94A3B8' }}>
+                <div className="qr-locked-info">
+                  <span className="qr-lock-icon">🏁</span>
+                  <div>
+                    <div className="qr-locked-title">출석 마감 ({activeSchedule.date} 일정 종료)</div>
+                    <div className="qr-locked-desc">
+                      {myLog
+                        ? `출석 완료 (${myLog.timestamp.includes('T') ? myLog.timestamp.slice(11, 16) : myLog.timestamp.slice(0, 5)}) · 정상 반영되었습니다.`
+                        : '금일 연습의 공식 출석 체크가 마감되었습니다.'}
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : (
               <>
                 {/* Default Primary Action: RSVP Pre-voting */}
@@ -590,14 +611,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       <div className="qr-locked-desc">{windowState?.message}</div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="btn-test-bypass"
-                    onClick={() => setTestWindowBypass((b) => !b)}
-                    title="개발/시뮬레이션 모드 전환"
-                  >
-                    {testWindowBypass ? '시뮬레이션 끄기' : '테스트 오픈'}
-                  </button>
                 </div>
               </>
             )}
