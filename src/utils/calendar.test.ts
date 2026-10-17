@@ -30,6 +30,18 @@ describe('Calendar Utility', () => {
     expect(oct15?.dayNumber).toBe(15);
   });
 
+  it('자정 직후 새벽(UTC 기준 전날)이어도 KST 기준 18일이 isToday로 올바르게 표시된다', () => {
+    // 2026-10-17T15:59:00.000Z -> KST 2026-10-18 00:59:00
+    const kstMidnightDate = new Date('2026-10-17T15:59:00.000Z');
+    const grid = getCalendarGrid(2026, 9, kstMidnightDate);
+
+    const oct17 = grid.find((d) => d.dateStr === '2026-10-17');
+    const oct18 = grid.find((d) => d.dateStr === '2026-10-18');
+
+    expect(oct17?.isToday).toBe(false);
+    expect(oct18?.isToday).toBe(true);
+  });
+
   it('expands recurring schedules weekly on Thursdays', () => {
     const base = {
       title: '정기연습',

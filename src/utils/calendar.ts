@@ -2,6 +2,8 @@
  * Calendar utilities for Moonchoir Rollbook
  */
 
+import { getKSTDateString } from './date';
+
 export interface CalendarDay {
   date: Date;
   dateStr: string; // YYYY-MM-DD
@@ -23,14 +25,19 @@ export function getCalendarGrid(year: number, monthIndex: number, referenceToday
   const totalDays = lastDayOfMonth.getDate();
 
   const days: CalendarDay[] = [];
-  const todayStr = referenceToday.toISOString().slice(0, 10);
+  const todayStr = getKSTDateString(referenceToday);
 
   // 1. Previous month trailing padding
   const prevMonthLastDay = new Date(year, monthIndex, 0).getDate();
+  const prevMonthIndex = monthIndex === 0 ? 11 : monthIndex - 1;
+  const prevYear = monthIndex === 0 ? year - 1 : year;
+  const prevMonthStr = String(prevMonthIndex + 1).padStart(2, '0');
+
   for (let i = startDayOfWeek - 1; i >= 0; i--) {
     const dayNum = prevMonthLastDay - i;
     const d = new Date(year, monthIndex - 1, dayNum);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dayStr = String(dayNum).padStart(2, '0');
+    const dateStr = `${prevYear}-${prevMonthStr}-${dayStr}`;
     days.push({
       date: d,
       dateStr,
@@ -252,7 +259,7 @@ export function createSchedulesMultiMode(
   options: MultiModeScheduleOptions
 ): import('../types/rollbook').Schedule[] {
   const { mode, baseSchedule } = options;
-  const initialDateStr = baseSchedule.date || new Date().toISOString().slice(0, 10);
+  const initialDateStr = baseSchedule.date || getKSTDateString();
   let targetDates: string[] = [];
 
   switch (mode) {

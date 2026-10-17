@@ -1,4 +1,5 @@
 import type { Schedule } from '../types/rollbook';
+import { getKSTDateString } from './date';
 
 export type WindowStatus = 'UPCOMING_DATE' | 'TODAY_BEFORE_WINDOW' | 'WINDOW_OPEN' | 'WINDOW_CLOSED';
 
@@ -65,7 +66,7 @@ export function getCheckInWindowState(
     const hoursLabel = openBeforeMinutes === 60 ? '1시간' : `${Math.round(openBeforeMinutes / 60)}시간`;
 
     if (nowTime < windowStart.getTime()) {
-      const todayYMD = currentDate.toISOString().slice(0, 10);
+      const todayYMD = getKSTDateString(currentDate);
       if (todayYMD < schedule.date) {
         return {
           isOpen: false,

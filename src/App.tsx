@@ -10,6 +10,7 @@ import { RSVPModal } from './components/RSVPModal';
 import { clearDeviceProfile, getBoundDeviceProfile, isAdminLoggedIn } from './services/auth';
 import { sheetsService } from './services/sheets';
 import type { BoundDeviceProfile, Schedule } from './types/rollbook';
+import { getKSTDateString } from './utils/date';
 
 export function App() {
   // Device binding state
@@ -50,7 +51,16 @@ export function App() {
   }, []);
 
   const activeSchedules = sheetsService.getSchedules();
-  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
+  const [todayStr, setTodayStr] = useState(() => getKSTDateString());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const currentKst = getKSTDateString();
+      setTodayStr((prev) => (prev !== currentKst ? currentKst : prev));
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
   const currentSchedule =
     qrTargetSchedule ||
     activeSchedules.find((s) => s.date === todayStr) ||

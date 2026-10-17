@@ -5,6 +5,7 @@ import {
   calculateCumulativeAttendanceWithLifecycle,
   getGamifiedAttendanceLevel,
 } from '../utils/attendanceStats';
+import { getKSTDateString } from '../utils/date';
 
 interface MemberPortalModalProps {
   profile: BoundDeviceProfile;
@@ -14,7 +15,7 @@ interface MemberPortalModalProps {
   onRefreshData?: () => void;
 }
 
-const getTodayDateString = () => new Date().toISOString().slice(0, 10);
+const getTodayDateString = () => getKSTDateString();
 
 export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   profile,

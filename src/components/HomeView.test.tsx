@@ -3,6 +3,7 @@ import { renderToString } from 'react-dom/server';
 import { HomeView } from './HomeView';
 import { sheetsService, resetStorage } from '../services/sheets';
 import type { BoundDeviceProfile, Schedule } from '../types/rollbook';
+import { getKSTDateString } from '../utils/date';
 
 describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () => {
   const mockProfile: BoundDeviceProfile = {
@@ -13,7 +14,7 @@ describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () 
     boundAt: '2026-10-17T10:00:00Z',
   };
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getKSTDateString();
 
   const cleanupTestSchedules = async () => {
     const list = sheetsService.getSchedules();

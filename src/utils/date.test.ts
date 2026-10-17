@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatMatrixHeaderDate, normalizeDateToYYYYMMDD, getKSTTimestampString, parseKSTDate } from './date';
+import { formatMatrixHeaderDate, normalizeDateToYYYYMMDD, getKSTTimestampString, parseKSTDate, getKSTDateString, addDaysKST } from './date';
 
 describe('formatMatrixHeaderDate', () => {
   it('YYYY-MM-DD 형식을 10/08 (목) 형식으로 올바르게 변환한다', () => {
@@ -49,5 +49,19 @@ describe('getKSTTimestampString & parseKSTDate', () => {
     expect(parsed.getHours()).toBe(22);
     expect(parsed.getMinutes()).toBe(15);
     expect(parsed.getSeconds()).toBe(30);
+  });
+});
+
+describe('getKSTDateString & addDaysKST', () => {
+  it('자정 직후(새벽 시간) UTC 시점이어도 KST 기준의 올바른 날짜를 반환한다', () => {
+    // UTC 2026-10-17 15:30:00 -> KST 2026-10-18 00:30:00 (새벽 0시 반)
+    const midnightUtc = new Date('2026-10-17T15:30:00.000Z');
+    expect(getKSTDateString(midnightUtc)).toBe('2026-10-18');
+  });
+
+  it('addDaysKST로 날짜를 더하거나 뺄 수 있다', () => {
+    expect(addDaysKST('2026-10-18', -1)).toBe('2026-10-17');
+    expect(addDaysKST('2026-10-18', 1)).toBe('2026-10-19');
+    expect(addDaysKST('2026-10-31', 1)).toBe('2026-11-01');
   });
 });

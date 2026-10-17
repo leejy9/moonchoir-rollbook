@@ -63,6 +63,46 @@ export function getKSTTimestampString(date: Date = new Date()): string {
 }
 
 /**
+ * 한국 표준시(Asia/Seoul) 기준 'YYYY-MM-DD' 날짜 문자열을 반환합니다.
+ * UTC 오프셋으로 인한 날짜 왜곡(예: 새벽 0~9시 사이 전날로 인식되는 문제)을 완벽히 방지합니다.
+ */
+export function getKSTDateString(date: Date = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+
+    let y = '', m = '', d = '';
+    for (const p of parts) {
+      if (p.type === 'year') y = p.value;
+      if (p.type === 'month') m = p.value;
+      if (p.type === 'day') d = p.value;
+    }
+    return `${y}-${m}-${d}`;
+  } catch {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+}
+
+/**
+ * YYYY-MM-DD 기준 일(day) 단위를 가감하여 새 YYYY-MM-DD를 반환합니다.
+ */
+export function addDaysKST(dateStr: string, days: number): string {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return getKSTDateString();
+  }
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const target = new Date(y, m - 1, d + days, 12, 0, 0);
+  return getKSTDateString(target);
+}
+
+/**
  * 구글 시트 등에서 들어온 날짜를 'YYYY-MM-DD' 표준 형식으로 통일합니다.
  */
 export function normalizeDateToYYYYMMDD(dateStr: string): string {

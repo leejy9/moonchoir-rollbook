@@ -4,6 +4,7 @@ import type { BoundDeviceProfile, Member, RSVPVote, Schedule } from '../types/ro
 import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
 import { getCalendarGrid } from '../utils/calendar';
 import { getCheckInWindowState } from '../utils/timeWindow';
+import { getKSTDateString } from '../utils/date';
 import {
   IconCalendar,
   IconClock,
@@ -44,7 +45,7 @@ function getCategoryDotClass(category: string): string {
   return 'dot-practice';
 }
 
-const getTodayDateString = () => new Date().toISOString().slice(0, 10);
+const getTodayDateString = () => getKSTDateString();
 
 export const HomeView: React.FC<HomeViewProps> = ({
   profile,
@@ -59,12 +60,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [homeViewTab, setHomeViewTab] = useState<'CALENDAR' | 'LIST'>('CALENDAR');
   const [isRosterOpen, setIsRosterOpen] = useState(false);
 
-  const [todayStr] = useState(getTodayDateString);
+  const [todayStr, setTodayStr] = useState(getTodayDateString);
   const [currentNow, setCurrentNow] = useState(() => new Date());
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentNow(new Date());
+      const now = new Date();
+      setCurrentNow(now);
+      const newTodayStr = getKSTDateString(now);
+      setTodayStr((prev) => {
+        if (prev !== newTodayStr) {
+          // 자정이 넘어가면 기본 선택 날짜도 새 오늘 날짜로 자동 갱신
+          setSelectedDateStr((sel) => (sel === prev ? newTodayStr : sel));
+          return newTodayStr;
+        }
+        return prev;
+      });
     }, 10000); // 10s tick for smooth, real-time window transition
     return () => clearInterval(timer);
   }, []);

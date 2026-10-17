@@ -23,7 +23,7 @@ import {
 import {
   generateMasterWallQRPayload,
 } from '../utils/qr';
-import { getKSTTimestampString } from '../utils/date';
+import { getKSTTimestampString, getKSTDateString } from '../utils/date';
 import {
   IconCalendar,
   IconClose,
@@ -83,7 +83,7 @@ function getPeriodRange(periodOption: '1M' | '3M' | '6M' | 'YEAR' | 'ALL') {
     return { startStr: undefined, endStr: undefined };
   }
   const today = new Date();
-  const endStr = today.toISOString().slice(0, 10);
+  const endStr = getKSTDateString(today);
   const start = new Date(today);
 
   if (periodOption === '1M') {
@@ -96,7 +96,7 @@ function getPeriodRange(periodOption: '1M' | '3M' | '6M' | 'YEAR' | 'ALL') {
     start.setMonth(0);
     start.setDate(1);
   }
-  return { startStr: start.toISOString().slice(0, 10), endStr };
+  return { startStr: getKSTDateString(start), endStr };
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -578,7 +578,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const seriesIdToDup = preferredSeriesId || targetItems[0].seriesId || targetItems[0].id;
     const defaultNextDate = new Date();
     defaultNextDate.setMonth(defaultNextDate.getMonth() + 4);
-    const defaultDateStr = defaultNextDate.toISOString().slice(0, 10);
+    const defaultDateStr = getKSTDateString(defaultNextDate);
 
     const userInput = window.prompt(
       `선택하신 [${targetItems[0].title}] ${targetItems.length}개 회차를 다음 학기/시즌으로 복제합니다.\n새 학기 첫 연습 시작 날짜를 입력해주세요 (YYYY-MM-DD):`,

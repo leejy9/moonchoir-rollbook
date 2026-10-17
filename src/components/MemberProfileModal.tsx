@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { Member, Schedule, RawAttendanceLog, PartType, MemberStatus, RoleType, MemberStatusHistory } from '../types/rollbook';
-import { formatMatrixHeaderDate, getKSTTimestampString } from '../utils/date';
+import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString, addDaysKST } from '../utils/date';
 import { sheetsService } from '../services/sheets';
 
 interface MemberProfileModalProps {
@@ -25,7 +25,7 @@ function formatPhoneNumber(val: string): string {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 }
 
-const getTodayDateString = () => getKSTTimestampString().slice(0, 10);
+const getTodayDateString = () => getKSTDateString();
 
 const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Member }> = ({
   member,
@@ -207,8 +207,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     if (recordHistory) {
       const targetStart = historyStartDate.trim() || todayStr;
       // 1. 기존에 진행 중이던 열린 이력(endDate >= targetStart)이 있다면, 새 이력 시작일 전날로 자동 마감
-      const prevDate = new Date(new Date(targetStart).getTime() - 86400000);
-      const prevDayStr = !isNaN(prevDate.getTime()) ? prevDate.toISOString().slice(0, 10) : todayStr;
+      const prevDayStr = addDaysKST(targetStart, -1);
 
       currentHistories = currentHistories.map((h) => {
         if (h.endDate >= targetStart) {
@@ -231,7 +230,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     } else if (isStatusChanged || isPartChanged) {
       // 2. 사용자가 이력 체크박스를 별도로 켜지 않고 단순히 상단 칩에서 상태/파트를 변경한 경우:
       // 과거의 무한 열린 이력(2999-12-31)이 미래 일정을 가로막지 않도록 어제 날짜로 자동 마감하고 새 상태 등록
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const yesterday = addDaysKST(todayStr, -1);
       currentHistories = currentHistories.map((h) => {
         if (h.endDate >= todayStr) {
           return { ...h, endDate: yesterday };

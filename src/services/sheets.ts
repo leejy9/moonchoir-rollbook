@@ -12,7 +12,7 @@ import type {
   Schedule,
 } from '../types/rollbook';
 import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
-import { getKSTTimestampString } from '../utils/date';
+import { getKSTTimestampString, getKSTDateString, addDaysKST, normalizeDateToYYYYMMDD } from '../utils/date';
 import {
   INITIAL_CONFIG,
   INITIAL_LOCATION_PRESETS,
@@ -436,8 +436,7 @@ export class SheetsService {
     let currentHistory = this.members[idx].statusHistory ? [...this.members[idx].statusHistory!] : [];
     if (historyItem) {
       // 새 이력이 시작하는 날짜 이전으로 기존 오픈 이력(2999-12-31) 마감
-      const prevDate = new Date(new Date(historyItem.startDate).getTime() - 86400000);
-      const prevDay = !isNaN(prevDate.getTime()) ? prevDate.toISOString().slice(0, 10) : historyItem.startDate;
+      const prevDay = addDaysKST(historyItem.startDate, -1);
       currentHistory = currentHistory.map((h) => {
         if (h.endDate >= historyItem.startDate) {
           return { ...h, endDate: h.startDate < historyItem.startDate ? prevDay : historyItem.startDate };
@@ -447,8 +446,8 @@ export class SheetsService {
       currentHistory.push(historyItem);
     } else if (updates.memberStatus && updates.memberStatus !== this.members[idx].memberStatus) {
       // historyItem 없이 memberStatus만 바뀐 경우에도 오픈 이력 마감 및 최신 상태 등록
-      const today = getKSTTimestampString().slice(0, 10);
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const today = getKSTDateString();
+      const yesterday = addDaysKST(today, -1);
       currentHistory = currentHistory.map((h) => {
         if (h.endDate >= today) {
           return { ...h, endDate: yesterday };
@@ -1260,12 +1259,8 @@ export class SheetsService {
     if (Array.isArray(data.schedules)) {
       this.schedules = data.schedules.map((s) => {
         let normalizedDate = s.date;
-        if (s.date && (s.date.includes('T') || !/^\d{4}-\d{2}-\d{2}$/.test(s.date))) {
-          const d = new Date(s.date);
-          if (!isNaN(d.getTime())) {
-            const kstDate = new Date(d.getTime() + (9 * 60 + d.getTimezoneOffset()) * 60 * 1000);
-            normalizedDate = kstDate.toISOString().slice(0, 10);
-          }
+        if (s.date) {
+          normalizedDate = normalizeDateToYYYYMMDD(s.date);
         }
         let startTime = s.startTime || '19:30';
         let endTime = s.endTime || '21:30';
