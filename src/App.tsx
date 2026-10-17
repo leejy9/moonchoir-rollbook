@@ -123,6 +123,7 @@ export function App() {
             triggerRefresh();
           }}
           onDataChanged={triggerRefresh}
+          refreshTrigger={refreshKey}
         />
       )}
 

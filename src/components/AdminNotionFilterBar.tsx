@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import type { MemberStatus, PartType } from '../types/rollbook';
 import { IconSearch } from './Icons';
+import { getKSTDateString } from '../utils/date';
 
 export interface AdminFilterState {
-  dateStart: string; // YYYY-MM-DD
-  dateEnd: string;   // YYYY-MM-DD
+  dateStart: string; // YYYY-MM-DD or '' for all
+  dateEnd: string;   // YYYY-MM-DD or '' for all
   selectedParts: PartType[];
   selectedStatuses: MemberStatus[];
   searchQuery: string;
@@ -34,14 +35,40 @@ export const AdminNotionFilterBar: React.FC<AdminNotionFilterBarProps> = ({
     'NONE' | 'DATE' | 'PART' | 'STATUS' | 'SEARCH'
   >('NONE');
 
-  // Quick preset ranges
-  const applyDatePreset = (preset: 'THIS_MONTH' | 'LAST_3_MONTHS' | 'ALL_2026') => {
-    if (preset === 'THIS_MONTH') {
-      onChangeFilters({ ...filters, dateStart: '2026-10-01', dateEnd: '2026-10-31' });
-    } else if (preset === 'LAST_3_MONTHS') {
-      onChangeFilters({ ...filters, dateStart: '2026-08-01', dateEnd: '2026-10-31' });
-    } else if (preset === 'ALL_2026') {
-      onChangeFilters({ ...filters, dateStart: '2026-01-01', dateEnd: '2026-12-31' });
+  // Quick preset ranges (dynamically calculated based on current KST date)
+  const applyDatePreset = (preset: 'ALL' | 'THIS_MONTH' | 'LAST_3_MONTHS' | 'THIS_YEAR') => {
+    if (preset === 'ALL') {
+      onChangeFilters({ ...filters, dateStart: '', dateEnd: '' });
+    } else {
+      const today = getKSTDateString();
+      const [yStr, mStr] = today.split('-');
+      const y = Number(yStr);
+      const m = Number(mStr);
+
+      if (preset === 'THIS_MONTH') {
+        const lastDay = new Date(y, m, 0).getDate();
+        onChangeFilters({
+          ...filters,
+          dateStart: `${yStr}-${mStr}-01`,
+          dateEnd: `${yStr}-${mStr}-${String(lastDay).padStart(2, '0')}`,
+        });
+      } else if (preset === 'LAST_3_MONTHS') {
+        const startDate = new Date(y, m - 3, 1);
+        const startY = startDate.getFullYear();
+        const startM = String(startDate.getMonth() + 1).padStart(2, '0');
+        const lastDay = new Date(y, m, 0).getDate();
+        onChangeFilters({
+          ...filters,
+          dateStart: `${startY}-${startM}-01`,
+          dateEnd: `${yStr}-${mStr}-${String(lastDay).padStart(2, '0')}`,
+        });
+      } else if (preset === 'THIS_YEAR') {
+        onChangeFilters({
+          ...filters,
+          dateStart: `${yStr}-01-01`,
+          dateEnd: `${yStr}-12-31`,
+        });
+      }
     }
     setActivePropertyModal('NONE');
   };
@@ -62,8 +89,8 @@ export const AdminNotionFilterBar: React.FC<AdminNotionFilterBarProps> = ({
 
   const resetAllFilters = () => {
     onChangeFilters({
-      dateStart: '2026-10-01',
-      dateEnd: '2026-10-31',
+      dateStart: '',
+      dateEnd: '',
       selectedParts: [],
       selectedStatuses: [],
       searchQuery: '',
@@ -74,8 +101,8 @@ export const AdminNotionFilterBar: React.FC<AdminNotionFilterBarProps> = ({
     filters.selectedParts.length > 0 ||
     filters.selectedStatuses.length > 0 ||
     filters.searchQuery.trim().length > 0 ||
-    filters.dateStart !== '2026-10-01' ||
-    filters.dateEnd !== '2026-10-31';
+    Boolean(filters.dateStart) ||
+    Boolean(filters.dateEnd);
 
   return (
     <div className="notion-filter-container">
@@ -83,7 +110,7 @@ export const AdminNotionFilterBar: React.FC<AdminNotionFilterBarProps> = ({
       <div className="notion-filter-bar">
         <div className="filter-chips-wrap">
           {/* 1. Date Range Filter Chip */}
-          <div className="notion-chip">
+          <div className={`notion-chip ${filters.dateStart || filters.dateEnd ? 'active' : ''}`}>
             <span className="notion-chip-icon">📅</span>
             <span className="notion-chip-label">기간:</span>
             <button
@@ -91,8 +118,20 @@ export const AdminNotionFilterBar: React.FC<AdminNotionFilterBarProps> = ({
               className="notion-chip-val-btn"
               onClick={() => setActivePropertyModal(activePropertyModal === 'DATE' ? 'NONE' : 'DATE')}
             >
-              {filters.dateStart} ~ {filters.dateEnd}
+              {filters.dateStart || filters.dateEnd
+                ? `${filters.dateStart || '처음'} ~ ${filters.dateEnd || '현재'}`
+                : '전체 일정'}
             </button>
+            {(filters.dateStart || filters.dateEnd) && (
+              <button
+                type="button"
+                className="notion-chip-remove"
+                onClick={() => onChangeFilters({ ...filters, dateStart: '', dateEnd: '' })}
+                title="기간 필터 해제 (전체 일정 보기)"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           {/* 2. Parts Filter Chips */}
@@ -222,9 +261,11 @@ export const AdminNotionFilterBar: React.FC<AdminNotionFilterBarProps> = ({
         {/* Counter Summary */}
         <div className="filter-summary-tally">
           <span className="tally-number">
-            {filteredMembersCount}명
+            {`${filteredMembersCount}명`}
           </span>
-          <span className="tally-total">/ 전체 {totalMembersCount}명 ({totalSchedulesCount}회차)</span>
+          <span className="tally-total">{`/ 전체 ${totalMembersCount}명`}</span>
+          <span className="tally-divider">·</span>
+          <span className="tally-schedules">{`일정 ${totalSchedulesCount}회차`}</span>
         </div>
       </div>
 
@@ -243,9 +284,10 @@ export const AdminNotionFilterBar: React.FC<AdminNotionFilterBarProps> = ({
           </div>
           <div className="popover-body">
             <div className="preset-buttons-row">
-              <button type="button" onClick={() => applyDatePreset('THIS_MONTH')}>이번 달 (10월)</button>
+              <button type="button" onClick={() => applyDatePreset('ALL')}>전체 일정</button>
+              <button type="button" onClick={() => applyDatePreset('THIS_MONTH')}>이번 달 ({Number(getKSTDateString().slice(5, 7))}월)</button>
               <button type="button" onClick={() => applyDatePreset('LAST_3_MONTHS')}>최근 3개월</button>
-              <button type="button" onClick={() => applyDatePreset('ALL_2026')}>2026년 전체</button>
+              <button type="button" onClick={() => applyDatePreset('THIS_YEAR')}>{getKSTDateString().slice(0, 4)}년 전체</button>
             </div>
             <div className="date-inputs-row">
               <label>

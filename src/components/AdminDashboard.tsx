@@ -49,6 +49,7 @@ import moonchoirLogo from '../assets/moonchoir-logo.png';
 interface AdminDashboardProps {
   onBackToHome: () => void;
   onDataChanged: () => void;
+  refreshTrigger?: number;
 }
 
 const DAYS_OF_WEEK = [
@@ -102,6 +103,7 @@ function getPeriodRange(periodOption: '1M' | '3M' | '6M' | 'YEAR' | 'ALL') {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onBackToHome,
   onDataChanged,
+  refreshTrigger,
 }) => {
   const [adminTab, setAdminTab] = useState<AdminTab>('ROSTER');
 
@@ -114,12 +116,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [scheduleSubTab, setScheduleSubTab] = useState<'LIST' | 'QR' | 'SESSION'>('LIST');
   const [settingsSubTab, setSettingsSubTab] = useState<'SHEETS' | 'LOCATIONS' | 'TAXONOMY'>('SHEETS');
 
-  // Schedules & Config
-  const schedules = sheetsService.getSchedules();
-  const config = sheetsService.getConfig();
-  const locationPresets = sheetsService.getLocationPresets();
-  const members = sheetsService.getMembers();
-  const programCards = sheetsService.getProgramCards();
+  // Schedules & Config (reactive to refreshTrigger)
+  const schedules = useMemo(() => {
+    void refreshTrigger;
+    return sheetsService.getSchedules();
+  }, [refreshTrigger]);
+  const config = useMemo(() => {
+    void refreshTrigger;
+    return sheetsService.getConfig();
+  }, [refreshTrigger]);
+  const locationPresets = useMemo(() => {
+    void refreshTrigger;
+    return sheetsService.getLocationPresets();
+  }, [refreshTrigger]);
+  const members = useMemo(() => {
+    void refreshTrigger;
+    return sheetsService.getMembers();
+  }, [refreshTrigger]);
+  const programCards = useMemo(() => {
+    void refreshTrigger;
+    return sheetsService.getProgramCards();
+  }, [refreshTrigger]);
 
   // Member Modal Handlers
   const handleOpenAddMemberModal = () => {
@@ -173,18 +190,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // --- 0. Universal Matrix Grid State (Notion Filter Bar) ---
-  const [matrixFilters, setMatrixFilters] = useState<AdminFilterState>({
-    dateStart: '2026-10-01',
-    dateEnd: '2026-10-31',
+  const [matrixFilters, setMatrixFilters] = useState<AdminFilterState>(() => ({
+    dateStart: '',
+    dateEnd: '',
     selectedParts: [],
     selectedStatuses: [],
     searchQuery: '',
-  });
+  }));
 
   const filteredMatrixSchedules = React.useMemo(() => {
-    return schedules.filter(
-      (s) => s.date >= matrixFilters.dateStart && s.date <= matrixFilters.dateEnd
-    );
+    return schedules.filter((s) => {
+      if (matrixFilters.dateStart && s.date < matrixFilters.dateStart) return false;
+      if (matrixFilters.dateEnd && s.date > matrixFilters.dateEnd) return false;
+      return true;
+    });
   }, [schedules, matrixFilters.dateStart, matrixFilters.dateEnd]);
 
   const filteredMatrixMembers = React.useMemo(() => {
