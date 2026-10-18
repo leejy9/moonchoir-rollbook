@@ -1134,10 +1134,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }
       }
 
-      setScheduleSuccessMsg(`일정 카드 [${cardData.title}]가 구글 시트에 영구 저장되었습니다.`);
+      setScheduleSuccessMsg(`일정 카드 [${cardData.title}]가 저장되었습니다. 이어서 일정을 등록할 수 있습니다.`);
       setRightPanelMode('SCHEDULE_FORM');
+      setEditingProgramCard(null);
+      setEditingScheduleForForm(null);
+      setSelectedProgramCardId(cardData.id);
+      setNewTitle(cardData.title);
+      setNewCategory(cardData.category);
+      if (cardData.defaultLocationId) {
+        handleLocationPresetChange(cardData.defaultLocationId);
+      } else if (defaultLoc) {
+        handleLocationPresetChange(defaultLoc.id);
+      }
+      if (cardData.defaultStartTime) setNewStartTime(cardData.defaultStartTime);
+      if (cardData.defaultEndTime) setNewEndTime(cardData.defaultEndTime);
+      if (cardData.targetAudienceType) {
+        setNewTargetAudienceType(cardData.targetAudienceType);
+        setNewTargetParts(cardData.targetParts || []);
+        setNewTargetMemberIds(cardData.targetMemberIds || []);
+      }
       onDataChanged();
-      setTimeout(() => setScheduleSuccessMsg(''), 4000);
+      setTimeout(() => setScheduleSuccessMsg(''), 4500);
+      setTimeout(() => {
+        const el = document.getElementById('admin-schedule-form-container');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : '일정 카드 저장 중 오류가 발생했습니다.');
     }
@@ -2312,7 +2333,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <button
                       type="button"
                       className={`btn-sub-tab ${scheduleViewTab === 'CALENDAR' ? 'active' : ''}`}
-                      onClick={() => setScheduleViewTab('CALENDAR')}
+                      onClick={() => {
+                        setScheduleViewTab('CALENDAR');
+                        setRightPanelMode('SCHEDULE_FORM');
+                      }}
                       style={{
                         minHeight: '36px',
                         padding: '0 16px',
@@ -2331,7 +2355,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <button
                       type="button"
                       className={`btn-sub-tab ${scheduleViewTab === 'ALL_LIST' ? 'active' : ''}`}
-                      onClick={() => setScheduleViewTab('ALL_LIST')}
+                      onClick={() => {
+                        setScheduleViewTab('ALL_LIST');
+                        setRightPanelMode('SCHEDULE_FORM');
+                      }}
                       style={{
                         minHeight: '36px',
                         padding: '0 16px',
@@ -2350,7 +2377,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <button
                       type="button"
                       className={`btn-sub-tab ${scheduleViewTab === 'PROGRAM_CARDS' ? 'active' : ''}`}
-                      onClick={() => setScheduleViewTab('PROGRAM_CARDS')}
+                      onClick={() => {
+                        setScheduleViewTab('PROGRAM_CARDS');
+                        setRightPanelMode('CARD_FORM');
+                      }}
                       style={{
                         minHeight: '36px',
                         padding: '0 16px',
@@ -2426,6 +2456,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 onClick={() => {
                                   setAdminSelectedDate(day.dateStr);
                                   setNewDate(day.dateStr);
+                                  setRightPanelMode('SCHEDULE_FORM');
                                 }}
                                 title={daySchedules.length > 0 ? `${day.dateStr} (${daySchedules.length}건)` : day.dateStr}
                               >
@@ -2478,6 +2509,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onClick={() => {
                               setNewDate(adminSelectedDate);
                               setEditingScheduleForForm(null);
+                              setRightPanelMode('SCHEDULE_FORM');
                               setScheduleSuccessMsg(`우측 폼에 [${adminSelectedDate}] 날짜가 세팅되었습니다. 새 일정을 작성해주세요.`);
                               setTimeout(() => setScheduleSuccessMsg(''), 3000);
                               const el = document.getElementById('admin-schedule-form-container');
@@ -3221,7 +3253,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           setNewTargetMemberIds(group.targetMemberIds || []);
                                         }
                                         setScheduleSuccessMsg(`[${group.title}]에 등록할 추가연습 정보를 우측 폼에 세팅했습니다. 날짜를 확인하고 등록을 눌러주세요.`);
+                                        setEditingScheduleForForm(null);
+                                        setRightPanelMode('SCHEDULE_FORM');
                                         setTimeout(() => setScheduleSuccessMsg(''), 4500);
+                                        const el = document.getElementById('admin-schedule-form-container');
+                                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                                       }}
                                       style={{
                                         background: '#EEF2FF',
@@ -3428,7 +3464,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                         <button
                           type="button"
-                          onClick={() => setRightPanelMode('SCHEDULE_FORM')}
+                          onClick={() => {
+                            setRightPanelMode('SCHEDULE_FORM');
+                            setEditingProgramCard(null);
+                          }}
                           style={{
                             background: '#F1F5F9',
                             color: '#475569',
@@ -3646,7 +3685,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             type="button"
                             className="btn-secondary-cancel"
                             style={{ minHeight: '44px' }}
-                            onClick={() => setRightPanelMode('SCHEDULE_FORM')}
+                            onClick={() => {
+                              setRightPanelMode('SCHEDULE_FORM');
+                              setEditingProgramCard(null);
+                            }}
                           >
                             ✕ 닫기
                           </button>
