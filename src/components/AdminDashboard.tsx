@@ -421,6 +421,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [cardTargetMemberIds, setCardTargetMemberIds] = useState<string[]>([]);
 
   const [scheduleSuccessMsg, setScheduleSuccessMsg] = useState('');
+  const [isSubmittingSchedule, setIsSubmittingSchedule] = useState(false);
   const [showArchivedSchedules, setShowArchivedSchedules] = useState(false);
 
   // --- 5.1 Admin Interactive Calendar State (SCHEDULES > LIST) ---
@@ -1197,12 +1198,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Create or Update Schedule (In-place & 4-Mode Engine)
   const handleCreateScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
-    if (scheduleAddMode !== 'CALENDAR_PICK' && !newDate.trim()) return;
+
+    // 1. 필수값 유효성 검사 및 사용자 피드백
+    if (!newTitle.trim()) {
+      alert('일정 명칭을 입력해주세요.');
+      document.getElementById('sch-title')?.focus();
+      return;
+    }
+    if (scheduleAddMode !== 'CALENDAR_PICK' && !newDate.trim()) {
+      alert('시작 기준 날짜를 입력해주세요.');
+      return;
+    }
     if (scheduleAddMode === 'CALENDAR_PICK' && pickedDates.length === 0) {
       alert('달력에서 최소 1개 이상의 날짜를 선택해주세요.');
       return;
     }
+    if (
+      (scheduleAddMode === 'DAYS_OF_WEEK' || (scheduleAddMode === 'INTERVAL' && intervalUnit === 'WEEKS')) &&
+      selectedDays.length === 0
+    ) {
+      alert('반복할 요일을 최소 1개 이상 선택해주세요.');
+      return;
+    }
+    if (scheduleAddMode === 'INTERVAL' && intervalUnit === 'MONTHS' && selectedMonthDays.length === 0) {
+      alert('매달 반복할 일자를 최소 1개 이상 선택해주세요.');
+      return;
+    }
+    if (scheduleAddMode === 'INTERVAL' && intervalUnit === 'YEARS' && selectedYearDates.length === 0) {
+      alert('매년 반복할 날짜를 최소 1개 이상 추가해주세요.');
+      return;
+    }
+
+    const effectiveLocName = newLocName.trim() || defaultLoc?.name || '연습실';
 
     const finalCategory = isCustomNewCategory
       ? ((customNewCategoryInput.trim() || '기타행사') as ScheduleCategory)
@@ -1213,14 +1240,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     const foundLoc = locationPresets.find((l) => l.id === selectedLocationPresetId);
 
-    // In-place update existing schedule
-    if (editingScheduleForForm) {
-      const updates: Partial<Schedule> = {
+    try {
+      setIsSubmittingSchedule(true);
+
+      // In-place update existing schedule
+      if (editingScheduleForForm) {
+        const updates: Partial<Schedule> = {
+          title: newTitle.trim(),
+          date: newDate,
+          startTime: newStartTime,
+          endTime: newEndTime,
+          locationName: effectiveLocName,
+          locationId: foundLoc ? foundLoc.id : undefined,
+          detailAddress: foundLoc?.detailAddress,
+          entranceNote: foundLoc?.entranceNote,
+          targetLat: newLat,
+          targetLon: newLon,
+          radiusMeters: newRadius,
+          category: finalCategory,
+          description: newDesc.trim() || undefined,
+          programId: selectedProgramCardId || undefined,
+          targetAudienceType: newTargetAudienceType,
+          targetParts: newTargetAudienceType === 'PARTS' ? newTargetParts : undefined,
+          targetMemberIds: newTargetAudienceType === 'CUSTOM_MEMBERS' ? newTargetMemberIds : undefined,
+        };
+
+        await sheetsService.updateSchedule(editingScheduleForForm.id, updates);
+        setEditingScheduleForForm(null);
+        setScheduleSuccessMsg(`[${newTitle.trim()}] 일정이 수정되었습니다.`);
+        onDataChanged();
+        setTimeout(() => setScheduleSuccessMsg(''), 4000);
+        return;
+      }
+
+      // Create New Schedules
+      const baseSchedule = {
         title: newTitle.trim(),
         date: newDate,
         startTime: newStartTime,
         endTime: newEndTime,
-        locationName: newLocName.trim(),
+        locationName: effectiveLocName,
         locationId: foundLoc ? foundLoc.id : undefined,
         detailAddress: foundLoc?.detailAddress,
         entranceNote: foundLoc?.entranceNote,
@@ -1235,61 +1294,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         targetMemberIds: newTargetAudienceType === 'CUSTOM_MEMBERS' ? newTargetMemberIds : undefined,
       };
 
-      await sheetsService.updateSchedule(editingScheduleForForm.id, updates);
+      const generated = createSchedulesMultiMode({
+        mode: scheduleAddMode,
+        baseSchedule,
+        intervalUnit,
+        intervalStep,
+        intervalCount,
+        byDays: selectedDays,
+        byMonthDays: selectedMonthDays,
+        byYearDates: selectedYearDates,
+        weeksCount,
+        pickedDates,
+      });
+
+      if (generated.length === 0) {
+        alert('생성할 수 있는 일정 날짜가 없습니다. 날짜 및 반복 설정을 확인해주세요.');
+        return;
+      }
+
+      if (generated.length === 1) {
+        await sheetsService.addSchedule(generated[0]);
+        setSelectedScheduleId(generated[0].id);
+        setScheduleSuccessMsg(`새 일정 [${generated[0].title}]이 등록되었습니다.`);
+      } else {
+        await sheetsService.addSchedules(generated);
+        setSelectedScheduleId(generated[0]?.id || '');
+        setScheduleSuccessMsg(
+          `반복 엔진을 통해 ${generated.length}개의 일정이 일괄 생성되어 등록되었습니다!`
+        );
+      }
+
+      // 등록 성공 후 폼 필드 초기화
+      setNewTitle('');
+      setNewDesc('');
       setEditingScheduleForForm(null);
-      setScheduleSuccessMsg(`[${newTitle.trim()}] 일정이 인라인으로 즉시 수정되었습니다.`);
       onDataChanged();
       setTimeout(() => setScheduleSuccessMsg(''), 4000);
-      return;
+    } catch (err: unknown) {
+      alert('일정 저장 중 오류가 발생했습니다: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsSubmittingSchedule(false);
     }
-
-    const baseSchedule = {
-      title: newTitle.trim(),
-      date: newDate,
-      startTime: newStartTime,
-      endTime: newEndTime,
-      locationName: newLocName.trim(),
-      locationId: foundLoc ? foundLoc.id : undefined,
-      detailAddress: foundLoc?.detailAddress,
-      entranceNote: foundLoc?.entranceNote,
-      targetLat: newLat,
-      targetLon: newLon,
-      radiusMeters: newRadius,
-      category: finalCategory,
-      description: newDesc.trim() || undefined,
-      programId: selectedProgramCardId || undefined,
-      targetAudienceType: newTargetAudienceType,
-      targetParts: newTargetAudienceType === 'PARTS' ? newTargetParts : undefined,
-      targetMemberIds: newTargetAudienceType === 'CUSTOM_MEMBERS' ? newTargetMemberIds : undefined,
-    };
-
-    const generated = createSchedulesMultiMode({
-      mode: scheduleAddMode,
-      baseSchedule,
-      intervalUnit,
-      intervalStep,
-      intervalCount,
-      byDays: selectedDays,
-      byMonthDays: selectedMonthDays,
-      byYearDates: selectedYearDates,
-      weeksCount,
-      pickedDates,
-    });
-
-    if (generated.length === 1) {
-      await sheetsService.addSchedule(generated[0]);
-      setSelectedScheduleId(generated[0].id);
-      setScheduleSuccessMsg(`새 일정 [${generated[0].title}]이 등록되었습니다.`);
-    } else {
-      await sheetsService.addSchedules(generated);
-      setSelectedScheduleId(generated[0]?.id || '');
-      setScheduleSuccessMsg(
-        `4대 다채널 엔진을 통해 ${generated.length}개의 일정이 일괄 생성되어 등록되었습니다!`
-      );
-    }
-
-    onDataChanged();
-    setTimeout(() => setScheduleSuccessMsg(''), 4000);
   };
 
   // Manual Override Submit
@@ -2430,9 +2475,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <button
                             type="button"
                             className="btn-quick-new-sch"
-                            onClick={() => setNewDate(adminSelectedDate)}
+                            onClick={() => {
+                              setNewDate(adminSelectedDate);
+                              setEditingScheduleForForm(null);
+                              setScheduleSuccessMsg(`우측 폼에 [${adminSelectedDate}] 날짜가 세팅되었습니다. 새 일정을 작성해주세요.`);
+                              setTimeout(() => setScheduleSuccessMsg(''), 3000);
+                              const el = document.getElementById('admin-schedule-form-container');
+                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }}
                           >
-                            + 이 날짜로 폼 채우기
+                            + 이 날짜로 새 일정 등록
                           </button>
                         </div>
 
@@ -3697,8 +3749,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           setSelectedProgramCardId(val);
                           const found = programCards.find((c) => c.id === val);
                           if (found) {
+                            if (!newTitle.trim() || (editingScheduleForForm && newTitle === editingScheduleForForm.title)) {
+                              setNewTitle(found.title);
+                            }
                             if (found.category) setNewCategory(found.category);
-                            if (found.defaultLocationId) handleLocationPresetChange(found.defaultLocationId);
+                            if (found.defaultLocationId) {
+                              handleLocationPresetChange(found.defaultLocationId);
+                            } else if (defaultLoc) {
+                              handleLocationPresetChange(defaultLoc.id);
+                            }
                             if (found.defaultStartTime) setNewStartTime(found.defaultStartTime);
                             if (found.defaultEndTime) setNewEndTime(found.defaultEndTime);
                             if (found.targetAudienceType) {
@@ -3717,7 +3776,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         ))}
                       </select>
                       <span className="form-hint" style={{ fontSize: '11.5px', color: '#64748B' }}>
-                        * 일정 카드를 선택하면 해당 카드의 기본 시간/장소/대상자 설정이 자동으로 반영됩니다.
+                        * 일정 카드를 선택하면 해당 카드의 명칭/시간/장소/대상자 설정이 자동으로 반영됩니다.
                       </span>
                     </div>
 
@@ -3731,7 +3790,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       placeholder="예: 11월 목요 정기연습"
                       value={newTitle}
                       onChange={(e) => setNewTitle(e.target.value)}
-                      required
                     />
 
                     {/* 4-Mode Recurrence Engine Selector */}
@@ -4448,7 +4506,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           value={newLocName}
                           onChange={(e) => setNewLocName(e.target.value)}
                           placeholder="장소명 (예: 서초 앙상블 연습실)"
-                          required
                         />
                       </div>
                     </div>
@@ -4467,8 +4524,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     {editingScheduleForForm ? (
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button type="submit" className="btn-primary-large" style={{ minHeight: '44px', flex: 1 }}>
-                          저장
+                        <button
+                          type="submit"
+                          className="btn-primary-large"
+                          disabled={isSubmittingSchedule}
+                          style={{ minHeight: '44px', flex: 1, fontWeight: 700 }}
+                        >
+                          {isSubmittingSchedule ? '⏳ 저장 중...' : '💾 수정 내용 저장'}
                         </button>
                         <button
                           type="button"
@@ -4493,11 +4555,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </button>
                       </div>
                     ) : (
-                      <button type="submit" className="btn-primary-large" style={{ minHeight: '44px' }}>
-                        {scheduleAddMode === 'SINGLE' && '단일 일정 등록 완료'}
-                        {scheduleAddMode === 'INTERVAL' && `시작일자(${newDate})부터 총 ${intervalCount}회 주기 반복 일정 추가`}
-                        {scheduleAddMode === 'DAYS_OF_WEEK' && `시작일자(${newDate})부터 총 ${weeksCount}주간 요일 지정 일정 추가 (${selectedDays.length * weeksCount}개)`}
-                        {scheduleAddMode === 'CALENDAR_PICK' && `선택한 ${pickedDates.length}개 날짜 일정 일괄 추가`}
+                      <button
+                        type="submit"
+                        className="btn-primary-large"
+                        disabled={isSubmittingSchedule}
+                        style={{ minHeight: '44px', fontWeight: 700 }}
+                      >
+                        {isSubmittingSchedule ? (
+                          '⏳ 일정 등록 중...'
+                        ) : (
+                          <>
+                            {scheduleAddMode === 'SINGLE' && '💾 단일 일정 등록 완료'}
+                            {scheduleAddMode === 'INTERVAL' && `💾 총 ${intervalCount}회 주기 반복 일정 추가`}
+                            {scheduleAddMode === 'DAYS_OF_WEEK' && `💾 총 ${weeksCount}주간 요일 지정 일정 추가 (${selectedDays.length * weeksCount}개)`}
+                            {scheduleAddMode === 'CALENDAR_PICK' && `💾 선택한 ${pickedDates.length}개 날짜 일정 일괄 추가`}
+                          </>
+                        )}
                       </button>
                     )}
                       </form>
