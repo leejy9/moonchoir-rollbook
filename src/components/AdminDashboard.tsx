@@ -472,6 +472,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(new Set());
   const [allScheduleSearch, setAllScheduleSearch] = useState('');
   const [allScheduleCatFilter, setAllScheduleCatFilter] = useState('ALL');
+  const [scheduleToDelete, setScheduleToDelete] = useState<Schedule | null>(null);
+  const [cardGroupToDelete, setCardGroupToDelete] = useState<{
+    cardId: string;
+    title: string;
+    category: ScheduleCategory;
+    schedules: Schedule[];
+    isRegisteredCard: boolean;
+    rawCard?: ProgramCard;
+  } | null>(null);
 
   // 일정 카드(Program Card) 컨테이너 그룹핑 (시트 DB 카드 + 미분류 일정)
   const programGroups = useMemo(() => {
@@ -739,28 +748,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleDeleteSchedule = async (scheduleId: string, title: string) => {
-    // If companion schedules exist with same title, offer choice via edit modal
-    const companions = schedules.filter((s) => s.title === title && s.id !== scheduleId);
-    if (companions.length > 0) {
-      const target = schedules.find((s) => s.id === scheduleId);
-      if (target) {
-        handleOpenEditSchedule(target);
-        return;
-      }
-    }
-
-    if (!window.confirm(`정말로 '${title}' 일정을 삭제하시겠습니까?\n구글 스프레드시트에서도 해당 행이 삭제됩니다.`)) {
-      return;
-    }
-    try {
-      await sheetsService.deleteSchedule(scheduleId);
-      setScheduleSuccessMsg(`'${title}' 일정이 정상적으로 삭제되었습니다.`);
-      setSelectedBatchScheduleIds((prev) => prev.filter((id) => id !== scheduleId));
-      onDataChanged();
-      setTimeout(() => setScheduleSuccessMsg(''), 4000);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : '일정 삭제 중 오류가 발생했습니다.');
+  const handleDeleteSchedule = (scheduleId: string, _title?: string) => {
+    const target = schedules.find((s) => s.id === scheduleId);
+    if (target) {
+      setScheduleToDelete(target);
     }
   };
 
@@ -1103,19 +1094,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleDeleteProgramCard = async (cardId: string, title: string) => {
-    if (!window.confirm(`정말로 일정 카드 [${title}]를 삭제하시겠습니까?\n구글 시트 일정카드 탭에서도 제거됩니다.`)) {
-      return;
-    }
-    try {
-      await sheetsService.deleteProgramCard(cardId);
-      setScheduleSuccessMsg(`일정 카드 [${title}]가 삭제되었습니다.`);
-      onDataChanged();
-      setTimeout(() => setScheduleSuccessMsg(''), 4000);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : '일정 카드 삭제 중 오류가 발생했습니다.');
-    }
-  };
 
   const handleBindScheduleToForm = (sch: Schedule) => {
     setEditingScheduleForForm(sch);
@@ -2964,44 +2942,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </div>
 
                                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                    {group.isRegisteredCard && group.rawCard && (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleOpenEditProgramCard(group.rawCard!)}
-                                          style={{
-                                            background: '#F8FAFC',
-                                            color: '#334155',
-                                            border: '1px solid #CBD5E1',
-                                            borderRadius: '6px',
-                                            padding: '6px 8px',
-                                            fontSize: '11.5px',
-                                            fontWeight: 600,
-                                            cursor: 'pointer',
-                                          }}
-                                          title="일정 카드 속성 수정"
-                                        >
-                                          ✏️ 카드 수정
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeleteProgramCard(group.cardId, group.title)}
-                                          style={{
-                                            background: '#FFF1F2',
-                                            color: '#E11D48',
-                                            border: '1px solid #FECDD3',
-                                            borderRadius: '6px',
-                                            padding: '6px 8px',
-                                            fontSize: '11.5px',
-                                            fontWeight: 600,
-                                            cursor: 'pointer',
-                                          }}
-                                          title="일정 카드 삭제"
-                                        >
-                                          🗑️ 카드 삭제
-                                        </button>
-                                      </>
-                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const fallbackCard: ProgramCard = {
+                                          id: group.cardId.startsWith('card_') ? group.cardId : `card_${Date.now()}`,
+                                          title: group.title,
+                                          category: group.category,
+                                          description: group.description,
+                                          defaultLocationId: locationPresets.find((l) => l.name === group.locationName)?.id,
+                                          defaultStartTime: group.startTime,
+                                          defaultEndTime: group.endTime,
+                                          targetAudienceType: group.targetAudienceType || 'ALL',
+                                          targetParts: group.targetParts,
+                                          targetMemberIds: group.targetMemberIds,
+                                          isArchived: group.isArchived,
+                                          createdAt: getKSTTimestampString(),
+                                        };
+                                        handleOpenEditProgramCard(group.rawCard || fallbackCard);
+                                      }}
+                                      style={{
+                                        background: '#F8FAFC',
+                                        color: '#334155',
+                                        border: '1px solid #CBD5E1',
+                                        borderRadius: '6px',
+                                        padding: '6px 8px',
+                                        fontSize: '11.5px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                      }}
+                                      title="일정 카드 속성 수정"
+                                    >
+                                      ✏️ 카드 수정
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCardGroupToDelete({
+                                          cardId: group.cardId,
+                                          title: group.title,
+                                          category: group.category,
+                                          schedules: group.schedules,
+                                          isRegisteredCard: group.isRegisteredCard,
+                                          rawCard: group.rawCard,
+                                        });
+                                      }}
+                                      style={{
+                                        background: '#FFF1F2',
+                                        color: '#E11D48',
+                                        border: '1px solid #FECDD3',
+                                        borderRadius: '6px',
+                                        padding: '6px 8px',
+                                        fontSize: '11.5px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                      }}
+                                      title="일정 카드 삭제"
+                                    >
+                                      🗑️ 카드 삭제
+                                    </button>
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -3130,7 +3129,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           <div style={{ display: 'flex', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
                                             <button
                                               type="button"
-                                              onClick={() => handleCloneScheduleToForm(sch)}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenEditSchedule(sch);
+                                              }}
+                                              style={{
+                                                background: '#EEF2FF',
+                                                color: '#4F46E5',
+                                                border: '1px solid #C7D2FE',
+                                                borderRadius: '4px',
+                                                padding: '3px 8px',
+                                                fontSize: '11px',
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                              }}
+                                              title="일정 상세 속성 수정"
+                                            >
+                                              수정
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleCloneScheduleToForm(sch);
+                                              }}
                                               style={{
                                                 background: '#F1F5F9',
                                                 color: '#475569',
@@ -3147,7 +3169,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                             </button>
                                             <button
                                               type="button"
-                                              onClick={() => handleDeleteSchedule(sch.id, sch.title)}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteSchedule(sch.id, sch.title);
+                                              }}
                                               style={{
                                                 background: '#FEE2E2',
                                                 color: '#DC2626',
@@ -4936,6 +4961,337 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onClose={() => setIsScheduleLocationModalOpen(false)}
           onSave={handleAddNewLocationPresetFromModal}
         />
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: Dedicated Schedule Delete Confirmation Modal            */}
+      {/* ============================================================== */}
+      {scheduleToDelete && (() => {
+        const companions = schedules.filter((s) => {
+          if (s.id === scheduleToDelete.id) return false;
+          if (scheduleToDelete.seriesId && s.seriesId) {
+            return s.seriesId === scheduleToDelete.seriesId;
+          }
+          return s.title === scheduleToDelete.title;
+        });
+        const futureCompanions = companions.filter((c) => c.date >= scheduleToDelete.date);
+        const isRepeating = companions.length > 0;
+
+        return (
+          <div className="modal-overlay" style={{ zIndex: 9999 }}>
+            <div
+              className="modal-card"
+              style={{ maxWidth: '440px', padding: '24px' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-header" style={{ marginBottom: '14px' }}>
+                <div className="modal-badge" style={{ color: '#DC2626', borderColor: '#FECDD3', background: '#FEF2F2' }}>
+                  🗑️ 일정 삭제 확인
+                </div>
+                <h2 className="modal-title" style={{ fontSize: '18px', marginTop: '10px', color: '#1E293B' }}>
+                  '{scheduleToDelete.title}' 일정을 삭제할까요?
+                </h2>
+                <div style={{ marginTop: '10px', padding: '12px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '12.5px', color: '#475569', lineHeight: '1.6' }}>
+                  <div>📅 <strong>날짜:</strong> {scheduleToDelete.date}</div>
+                  <div>🕒 <strong>시간:</strong> {scheduleToDelete.startTime} ~ {scheduleToDelete.endTime}</div>
+                  <div>📍 <strong>장소:</strong> {scheduleToDelete.locationName}</div>
+                  {isRepeating && (
+                    <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #CBD5E1', color: '#4F46E5', fontWeight: 600 }}>
+                      ※ 동일 명칭의 반복 일정이 총 {companions.length + 1}회차 존재합니다.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {!isRepeating ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#64748B' }}>
+                    구글 스프레드시트 [일정] 탭에서도 해당 행이 영구 삭제됩니다.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-primary-large"
+                    style={{ backgroundColor: '#DC2626', minHeight: '44px', fontWeight: 700 }}
+                    onClick={async () => {
+                      const id = scheduleToDelete.id;
+                      const title = scheduleToDelete.title;
+                      setScheduleToDelete(null);
+                      await handleDeleteScheduleSingle(id, title);
+                    }}
+                  >
+                    🗑️ 일정 영구 삭제
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary-cancel"
+                    style={{ minHeight: '42px' }}
+                    onClick={() => setScheduleToDelete(null)}
+                  >
+                    취소
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>삭제할 범위를 선택하세요:</span>
+                  <button
+                    type="button"
+                    style={{
+                      background: '#FFF1F2',
+                      color: '#E11D48',
+                      border: '1px solid #FECDD3',
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                    onClick={async () => {
+                      const id = scheduleToDelete.id;
+                      const title = scheduleToDelete.title;
+                      setScheduleToDelete(null);
+                      await handleDeleteScheduleSingle(id, title);
+                    }}
+                  >
+                    <span>1️⃣ 이 회차만 삭제 ({scheduleToDelete.date})</span>
+                    <span style={{ fontSize: '11px', color: '#9F1239', fontWeight: 400, marginTop: '2px' }}>다른 회차 일정은 그대로 유지됩니다.</span>
+                  </button>
+
+                  {futureCompanions.length > 0 && (
+                    <button
+                      type="button"
+                      style={{
+                        background: '#FFF7ED',
+                        color: '#EA580C',
+                        border: '1px solid #FFEDD5',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        display: 'flex',
+                        flexDirection: 'column',
+                      }}
+                      onClick={async () => {
+                        const targetIds = [scheduleToDelete.id, ...futureCompanions.map((c) => c.id)];
+                        const title = scheduleToDelete.title;
+                        setScheduleToDelete(null);
+                        await handleDeleteScheduleSeries(targetIds, title);
+                      }}
+                    >
+                      <span>⏩ 오늘 포함 이후 회차 일괄 삭제 ({futureCompanions.length + 1}개)</span>
+                      <span style={{ fontSize: '11px', color: '#9A3412', fontWeight: 400, marginTop: '2px' }}>과거 회차는 보존하고 남은 연습 일정만 삭제합니다.</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    style={{
+                      background: '#FEF2F2',
+                      color: '#DC2626',
+                      border: '1.5px solid #FCA5A5',
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                    onClick={async () => {
+                      const allIds = [scheduleToDelete.id, ...companions.map((c) => c.id)];
+                      const title = scheduleToDelete.title;
+                      setScheduleToDelete(null);
+                      await handleDeleteScheduleSeries(allIds, title);
+                    }}
+                  >
+                    <span>💥 전체 {companions.length + 1}개 회차 모두 삭제</span>
+                    <span style={{ fontSize: '11px', color: '#B91C1C', fontWeight: 400, marginTop: '2px' }}>시리즈에 속한 모든 회차 일정을 영구 삭제합니다.</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn-secondary-cancel"
+                    style={{ minHeight: '40px', marginTop: '4px' }}
+                    onClick={() => setScheduleToDelete(null)}
+                  >
+                    취소
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ============================================================== */}
+      {/* MODAL: Dedicated Program Card Delete Confirmation Modal        */}
+      {/* ============================================================== */}
+      {cardGroupToDelete && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div
+            className="modal-card"
+            style={{ maxWidth: '460px', padding: '24px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header" style={{ marginBottom: '14px' }}>
+              <div className="modal-badge" style={{ color: '#DC2626', borderColor: '#FECDD3', background: '#FEF2F2' }}>
+                📦 일정 카드 삭제 확인
+              </div>
+              <h2 className="modal-title" style={{ fontSize: '18px', marginTop: '10px', color: '#1E293B' }}>
+                '[{cardGroupToDelete.title}]' 일정을 카드에서 삭제할까요?
+              </h2>
+              <div style={{ marginTop: '10px', padding: '12px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '12.5px', color: '#475569', lineHeight: '1.6' }}>
+                <div>🏷️ <strong>구분:</strong> {cardGroupToDelete.category}</div>
+                <div>📋 <strong>소속 회차:</strong> 총 {cardGroupToDelete.schedules.length}회차 등록됨</div>
+                <div>📍 <strong>카드 상태:</strong> {cardGroupToDelete.isRegisteredCard ? '시트 저장된 정식 카드' : '일정 기반 자동 묶음 카드'}</div>
+              </div>
+            </div>
+
+            {cardGroupToDelete.schedules.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <p style={{ margin: '0 0 6px', fontSize: '12.5px', color: '#4E5968', lineHeight: '1.5' }}>
+                  일정이 이 카드에 소속되어 있습니다. 카드를 삭제할 때 소속된 일정({cardGroupToDelete.schedules.length}개)도 함께 처리할 방법을 선택하세요:
+                </p>
+
+                {/* Option 1: Delete Card + Contained Schedules (Recommended) */}
+                <button
+                  type="button"
+                  style={{
+                    background: '#FEF2F2',
+                    color: '#DC2626',
+                    border: '1.5px solid #FCA5A5',
+                    borderRadius: '8px',
+                    padding: '12px 14px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '2px',
+                    boxShadow: '0 1px 3px rgba(220, 38, 38, 0.1)',
+                  }}
+                  onClick={async () => {
+                    const target = cardGroupToDelete;
+                    setCardGroupToDelete(null);
+                    try {
+                      if (target.isRegisteredCard) {
+                        await sheetsService.deleteProgramCard(target.cardId);
+                      }
+                      if (target.schedules.length > 0) {
+                        await sheetsService.deleteSchedules(target.schedules.map((s) => s.id));
+                      }
+                      setScheduleSuccessMsg(`[${target.title}] 카드와 소속된 ${target.schedules.length}개 일정이 모두 영구 삭제되었습니다.`);
+                      onDataChanged();
+                      setTimeout(() => setScheduleSuccessMsg(''), 4000);
+                    } catch (err: unknown) {
+                      alert(err instanceof Error ? err.message : '삭제 중 오류가 발생했습니다.');
+                    }
+                  }}
+                >
+                  <span style={{ fontSize: '13.5px' }}>🔥 카드 및 소속 일정({cardGroupToDelete.schedules.length}개) 모두 일괄 삭제 (권장)</span>
+                  <span style={{ fontSize: '11px', color: '#B91C1C', fontWeight: 400 }}>
+                    구글 시트의 [일정카드] 및 [일정] 탭에서 모두 삭제되어 카드가 완전히 제거됩니다.
+                  </span>
+                </button>
+
+                {/* Option 2: Delete Card Only, Keep Schedules as Unbundled */}
+                {cardGroupToDelete.isRegisteredCard && (
+                  <button
+                    type="button"
+                    style={{
+                      background: '#F8FAFC',
+                      color: '#334155',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                    }}
+                    onClick={async () => {
+                      const target = cardGroupToDelete;
+                      setCardGroupToDelete(null);
+                      try {
+                        await sheetsService.deleteProgramCard(target.cardId);
+                        // Unlink programId from schedules so they don't recreate the virtual card
+                        if (target.schedules.length > 0) {
+                          await sheetsService.batchUpdateSchedules(
+                            target.schedules.map((s) => s.id),
+                            { programId: undefined }
+                          );
+                        }
+                        setScheduleSuccessMsg(`[${target.title}] 카드 묶음만 삭제되었습니다. 소속 일정은 독립 일정으로 보존됩니다.`);
+                        onDataChanged();
+                        setTimeout(() => setScheduleSuccessMsg(''), 4000);
+                      } catch (err: unknown) {
+                        alert(err instanceof Error ? err.message : '카드 삭제 중 오류가 발생했습니다.');
+                      }
+                    }}
+                  >
+                    <span>📦 카드만 삭제 (일정 {cardGroupToDelete.schedules.length}개는 미분류로 보존)</span>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 400 }}>
+                      카드 등록 정보만 지우고, 개별 일정 데이터와 출결 기록은 유지합니다.
+                    </span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="btn-secondary-cancel"
+                  style={{ minHeight: '40px', marginTop: '6px' }}
+                  onClick={() => setCardGroupToDelete(null)}
+                >
+                  취소
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#64748B' }}>
+                  이 카드에 소속된 일정이 없습니다. 카드를 영구 삭제하시겠습니까?
+                </p>
+                <button
+                  type="button"
+                  className="btn-primary-large"
+                  style={{ backgroundColor: '#DC2626', minHeight: '44px', fontWeight: 700 }}
+                  onClick={async () => {
+                    const target = cardGroupToDelete;
+                    setCardGroupToDelete(null);
+                    try {
+                      if (target.isRegisteredCard) {
+                        await sheetsService.deleteProgramCard(target.cardId);
+                      }
+                      setScheduleSuccessMsg(`[${target.title}] 카드가 삭제되었습니다.`);
+                      onDataChanged();
+                      setTimeout(() => setScheduleSuccessMsg(''), 4000);
+                    } catch (err: unknown) {
+                      alert(err instanceof Error ? err.message : '카드 삭제 중 오류가 발생했습니다.');
+                    }
+                  }}
+                >
+                  🗑️ 빈 카드 삭제하기
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary-cancel"
+                  style={{ minHeight: '42px' }}
+                  onClick={() => setCardGroupToDelete(null)}
+                >
+                  취소
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
 
