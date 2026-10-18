@@ -565,13 +565,20 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                   </span>
                 </div>
 
-                {/* 3열 세그먼트 버튼 그리드 (스크린샷 일치) */}
+                {/* 가로 일체형 세그먼트 토글 바 (iOS/토스 스타일) */}
                 <div
+                  className="status-segmented-control"
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(3, 1fr)',
-                    gap: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    background: '#f1f5f9',
+                    borderRadius: '12px',
+                    padding: '4px',
+                    gap: '2px',
+                    border: '1px solid #e2e8f0',
                     marginTop: '6px',
+                    overflowX: 'auto',
+                    scrollbarWidth: 'none',
                   }}
                 >
                   {[
@@ -603,24 +610,27 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                           }
                         }}
                         style={{
-                          minHeight: '44px',
-                          padding: '8px 6px',
+                          flex: 1,
+                          minWidth: '44px',
+                          minHeight: '38px',
+                          padding: '6px 4px',
                           borderRadius: '8px',
-                          border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                          background: isSelected ? '#eff6ff' : '#ffffff',
-                          color: isSelected ? '#1d4ed8' : '#475569',
+                          border: 'none',
+                          background: isSelected ? '#ffffff' : 'transparent',
+                          color: isSelected ? '#1d4ed8' : '#64748b',
                           fontWeight: isSelected ? 700 : 500,
-                          fontSize: '0.88rem',
+                          fontSize: '0.84rem',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: '4px',
-                          boxShadow: isSelected ? '0 2px 4px rgba(37, 99, 235, 0.15)' : 'none',
-                          transition: 'all 0.15s ease-in-out',
+                          whiteSpace: 'nowrap',
+                          boxShadow: isSelected
+                            ? '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)'
+                            : 'none',
+                          transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
                         }}
                       >
-                        {isSelected && <span style={{ fontSize: '0.75rem' }}>✓</span>}
                         {chip.label}
                       </button>
                     );

@@ -50,6 +50,18 @@ describe('MemberProfileModal Component & Status History Invariant', () => {
     expect(html).toContain('특정 기간 한정 적용');
   });
 
+  it('renders single-row iOS/Toss style segmented control bar for memberStatus', () => {
+    const html = renderToString(<MemberProfileModal {...defaultProps} />);
+
+    expect(html).toContain('status-segmented-control');
+    expect(html).toContain('정단원');
+    expect(html).toContain('준단원');
+    expect(html).toContain('휴단');
+    expect(html).toContain('퇴단');
+    expect(html).toContain('선생님');
+    expect(html).toContain('객원');
+  });
+
   it('renders active toggle and summary card when member has an existing active custom period', () => {
     const memberWithActiveLeave: Member = {
       ...mockMemberDefault,
