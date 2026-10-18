@@ -291,10 +291,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
      myReconciliation.finalStatus === '지각' ||
      myReconciliation.finalStatus === '수동인정')
   );
-  // 관리자가 명시적으로 결석/노쇼로 지정한 경우에만 관리자 결석으로 판정 (일반 미출석 마감과 엄격히 분리)
+  // 관리자가 명시적으로 결석/노쇼로 지정한 경우에만 관리자 결석으로 판정 (출결 취소/초기화 및 일반 미출석 마감과 엄격히 분리)
   const isManuallyAbsent = Boolean(
     myReconciliation?.finalStatus === '결석' &&
     myReconciliation.isManualOverride &&
+    !myReconciliation.adminNote?.includes('취소') &&
     (myReconciliation.adminNote?.includes('결석') || myReconciliation.adminNote?.includes('노쇼'))
   );
 

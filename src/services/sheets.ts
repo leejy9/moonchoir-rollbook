@@ -296,9 +296,11 @@ export class SheetsService {
               if (l.scheduleId && (scheduleId.startsWith(l.scheduleId) || l.scheduleId.startsWith(scheduleId))) {
                 return true;
               }
-              // Fallback 2: exact match on schedule date if log has timestamp with YYYY-MM-DD
-              if (l.timestamp && l.timestamp.length >= 10 && l.timestamp.slice(0, 10) === targetSchedule.date) {
-                return true;
+              // Fallback 2: exact match on schedule date ONLY for legacy/orphan logs without valid scheduleId
+              if (!l.scheduleId || l.scheduleId === 'undefined' || l.scheduleId === 'null') {
+                if (l.timestamp && l.timestamp.length >= 10 && l.timestamp.slice(0, 10) === targetSchedule.date) {
+                  return true;
+                }
               }
             }
             return false;
@@ -448,7 +450,7 @@ export class SheetsService {
       part: targetMember?.part || '소프라노',
       authMethod: 'MANUAL_BY_ADMIN',
       isVerifiedLocation: false,
-      adminNote: '관리자 출결 취소 (결석 처리)',
+      adminNote: '관리자 출결 취소 (초기화)',
     };
 
     this.logs.push(cancelLog);
@@ -460,7 +462,7 @@ export class SheetsService {
         memberId,
         memberName: targetMember?.name,
         part: targetMember?.part,
-        adminNote: '관리자 출결 취소 (결석 처리)',
+        adminNote: '관리자 출결 취소 (초기화)',
         scheduleDate: targetSchedule?.date,
       }).catch((err) => {
         console.error('[Sheets API] Clear attendance cancel-log sync failed:', err);
@@ -1274,50 +1276,70 @@ export class SheetsService {
       const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
       const isExempt = !isRequired;
 
+      // 1) 출결 취소(초기화) 로그인지 판별:
+      // clearAttendanceLog()는 원천 로그 보존을 위해 취소 로그를 Append하지만,
+      // 그 본질은 "체크인을 초기화하여 원래의 출석 전 기본 상태로 복귀"시키는 것임.
       const isCancelledLog = Boolean(
         log && (
           log.adminNote?.includes('취소') ||
-          log.adminNote?.includes('결석 처리') ||
-          log.adminNote === '관리자 결석 처리' ||
+          log.adminNote === '관리자 출결 취소 (초기화)'
+        )
+      );
+
+      // 2) 관리자가 명시적으로 수동 결석 오버라이드한 경우 (취소 로그 제외):
+      const isManualAbsentOverride = Boolean(
+        log && !isCancelledLog && log.authMethod === 'MANUAL_BY_ADMIN' && (
+          log.adminNote?.includes('결석') ||
+          log.adminNote?.includes('노쇼') ||
           (log as any).status === '결석'
         )
       );
 
+      let isManualOverride = false;
+      let effectiveAdminNote: string | undefined;
+
       if (log && !isCancelledLog) {
         checkInTime = log.timestamp;
-        // Check timestamp against schedule start time
-        let logMinutes = 0;
-        if (log.timestamp.includes('T')) {
-          const timePart = log.timestamp.split('T')[1].slice(0, 5); // "HH:mm"
-          const [h, m] = timePart.split(':').map(Number);
-          logMinutes = (h || 0) * 60 + (m || 0);
+        isManualOverride = log.authMethod === 'MANUAL_BY_ADMIN';
+        effectiveAdminNote = log.adminNote;
+
+        if (isManualAbsentOverride) {
+          finalStatus = '결석';
         } else {
-          const logDate = new Date(log.timestamp);
-          if (!isNaN(logDate.getTime())) {
-            logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
-          } else if (log.timestamp.includes(':')) {
-            const [h, m] = log.timestamp.split(':').map(Number);
+          // Check timestamp against schedule start time
+          let logMinutes = 0;
+          if (log.timestamp.includes('T')) {
+            const timePart = log.timestamp.split('T')[1].slice(0, 5); // "HH:mm"
+            const [h, m] = timePart.split(':').map(Number);
             logMinutes = (h || 0) * 60 + (m || 0);
+          } else {
+            const logDate = new Date(log.timestamp);
+            if (!isNaN(logDate.getTime())) {
+              logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
+            } else if (log.timestamp.includes(':')) {
+              const [h, m] = log.timestamp.split(':').map(Number);
+              logMinutes = (h || 0) * 60 + (m || 0);
+            }
+          }
+
+          if (log.adminNote?.includes('지각') || logMinutes > lateThresholdMinutes) {
+            finalStatus = '지각';
+          } else {
+            finalStatus = '출석';
           }
         }
-
-        // 수동 개입이든 자동 체크인이든 상태는 출석/지각/결석으로 명확히 표기 (수동 여부는 authMethod/adminNote로 보존)
-        if (log.adminNote?.includes('결석') || log.adminNote?.includes('노쇼')) {
-          finalStatus = '결석';
-        } else if (log.adminNote?.includes('지각') || logMinutes > lateThresholdMinutes) {
-          finalStatus = '지각';
-        } else {
-          finalStatus = '출석';
-        }
       } else {
-        // No log found or cancellation log: evaluate exemption or RSVP status
+        // No log found OR cancellation log: evaluate exemption or RSVP status
         if (isExempt) {
           finalStatus = '미참';
         } else if (rsvp && rsvp.status === 'ABSENT' && rsvp.reason) {
           finalStatus = '사유결석';
         } else {
-          finalStatus = '결석'; // 무단 결석
+          finalStatus = '결석'; // 일반 무단 결석 (Default)
         }
+        // 취소된 경우 관리자 수동 오버라이드가 아닌 기본 상태로 안전 환원
+        isManualOverride = false;
+        effectiveAdminNote = undefined;
       }
 
       return {
@@ -1327,12 +1349,12 @@ export class SheetsService {
         rsvpStatus: rsvp ? rsvp.status : 'UNVOTED',
         rsvpReason: rsvp?.reason,
         checkInTime,
-        authMethod: log?.authMethod,
+        authMethod: isCancelledLog ? undefined : log?.authMethod,
         distanceMeters: log?.distanceMeters,
         isVerifiedLocation: log?.isVerifiedLocation,
         finalStatus,
-        isManualOverride: log?.authMethod === 'MANUAL_BY_ADMIN',
-        adminNote: log?.adminNote,
+        isManualOverride,
+        adminNote: effectiveAdminNote,
       };
     });
   }
