@@ -5,11 +5,8 @@ import { sheetsService } from '../services/sheets';
 import type {
   AttendanceStatus,
   LocationPreset,
-  Member,
-  MemberStatusHistory,
   PartType,
   ProgramCard,
-  RawAttendanceLog,
   Schedule,
   ScheduleCategory,
   TargetAudienceType,
@@ -20,7 +17,6 @@ import {
 import {
   generateMasterWallQRPayload,
 } from '../utils/qr';
-import { getKSTTimestampString, getKSTDateString } from '../utils/date';
 import {
   IconCalendar,
   IconClose,
@@ -46,6 +42,7 @@ import { AdminCalendarView } from './admin/AdminCalendarView';
 import { AdminScheduleListView } from './admin/AdminScheduleListView';
 import { AdminProgramCardsView } from './admin/AdminProgramCardsView';
 import { useScheduleAdmin } from '../hooks/useScheduleAdmin';
+import { useAttendanceAdmin } from '../hooks/useAttendanceAdmin';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface AdminDashboardProps {
@@ -64,45 +61,12 @@ function getTodayString(): string {
   return `${y}-${m}-${d}`;
 }
 
-function createManualLogMeta(): { id: string; timestamp: string } {
-  return {
-    id: `log_manual_${Date.now()}`,
-    timestamp: getKSTTimestampString(),
-  };
-}
-
-function getPeriodRange(periodOption: '1M' | '3M' | '6M' | 'YEAR' | 'ALL') {
-  if (periodOption === 'ALL') {
-    return { startStr: undefined, endStr: undefined };
-  }
-  const today = new Date();
-  const endStr = getKSTDateString(today);
-  const start = new Date(today);
-
-  if (periodOption === '1M') {
-    start.setMonth(start.getMonth() - 1);
-  } else if (periodOption === '3M') {
-    start.setMonth(start.getMonth() - 3);
-  } else if (periodOption === '6M') {
-    start.setMonth(start.getMonth() - 6);
-  } else if (periodOption === 'YEAR') {
-    start.setMonth(0);
-    start.setDate(1);
-  }
-  return { startStr: getKSTDateString(start), endStr };
-}
-
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onBackToHome,
   onDataChanged,
   refreshTrigger,
 }) => {
   const [adminTab, setAdminTab] = useState<AdminTab>('ROSTER');
-
-  // Member Profile Modal State
-  const [selectedMemberForModal, setSelectedMemberForModal] = useState<Member | null>(null);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [, setMemberRefreshKey] = useState<number>(0);
 
   // Sub-segments for unified major categories
   const [scheduleSubTab, setScheduleSubTab] = useState<'LIST' | 'QR' | 'SESSION'>('LIST');
@@ -130,56 +94,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return sheetsService.getProgramCards();
   }, [refreshTrigger]);
 
-  // Member Modal Handlers
-  const handleOpenAddMemberModal = () => {
-    const newMember: Member = {
-      id: `mem_${Date.now().toString().slice(-6)}`,
-      name: '',
-      part: '소프라노',
-      phoneLast4: '',
-      role: 'MEMBER',
-      status: 'ACTIVE',
-      joinedAt: getTodayString(),
-      memberStatus: '정단원',
-      note: '',
-      createdAt: getKSTTimestampString(),
-    };
-    setSelectedMemberForModal(newMember);
-    setIsProfileModalOpen(true);
-  };
-
-  const handleOpenEditMemberModal = (member: Member) => {
-    setSelectedMemberForModal(member);
-    setIsProfileModalOpen(true);
-  };
-
-  const handleSaveMemberProfile = async (
-    memberData: Member,
-    historyItem?: MemberStatusHistory
-  ) => {
-    const exists = members.some((m) => m.id === memberData.id);
-    if (exists) {
-      await sheetsService.updateMember(memberData.id, memberData, historyItem);
-      setMemberActionMsg(
-        `단원 [${memberData.name}] 정보가 수정되었습니다.${historyItem ? ' (변경 이력 시트 기록 완료)' : ''}`
-      );
-    } else {
-      await sheetsService.addMember(memberData);
-      setMemberActionMsg(`신규 단원 [${memberData.name}]이(가) 등록되었습니다.`);
-    }
-    setMemberRefreshKey((k) => k + 1);
-    onDataChanged();
-    setTimeout(() => setMemberActionMsg(''), 3500);
-  };
-
-  const handleDeleteMemberProfile = async (memberId: string) => {
-    const target = members.find((m) => m.id === memberId);
-    await sheetsService.deleteMember(memberId);
-    setMemberActionMsg(`단원 [${target?.name || memberId}]이(가) 삭제되었습니다.`);
-    setMemberRefreshKey((k) => k + 1);
-    onDataChanged();
-    setTimeout(() => setMemberActionMsg(''), 3500);
-  };
+  // --- Attendance & Member Administration (useAttendanceAdmin Hook) ---
+  const {
+    selectedMemberForModal,
+    isProfileModalOpen,
+    setIsProfileModalOpen,
+    memberActionMsg,
+    handleOpenAddMemberModal,
+    handleOpenEditMemberModal,
+    handleSaveMemberProfile,
+    handleDeleteMemberProfile,
+    setSelectedScheduleId,
+    currentSchedule,
+    reconciledList,
+    sessionFilter,
+    setSessionFilter,
+    filteredSessionList,
+    overrideTarget,
+    setOverrideTarget,
+    overrideReason,
+    setOverrideReason,
+    handleManualOverrideSubmit,
+    periodOption,
+    setPeriodOption,
+    partFilter,
+    setPartFilter,
+    memberStatusFilter,
+    setMemberStatusFilter,
+    searchQuery,
+    setSearchQuery,
+    selectedMemberIds,
+    cumulativeSessions,
+    filteredSummaries,
+    selectedSummaries,
+    selectedAvgRate,
+    toggleSelectMember,
+    selectAllFiltered,
+    clearSelection,
+  } = useAttendanceAdmin({
+    schedules,
+    members,
+    onDataChanged,
+  });
 
   // --- 0. Universal Matrix Grid State (Notion Filter Bar) ---
   const [matrixFilters, setMatrixFilters] = useState<AdminFilterState>(() => ({
@@ -220,87 +176,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [members, matrixFilters]);
 
-  // --- 1. Cumulative Attendance State ---
-  const [periodOption, setPeriodOption] = useState<'1M' | '3M' | '6M' | 'YEAR' | 'ALL'>('3M');
-  const [partFilter, setPartFilter] = useState<string>('전체');
-  const [memberStatusFilter, setMemberStatusFilter] = useState<string>('전체');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
-
-  const { startStr, endStr } = getPeriodRange(periodOption);
-  const { sessions: cumulativeSessions, memberSummaries } =
-    sheetsService.calculateCumulativeAttendance(startStr, endStr);
-
-  // Filtered members for cumulative tab
-  const filteredSummaries = memberSummaries.filter((m) => {
-    if (partFilter !== '전체' && m.part !== partFilter) return false;
-    if (memberStatusFilter !== '전체' && m.memberStatus !== memberStatusFilter) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const matchName = m.memberName.toLowerCase().includes(q);
-      const matchPart = m.part.toLowerCase().includes(q);
-      const matchNote = m.note?.toLowerCase().includes(q);
-      if (!matchName && !matchPart && !matchNote) return false;
-    }
-    return true;
-  });
-
-  // Selected Members Multi-comparison Metrics
-  const selectedSummaries = memberSummaries.filter((m) => selectedMemberIds.has(m.memberId));
-  const selectedAvgRate =
-    selectedSummaries.length > 0
-      ? Math.round(
-          selectedSummaries.reduce((sum, item) => sum + item.attendanceRate, 0) /
-            selectedSummaries.length
-        )
-      : 0;
-
-  const toggleSelectMember = (id: string) => {
-    setSelectedMemberIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const selectAllFiltered = () => {
-    setSelectedMemberIds(new Set(filteredSummaries.map((m) => m.memberId)));
-  };
-
-  const clearSelection = () => {
-    setSelectedMemberIds(new Set());
-  };
-
-  // --- 2. Session Detail State ---
-  const [selectedScheduleId, setSelectedScheduleId] = useState<string>(
-    schedules[0]?.id || ''
-  );
-  const currentSchedule =
-    schedules.find((s) => s.id === selectedScheduleId) || schedules[0];
-  const reconciledList = currentSchedule
-    ? sheetsService.reconcileAttendance(currentSchedule.id)
-    : [];
-
-  const [sessionFilter, setSessionFilter] = useState<
-    '전체' | '출석' | '지각' | '사유결석' | '결석'
-  >('전체');
-
-  const filteredSessionList = reconciledList.filter((r) => {
-    if (sessionFilter === '전체') return true;
-    if (sessionFilter === '출석') return r.finalStatus === '출석' || r.finalStatus === '수동인정';
-    return r.finalStatus === sessionFilter;
-  });
-
-  // Manual Override Modal
-  const [overrideTarget, setOverrideTarget] = useState<{
-    id: string;
-    name: string;
-    part: string;
-  } | null>(null);
-  const [overrideReason, setOverrideReason] = useState('현장 확인 완료 (배터리 방전)');
-
-  const [memberActionMsg, setMemberActionMsg] = useState('');
+  // --- 3. Duplicate Member Detection & Merge State ---
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
   const duplicateMemberGroups = useMemo(() => {
     if (!members) return [];
@@ -731,30 +607,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTaxSuccessMsg(`일정 카테고리 '${cat}'이(가) 삭제되었습니다.`);
     onDataChanged();
     setTimeout(() => setTaxSuccessMsg(null), 3000);
-  };
-
-  // Manual Override Submit
-  const handleManualOverrideSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!overrideTarget || !currentSchedule) return;
-
-    const { id, timestamp } = createManualLogMeta();
-    const log: RawAttendanceLog = {
-      id,
-      timestamp,
-      scheduleId: currentSchedule.id,
-      memberId: overrideTarget.id,
-      memberName: overrideTarget.name,
-      part: overrideTarget.part,
-      authMethod: 'MANUAL_BY_ADMIN',
-      isVerifiedLocation: true,
-      adminNote: overrideReason.trim(),
-    };
-
-    await sheetsService.addCheckInLog(log);
-    setOverrideTarget(null);
-    setOverrideReason('현장 확인 완료 (배터리 방전)');
-    onDataChanged();
   };
 
   // Master QR Refresh
