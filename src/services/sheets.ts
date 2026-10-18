@@ -1221,24 +1221,17 @@ export class SheetsService {
 
   // --- Projection View: Reconcile Attendance ---
   /**
-   * Reconciles RSVP votes + Raw Attendance Logs into a final projection view.
-   * Conforms strictly to Domain Invariant 1.1 (Raw log is immutable; status is calculated view).
+   * Pure projection reducer: 단원 1명에 대한 출결 상태를 계산하는 단일 책임 엔진
    */
-  public reconcileAttendance(scheduleId: string): AttendanceReconciliation[] {
-    const schedule = this.schedules.find((s) => s.id === scheduleId);
-    if (!schedule) return [];
-
-    const scheduleRSVPs = this.getRSVPVotes(scheduleId);
-    const scheduleLogs = this.getLogs(scheduleId);
-
-    // Scheduled start time as minutes from midnight
-    const [startHour, startMin] = schedule.startTime.split(':').map(Number);
-    const startMinutes = startHour * 60 + startMin;
-    const lateGraceMinutes = this.config.lateGraceMinutes ?? 10;
-    const lateThresholdMinutes = startMinutes + lateGraceMinutes;
-
+  private reconcileSingleMember(
+    member: Member,
+    schedule: Schedule,
+    memberLogs: RawAttendanceLog[],
+    memberRsvp: RSVPVote | undefined,
+    lateGraceMinutes: number
+  ): AttendanceReconciliation {
     if (schedule.isCancelled) {
-      return this.members.map((member) => ({
+      return {
         memberId: member.id,
         memberName: member.name,
         part: member.part,
@@ -1246,137 +1239,169 @@ export class SheetsService {
         finalStatus: '미참',
         isManualOverride: false,
         adminNote: '취소된 연습',
-      }));
+      };
     }
 
-    return this.members.map((member) => {
-      // 자연키(이름+전화번호) 기반 다중 ID 세트 (파편화된 과거 ID 구출)
-      const siblingIds = new Set(
-        this.members
-          .filter((m) => m.name === member.name && (m.phoneLast4 === member.phoneLast4 || !m.phoneLast4 || !member.phoneLast4))
-          .map((m) => m.id)
-      );
-      siblingIds.add(member.id);
+    const [startHour, startMin] = schedule.startTime.split(':').map(Number);
+    const startMinutes = (startHour || 0) * 60 + (startMin || 0);
+    const lateThresholdMinutes = startMinutes + lateGraceMinutes;
 
-      const rsvp = scheduleRSVPs.find((v) => siblingIds.has(v.memberId));
+    // Recency Resolution: 동일 단원의 다중 로그 중 가장 최신 액션 우선 채택 (밀리초 단위 정렬)
+    const sortedLogs = [...memberLogs].sort((a, b) => {
+      const timeA = parseKSTDate(a.timestamp || '').getTime();
+      const timeB = parseKSTDate(b.timestamp || '').getTime();
+      return timeA - timeB;
+    });
+    const log = sortedLogs.length > 0 ? sortedLogs[sortedLogs.length - 1] : undefined;
 
-      // Recency Resolution: 동일 단원의 다중 로그 중 가장 최신 액션 우선 채택 (밀리초 단위 정렬)
-      const matchingLogs = scheduleLogs
-        .filter((l) => siblingIds.has(l.memberId))
-        .sort((a, b) => {
-          const timeA = parseKSTDate(a.timestamp || '').getTime();
-          const timeB = parseKSTDate(b.timestamp || '').getTime();
-          return timeA - timeB;
-        });
-      const log = matchingLogs.length > 0 ? matchingLogs[matchingLogs.length - 1] : undefined;
+    let finalStatus: AttendanceStatus = '결석';
+    let checkInTime: string | undefined;
 
-      let finalStatus: AttendanceStatus = '결석';
-      let checkInTime: string | undefined;
+    const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
+    const isExempt = !isRequired;
 
-      const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
-      const isExempt = !isRequired;
+    // 1) 출결 취소(초기화) 로그인지 판별:
+    const isCancelledLog = Boolean(
+      log && (
+        log.adminNote?.includes('취소') ||
+        log.adminNote === '관리자 출결 취소 (초기화)'
+      )
+    );
 
-      // 1) 출결 취소(초기화) 로그인지 판별:
-      // clearAttendanceLog()는 원천 로그 보존을 위해 취소 로그를 Append하지만,
-      // 그 본질은 "체크인을 초기화하여 원래의 출석 전 기본 상태로 복귀"시키는 것임.
-      const isCancelledLog = Boolean(
-        log && (
-          log.adminNote?.includes('취소') ||
-          log.adminNote === '관리자 출결 취소 (초기화)'
-        )
-      );
+    // 2) 관리자가 명시적으로 수동 결석 오버라이드한 경우 (취소 로그 제외):
+    const isManualAbsentOverride = Boolean(
+      log && !isCancelledLog && log.authMethod === 'MANUAL_BY_ADMIN' && (
+        log.adminNote?.includes('결석') ||
+        log.adminNote?.includes('노쇼') ||
+        (log as any).status === '결석'
+      )
+    );
 
-      // 2) 관리자가 명시적으로 수동 결석 오버라이드한 경우 (취소 로그 제외):
-      const isManualAbsentOverride = Boolean(
-        log && !isCancelledLog && log.authMethod === 'MANUAL_BY_ADMIN' && (
-          log.adminNote?.includes('결석') ||
-          log.adminNote?.includes('노쇼') ||
-          (log as any).status === '결석'
-        )
-      );
+    let isManualOverride = false;
+    let effectiveAdminNote: string | undefined;
 
-      let isManualOverride = false;
-      let effectiveAdminNote: string | undefined;
+    if (log && !isCancelledLog) {
+      checkInTime = log.timestamp;
+      isManualOverride = log.authMethod === 'MANUAL_BY_ADMIN';
+      effectiveAdminNote = log.adminNote;
 
-      if (log && !isCancelledLog) {
-        checkInTime = log.timestamp;
-        isManualOverride = log.authMethod === 'MANUAL_BY_ADMIN';
-        effectiveAdminNote = log.adminNote;
-
-        if (isManualAbsentOverride) {
-          finalStatus = '결석';
-        } else {
-          // Check timestamp against schedule start time
-          let logMinutes = 0;
-          if (log.timestamp.includes('T')) {
-            const timePart = log.timestamp.split('T')[1].slice(0, 5); // "HH:mm"
-            const [h, m] = timePart.split(':').map(Number);
-            logMinutes = (h || 0) * 60 + (m || 0);
-          } else {
-            const logDate = new Date(log.timestamp);
-            if (!isNaN(logDate.getTime())) {
-              logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
-            } else if (log.timestamp.includes(':')) {
-              const [h, m] = log.timestamp.split(':').map(Number);
-              logMinutes = (h || 0) * 60 + (m || 0);
-            }
-          }
-
-          if (log.adminNote?.includes('지각') || logMinutes > lateThresholdMinutes) {
-            finalStatus = '지각';
-          } else {
-            finalStatus = '출석';
-          }
-        }
+      if (isManualAbsentOverride) {
+        finalStatus = '결석';
       } else {
-        // No log found OR cancellation log: evaluate exemption or RSVP status
-        if (isExempt) {
-          finalStatus = '미참';
-        } else if (rsvp && rsvp.status === 'ABSENT' && rsvp.reason) {
-          finalStatus = '사유결석';
+        // Check timestamp against schedule start time
+        let logMinutes = 0;
+        if (log.timestamp.includes('T')) {
+          const timePart = log.timestamp.split('T')[1].slice(0, 5); // "HH:mm"
+          const [h, m] = timePart.split(':').map(Number);
+          logMinutes = (h || 0) * 60 + (m || 0);
         } else {
-          finalStatus = '결석'; // 일반 무단 결석 (Default)
+          const logDate = new Date(log.timestamp);
+          if (!isNaN(logDate.getTime())) {
+            logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
+          } else if (log.timestamp.includes(':')) {
+            const [h, m] = log.timestamp.split(':').map(Number);
+            logMinutes = (h || 0) * 60 + (m || 0);
+          }
         }
-        // 취소된 경우 관리자 수동 오버라이드가 아닌 기본 상태로 안전 환원
-        isManualOverride = false;
-        effectiveAdminNote = undefined;
-      }
 
+        if (log.adminNote?.includes('지각') || logMinutes > lateThresholdMinutes) {
+          finalStatus = '지각';
+        } else {
+          finalStatus = '출석';
+        }
+      }
+    } else {
+      // No log found OR cancellation log: evaluate exemption or RSVP status
+      if (isExempt) {
+        finalStatus = '미참';
+      } else if (memberRsvp && memberRsvp.status === 'ABSENT' && memberRsvp.reason) {
+        finalStatus = '사유결석';
+      } else {
+        finalStatus = '결석'; // 일반 무단 결석 (Default)
+      }
+      isManualOverride = false;
+      effectiveAdminNote = undefined;
+    }
+
+    return {
+      memberId: member.id,
+      memberName: member.name,
+      part: member.part,
+      rsvpStatus: memberRsvp ? memberRsvp.status : 'UNVOTED',
+      rsvpReason: memberRsvp?.reason,
+      checkInTime,
+      authMethod: isCancelledLog ? undefined : log?.authMethod,
+      distanceMeters: log?.distanceMeters,
+      isVerifiedLocation: log?.isVerifiedLocation,
+      finalStatus,
+      isManualOverride,
+      adminNote: effectiveAdminNote,
+    };
+  }
+
+  /**
+   * 단원 1명에 대한 출결 상태를 직행(O(1)) 조회 및 판정합니다. (홈 화면, 마이페이지 전용)
+   */
+  public reconcileMemberAttendance(memberId: string, scheduleId: string, memberName?: string): AttendanceReconciliation | null {
+    const schedule = this.schedules.find((s) => s.id === scheduleId);
+    if (!schedule) return null;
+
+    const targetMember = this.members.find(
+      (m) => m.id === memberId || (memberName && m.name.trim() === memberName.trim())
+    );
+    if (!targetMember) return null;
+
+    // 자연키(이름+전화번호) 기반 다중 ID 세트 (파편화된 과거 ID 구출)
+    const siblingIds = new Set(
+      this.members
+        .filter((m) => m.name === targetMember.name && (m.phoneLast4 === targetMember.phoneLast4 || !m.phoneLast4 || !targetMember.phoneLast4))
+        .map((m) => m.id)
+    );
+    siblingIds.add(targetMember.id);
+
+    // 해당 단원의 RSVP 투표 1건 조회
+    const memberRsvp = this.rsvpVotes.find(
+      (v) => siblingIds.has(v.memberId) && v.scheduleId === scheduleId
+    );
+
+    // 해당 단원의 출석 로그들만 타겟팅 필터링
+    const memberLogs = this.logs.filter((l) => {
+      if (!siblingIds.has(l.memberId)) return false;
+      if (l.scheduleId === scheduleId) return true;
+      if (l.scheduleId && (scheduleId.startsWith(l.scheduleId) || l.scheduleId.startsWith(scheduleId))) return true;
+      // orphan log date fallback
+      if (!l.scheduleId || l.scheduleId === 'undefined' || l.scheduleId === 'null') {
+        if (l.timestamp && l.timestamp.length >= 10 && l.timestamp.slice(0, 10) === schedule.date) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    const lateGraceMinutes = this.config.lateGraceMinutes ?? 10;
+    return this.reconcileSingleMember(targetMember, schedule, memberLogs, memberRsvp, lateGraceMinutes);
+  }
+
+  /**
+   * Reconciles RSVP votes + Raw Attendance Logs into a final projection view for all members.
+   * Conforms strictly to Domain Invariant 1.1 (Raw log is immutable; status is calculated view).
+   */
+  public reconcileAttendance(scheduleId: string): AttendanceReconciliation[] {
+    const schedule = this.schedules.find((s) => s.id === scheduleId);
+    if (!schedule) return [];
+
+    return this.members.map((member) => {
+      const rec = this.reconcileMemberAttendance(member.id, scheduleId, member.name);
+      if (rec) return rec;
       return {
         memberId: member.id,
         memberName: member.name,
         part: member.part,
-        rsvpStatus: rsvp ? rsvp.status : 'UNVOTED',
-        rsvpReason: rsvp?.reason,
-        checkInTime,
-        authMethod: isCancelledLog ? undefined : log?.authMethod,
-        distanceMeters: log?.distanceMeters,
-        isVerifiedLocation: log?.isVerifiedLocation,
-        finalStatus,
-        isManualOverride,
-        adminNote: effectiveAdminNote,
+        rsvpStatus: 'UNVOTED',
+        finalStatus: '결석',
+        isManualOverride: false,
       };
     });
-  }
-
-  /**
-   * Reconciles attendance for a single member on a single schedule.
-   */
-  public reconcileMemberAttendance(memberId: string, scheduleId: string, memberName?: string): AttendanceReconciliation | null {
-    const list = this.reconcileAttendance(scheduleId);
-    if (memberName) {
-      const byName = list.find((r) => r.memberName === memberName);
-      if (byName) return byName;
-    }
-    const targetMember = this.members.find((m) => m.id === memberId || (memberName && m.name === memberName));
-    if (targetMember) {
-      return (
-        list.find((r) => r.memberId === targetMember.id) ||
-        list.find((r) => r.memberName === targetMember.name) ||
-        null
-      );
-    }
-    return list.find((r) => r.memberId === memberId) || null;
   }
 
   // --- Remote Google Sheets API Handler ---
