@@ -474,6 +474,9 @@ function doPost(e) {
       const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
       const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
       const newRow = headers.map(function(h) {
+        if (h === 'targetParts') return Array.isArray(data.targetParts) ? data.targetParts.join(',') : (data.targetParts || '');
+        if (h === 'targetMemberIds') return Array.isArray(data.targetMemberIds) ? data.targetMemberIds.join(',') : (data.targetMemberIds || '');
+        if (h === 'isArchived') return data.isArchived ? 'TRUE' : 'FALSE';
         return data[h] !== undefined ? data[h] : '';
       });
       sheet.appendRow(newRow.length > 0 ? newRow : [
@@ -499,7 +502,15 @@ function doPost(e) {
           const row = [...rows[i]];
           headers.forEach(function (h, colIdx) {
             if (data[h] !== undefined) {
-              row[colIdx] = data[h];
+              if (h === 'targetParts') {
+                row[colIdx] = Array.isArray(data.targetParts) ? data.targetParts.join(',') : (data.targetParts || '');
+              } else if (h === 'targetMemberIds') {
+                row[colIdx] = Array.isArray(data.targetMemberIds) ? data.targetMemberIds.join(',') : (data.targetMemberIds || '');
+              } else if (h === 'isArchived') {
+                row[colIdx] = data.isArchived ? 'TRUE' : 'FALSE';
+              } else {
+                row[colIdx] = data[h];
+              }
             }
           });
           sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
@@ -550,7 +561,15 @@ function doPost(e) {
           const row = [...rows[i]];
           headers.forEach(function (h, colIdx) {
             if (updates[h] !== undefined) {
-              row[colIdx] = updates[h];
+              if (h === 'targetParts') {
+                row[colIdx] = Array.isArray(updates.targetParts) ? updates.targetParts.join(',') : (updates.targetParts || '');
+              } else if (h === 'targetMemberIds') {
+                row[colIdx] = Array.isArray(updates.targetMemberIds) ? updates.targetMemberIds.join(',') : (updates.targetMemberIds || '');
+              } else if (h === 'isArchived') {
+                row[colIdx] = updates.isArchived ? 'TRUE' : 'FALSE';
+              } else {
+                row[colIdx] = updates[h];
+              }
             }
           });
           sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);

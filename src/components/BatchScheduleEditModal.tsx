@@ -35,6 +35,10 @@ export const BatchScheduleEditModal: React.FC<BatchScheduleEditModalProps> = ({
   const [changeDescription, setChangeDescription] = useState(false);
   const [description, setDescription] = useState('');
 
+  const [changeAudience, setChangeAudience] = useState(false);
+  const [targetAudienceType, setTargetAudienceType] = useState<import('../types/rollbook').TargetAudienceType>('ALL');
+  const [targetParts, setTargetParts] = useState<import('../types/rollbook').PartType[]>([]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -44,7 +48,7 @@ export const BatchScheduleEditModal: React.FC<BatchScheduleEditModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!changeLocation && !changeTime && !changeCategory && !changeDescription) {
+    if (!changeLocation && !changeTime && !changeCategory && !changeDescription && !changeAudience) {
       setErrorMsg('일괄 변경할 항목을 1개 이상 선택(체크)해주세요.');
       return;
     }
@@ -75,6 +79,11 @@ export const BatchScheduleEditModal: React.FC<BatchScheduleEditModalProps> = ({
 
     if (changeDescription) {
       updates.description = description.trim() || undefined;
+    }
+
+    if (changeAudience) {
+      updates.targetAudienceType = targetAudienceType;
+      updates.targetParts = targetAudienceType === 'PARTS' ? targetParts : undefined;
     }
 
     try {
@@ -339,6 +348,99 @@ export const BatchScheduleEditModal: React.FC<BatchScheduleEditModalProps> = ({
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="선택한 모든 일정에 동일하게 들어갈 곡목/공지사항"
                   />
+                </div>
+              )}
+            </div>
+
+            {/* 5. Audience Change */}
+            <div
+              style={{
+                border: '1px solid #E5E7EB',
+                borderRadius: '10px',
+                padding: '14px',
+                marginBottom: '12px',
+                background: changeAudience ? '#F9FAFB' : '#FFFFFF',
+              }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  color: '#1F2937',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={changeAudience}
+                  onChange={(e) => setChangeAudience(e.target.checked)}
+                  style={{ width: '18px', height: '18px', accentColor: '#4F46E5', cursor: 'pointer' }}
+                />
+                👥 참석 대상자 설정 일괄 변경
+              </label>
+
+              {changeAudience && (
+                <div style={{ marginTop: '10px' }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                    {(
+                      [
+                        { key: 'ALL', label: '🌐 전체 단원 필참' },
+                        { key: 'PARTS', label: '👥 특정 파트 한정' },
+                      ] as const
+                    ).map((aud) => (
+                      <button
+                        key={aud.key}
+                        type="button"
+                        onClick={() => setTargetAudienceType(aud.key)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '20px',
+                          border: targetAudienceType === aud.key ? '1.5px solid #4F46E5' : '1px solid #CBD5E1',
+                          background: targetAudienceType === aud.key ? '#EEF2FF' : '#FFFFFF',
+                          color: targetAudienceType === aud.key ? '#4F46E5' : '#475569',
+                          fontWeight: targetAudienceType === aud.key ? 700 : 500,
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {aud.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {targetAudienceType === 'PARTS' && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', padding: '8px 10px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                      {['소프라노', '알토', '테너', '베이스'].map((p) => {
+                        const isSel = targetParts.includes(p as import('../types/rollbook').PartType);
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => {
+                              setTargetParts((prev) =>
+                                prev.includes(p as any) ? prev.filter((item) => item !== p) : [...prev, p as any]
+                              );
+                            }}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              border: isSel ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                              background: isSel ? '#D1FAE5' : '#FFFFFF',
+                              color: isSel ? '#047857' : '#334155',
+                              fontWeight: isSel ? 700 : 500,
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {p} {isSel ? '✓' : ''}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -294,6 +294,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     if (isCustomPeriod) {
       // 1. 특정 기간 한정 적용 (토글 ON): 사용자가 팝업에서 지정한 기간과 사유로 등록
       const targetStart = historyStartDate.trim() || todayStr;
+      const targetEnd = historyEndDate.trim() || '2999-12-31';
       const prevDayStr = addDaysKST(targetStart, -1);
 
       currentHistories = currentHistories.map((h) => {
@@ -309,11 +310,28 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
         status: formData.memberStatus || '정단원',
         part: finalPart as PartType,
         startDate: targetStart,
-        endDate: historyEndDate.trim() || '2999-12-31',
+        endDate: targetEnd,
         reason: historyReason.trim() || `[${formData.memberStatus}] 특정 기간 한정 적용`,
         createdAt: getKSTTimestampString(),
       };
       currentHistories.push(newHistoryItem);
+
+      // 기간이 명시적으로 종료되는 경우: 기간 종료 익일부로 기존 상태(예: 정단원)로의 자동 복귀 이력도 함께 생성
+      if (targetEnd < '2999-12-31') {
+        const returnDate = addDaysKST(targetEnd, 1);
+        const returnStatus = initialData.memberStatus || '정단원';
+        const returnItem: MemberStatusHistory = {
+          id: `hist_${Date.now() + 1}_${Math.random().toString(36).substring(2, 6)}`,
+          memberId: formData.id,
+          status: returnStatus,
+          part: (initialData.part || finalPart) as PartType,
+          startDate: returnDate,
+          endDate: '2999-12-31',
+          reason: `[자동복귀] ${formData.memberStatus} 기간 만료에 따른 [${returnStatus}] 원상 복귀`,
+          createdAt: getKSTTimestampString(),
+        };
+        currentHistories.push(returnItem);
+      }
     } else if (isStatusChanged || isPartChanged) {
       // 2. 토글이 꺼져 있어도 상태나 파트가 변경된 경우: DB기록에는 항상 100% 무조건 누적 저장!
       // 과거의 무한 열린 이력(2999-12-31)이 미래 일정을 가로막지 않도록 어제 날짜로 자동 마감하고 새 상태 등록

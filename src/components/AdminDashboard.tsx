@@ -41,7 +41,6 @@ import { AdminNotionFilterBar, type AdminFilterState } from './AdminNotionFilter
 import { MemberProfileModal } from './MemberProfileModal';
 import { LocationPickerMap } from './LocationPickerMap';
 import { LocationPickerModal } from './LocationPickerModal';
-import { ScheduleEditModal } from './ScheduleEditModal';
 import { BatchScheduleEditModal } from './BatchScheduleEditModal';
 import { MemberMergeModal } from './MemberMergeModal';
 import { RoundDatePicker } from './RoundDatePicker';
@@ -463,9 +462,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const schedulesOnSelectedDate = schedulesByDate.get(adminSelectedDate) || [];
 
-  // --- Schedule Editing & Batch Operations State ---
-  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
-  const [isScheduleEditModalOpen, setIsScheduleEditModalOpen] = useState(false);
+  // --- Schedule Batch Operations State ---
   const [selectedBatchScheduleIds, setSelectedBatchScheduleIds] = useState<string[]>([]);
   const [isBatchScheduleEditModalOpen, setIsBatchScheduleEditModalOpen] = useState(false);
   const [scheduleViewTab, setScheduleViewTab] = useState<'CALENDAR' | 'ALL_LIST' | 'PROGRAM_CARDS'>('CALENDAR');
@@ -674,24 +671,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleOpenEditSchedule = (sch: Schedule) => {
-    setEditingSchedule(sch);
-    setIsScheduleEditModalOpen(true);
-  };
 
-  const handleSaveScheduleSingle = async (scheduleId: string, updates: Partial<Schedule>) => {
-    await sheetsService.updateSchedule(scheduleId, updates);
-    setScheduleSuccessMsg(`일정이 성공적으로 수정되었습니다.`);
-    onDataChanged();
-    setTimeout(() => setScheduleSuccessMsg(''), 3500);
-  };
-
-  const handleSaveScheduleSeries = async (matchingIds: string[], updates: Partial<Schedule>) => {
-    await sheetsService.batchUpdateSchedules(matchingIds, updates);
-    setScheduleSuccessMsg(`동일 시리즈 일정 ${matchingIds.length}개 회차가 일괄 수정되었습니다.`);
-    onDataChanged();
-    setTimeout(() => setScheduleSuccessMsg(''), 3500);
-  };
 
   const handleDeleteScheduleSingle = async (scheduleId: string, title: string) => {
     await sheetsService.deleteSchedule(scheduleId);
@@ -1085,6 +1065,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     try {
       await sheetsService.saveProgramCard(cardData);
+
+      // 만약 기존 카드의 대상자 설정이 바뀌었고 소속된 세부 일정이 있다면 함께 일괄 동기화 여부 확인
+      if (editingProgramCard) {
+        const childSchedules = schedules.filter((s) => s.programId === editingProgramCard.id);
+        const audienceChanged =
+          editingProgramCard.targetAudienceType !== cardAudienceType ||
+          JSON.stringify(editingProgramCard.targetParts || []) !== JSON.stringify(cardTargetParts || []) ||
+          JSON.stringify(editingProgramCard.targetMemberIds || []) !== JSON.stringify(cardTargetMemberIds || []);
+
+        if (childSchedules.length > 0 && audienceChanged) {
+          const syncConfirm = window.confirm(
+            `[${cardData.title}] 카드의 참여 대상자 설정이 변경되었습니다.\n소속된 기존 세부 일정(${childSchedules.length}개)의 참여 대상자도 동일하게 일괄 변경하시겠습니까?`
+          );
+          if (syncConfirm) {
+            await sheetsService.batchUpdateSchedules(
+              childSchedules.map((s) => s.id),
+              {
+                targetAudienceType: cardAudienceType,
+                targetParts: cardAudienceType === 'PARTS' ? cardTargetParts : undefined,
+                targetMemberIds: cardAudienceType === 'CUSTOM_MEMBERS' ? cardTargetMemberIds : undefined,
+              }
+            );
+          }
+        }
+      }
+
       setScheduleSuccessMsg(`일정 카드 [${cardData.title}]가 구글 시트에 영구 저장되었습니다.`);
       setRightPanelMode('SCHEDULE_FORM');
       onDataChanged();
@@ -1096,6 +1102,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
 
   const handleBindScheduleToForm = (sch: Schedule) => {
+    setRightPanelMode('SCHEDULE_FORM');
     setEditingScheduleForForm(sch);
     setNewTitle(sch.title);
     setNewDate(sch.date);
@@ -1114,11 +1121,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewTargetParts(sch.targetParts || []);
     setNewTargetMemberIds(sch.targetMemberIds || []);
     setScheduleAddMode('SINGLE');
-    setScheduleSuccessMsg(`[${sch.title}] 일정이 우측 수정 폼에 인라인 바인딩되었습니다.`);
-    setTimeout(() => setScheduleSuccessMsg(''), 3000);
+    setScheduleSuccessMsg(`[${sch.title}] 일정이 우측 수정 폼에 로드되었습니다. 대상자 및 세부 속성을 수정한 뒤 하단 저장 버튼을 눌러주세요.`);
+    setTimeout(() => setScheduleSuccessMsg(''), 4500);
+    setTimeout(() => {
+      const el = document.getElementById('admin-schedule-form-container');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
   };
 
   const handleCloneScheduleToForm = (sch: Schedule) => {
+    setRightPanelMode('SCHEDULE_FORM');
     setEditingScheduleForForm(null);
     setNewTitle(`${sch.title} (복제)`);
     setNewDate(getTodayString());
@@ -3131,7 +3143,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                               type="button"
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                handleOpenEditSchedule(sch);
+                                                handleBindScheduleToForm(sch);
                                               }}
                                               style={{
                                                 background: '#EEF2FF',
@@ -3143,9 +3155,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                                 fontWeight: 600,
                                                 cursor: 'pointer',
                                               }}
-                                              title="일정 상세 속성 수정"
+                                              title="우측 폼에서 일정 및 대상자 정보 수정"
                                             >
-                                              수정
+                                              ✏️ 수정
                                             </button>
                                             <button
                                               type="button"
@@ -3451,7 +3463,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </form>
                     </div>
                   ) : (
-                    <div>
+                    <div id="admin-schedule-form-container">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
                         <div>
                           <h2 className="section-title" style={{ margin: 0 }}>
@@ -4918,26 +4930,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       )}
-      {/* ============================================================== */}
-      {/* MODAL: Single / Series Schedule Edit Modal                     */}
-      {/* ============================================================== */}
-      <ScheduleEditModal
-        key={editingSchedule?.id || 'none'}
-        isOpen={isScheduleEditModalOpen}
-        schedule={editingSchedule}
-        allSchedules={schedules}
-        locationPresets={locationPresets}
-        categories={dynamicCategories}
-        onClose={() => {
-          setIsScheduleEditModalOpen(false);
-          setEditingSchedule(null);
-        }}
-        onSaveSingle={handleSaveScheduleSingle}
-        onSaveSeries={handleSaveScheduleSeries}
-        onDeleteSingle={handleDeleteScheduleSingle}
-        onDeleteSeries={handleDeleteScheduleSeries}
-        onSaveNewLocationPreset={handleAddNewLocationPresetFromModal}
-      />
+
 
       {/* ============================================================== */}
       {/* MODAL: Batch Schedule Edit Modal                               */}

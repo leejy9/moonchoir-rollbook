@@ -50,6 +50,12 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
     !categories.includes(schedule?.category || '') ? String(schedule?.category || '') : ''
   );
   const [description, setDescription] = useState(schedule?.description || '');
+  const [targetAudienceType, setTargetAudienceType] = useState<import('../types/rollbook').TargetAudienceType>(
+    schedule?.targetAudienceType || 'ALL'
+  );
+  const [targetParts, setTargetParts] = useState<import('../types/rollbook').PartType[]>(
+    schedule?.targetParts || []
+  );
   const [editScope, setEditScope] = useState<EditScope>('THIS_ONLY');
   const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -93,6 +99,8 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
       targetLat: foundLoc?.latitude,
       targetLon: foundLoc?.longitude,
       radiusMeters: foundLoc?.radiusMeters,
+      targetAudienceType,
+      targetParts: targetAudienceType === 'PARTS' ? targetParts : undefined,
     };
 
     try {
@@ -368,6 +376,70 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
                     <option value="__NEW_LOCATION__">🗺️ + 새 연습실 등록...</option>
                   </select>
                 </div>
+              </div>
+
+              {/* 참석 대상자 설정 */}
+              <div
+                className="modern-field-group full-width"
+                style={{ gridColumn: '1 / -1', width: '100%' }}
+              >
+                <label className="modern-field-label">참석 대상자 *</label>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  {(
+                    [
+                      { key: 'ALL', label: '🌐 전체 단원 필참' },
+                      { key: 'PARTS', label: '👥 특정 파트 한정' },
+                    ] as const
+                  ).map((aud) => (
+                    <button
+                      key={aud.key}
+                      type="button"
+                      onClick={() => setTargetAudienceType(aud.key)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        border: targetAudienceType === aud.key ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                        background: targetAudienceType === aud.key ? '#eff6ff' : '#ffffff',
+                        color: targetAudienceType === aud.key ? '#2563eb' : '#475569',
+                        fontWeight: targetAudienceType === aud.key ? 700 : 500,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {aud.label}
+                    </button>
+                  ))}
+                </div>
+                {targetAudienceType === 'PARTS' && (
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', padding: '8px 10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    {['소프라노', '알토', '테너', '베이스'].map((p) => {
+                      const isSel = targetParts.includes(p as import('../types/rollbook').PartType);
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => {
+                            setTargetParts((prev) =>
+                              prev.includes(p as any) ? prev.filter((item) => item !== p) : [...prev, p as any]
+                            );
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            border: isSel ? '1.5px solid #059669' : '1px solid #cbd5e1',
+                            background: isSel ? '#d1fae5' : '#ffffff',
+                            color: isSel ? '#047857' : '#334155',
+                            fontWeight: isSel ? 700 : 500,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {p} {isSel ? '✓' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div

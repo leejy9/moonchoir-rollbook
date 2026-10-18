@@ -689,7 +689,12 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('CREATE_SCHEDULE', schedule).catch((err) => {
+      const payload = {
+        ...schedule,
+        targetParts: Array.isArray(schedule.targetParts) ? schedule.targetParts.join(',') : (schedule.targetParts || ''),
+        targetMemberIds: Array.isArray(schedule.targetMemberIds) ? schedule.targetMemberIds.join(',') : (schedule.targetMemberIds || ''),
+      };
+      this.sendToGoogleSheet('CREATE_SCHEDULE', payload).catch((err) => {
         console.error('[Sheets API] Schedule create sync failed:', err);
       });
     }
@@ -703,7 +708,12 @@ export class SheetsService {
 
     if (this.config.sheetsWebAppUrl) {
       for (const sch of schedules) {
-        this.sendToGoogleSheet('CREATE_SCHEDULE', sch).catch((err) => {
+        const payload = {
+          ...sch,
+          targetParts: Array.isArray(sch.targetParts) ? sch.targetParts.join(',') : (sch.targetParts || ''),
+          targetMemberIds: Array.isArray(sch.targetMemberIds) ? sch.targetMemberIds.join(',') : (sch.targetMemberIds || ''),
+        };
+        this.sendToGoogleSheet('CREATE_SCHEDULE', payload).catch((err) => {
           console.error('[Sheets API] Batch schedule sync error:', err);
         });
       }
@@ -719,7 +729,13 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('UPDATE_SCHEDULE', this.schedules[idx]).catch((err) => {
+      const sch = this.schedules[idx];
+      const payload = {
+        ...sch,
+        targetParts: Array.isArray(sch.targetParts) ? sch.targetParts.join(',') : (sch.targetParts || ''),
+        targetMemberIds: Array.isArray(sch.targetMemberIds) ? sch.targetMemberIds.join(',') : (sch.targetMemberIds || ''),
+      };
+      this.sendToGoogleSheet('UPDATE_SCHEDULE', payload).catch((err) => {
         console.error('[Sheets API] Schedule update sync failed:', err);
       });
     }
@@ -766,7 +782,16 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('BATCH_UPDATE_SCHEDULES', { ids: scheduleIds, updates }).catch((err) => {
+      const serializedUpdates = {
+        ...updates,
+        ...(updates.targetParts !== undefined
+          ? { targetParts: Array.isArray(updates.targetParts) ? updates.targetParts.join(',') : (updates.targetParts || '') }
+          : {}),
+        ...(updates.targetMemberIds !== undefined
+          ? { targetMemberIds: Array.isArray(updates.targetMemberIds) ? updates.targetMemberIds.join(',') : (updates.targetMemberIds || '') }
+          : {}),
+      };
+      this.sendToGoogleSheet('BATCH_UPDATE_SCHEDULES', { ids: scheduleIds, updates: serializedUpdates }).catch((err) => {
         console.error('[Sheets API] Batch schedule update sync failed:', err);
       });
     }
@@ -1340,11 +1365,20 @@ export class SheetsService {
           ? rawMembers.split(',').map((id: string) => id.trim()).filter(Boolean)
           : Array.isArray(rawMembers) ? (rawMembers as string[]) : undefined;
 
+        const targetAudienceType =
+          (s.targetAudienceType as import('../types/rollbook').TargetAudienceType) ||
+          (targetParts && targetParts.length > 0
+            ? 'PARTS'
+            : targetMemberIds && targetMemberIds.length > 0
+            ? 'CUSTOM_MEMBERS'
+            : 'ALL');
+
         return {
           ...s,
           date: normalizedDate,
           startTime,
           endTime,
+          targetAudienceType,
           targetParts,
           targetMemberIds,
         };
