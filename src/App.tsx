@@ -7,7 +7,12 @@ import { HomeView } from './components/HomeView';
 import { MemberPortalModal } from './components/MemberPortalModal';
 import { QRScannerModal } from './components/QRScannerModal';
 import { RSVPModal } from './components/RSVPModal';
-import { clearDeviceProfile, getBoundDeviceProfile, isAdminLoggedIn } from './services/auth';
+import {
+  clearDeviceProfile,
+  getBoundDeviceProfile,
+  isAdminLoggedIn,
+  updateBoundDeviceProfile,
+} from './services/auth';
 import { sheetsService } from './services/sheets';
 import type { BoundDeviceProfile, Schedule } from './types/rollbook';
 import { getKSTDateString } from './utils/date';
@@ -60,6 +65,24 @@ export function App() {
     }, 10000);
     return () => clearInterval(timer);
   }, []);
+
+  // Synchronize bound profile with remote/local member data if part or name changed in Sheets
+  useEffect(() => {
+    if (!profile) return;
+    const members = sheetsService.getMembers();
+    const current = members.find((m) => m.id === profile.memberId);
+    if (current && (current.part !== profile.part || current.name !== profile.name)) {
+      const updated = updateBoundDeviceProfile({
+        name: current.name,
+        part: current.part,
+      });
+      if (updated) {
+        queueMicrotask(() => {
+          setProfile(updated);
+        });
+      }
+    }
+  }, [profile, refreshKey]);
 
   const currentSchedule =
     qrTargetSchedule ||

@@ -438,8 +438,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
             onClick={handleProfileClick}
             title="프로필 및 출결 현황"
           >
-            <span className={`part-badge part-${profile.part}`}>{profile.part}</span>
-            <span className="profile-name">{profile.name}</span>
+            <span className={`part-badge part-${currentMember.part || profile.part}`}>{currentMember.part || profile.part}</span>
+            <span className="profile-name">{currentMember.name || profile.name}</span>
           </button>
 
           <button
@@ -834,7 +834,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               )}
             </div>
             {/* Cute Liquid Wave Gauge (MYTURN Style) */}
-            <LiquidGauge percentage={attendRate} size={44} subText="참석률" />
+            <LiquidGauge percentage={attendRate} size={44} subText="투표율" />
           </div>
 
           <h2 className="schedule-card-title">{activeSchedule.title}</h2>

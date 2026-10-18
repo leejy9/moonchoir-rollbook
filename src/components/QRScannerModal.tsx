@@ -37,6 +37,10 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const [savedLog, setSavedLog] = useState<RawAttendanceLog | null>(null);
   const [successTimeStr, setSuccessTimeStr] = useState('');
 
+  const currentMember = sheetsService.getMembers().find((m) => m.id === profile.memberId);
+  const currentPart = currentMember?.part || profile.part;
+  const currentName = currentMember?.name || profile.name;
+
   // Common check-in execution
   const executeCheckIn = async (
     targetSchedule: Schedule,
@@ -116,8 +120,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       timestamp: getKSTTimestampString(),
       scheduleId: targetSchedule.id,
       memberId: profile.memberId,
-      memberName: profile.name,
-      part: profile.part,
+      memberName: currentName,
+      part: currentPart,
       authMethod,
       latitude: lat,
       longitude: lon,
@@ -309,7 +313,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               🎵 문콰이어 출석 체크
             </span>
             <h2 style={{ margin: '4px 0 0', fontSize: '18px', fontWeight: 800, color: '#1E293B' }}>
-              {profile.name} 님 <span style={{ fontSize: '14px', fontWeight: 600, color: '#64748B' }}>({profile.part})</span>
+              {currentName} 님 <span style={{ fontSize: '14px', fontWeight: 600, color: '#64748B' }}>({currentPart})</span>
             </h2>
           </div>
           <button

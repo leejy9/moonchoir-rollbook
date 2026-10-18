@@ -32,6 +32,10 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
     onSuccess();
   };
 
+  const currentMember = sheetsService.getMembers().find((m) => m.id === profile.memberId);
+  const currentPart = currentMember?.part || profile.part;
+  const currentName = currentMember?.name || profile.name;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -40,8 +44,8 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
       id: currentVote?.id || `vote_${Date.now()}`,
       scheduleId: schedule.id,
       memberId: profile.memberId,
-      memberName: profile.name,
-      part: profile.part,
+      memberName: currentName,
+      part: currentPart,
       status,
       reason: status === 'ABSENT' ? reason.trim() : undefined,
       timestamp: getKSTTimestampString(),
@@ -66,8 +70,8 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
 
         <form onSubmit={handleSubmit} className="form-stack">
           <div className="selected-card">
-            <span className={`part-badge part-${profile.part}`}>{profile.part}</span>
-            <span className="selected-name">{profile.name} 님의 투표</span>
+            <span className={`part-badge part-${currentPart}`}>{currentPart}</span>
+            <span className="selected-name">{currentName} 님의 투표</span>
           </div>
 
           <div className="rsvp-toggle-grid">

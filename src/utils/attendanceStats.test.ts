@@ -258,36 +258,121 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
     expect(stats[0].badges).toContain('게스트 1회');
   });
 
-  it('getGamifiedAttendanceLevel는 출석 횟수에 따라 정확한 레벨 뱃지와 진척도를 반환해야 한다', () => {
-    // 0회: 새싹 소프라노 (0/4, 0%)
+  it('getGamifiedAttendanceLevel는 4단계 구간(8, 24, 50회)과 파트명에 따라 정확한 레벨 칭호와 진척도를 반환해야 한다', () => {
+    // 1단계: 0~7회 (새싹 소프라노, 목표 8회)
     const lv0 = getGamifiedAttendanceLevel(0, '소프라노');
     expect(lv0.currentLevelName).toBe('새싹 소프라노');
     expect(lv0.nextLevelName).toBe('성실한 소프라노');
     expect(lv0.progressPercent).toBe(0);
     expect(lv0.badgeEmoji).toBe('🌱');
 
-    // 2회: 새싹 (2/4, 50%)
-    const lv2 = getGamifiedAttendanceLevel(2, '소프라노');
-    expect(lv2.progressPercent).toBe(50);
+    const lv4 = getGamifiedAttendanceLevel(4, '소프라노');
+    expect(lv4.progressPercent).toBe(50); // 4 / 8 = 50%
 
-    // 5회: 성실한 (5-4 / 4 = 25%)
-    const lv5 = getGamifiedAttendanceLevel(5, '알토');
-    expect(lv5.currentLevelName).toBe('성실한 알토');
-    expect(lv5.badgeEmoji).toBe('🥉');
-    expect(lv5.progressPercent).toBe(25);
+    // 2단계: 8~23회 (성실한 알토, 목표 24회)
+    const lv8 = getGamifiedAttendanceLevel(8, '알토');
+    expect(lv8.currentLevelName).toBe('성실한 알토');
+    expect(lv8.nextLevelName).toBe('알토의 기둥');
+    expect(lv8.badgeEmoji).toBe('🎵');
+    expect(lv8.progressPercent).toBe(0); // (8 - 8) / 16 = 0%
 
-    // 10회: 빛나는 (10-8 / 4 = 50%)
-    const lv10 = getGamifiedAttendanceLevel(10, '테너');
-    expect(lv10.currentLevelName).toBe('빛나는 테너');
-    expect(lv10.badgeEmoji).toBe('🥈');
-    expect(lv10.progressPercent).toBe(50);
+    const lv16 = getGamifiedAttendanceLevel(16, '알토');
+    expect(lv16.progressPercent).toBe(50); // (16 - 8) / 16 = 50%
 
-    // 15회: 개근 마스터 (100%)
-    const lv15 = getGamifiedAttendanceLevel(15, '베이스');
-    expect(lv15.currentLevelName).toBe('개근 마스터');
-    expect(lv15.nextLevelName).toBeNull();
-    expect(lv15.progressPercent).toBe(100);
-    expect(lv15.badgeEmoji).toBe('🌟');
+    // 3단계: 24~49회 (테너의 기둥, 목표 50회)
+    const lv24 = getGamifiedAttendanceLevel(24, '테너');
+    expect(lv24.currentLevelName).toBe('테너의 기둥');
+    expect(lv24.nextLevelName).toBe('문콰이어 테너 레전드');
+    expect(lv24.badgeEmoji).toBe('🏛️');
+    expect(lv24.progressPercent).toBe(0); // (24 - 24) / 26 = 0%
+
+    const lv37 = getGamifiedAttendanceLevel(37, '테너');
+    expect(lv37.progressPercent).toBe(50); // (37 - 24) / 26 = 50%
+
+    // 4단계: 50회 이상 (문콰이어 베이스 레전드, 100%)
+    const lv50 = getGamifiedAttendanceLevel(50, '베이스');
+    expect(lv50.currentLevelName).toBe('문콰이어 베이스 레전드');
+    expect(lv50.nextLevelName).toBeNull();
+    expect(lv50.progressPercent).toBe(100);
+    expect(lv50.badgeEmoji).toBe('👑');
+
+    // 파트명이 기타이거나 없을 경우 기본값 '단원' 적용
+    const lvDefault = getGamifiedAttendanceLevel(10, '기타');
+    expect(lvDefault.currentLevelName).toBe('성실한 단원');
+    expect(lvDefault.nextLevelName).toBe('단원의 기둥');
+  });
+
+  it('지각생은 통계 산출 시 1.0회 출석으로 인정(감점 없음)되고, 원천 로그에는 지각으로 보존되어야 한다', () => {
+    const member: Member = {
+      id: 'm_late_test',
+      name: '지각단원',
+      part: '알토',
+      phoneLast4: '9999',
+      role: 'MEMBER',
+      createdAt: '2026-01-01T00:00:00Z',
+      status: 'ACTIVE',
+      joinedAt: '2026-01-01',
+      memberStatus: '정단원',
+    };
+
+    // 2개 일정: 1회 정상출석, 1회 지각
+    const schedules: Schedule[] = [
+      {
+        id: 'sch_1',
+        title: '연습 1',
+        date: '2026-10-01',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '연습실',
+        category: '정기연습',
+      },
+      {
+        id: 'sch_2',
+        title: '연습 2',
+        date: '2026-10-08',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '연습실',
+        category: '정기연습',
+      },
+    ];
+
+    const logs: RawAttendanceLog[] = [
+      {
+        id: 'log_normal',
+        scheduleId: 'sch_1',
+        memberId: 'm_late_test',
+        memberName: '지각단원',
+        part: '알토',
+        timestamp: '2026-10-01T19:25:00Z', // 제시간 출석
+        authMethod: 'QR_WEB_CAM',
+        isVerifiedLocation: true,
+      },
+      {
+        id: 'log_late',
+        scheduleId: 'sch_2',
+        memberId: 'm_late_test',
+        memberName: '지각단원',
+        part: '알토',
+        timestamp: '2026-10-08T19:45:00Z', // 지각 출석
+        authMethod: 'QR_WEB_CAM',
+        isVerifiedLocation: true,
+      },
+    ];
+
+    const stats = calculateCumulativeAttendanceWithLifecycle(
+      [member],
+      schedules,
+      logs,
+      '2026-10-15'
+    );
+
+    expect(stats[0].totalSessions).toBe(2);
+    expect(stats[0].attended).toBe(1); // 순수 제시간 출석
+    expect(stats[0].late).toBe(1);     // 지각 1회 보존
+    expect(stats[0].absent).toBe(0);
+    // 지각도 1.0 인정: (1 + 1) / 2 * 100 = 100%
+    expect(stats[0].attendanceRate).toBe(100);
   });
 
   describe('Audience Selector (대상자 지정 필터)', () => {

@@ -49,6 +49,9 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     };
   }, [members, profile]);
 
+  const memberPart = currentMember.part || profile.part;
+  const memberName = currentMember.name || profile.name;
+
   const schedules = sheetsService.getSchedules();
   const allLogs = sheetsService.getLogs();
 
@@ -69,10 +72,10 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     );
   }, [currentMember, schedules, allLogs]);
 
-  // 게이미피케이션 레벨 계산
+  // 게이미피케이션 레벨 계산 (최신 시트 파트명 반영)
   const gamifiedLevel = useMemo(() => {
-    return getGamifiedAttendanceLevel(memberSummary.attended, currentMember.part || '단원');
-  }, [memberSummary.attended, currentMember.part]);
+    return getGamifiedAttendanceLevel(memberSummary.attended, memberPart || '단원');
+  }, [memberSummary.attended, memberPart]);
 
   // 3. 탭 1용: 회차별 통합 리스트 데이터 조립 [연습명칭 / 연습일 / 투표 상태 / 출결 시간]
   const scheduleRecords = useMemo(() => {
@@ -169,10 +172,10 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span className={`part-badge part-${profile.part}`}>{profile.part}</span>
+              <span className={`part-badge part-${memberPart}`}>{memberPart}</span>
               <div>
                 <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#ffffff' }}>
-                  {profile.name} <span style={{ fontSize: '13px', fontWeight: 500, color: '#cbd5e1' }}>단원 성적표</span>
+                  {memberName} <span style={{ fontSize: '13px', fontWeight: 500, color: '#cbd5e1' }}>단원 성적표</span>
                 </h2>
                 <span style={{ fontSize: '12px', color: '#94a3b8' }}>
                   {currentMember.memberStatus || '정단원'} · 입단일 {currentMember.joinedAt || '미등록'}
@@ -284,8 +287,13 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#1e293b' }}>
                         이번 시즌 연습: 총 {memberSummary.attended}회 출석
                       </div>
-                      <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 700 }}>
-                        현재 칭호: {gamifiedLevel.currentLevelName}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '12px', color: '#6366f1', fontWeight: 700 }}>
+                          칭호: {gamifiedLevel.currentLevelName}
+                        </span>
+                        <span style={{ fontSize: '11.5px', color: '#0f766e', fontWeight: 700, background: '#ccfbf1', padding: '1px 7px', borderRadius: '4px' }}>
+                          나의 출석률 {memberSummary.attendanceRate}%
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -491,7 +499,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
                   <div>
                     <span style={{ color: '#64748b', fontSize: '12px', display: 'block' }}>소속 파트</span>
-                    <strong style={{ color: '#1e293b' }}>{profile.part}</strong>
+                    <strong style={{ color: '#1e293b' }}>{memberPart}</strong>
                   </div>
                   <div>
                     <span style={{ color: '#64748b', fontSize: '12px', display: 'block' }}>회원 구분</span>

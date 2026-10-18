@@ -111,43 +111,52 @@ export interface GamifiedLevel {
 
 export function getGamifiedAttendanceLevel(attendedCount: number, part: string = '단원'): GamifiedLevel {
   const safeCount = Math.max(0, attendedCount);
-  if (safeCount < 4) {
+  const partName = part && part !== '기타' ? part : '단원';
+
+  // 1단계: 0~7회 (입단 ~ 2개월 미만, 뉴비)
+  if (safeCount < 8) {
     return {
-      currentLevelName: `새싹 ${part}`,
-      nextLevelName: `성실한 ${part}`,
+      currentLevelName: `새싹 ${partName}`,
+      nextLevelName: `성실한 ${partName}`,
       currentCount: safeCount,
-      targetCount: 4,
-      progressPercent: Math.min(100, Math.round((safeCount / 4) * 100)),
+      targetCount: 8,
+      progressPercent: Math.min(100, Math.round((safeCount / 8) * 100)),
       badgeEmoji: '🌱',
     };
   }
-  if (safeCount < 8) {
+
+  // 2단계: 8~23회 (2개월 ~ 6개월, 뉴비 탈출 및 1차 승급)
+  if (safeCount < 24) {
     return {
-      currentLevelName: `성실한 ${part}`,
-      nextLevelName: `빛나는 ${part}`,
+      currentLevelName: `성실한 ${partName}`,
+      nextLevelName: `${partName}의 기둥`,
       currentCount: safeCount,
-      targetCount: 8,
-      progressPercent: Math.min(100, Math.round(((safeCount - 4) / 4) * 100)),
-      badgeEmoji: '🥉',
+      targetCount: 24,
+      progressPercent: Math.min(100, Math.round(((safeCount - 8) / 16) * 100)),
+      badgeEmoji: '🎵',
     };
   }
-  if (safeCount < 12) {
+
+  // 3단계: 24~49회 (6개월 ~ 1년 이상, 대리/중견)
+  if (safeCount < 50) {
     return {
-      currentLevelName: `빛나는 ${part}`,
-      nextLevelName: `개근 마스터`,
+      currentLevelName: `${partName}의 기둥`,
+      nextLevelName: `문콰이어 ${partName} 레전드`,
       currentCount: safeCount,
-      targetCount: 12,
-      progressPercent: Math.min(100, Math.round(((safeCount - 8) / 4) * 100)),
-      badgeEmoji: '🥈',
+      targetCount: 50,
+      progressPercent: Math.min(100, Math.round(((safeCount - 24) / 26) * 100)),
+      badgeEmoji: '🏛️',
     };
   }
+
+  // 4단계: 50회 이상 (짬 찬 베테랑, 레전드)
   return {
-    currentLevelName: `개근 마스터`,
+    currentLevelName: `문콰이어 ${partName} 레전드`,
     nextLevelName: null,
     currentCount: safeCount,
     targetCount: safeCount,
     progressPercent: 100,
-    badgeEmoji: '🌟',
+    badgeEmoji: '👑',
   };
 }
 
@@ -201,10 +210,35 @@ export function calculateCumulativeAttendanceWithLifecycle(
         if (isPastOrToday) {
           totalSessions++;
           if (hasCheckedIn) {
-            attended++;
-            if (lastLog?.authMethod === 'MANUAL_BY_ADMIN') {
+            let isLate = Boolean(lastLog?.adminNote && lastLog.adminNote.includes('지각'));
+            if (!isLate && lastLog?.timestamp && schedule.startTime) {
+              const [sh, sm] = schedule.startTime.split(':').map(Number);
+              const scheduleStartMinutes = (sh || 0) * 60 + (sm || 0);
+              let logMinutes = 0;
+              if (lastLog.timestamp.includes('T')) {
+                const timePart = lastLog.timestamp.split('T')[1].slice(0, 5);
+                const [h, m] = timePart.split(':').map(Number);
+                logMinutes = (h || 0) * 60 + (m || 0);
+              } else if (lastLog.timestamp.includes(':')) {
+                const parts = lastLog.timestamp.split(':');
+                const h = parseInt(parts[0].slice(-2), 10);
+                const m = parseInt(parts[1].slice(0, 2), 10);
+                logMinutes = (h || 0) * 60 + (m || 0);
+              }
+              // 기본 10분 유예시간 초과 시 지각 판정
+              if (logMinutes > scheduleStartMinutes + 10) {
+                isLate = true;
+              }
+            }
+
+            if (isLate) {
+              late++;
+              recentStatusList.push('지각');
+            } else if (lastLog?.authMethod === 'MANUAL_BY_ADMIN') {
+              attended++;
               recentStatusList.push('수동인정');
             } else {
+              attended++;
               recentStatusList.push('출석');
             }
           } else {
@@ -225,9 +259,10 @@ export function calculateCumulativeAttendanceWithLifecycle(
       }
     }
 
-    // 출석률(%) 계산 (모수가 0이면 100% 또는 N/A 방어)
+    // 출석률(%) 계산: 지각도 1.0 인정 (별도 감점 없이 출석률 100% 반영)
+    const effectiveAttended = attended + late;
     const attendanceRate =
-      totalSessions === 0 ? 100 : Math.round((attended / totalSessions) * 100);
+      totalSessions === 0 ? 100 : Math.round((effectiveAttended / totalSessions) * 100);
 
     // 뱃지 부여
     const badges: string[] = [];

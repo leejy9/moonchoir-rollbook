@@ -86,6 +86,22 @@ export function bindDeviceProfile(
   return profile;
 }
 
+export function updateBoundDeviceProfile(
+  updates: Partial<BoundDeviceProfile>
+): BoundDeviceProfile | null {
+  const current = getBoundDeviceProfile();
+  if (!current) return null;
+  const updated: BoundDeviceProfile = {
+    ...current,
+    ...updates,
+  };
+  const storage = getStorage();
+  if (storage) {
+    storage.setItem(AUTH_KEYS.DEVICE_PROFILE, JSON.stringify(updated));
+  }
+  return updated;
+}
+
 export function clearDeviceProfile(): void {
   const storage = getStorage();
   if (storage) {

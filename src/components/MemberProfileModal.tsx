@@ -229,28 +229,36 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
   };
 
   // 단원의 출결 통계 계산 (중앙 엔진 reconcileMemberAttendance 기반 SSOT)
-  const { attendedCount, attendanceRate } = useMemo(() => {
+  const { attendedCount, attendanceRate, totalPastSessions } = useMemo(() => {
     let attended = 0;
+    let late = 0;
     let requiredSessions = 0;
+    const todayStr = getKSTDateString();
 
     schedules.forEach((s) => {
       const rec = sheetsService.reconcileMemberAttendance(formData.id, s.id);
+      const isPastOrToday = s.date <= todayStr;
       const isExempt = rec?.finalStatus === '미참' || rec?.finalStatus === '모수제외' || Boolean(formData.joinedAt && s.date < formData.joinedAt);
-      if (!isExempt) {
+      const hasCheckedIn = rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정' || rec?.finalStatus === '지각';
+
+      // 과거 또는 오늘 일정, 또는 실제 출결 로그가 있는 일정만 모수에 포함 (미래 일정 모수 왜곡 원천 차단)
+      if (!isExempt && (isPastOrToday || hasCheckedIn)) {
         requiredSessions++;
         if (rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정') {
           attended += 1;
         } else if (rec?.finalStatus === '지각') {
-          attended += 0.7;
+          late += 1;
         }
-      } else if (rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정') {
+      } else if (isExempt && hasCheckedIn) {
         requiredSessions++;
         attended += 1;
       }
     });
 
-    const rate = requiredSessions > 0 ? Math.round((attended / requiredSessions) * 100) : 100;
-    return { attendedCount: Math.floor(attended), attendanceRate: rate };
+    // 지각도 1.0 인정 (별도 감점 없이 출석률 산출)
+    const effectiveAttended = attended + late;
+    const rate = requiredSessions > 0 ? Math.round((effectiveAttended / requiredSessions) * 100) : 100;
+    return { attendedCount: effectiveAttended, attendanceRate: rate, totalPastSessions: requiredSessions };
   }, [schedules, formData.id, formData.joinedAt]);
 
   // 최신순 일정 정렬
@@ -429,7 +437,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
           {/* Quick Stats Summary Card (Toss Minimalist) */}
           <div className="profile-stats-card-modern">
             <div className="stat-col">
-              <span className="stat-label-modern">누적 출석률</span>
+              <span className="stat-label-modern">나의 출석률</span>
               <strong className="stat-value-highlight">{attendanceRate}%</strong>
             </div>
             <div className="stat-v-divider" />
@@ -440,7 +448,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
             <div className="stat-v-divider" />
             <div className="stat-col">
               <span className="stat-label-modern">총 연습 회차</span>
-              <strong className="stat-value-modern">{schedules.length}회</strong>
+              <strong className="stat-value-modern">{totalPastSessions}회</strong>
             </div>
           </div>
 

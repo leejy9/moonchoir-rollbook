@@ -233,7 +233,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     </div>
 
                     {/* Cute Liquid Wave Gauge (MYTURN Style Energy Fill) */}
-                    <LiquidGauge percentage={rate} size={48} subText="참석률" />
+                    <LiquidGauge percentage={rate} size={48} subText="투표율" />
                   </div>
 
                   <div className="item-rsvp-row" style={{ marginTop: '12px' }}>

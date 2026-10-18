@@ -1081,24 +1081,28 @@ export class SheetsService {
       let guestAttended = 0;
       const recentStatusList: AttendanceStatus[] = [];
 
+      const todayStr = getKSTDateString();
       for (const { schedule, reconciliation } of sessionReconciliations) {
         const isRequired = isMemberRequiredForSchedule(m, schedule.date, schedule);
         const item = reconciliation.find((r) => r.memberId === m.id);
         const hasCheckedIn = item && (item.finalStatus === '출석' || item.finalStatus === '수동인정' || item.finalStatus === '지각');
+        const isPastOrToday = schedule.date <= todayStr;
 
         if (isRequired) {
-          totalSessions += 1;
-          const status = item ? item.finalStatus : '결석';
-          recentStatusList.push(status);
+          if (isPastOrToday || hasCheckedIn) {
+            totalSessions += 1;
+            const status = item ? item.finalStatus : '결석';
+            recentStatusList.push(status);
 
-          if (status === '출석' || status === '수동인정') {
-            attended += 1;
-          } else if (status === '지각') {
-            late += 1;
-          } else if (status === '사유결석') {
-            excused += 1;
-          } else {
-            absent += 1;
+            if (status === '출석' || status === '수동인정') {
+              attended += 1;
+            } else if (status === '지각') {
+              late += 1;
+            } else if (status === '사유결석') {
+              excused += 1;
+            } else {
+              absent += 1;
+            }
           }
         } else {
           // 비필참 기간 (입단 전, 휴단/퇴단/객원 기간)
@@ -1113,9 +1117,9 @@ export class SheetsService {
         }
       }
 
-      // Formula: (출석 + 지각*0.5) / 총 유효 회차 * 100
+      // Formula: 지각도 1.0 인정 (별도 감점 없이 출석률 산출)
       const attendanceRate = totalSessions > 0
-        ? Math.min(100, Math.round(((attended + late * 0.5) / totalSessions) * 100))
+        ? Math.min(100, Math.round(((attended + late) / totalSessions) * 100))
         : 100;
 
       // Smart Badges calculation

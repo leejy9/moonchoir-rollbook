@@ -92,9 +92,9 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
         }
       });
 
-      // Standard rate formula: (attended + late*0.7) / requiredSessions
-      const denominator = requiredSessions > 0 ? requiredSessions : (attended > 0 ? attended : 0);
-      const rate = denominator > 0 ? Math.round(((attended + late * 0.7) / denominator) * 100) : 0;
+      // Standard rate formula: 지각도 1.0 인정 (별도 감점 없이 출석률 산출)
+      const denominator = requiredSessions > 0 ? requiredSessions : (attended + late > 0 ? attended + late : 0);
+      const rate = denominator > 0 ? Math.round(((attended + late) / denominator) * 100) : 0;
 
       map.set(m.id, { attended, late, excused, absent, exempt, rate });
     });
