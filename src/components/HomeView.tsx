@@ -94,10 +94,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
     void _refreshTrigger;
     return sheetsService.getMembers().filter((m) => m.status === 'ACTIVE');
   }, [_refreshTrigger]);
-  const allLogs = useMemo(() => {
-    void _refreshTrigger;
-    return sheetsService.getLogs();
-  }, [_refreshTrigger]);
 
   const currentMember = useMemo(() => {
     void _refreshTrigger;
@@ -116,22 +112,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
     );
   }, [members, profile, _refreshTrigger]);
 
-  // Map user's attended schedules
+  // Map user's attended schedules (reconciled projection view: only actual attendances get checkmark)
   const myLogsByScheduleId = useMemo(() => {
+    void _refreshTrigger;
     const map = new Map<string, boolean>();
-    allLogs
-      .filter((l) => l.memberId === profile.memberId)
-      .forEach((l) => {
-        map.set(l.scheduleId, true);
-        const matching = schedules.find(
-          (s) => s.id === l.scheduleId || (l.scheduleId && s.id.startsWith(l.scheduleId)) || (l.timestamp && l.timestamp.startsWith(s.date))
-        );
-        if (matching) {
-          map.set(matching.id, true);
-        }
-      });
+    schedules.forEach((sch) => {
+      const rec = sheetsService.reconcileMemberAttendance(profile.memberId, sch.id, profile.name);
+      if (rec && (rec.finalStatus === '출석' || rec.finalStatus === '지각' || rec.finalStatus === '수동인정')) {
+        map.set(sch.id, true);
+      }
+    });
     return map;
-  }, [allLogs, profile.memberId, schedules]);
+  }, [schedules, profile.memberId, profile.name, _refreshTrigger]);
 
   // Map schedules by date string
   const schedulesByDate = useMemo(() => {
@@ -285,6 +277,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
   );
   const myLog = logs.find(
     (l) => l.memberId === profile.memberId || (profile.name && l.memberName === profile.name)
+  );
+
+  const myReconciliation = useMemo(() => {
+    void _refreshTrigger;
+    if (!activeSchedule) return null;
+    return sheetsService.reconcileMemberAttendance(profile.memberId, activeSchedule.id, profile.name);
+  }, [activeSchedule, profile.memberId, profile.name, _refreshTrigger]);
+
+  const isActuallyAttended = Boolean(
+    myReconciliation &&
+    (myReconciliation.finalStatus === '출석' ||
+     myReconciliation.finalStatus === '지각' ||
+     myReconciliation.finalStatus === '수동인정')
+  );
+  const isManuallyAbsent = Boolean(
+    myReconciliation?.finalStatus === '결석' && myReconciliation.isManualOverride
   );
 
   // Grouped RSVP lists with deduplication by name/ID so a single person cannot appear twice
@@ -877,22 +885,34 @@ export const HomeView: React.FC<HomeViewProps> = ({
           )}
 
           {/* User's Check-in & RSVP Status Banner */}
-          {myLog ? (
-            <div className="my-status-banner checked-in">
-              <span className="status-indicator-dot checked" />
+          {isActuallyAttended ? (
+            <div className={`my-status-banner checked-in ${myReconciliation?.finalStatus === '지각' ? 'late' : ''}`}>
+              <span className={`status-indicator-dot ${myReconciliation?.finalStatus === '지각' ? 'late' : 'checked'}`} />
               <div>
-                <strong>오늘 출석 체크 완료</strong>
+                <strong>{myReconciliation?.finalStatus === '지각' ? '오늘 출석 (지각)' : '오늘 출석 체크 완료'}</strong>
                 <p className="banner-subtext">
                   인증 시각:{' '}
-                  {myLog.timestamp.includes('T')
-                    ? myLog.timestamp.slice(11, 16)
-                    : myLog.timestamp.slice(0, 5)}{' '}
+                  {myReconciliation?.checkInTime
+                    ? (myReconciliation.checkInTime.includes('T')
+                        ? myReconciliation.checkInTime.slice(11, 16)
+                        : myReconciliation.checkInTime.slice(0, 5))
+                    : (myLog ? (myLog.timestamp.includes('T') ? myLog.timestamp.slice(11, 16) : myLog.timestamp.slice(0, 5)) : '')}{' '}
                   ·{' '}
-                  {myLog.authMethod === 'MANUAL_BY_ADMIN'
-                    ? '관리자 수동 인정'
-                    : myLog.isVerifiedLocation
+                  {myReconciliation?.authMethod === 'MANUAL_BY_ADMIN'
+                    ? (myReconciliation.adminNote || '관리자 수동 인정')
+                    : myReconciliation?.isVerifiedLocation
                     ? '연습실 위치 확인됨'
                     : 'GPS 오차 범위'}
+                </p>
+              </div>
+            </div>
+          ) : isManuallyAbsent ? (
+            <div className="my-status-banner absent" style={{ background: '#fef2f2', borderColor: '#fca5a5' }}>
+              <span className="status-indicator-dot absent" />
+              <div>
+                <strong style={{ color: '#b91c1c' }}>관리자 확인: 결석 처리</strong>
+                <p className="banner-subtext" style={{ color: '#ef4444' }}>
+                  {myReconciliation?.adminNote || '관리자에 의해 결석으로 처리되었습니다.'}
                 </p>
               </div>
             </div>
@@ -918,7 +938,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <IconQrScan size={22} className="btn-icon" />
                   <div className="btn-text-block">
                     <span className="btn-main-label">
-                      {myLog ? '다시 출석 체크하기' : (!isTargetMember ? '개인 연습으로 출석 체크' : 'QR 출석 체크')}
+                      {isActuallyAttended ? '다시 출석 체크하기' : (!isTargetMember ? '개인 연습으로 출석 체크' : 'QR 출석 체크')}
                     </span>
                     <span className="btn-sub-label">
                       {!isTargetMember ? '자유 연습/참관으로 출석 기록을 남깁니다' : '연습실 종이 QR 코드를 스캔하세요'}
@@ -947,8 +967,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <div>
                     <div className="qr-locked-title">출석 마감 ({activeSchedule.date} 일정 종료)</div>
                     <div className="qr-locked-desc">
-                      {myLog
-                        ? `출석 완료 (${myLog.timestamp.includes('T') ? myLog.timestamp.slice(11, 16) : myLog.timestamp.slice(0, 5)}) · 정상 반영되었습니다.`
+                      {isActuallyAttended && myReconciliation?.checkInTime
+                        ? `출석 완료 (${myReconciliation.checkInTime.includes('T') ? myReconciliation.checkInTime.slice(11, 16) : myReconciliation.checkInTime.slice(0, 5)}) · 정상 반영되었습니다.`
+                        : isManuallyAbsent
+                        ? `관리자에 의해 결석 처리되었습니다 (${myReconciliation?.adminNote || '관리자 결석'}).`
                         : '금일 연습의 공식 출석 체크가 마감되었습니다.'}
                     </div>
                   </div>

@@ -392,11 +392,35 @@ export class SheetsService {
     );
     siblingIds.add(memberId);
 
-    this.logs = this.logs.filter((l) => !(l.scheduleId === scheduleId && siblingIds.has(l.memberId)));
+    const targetSchedule =
+      this.schedules.find((s) => s.id === scheduleId) ||
+      this.schedules.find((s) => s.id.startsWith(scheduleId) || (s.id && scheduleId.startsWith(s.id)));
+
+    const isMatchingSchedule = (sId: string, timestamp?: string) => {
+      if (sId === scheduleId) return true;
+      if (sId && scheduleId && (scheduleId.startsWith(sId) || sId.startsWith(scheduleId))) return true;
+      if (targetSchedule) {
+        if (timestamp && timestamp.length >= 10 && timestamp.slice(0, 10) === targetSchedule.date) return true;
+      }
+      return false;
+    };
+
+    this.logs = this.logs.filter((l) => !(isMatchingSchedule(l.scheduleId, l.timestamp) && siblingIds.has(l.memberId)));
     saveToStorage(STORAGE_KEYS.LOGS, this.logs);
 
-    this.rsvpVotes = this.rsvpVotes.filter((v) => !(v.scheduleId === scheduleId && siblingIds.has(v.memberId)));
+    this.rsvpVotes = this.rsvpVotes.filter((v) => !(isMatchingSchedule(v.scheduleId) && siblingIds.has(v.memberId)));
     saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
+
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('CLEAR_ATTENDANCE', {
+        scheduleId,
+        memberId,
+        memberName: targetMember?.name,
+        scheduleDate: targetSchedule?.date,
+      }).catch((err) => {
+        console.error('[Sheets API] Clear attendance sync failed:', err);
+      });
+    }
   }
 
   public async cancelRSVP(scheduleId: string, memberId: string): Promise<boolean> {

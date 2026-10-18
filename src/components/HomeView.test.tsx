@@ -158,4 +158,49 @@ describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () 
     expect(html).toContain('야간 총연습 (예정)');
     expect(html).toContain('(23:59)');
   });
+
+  it('does NOT display 오늘 출석 체크 완료 when admin manually marked absent', async () => {
+    const sch: Schedule = {
+      id: 'sch_test_absent_view',
+      title: '관리자 결석 테스트 일정',
+      category: '정기연습',
+      date: todayStr,
+      startTime: '19:30',
+      endTime: '21:30',
+      locationName: '제1연습실',
+      targetLat: 37.5665,
+      targetLon: 126.978,
+      radiusMeters: 100,
+    };
+    await sheetsService.addSchedule(sch);
+
+    // 관리자 결석 처리 로그 추가
+    await sheetsService.addCheckInLog({
+      id: 'log_test_absent',
+      scheduleId: sch.id,
+      memberId: mockProfile.memberId,
+      memberName: mockProfile.name,
+      part: mockProfile.part,
+      timestamp: `${todayStr}T19:30:00`,
+      authMethod: 'MANUAL_BY_ADMIN',
+      adminNote: '관리자 결석 처리',
+      isVerifiedLocation: true,
+    });
+
+    const html = renderToString(
+      <HomeView
+        profile={mockProfile}
+        onOpenQRScanner={() => {}}
+        onOpenRSVP={() => {}}
+        onOpenAdmin={() => {}}
+        onChangeProfile={() => {}}
+        refreshTrigger={0}
+      />
+    );
+
+    // 출석 완료 배너가 뜨지 않고 결석 안내가 떠야 함
+    expect(html).not.toContain('오늘 출석 체크 완료');
+    expect(html).toContain('관리자 확인: 결석 처리');
+  });
 });
+

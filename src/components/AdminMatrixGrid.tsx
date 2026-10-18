@@ -6,7 +6,7 @@ import type {
   Schedule,
 } from '../types/rollbook';
 import { LiquidGauge } from './LiquidGauge';
-import { formatMatrixHeaderDate, getKSTTimestampString } from '../utils/date';
+import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString } from '../utils/date';
 import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
 
 interface AdminMatrixGridProps {
@@ -51,6 +51,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
 
   // Calculate cumulative stats for each member across filtered schedules
   const memberStats = React.useMemo(() => {
+    const todayStr = getKSTDateString();
     const map = new Map<
       string,
       { attended: number; late: number; excused: number; absent: number; exempt: number; rate: number }
@@ -68,9 +69,11 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
         const recList = reconciliationsBySchedule.get(s.id) || [];
         const item = recList.find((r) => r.memberId === m.id);
         const isRequired = isMemberRequiredForSchedule(m, s.date, s);
+        const isPastOrToday = s.date <= todayStr;
         const status = item?.finalStatus || (isRequired ? '결석' : '미참');
 
-        if (isRequired) {
+        // 정규 필참 일정은 과거 또는 오늘 일정만 결석 및 출석률 모수에 반영 (미래 미진행 일정은 모수 제외)
+        if (isRequired && (isPastOrToday || item?.checkInTime || item?.isManualOverride)) {
           requiredSessions += 1;
         }
 
@@ -80,7 +83,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           late += 1;
         } else if (status === '사유결석') {
           excused += 1;
-        } else if (status === '미참' || status === '모수제외') {
+        } else if (status === '미참' || status === '모수제외' || (!isPastOrToday && !item?.checkInTime && !item?.isManualOverride)) {
           exempt += 1;
         } else {
           absent += 1;
@@ -93,7 +96,6 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
 
       map.set(m.id, { attended, late, excused, absent, exempt, rate });
     });
-
     return map;
   }, [members, schedules, reconciliationsBySchedule]);
 
@@ -133,11 +135,15 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
     const item = recList.find((r) => r.memberId === member.id);
     const rect = e.currentTarget.getBoundingClientRect();
     const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
+    const todayStr = getKSTDateString();
+    const isFuture = schedule.date > todayStr;
+    const isRecorded = Boolean(item?.checkInTime || item?.isManualOverride || (item?.rsvpStatus && item.rsvpStatus !== 'UNVOTED'));
+    const defaultStatus = !isRecorded && isFuture ? '미진행' : (item?.finalStatus || (isRequired ? '결석' : '미참'));
 
     setPopoverTarget({
       member,
       schedule,
-      currentStatus: item?.finalStatus || (isRequired ? '결석' : '미참'),
+      currentStatus: defaultStatus,
       checkInTime: item?.checkInTime,
       rsvpReason: item?.rsvpReason,
       x: rect.left,
@@ -363,6 +369,9 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                     const recList = reconciliationsBySchedule.get(s.id) || [];
                     const item = recList.find((r) => r.memberId === m.id);
                     const isRequired = isMemberRequiredForSchedule(m, s.date, s);
+                    const todayStr = getKSTDateString();
+                    const isFuture = s.date > todayStr;
+                    const isRecorded = Boolean(item?.checkInTime || item?.isManualOverride || (item?.rsvpStatus && item.rsvpStatus !== 'UNVOTED'));
                     const status = item?.finalStatus || (isRequired ? '결석' : '미참');
 
                     let badgeClass = 'cell-absent';
@@ -386,6 +395,10 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                     } else if (status === '미참' || status === '모수제외') {
                       badgeClass = 'cell-exempt';
                       statusLabel = '미참';
+                    } else if (isFuture && !isRecorded) {
+                      // 미래 미진행 일정: 아직 연습 전이므로 결석이 아닌 미체크(-)로 표기
+                      badgeClass = 'cell-upcoming';
+                      statusLabel = '-';
                     }
 
                     return (

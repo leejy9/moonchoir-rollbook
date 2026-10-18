@@ -82,6 +82,22 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     await service.clearAttendanceLog('sch_20261022', 'mem_s01');
     rec = service.reconcileAttendance('sch_20261022').find((r) => r.memberName === '김하은');
     expect(rec?.finalStatus).toBe('결석'); // 의무 대상자이므로 기본 결석으로 복귀
+
+    // 4. 스케줄 ID 프리픽스가 다른 과거 잔존 로그가 있는 경우에도 함께 초기화되는지 검증
+    await service.addCheckInLog({
+      id: 'log_prefix_legacy',
+      scheduleId: 'sch_20261022',
+      memberId: 'mem_s01',
+      memberName: '김하은',
+      part: '소프라노',
+      timestamp: '2026-10-22T19:30:00',
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    });
+    // 파생된 ID 'sch_20261022_klyd' 로 clear 요청
+    await service.clearAttendanceLog('sch_20261022_klyd', 'mem_s01');
+    const remainingLogs = service.getLogs('sch_20261022').filter((l) => l.memberId === 'mem_s01');
+    expect(remainingLogs.length).toBe(0);
   });
 
   it('guarantees append-only behavior for check-in logs', async () => {

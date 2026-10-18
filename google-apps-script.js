@@ -190,6 +190,72 @@ function doPost(e) {
       return jsonResponse({ success: true, message: '사전 투표 취소 완료' });
     }
 
+    if (action === 'CLEAR_ATTENDANCE') {
+      // 출결 보정 및 해당 세션의 출석 원천 로그 초기화
+      const logSheet = ss.getSheetByName(SHEET_NAMES.LOGS);
+      if (logSheet) {
+        const rows = logSheet.getDataRange().getValues();
+        const headers = rows[0];
+        const sIdCol = headers.indexOf('scheduleId');
+        const mIdCol = headers.indexOf('memberId');
+        const mNameCol = headers.indexOf('memberName');
+        const timeCol = headers.indexOf('timestamp');
+        const targetDate = data.scheduleDate || '';
+
+        // 역순 탐색으로 안전 삭제
+        for (let i = rows.length - 1; i >= 1; i--) {
+          const rowSId = String(rows[i][sIdCol] || '').trim();
+          const rowMId = String(rows[i][mIdCol] || '').trim();
+          const rowMName = String(rows[i][mNameCol] || '').trim();
+          const rowTime = String(rows[i][timeCol] || '');
+
+          const mMatch = (data.memberId && rowMId === String(data.memberId).trim()) ||
+                         (data.memberName && rowMName === String(data.memberName).trim());
+
+          let sMatch = Boolean(data.scheduleId && rowSId === String(data.scheduleId).trim());
+          if (!sMatch && data.scheduleId && rowSId) {
+            if (rowSId.startsWith(data.scheduleId) || String(data.scheduleId).startsWith(rowSId)) {
+              sMatch = true;
+            }
+          }
+          if (!sMatch && targetDate && rowTime.startsWith(targetDate)) {
+            sMatch = true;
+          }
+
+          if (mMatch && sMatch) {
+            logSheet.deleteRow(i + 1);
+          }
+        }
+      }
+
+      // 사전투표도 함께 초기화
+      const rsvpSheet = ss.getSheetByName(SHEET_NAMES.RSVP);
+      if (rsvpSheet) {
+        const rRows = rsvpSheet.getDataRange().getValues();
+        for (let i = rRows.length - 1; i >= 1; i--) {
+          const rSId = String(rRows[i][1]).trim();
+          const rMId = String(rRows[i][2]).trim();
+          const rMName = String(rRows[i][3]).trim();
+
+          const mMatch = (data.memberId && rMId === String(data.memberId).trim()) ||
+                         (data.memberName && rMName === String(data.memberName).trim());
+
+          let sMatch = Boolean(data.scheduleId && rSId === String(data.scheduleId).trim());
+          if (!sMatch && data.scheduleId && rSId) {
+            if (rSId.startsWith(data.scheduleId) || String(data.scheduleId).startsWith(rSId)) {
+              sMatch = true;
+            }
+          }
+
+          if (mMatch && sMatch) {
+            rsvpSheet.deleteRow(i + 1);
+          }
+        }
+      }
+
+      return jsonResponse({ success: true, message: '출결 보정 및 로그 초기화 완료' });
+    }
+
     if (action === 'BIND_DEVICE') {
       const sheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
       const rows = sheet.getDataRange().getValues();

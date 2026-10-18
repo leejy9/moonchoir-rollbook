@@ -3419,6 +3419,12 @@ a {
   border: 1px dashed #cbd5e1;
 }
 
+.matrix-cell.cell-upcoming .cell-status-tag {
+  background: #f8fafc;
+  color: #94a3b8;
+  border: 1px dashed #e2e8f0;
+}
+
 .matrix-cell.cell-manual .cell-status-tag {
   background: #e0e7ff;
   color: #4338ca;

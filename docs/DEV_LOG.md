@@ -640,14 +640,36 @@
 - `npm run build`: Production bundle 성공 (842 kB / gzip 245 kB)
 - `gh-pages` 배포 및 라이브 렌더링 검증 완료.
 
+---
 
+## [2026-10-18] Phase 4.10: 출결 판정 투영 뷰 일원화, 통신 파이프라인 결함 수복 & 보정 초기화 양방향 동기화
 
+### 1. 현상 분석 및 문제 원인 (이재연 단원 10/22 사례)
+1. **결석 보정 후 홈 화면 '출석완료' 표출 결함**:
+   - 관리자가 관리자 화면에서 '결석으로 변경'을 클릭하면 Append-Only 원칙에 따라 `authMethod: 'MANUAL_BY_ADMIN', adminNote: '관리자 결석 처리'` 행이 구글 시트 원천 로그에 추가됨.
+   - 관리자 화면(`AdminMatrixGrid`)은 `reconcileAttendance()` 투영 뷰를 통해 '결석'으로 정상 표출했으나,
+   - 홈 화면(`HomeView.tsx`)은 투영 뷰를 거치지 않고 `sheetsService.getLogs()`에서 내 ID/이름의 로그가 한 건이라도 있는지(`if (myLog)`) 단순 존재 여부만 검사하여, 방금 추가된 '관리자 결석 처리' 로그를 "출석 체크 기록이 존재한다"고 오판하여 '✓ 내 출석 완료' 및 '오늘 출석 체크 완료' 배너를 띄움.
+2. **보정 초기화 시 '출석 08:54'로 부활하는 결함**:
+   - 과거 10/16 08:54에 테스트로 기록되었던 QR 출석 원천 로그(`sch_20261022`)가 구글 시트에 그대로 남아 있었음.
+   - 현재 일정 ID는 `sch_20261022_klyd`였는데, `getLogs()`는 prefix 호환으로 08:54 로그를 가져왔으나 `clearAttendanceLog()`는 완전 일치만 필터링하여 보정(결석) 로그만 지우고 08:54 로그를 남겨둠.
+   - 또한 `clearAttendanceLog`가 구글 시트 웹앱으로 삭제 요청을 전송하지 않아 시트에 남아있던 과거 로그가 재유입됨.
+3. **미래 미진행 일정의 결석/출석 오판 결함**:
+   - 10/22처럼 아직 연습이 시작되지 않은 미래 일정(`schedule.date > todayStr`)에 대해, 출석 로그가 없는 경우 기본값이 무조건 '결석'으로 처리되어 출석률 모수를 왜곡함.
 
+### 2. 수복 및 조치 내용
+1. **`HomeView.tsx` 출결 판정 투영 뷰 일원화**:
+   - `myLogsByScheduleId` 및 활성 일정 배너를 `sheetsService.reconcileMemberAttendance()` 기반으로 전면 교체.
+   - `finalStatus === '출석' | '지각' | '수동인정'`일 때만 출석 완료 배너와 캘린더 `✓` 뱃지 표출.
+   - 관리자에 의해 결석 처리된 경우(`finalStatus === '결석' && isManualOverride`)에는 빨간색 '관리자 확인: 결석 처리' 안내 배너를 띄우고 출석 완료 표시를 완전 차단.
+2. **`clearAttendanceLog` 프리픽스·날짜 매칭 및 시트 동기화**:
+   - `scheduleId` 프리픽스 매칭 및 날짜 매칭을 지원하여 파생 일정 ID 간 잔존 로그까지 완벽 초기화.
+   - `CLEAR_ATTENDANCE` 액션을 신설하고 `google-apps-script.js`에 핸들러를 추가하여 원격 시트의 로그/RSVP까지 역순 안전 삭제 동기화.
+3. **미래 미진행 일정의 `null` / `미진행(-)` 뷰 분기**:
+   - `AdminMatrixGrid.tsx`: 미래 일정(`s.date > todayStr`)이면서 아직 체크인/투표가 없는 셀은 붉은색 '결석' 대신 깔끔한 미진행 대시(`-`, `.cell-upcoming`)로 렌더링.
+   - 누적 출석률 통계(`memberStats`) 계산 시 미래 미진행 일정은 모수 및 결석 횟수에서 제외하여 출석률 왜곡 원천 차단.
 
-
-
-
-
-
-
-
+### 3. 센서 검증 결과 (Green Bar)
+- `npm run typecheck`: 0 errors
+- `npm run lint`: 0 errors
+- `npm test`: 13 test files, 85/85 tests pass (100% 통과, 신규 HomeView 결석 override 격리 테스트 및 프리픽스 clear 테스트 포함)
+- `npm run build`: Production bundle 성공 (845 kB / gzip 246 kB)
