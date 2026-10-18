@@ -5150,13 +5150,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* 강제 영구 삭제 옵션 체크박스 */}
+              {/* 영구 삭제 옵션 체크박스 */}
               <label
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  fontSize: '12px',
+                  fontSize: '13px',
                   color: forceHardDeleteSelected ? '#DC2626' : '#64748B',
                   background: forceHardDeleteSelected ? '#FEF2F2' : '#F8FAFC',
                   border: `1px solid ${forceHardDeleteSelected ? '#FECACA' : '#E2E8F0'}`,
@@ -5172,7 +5172,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={(e) => setForceHardDeleteSelected(e.target.checked)}
                 />
                 <span style={{ fontWeight: forceHardDeleteSelected ? 700 : 500 }}>
-                  💥 출석/투표 기록이 있어도 구글 시트에서 완전 강제 삭제
+                  💥 영구 삭제
                 </span>
               </label>
 
@@ -5180,8 +5180,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#64748B' }}>
                     {forceHardDeleteSelected
-                      ? '기록 유무와 무관하게 구글 시트에서 행이 완전히 영구 삭제됩니다.'
-                      : '출결이나 투표 기록이 있으면 기록 보존을 위해 [취소] 처리되며, 없으면 행이 영구 삭제됩니다.'}
+                      ? '일정을 완전히 영구 삭제합니다.'
+                      : '출결이나 투표 기록이 있으면 기록 보존을 위해 [취소] 처리되며, 없으면 영구 삭제됩니다.'}
                   </p>
                   <button
                     type="button"
@@ -5196,7 +5196,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       await handleDeleteScheduleSingle(id, title, force);
                     }}
                   >
-                    {forceHardDeleteSelected ? '💥 일정 완전 강제 삭제' : '🗑️ 일정 삭제'}
+                    {forceHardDeleteSelected ? '💥 영구 삭제' : '🗑️ 일정 삭제'}
                   </button>
                   <button
                     type="button"
@@ -5239,7 +5239,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <span>1️⃣ 이 회차만 삭제 ({scheduleToDelete.date})</span>
                     <span style={{ fontSize: '11px', color: '#9F1239', fontWeight: 400, marginTop: '2px' }}>
-                      {forceHardDeleteSelected ? '이 회차만 구글 시트에서 강제 영구 삭제합니다.' : '다른 회차 일정은 그대로 유지됩니다.'}
+                      {forceHardDeleteSelected ? '이 회차만 영구 삭제합니다.' : '다른 회차 일정은 그대로 유지됩니다.'}
                     </span>
                   </button>
 
@@ -5270,7 +5270,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     >
                       <span>⏩ 오늘 포함 이후 회차 일괄 삭제 ({futureCompanions.length + 1}개)</span>
                       <span style={{ fontSize: '11px', color: '#9A3412', fontWeight: 400, marginTop: '2px' }}>
-                        {forceHardDeleteSelected ? '이후 회차를 구글 시트에서 강제 영구 삭제합니다.' : '과거 회차는 보존하고 남은 연습 일정만 삭제합니다.'}
+                        {forceHardDeleteSelected ? '이후 회차를 영구 삭제합니다.' : '과거 회차는 보존하고 남은 연습 일정만 삭제합니다.'}
                       </span>
                     </button>
                   )}
@@ -5301,7 +5301,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <span>💥 전체 {companions.length + 1}개 회차 모두 삭제</span>
                     <span style={{ fontSize: '11px', color: '#B91C1C', fontWeight: 400, marginTop: '2px' }}>
-                      {forceHardDeleteSelected ? '연결된 모든 회차를 구글 시트에서 강제 영구 삭제합니다.' : '시리즈에 속한 모든 회차 일정을 삭제합니다.'}
+                      {forceHardDeleteSelected ? '연결된 모든 회차를 영구 삭제합니다.' : '시리즈에 속한 모든 회차 일정을 삭제합니다.'}
                     </span>
                   </button>
 
