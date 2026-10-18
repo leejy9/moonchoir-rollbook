@@ -2,6 +2,14 @@ import React, { useMemo, useState } from 'react';
 import type { Member, Schedule, RawAttendanceLog, PartType, MemberStatus, RoleType, MemberStatusHistory } from '../types/rollbook';
 import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString, addDaysKST } from '../utils/date';
 import { sheetsService } from '../services/sheets';
+import { RoundDatePicker } from './RoundDatePicker';
+
+function addMonthsKST(dateStr: string, months: number): string {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return getKSTDateString();
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const target = new Date(y, m - 1 + months, d, 12, 0, 0);
+  return getKSTDateString(target);
+}
 
 interface MemberProfileModalProps {
   member: Member | null;
@@ -88,11 +96,85 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     !STANDARD_STATUSES.includes(formData.memberStatus as string) ? String(formData.memberStatus || '') : ''
   );
 
-  // 신규 이력 추가 폼 상태
-  const [recordHistory, setRecordHistory] = useState(false);
-  const [historyStartDate, setHistoryStartDate] = useState(getTodayDateString);
-  const [historyEndDate, setHistoryEndDate] = useState('2999-12-31');
-  const [historyReason, setHistoryReason] = useState('');
+  // 특정 기간 한정 적용 (토글) 및 기간 설정 팝업 상태
+  const activeCustomHistory = useMemo(() => {
+    if (!member.statusHistory || member.statusHistory.length === 0) return null;
+    const today = getKSTDateString();
+    return (
+      member.statusHistory.find(
+        (h) => h.startDate <= today && h.endDate >= today && h.endDate !== '2999-12-31'
+      ) || null
+    );
+  }, [member.statusHistory]);
+
+  const [isCustomPeriod, setIsCustomPeriod] = useState<boolean>(() => Boolean(activeCustomHistory));
+  const [showPeriodModal, setShowPeriodModal] = useState<boolean>(false);
+  const [historyStartDate, setHistoryStartDate] = useState<string>(
+    () => activeCustomHistory?.startDate || getTodayDateString()
+  );
+  const [historyEndDate, setHistoryEndDate] = useState<string>(
+    () => activeCustomHistory?.endDate || '2999-12-31'
+  );
+  const [historyReason, setHistoryReason] = useState<string>(
+    () => activeCustomHistory?.reason || ''
+  );
+
+  // 팝업 모달 내부 작업용 임시 상태
+  const [modalStartDate, setModalStartDate] = useState<string>(getTodayDateString);
+  const [modalEndDate, setModalEndDate] = useState<string>(() => addMonthsKST(getTodayDateString(), 3));
+  const [modalReason, setModalReason] = useState<string>('');
+  const [modalError, setModalError] = useState<string>('');
+
+  // 토글 스위치 클릭 핸들러
+  const handleToggleCustomPeriod = () => {
+    if (isCustomPeriod) {
+      setIsCustomPeriod(false);
+      setHistoryEndDate('2999-12-31');
+      setHistoryReason('');
+    } else {
+      setModalStartDate(historyStartDate || todayStr);
+      setModalEndDate(historyEndDate !== '2999-12-31' ? historyEndDate : addMonthsKST(todayStr, 3));
+      setModalReason(historyReason || '');
+      setModalError('');
+      setShowPeriodModal(true);
+    }
+  };
+
+  // 팝업 모달 열기 (요약 카드 또는 수정 버튼 클릭 시)
+  const handleOpenPeriodModal = () => {
+    setModalStartDate(historyStartDate || todayStr);
+    setModalEndDate(historyEndDate !== '2999-12-31' ? historyEndDate : addMonthsKST(todayStr, 3));
+    setModalReason(historyReason || '');
+    setModalError('');
+    setShowPeriodModal(true);
+  };
+
+  // 팝업 모달 취소
+  const handleCancelPeriodModal = () => {
+    setModalError('');
+    setShowPeriodModal(false);
+    if (historyEndDate === '2999-12-31' && !activeCustomHistory) {
+      setIsCustomPeriod(false);
+    }
+  };
+
+  // 팝업 모달 적용 완료
+  const handleApplyPeriodModal = () => {
+    if (!modalStartDate) {
+      setModalError('적용 시작일을 선택해주세요.');
+      return;
+    }
+    if (modalEndDate !== '2999-12-31' && modalEndDate < modalStartDate) {
+      setModalError('적용 종료일은 시작일보다 빠를 수 없습니다.');
+      return;
+    }
+    setHistoryStartDate(modalStartDate);
+    setHistoryEndDate(modalEndDate || '2999-12-31');
+    setHistoryReason(modalReason.trim());
+    setIsCustomPeriod(true);
+    setModalError('');
+    setShowPeriodModal(false);
+  };
 
   // 기기 연동 초기화 핸들러 (1인 1기기 락 해제)
   const handleUnbindDevice = async () => {
@@ -128,9 +210,14 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
       formData.role !== initialData.role ||
       String(formData.joinedAt || '') !== String(initialData.joinedAt || '') ||
       String(formData.note || '').trim() !== String(initialData.note || '').trim() ||
-      recordHistory
+      isCustomPeriod !== Boolean(activeCustomHistory) ||
+      (isCustomPeriod && (
+        historyStartDate !== (activeCustomHistory?.startDate || todayStr) ||
+        historyEndDate !== (activeCustomHistory?.endDate || '2999-12-31') ||
+        historyReason !== (activeCustomHistory?.reason || '')
+      ))
     );
-  }, [formData, initialData, recordHistory]);
+  }, [formData, initialData, isCustomPeriod, activeCustomHistory, historyStartDate, todayStr, historyEndDate, historyReason]);
 
   // 안전 닫기 핸들러 (수정사항 존재 시 확인창 표시)
   const handleAttemptClose = () => {
@@ -204,9 +291,9 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     const isStatusChanged = formData.memberStatus !== initialData.memberStatus;
     const isPartChanged = finalPart !== initialData.part;
 
-    if (recordHistory) {
+    if (isCustomPeriod) {
+      // 1. 특정 기간 한정 적용 (토글 ON): 사용자가 팝업에서 지정한 기간과 사유로 등록
       const targetStart = historyStartDate.trim() || todayStr;
-      // 1. 기존에 진행 중이던 열린 이력(endDate >= targetStart)이 있다면, 새 이력 시작일 전날로 자동 마감
       const prevDayStr = addDaysKST(targetStart, -1);
 
       currentHistories = currentHistories.map((h) => {
@@ -223,12 +310,12 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
         part: finalPart as PartType,
         startDate: targetStart,
         endDate: historyEndDate.trim() || '2999-12-31',
-        reason: historyReason.trim(),
+        reason: historyReason.trim() || `[${formData.memberStatus}] 특정 기간 한정 적용`,
         createdAt: getKSTTimestampString(),
       };
       currentHistories.push(newHistoryItem);
     } else if (isStatusChanged || isPartChanged) {
-      // 2. 사용자가 이력 체크박스를 별도로 켜지 않고 단순히 상단 칩에서 상태/파트를 변경한 경우:
+      // 2. 토글이 꺼져 있어도 상태나 파트가 변경된 경우: DB기록에는 항상 100% 무조건 누적 저장!
       // 과거의 무한 열린 이력(2999-12-31)이 미래 일정을 가로막지 않도록 어제 날짜로 자동 마감하고 새 상태 등록
       const yesterday = addDaysKST(todayStr, -1);
       currentHistories = currentHistories.map((h) => {
@@ -245,7 +332,9 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
         part: finalPart as PartType,
         startDate: todayStr,
         endDate: '2999-12-31',
-        reason: `단원 설정에서 [${formData.memberStatus}]으로 변경`,
+        reason: isStatusChanged 
+          ? `단원 상태를 [${formData.memberStatus}]으로 변경`
+          : `단원 파트를 [${finalPart}]으로 변경`,
         createdAt: getKSTTimestampString(),
       };
       currentHistories.push(newHistoryItem);
@@ -402,7 +491,6 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                       } else {
                         setIsCustomPart(false);
                         setFormData({ ...formData, part: e.target.value as PartType });
-                        setRecordHistory(true);
                       }
                     }}
                   >
@@ -427,7 +515,6 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                       const val = e.target.value;
                       setCustomPartInput(val);
                       setFormData((prev) => ({ ...prev, part: (val.trim() || '기타') as PartType }));
-                      setRecordHistory(true);
                     }}
                     placeholder="새 파트명 직접 입력 (예: 카운터테너, 반주자, 임원)"
                     required={isCustomPart}
@@ -491,10 +578,6 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                           } else {
                             setIsCustomStatus(false);
                             setFormData((prev) => ({ ...prev, memberStatus: chip.key as MemberStatus }));
-                            // 휴단원이나 퇴단원으로 변경 시 자동으로 상태 이력 기록 활성화
-                            if (chip.key === '휴단원' || chip.key === '퇴단원' || chip.key !== initialData.memberStatus) {
-                              setRecordHistory(true);
-                            }
                           }
                         }}
                         style={{
@@ -532,7 +615,6 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                         const val = e.target.value;
                         setCustomStatusInput(val);
                         setFormData((prev) => ({ ...prev, memberStatus: (val.trim() || '기타') as MemberStatus }));
-                        setRecordHistory(true);
                       }}
                       placeholder="단원 상태 직접 입력 (예: 임원진, 특별휴단, 명예단원)"
                       required={isCustomStatus}
@@ -541,74 +623,64 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                   </div>
                 )}
 
-                {/* 상태/파트 변경 이력 기간 및 사유 설정 */}
-                <div style={{ marginTop: '10px', padding: '12px', background: '#f8f9fe', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', color: '#334155' }}>
-                    <input
-                      type="checkbox"
-                      checked={recordHistory}
-                      onChange={(e) => setRecordHistory(e.target.checked)}
-                      style={{ width: '16px', height: '16px' }}
-                    />
-                    <span>🕒 [{formData.memberStatus || '상태'}] 상태 변경 이력 기록 (시트 DB 저장)</span>
-                  </label>
+                {/* 특정 기간 한정 적용 토글 및 기간 요약 카드 */}
+                <div className={`period-setting-toggle-box ${isCustomPeriod ? 'active' : ''}`}>
+                  <div className="modern-switch-wrap" onClick={handleToggleCustomPeriod}>
+                    <div className="period-toggle-info">
+                      <span className="period-toggle-title">
+                        🕒 특정 기간 한정 적용
+                      </span>
+                      <span className="period-toggle-desc">
+                        {isCustomPeriod 
+                          ? `[${formData.memberStatus}] 상태를 정해진 기간 동안만 임시 적용합니다.`
+                          : '기본 상시 적용 (상태 변경 시 시트 DB 이력에 항상 자동 기록됩니다)'}
+                      </span>
+                    </div>
+                    <div className="modern-switch">
+                      <input
+                        type="checkbox"
+                        id="toggle-custom-period"
+                        checked={isCustomPeriod}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleToggleCustomPeriod();
+                        }}
+                      />
+                      <span className="modern-switch-slider" />
+                    </div>
+                  </div>
 
-                  {recordHistory && (
-                    <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <div style={{ flex: 1, minWidth: '130px' }}>
-                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>적용 시작일</span>
-                          <input
-                            type="date"
-                            className="modern-input"
-                            style={{ height: '38px', fontSize: '0.85rem' }}
-                            value={historyStartDate}
-                            onChange={(e) => setHistoryStartDate(e.target.value)}
-                          />
+                  {/* 토글 ON일 때 요약 카드 표시 (팝업으로 열리는 트리거) */}
+                  {isCustomPeriod && (
+                    <div className="period-summary-card" onClick={handleOpenPeriodModal}>
+                      <div className="period-summary-content">
+                        <div className="period-summary-dates">
+                          <span className="period-calendar-icon">📅</span>
+                          <span className="period-dates-text">
+                            {historyStartDate} ~ {historyEndDate === '2999-12-31' ? '무기한' : historyEndDate}
+                          </span>
+                          <span className="period-badge">기간 한정</span>
                         </div>
-                        <span style={{ marginTop: '16px', color: '#94a3b8' }}>~</span>
-                        <div style={{ flex: 1, minWidth: '130px' }}>
-                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>적용 종료일</span>
-                          <input
-                            type="text"
-                            className="modern-input"
-                            style={{ height: '38px', fontSize: '0.85rem' }}
-                            value={historyEndDate}
-                            onChange={(e) => setHistoryEndDate(e.target.value)}
-                            placeholder="YYYY-MM-DD"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setHistoryEndDate('2999-12-31')}
-                          style={{
-                            marginTop: '16px',
-                            height: '38px',
-                            padding: '0 12px',
-                            background: historyEndDate === '2999-12-31' ? '#4f46e5' : '#e2e8f0',
-                            color: historyEndDate === '2999-12-31' ? '#fff' : '#475569',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '0.8rem',
-                            fontWeight: 600,
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          ♾️ 영구 적용
-                        </button>
+                        {historyReason ? (
+                          <div className="period-summary-reason">
+                            사유: {historyReason}
+                          </div>
+                        ) : (
+                          <div className="period-summary-reason" style={{ color: '#94a3b8' }}>
+                            사유 미입력 (터치하여 사유 및 기간 수정)
+                          </div>
+                        )}
                       </div>
-
-                      <div>
-                        <input
-                          type="text"
-                          className="modern-input"
-                          style={{ height: '36px', fontSize: '0.85rem' }}
-                          value={historyReason}
-                          onChange={(e) => setHistoryReason(e.target.value)}
-                          placeholder="변경 사유 입력 (예: 개인 사정으로 휴단, 파트 이동)"
-                        />
-                      </div>
+                      <button
+                        type="button"
+                        className="period-edit-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenPeriodModal();
+                        }}
+                      >
+                        ✏️ 기간·사유 수정
+                      </button>
                     </div>
                   )}
                 </div>
@@ -820,6 +892,162 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
             {isSubmitting ? '저장 중...' : '💾 인적사항 저장'}
           </button>
         </div>
+
+        {/* Period & Reason Setting Popup Modal */}
+        {showPeriodModal && (
+          <div className="period-modal-overlay" onClick={handleCancelPeriodModal}>
+            <div
+              className="period-modal-dialog"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="period-modal-header">
+                <div>
+                  <h3 className="period-modal-title">
+                    📅 [{formData.memberStatus}] 기간 및 사유 설정
+                  </h3>
+                  <p className="period-modal-subtitle">
+                    단원의 상태가 유효한 적용 기간과 사유를 설정합니다.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="period-modal-close-btn"
+                  onClick={handleCancelPeriodModal}
+                  aria-label="닫기"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="period-modal-body">
+                {/* 시작일 */}
+                <div className="period-form-group">
+                  <label className="period-form-label">
+                    적용 시작일 <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <RoundDatePicker
+                    value={modalStartDate}
+                    onChange={setModalStartDate}
+                  />
+                  <div className="period-quick-presets">
+                    <button
+                      type="button"
+                      className={`quick-chip-btn ${modalStartDate === todayStr ? 'active' : ''}`}
+                      onClick={() => setModalStartDate(todayStr)}
+                    >
+                      오늘 ({todayStr})
+                    </button>
+                    <button
+                      type="button"
+                      className={`quick-chip-btn ${modalStartDate === addDaysKST(todayStr, 7) ? 'active' : ''}`}
+                      onClick={() => setModalStartDate(addDaysKST(todayStr, 7))}
+                    >
+                      1주일 후
+                    </button>
+                  </div>
+                </div>
+
+                {/* 종료일 */}
+                <div className="period-form-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="period-form-label">
+                      적용 종료일 <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    {modalEndDate === '2999-12-31' && (
+                      <span className="period-infinite-badge">♾️ 기한 없음 (영구)</span>
+                    )}
+                  </div>
+                  <RoundDatePicker
+                    value={modalEndDate === '2999-12-31' ? '' : modalEndDate}
+                    placeholder="종료 날짜를 선택하세요"
+                    onChange={(val) => setModalEndDate(val)}
+                  />
+                  <div className="period-quick-presets">
+                    <button
+                      type="button"
+                      className={`quick-chip-btn ${modalEndDate === addMonthsKST(modalStartDate, 1) ? 'active' : ''}`}
+                      onClick={() => setModalEndDate(addMonthsKST(modalStartDate, 1))}
+                    >
+                      +1개월
+                    </button>
+                    <button
+                      type="button"
+                      className={`quick-chip-btn ${modalEndDate === addMonthsKST(modalStartDate, 3) ? 'active' : ''}`}
+                      onClick={() => setModalEndDate(addMonthsKST(modalStartDate, 3))}
+                    >
+                      +3개월
+                    </button>
+                    <button
+                      type="button"
+                      className={`quick-chip-btn ${modalEndDate === addMonthsKST(modalStartDate, 6) ? 'active' : ''}`}
+                      onClick={() => setModalEndDate(addMonthsKST(modalStartDate, 6))}
+                    >
+                      +6개월
+                    </button>
+                    <button
+                      type="button"
+                      className={`quick-chip-btn ${modalEndDate === '2999-12-31' ? 'active' : ''}`}
+                      onClick={() => setModalEndDate('2999-12-31')}
+                    >
+                      ♾️ 영구/무기한
+                    </button>
+                  </div>
+                </div>
+
+                {/* 변경 사유 */}
+                <div className="period-form-group">
+                  <label className="period-form-label">
+                    변경 사유 (선택)
+                  </label>
+                  <input
+                    type="text"
+                    className="modern-input"
+                    value={modalReason}
+                    onChange={(e) => setModalReason(e.target.value)}
+                    placeholder="예: 개인 사정으로 휴단, 해외 출장, 학업 등"
+                  />
+                  <div className="period-quick-presets">
+                    {['개인 사정', '해외 출장', '학업/시험', '건강/치료', '육아/가사', '임시 활동'].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        className={`quick-chip-btn ${modalReason === r ? 'active' : ''}`}
+                        onClick={() => setModalReason(r)}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {modalError && (
+                  <div style={{ color: '#ef4444', fontSize: '0.82rem', fontWeight: 600 }}>
+                    ⚠️ {modalError}
+                  </div>
+                )}
+              </div>
+
+              <div className="period-modal-footer">
+                <button
+                  type="button"
+                  className="period-modal-cancel-btn"
+                  onClick={handleCancelPeriodModal}
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  className="period-modal-apply-btn"
+                  onClick={handleApplyPeriodModal}
+                >
+                  적용 완료
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Discard Unsaved Changes Confirm Dialog */}
         {showDiscardConfirm && (

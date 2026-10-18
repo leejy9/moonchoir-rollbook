@@ -477,6 +477,7 @@ export class SheetsService {
     }
 
     let currentHistory = this.members[idx].statusHistory ? [...this.members[idx].statusHistory!] : [];
+    let effectiveHistoryItem = historyItem;
     if (historyItem) {
       // 새 이력이 시작하는 날짜 이전으로 기존 오픈 이력(2999-12-31) 마감
       const prevDay = addDaysKST(historyItem.startDate, -1);
@@ -497,7 +498,7 @@ export class SheetsService {
         }
         return h;
       });
-      currentHistory.push({
+      effectiveHistoryItem = {
         id: `hist_${Date.now()}`,
         memberId,
         status: updates.memberStatus,
@@ -506,7 +507,8 @@ export class SheetsService {
         endDate: '2999-12-31',
         reason: `상태를 [${updates.memberStatus}]으로 변경`,
         createdAt: getKSTTimestampString(),
-      });
+      };
+      currentHistory.push(effectiveHistoryItem);
     }
 
     this.members[idx] = {
@@ -519,7 +521,7 @@ export class SheetsService {
     if (this.config.sheetsWebAppUrl) {
       this.sendToGoogleSheet('UPDATE_MEMBER', {
         ...this.members[idx],
-        historyItem,
+        historyItem: effectiveHistoryItem,
       }).catch((err) => {
         console.error('[Sheets API] Member update sync failed:', err);
       });
