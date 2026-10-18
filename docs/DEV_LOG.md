@@ -673,3 +673,36 @@
 - `npm run lint`: 0 errors
 - `npm test`: 13 test files, 85/85 tests pass (100% 통과, 신규 HomeView 결석 override 격리 테스트 및 프리픽스 clear 테스트 포함)
 - `npm run build`: Production bundle 성공 (845 kB / gzip 246 kB)
+
+---
+
+## [2026-10-18] Phase 4.11: 단원 상태 변경 이력의 도메인 불변식 강화 & 토글 스위치/팝업 모달 UX 혁신
+
+### 1. 배경 및 사용자 요구사항
+- 관리자 화면에서 단원의 상태(`정단원`, `준단원`, `휴단`, `퇴단` 등) 변경 시, 기존에는 복잡한 인라인 체크박스와 날짜 입력창이 폼 중간으로 확장되어 모바일 화면을 밀어내는 불편함이 존재했음.
+- **핵심 요청사항**:
+  1. "이거 토글로 하고": 기존 체크박스를 iOS/토스 스타일의 모던 토글 스위치(`.modern-switch`)로 개편.
+  2. "DB기록에는 항상 저장하고": 토글의 ON/OFF 여부와 상관없이 단원 상태나 파트가 변경되면 시트 DB(`단원변경로그` 탭 및 `statusHistory`)에 100% 무조건 감사 이력을 누적 보존.
+  3. "기간 선택하는건 팝업으로 뜨게 해": 인라인 폼 확장을 완전 제거하고, 토글을 켜면 독립된 팝업 모달(`RoundDatePicker` 기반)이 열려 시작일/종료일/사유를 설정하도록 UX 개편.
+
+### 2. 주요 아키텍처 및 구현 내용
+1. **토글 스위치 UI (`MemberProfileModal.tsx`, `index.css`)**:
+   - `🕒 특정 기간 한정 적용` 토글 스위치 컴포넌트 구현.
+   - Toggle OFF: '기본 상시 적용 (상태 변경 시 시트 DB 이력에 항상 자동 기록됩니다)' 안내 표시.
+   - Toggle ON: 컴팩트한 요약 카드(`📅 2026.10.18 ~ 2027.01.18 [기간 한정]`, 사유, `[✏️ 기간·사유 수정]` 버튼) 표출.
+2. **도메인 감사 로그 무조건 보존 (Always-Save to DB)**:
+   - `MemberProfileModal.tsx:handleSubmit`: 상태(`isStatusChanged`)나 파트(`isPartChanged`)가 변경되면 토글이 꺼져 있어도 `startDate = todayStr, endDate = '2999-12-31'`인 `newHistoryItem`을 자동 생성하여 `onSave` 및 `sheetsService.updateMember`로 전달.
+   - `sheets.ts:updateMember`: `effectiveHistoryItem`을 구글 시트 웹앱 `UPDATE_MEMBER` 페이로드에 항상 동봉하여 `단원변경로그` 탭에 안전하게 appendRow 처리.
+3. **독립된 기간 및 사유 설정 팝업 모달 (`showPeriodModal`)**:
+   - `z-index: 2000`의 중앙 팝업 모달을 띄워 모바일 인라인 밀림 현상 원천 차단.
+   - 시작일/종료일: `RoundDatePicker`(`z-index: 9999`)와 연동.
+   - 원터치 프리셋 칩 제공: 시작일(`오늘`, `1주일 후`), 종료일(`+1개월`, `+3개월`, `+6개월`, `♾️ 영구/무기한`), 사유(`개인 사정`, `해외 출장`, `학업/시험`, `건강/치료`, `육아/가사`, `임시 활동`).
+   - 적용 완료 시 단원 폼에는 깔끔한 한 줄 요약 칩만 남겨 모바일 사용성 극대화.
+
+### 3. 센서 검증 결과 (Green Bar)
+- `npm run typecheck`: 0 errors (100% 통과)
+- `npm run lint`: 0 warnings, 0 errors
+- `npm test`: 14 test files, 88/88 tests pass (`MemberProfileModal.test.tsx` 포함 100% 통과)
+- `npm run build`: Production bundle 성공 (850 kB / gzip 247 kB)
+- `npm run deploy`: GitHub Pages 배포 완료
+- 브라우저 서브에이전트 시각적 검증: 토글 스위치, 팝업 모달 렌더링, 프리셋 적용, 요약 카드 생성 확인 완료.
