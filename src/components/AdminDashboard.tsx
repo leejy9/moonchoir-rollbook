@@ -3608,7 +3608,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <option value="YEARS">년마다 (매년)</option>
                               <option value="DAYS">일마다 (매일)</option>
                             </select>
-                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>총</span>
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>시작일자부터 총</span>
                             <input
                               type="number"
                               min={1}
@@ -3618,7 +3618,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               value={intervalCount}
                               onChange={(e) => setIntervalCount(Math.max(1, Number(e.target.value)))}
                             />
-                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>회차 전개</span>
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>회차 추가</span>
                           </div>
 
                           {/* Interval: WEEKS Day Selector */}
@@ -3833,17 +3833,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </div>
                           )}
 
-                          <span className="form-hint" style={{ marginTop: '10px', display: 'block', color: '#6366F1', fontWeight: 600 }}>
-                            💡 {newDate}부터 매 {intervalStep}
-                            {intervalUnit === 'DAYS' && '일 간격으로'}
-                            {intervalUnit === 'WEEKS' &&
-                              `주마다 [${selectedDays.map((k) => DAYS_OF_WEEK.find((d) => d.key === k)?.label).join(', ')}] 요일에`}
-                            {intervalUnit === 'MONTHS' &&
-                              `개월마다 [${selectedMonthDays.slice().sort((a, b) => a - b).map((d) => `${d}일`).join(', ')}]에`}
-                            {intervalUnit === 'YEARS' &&
-                              `년마다 [${selectedYearDates.map((item) => `${item.month}월 ${item.day}일`).join(', ')}]에`}
-                            {' '}총 {intervalCount}회차 일정이 자동 일괄 생성됩니다.
-                          </span>
+                          <div style={{ marginTop: '10px', padding: '10px 12px', background: '#EEF2FF', borderRadius: '10px', border: '1px solid #C7D2FE', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                            <span style={{ fontSize: '16px', lineHeight: 1 }}>ℹ️</span>
+                            <div style={{ fontSize: '12.5px', color: '#3730A3', fontWeight: 600, lineHeight: 1.5 }}>
+                              시작일자(<strong>{newDate}</strong>)를 기점으로 매 {intervalStep}
+                              {intervalUnit === 'DAYS' && '일 간격으로'}
+                              {intervalUnit === 'WEEKS' &&
+                                `주마다 [${selectedDays.map((k) => DAYS_OF_WEEK.find((d) => d.key === k)?.label).join(', ')}] 요일에`}
+                              {intervalUnit === 'MONTHS' &&
+                                `개월마다 [${selectedMonthDays.slice().sort((a, b) => a - b).map((d) => `${d}일`).join(', ')}]에`}
+                              {intervalUnit === 'YEARS' &&
+                                `년마다 [${selectedYearDates.map((item) => `${item.month}월 ${item.day}일`).join(', ')}]에`}
+                              {' '}총 <strong>{intervalCount}회</strong>의 연습 일정이 차례대로 추가됩니다.
+                            </div>
+                          </div>
                         </div>
                       )}
 
@@ -4315,9 +4318,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     ) : (
                       <button type="submit" className="btn-primary-large" style={{ minHeight: '44px' }}>
                         {scheduleAddMode === 'SINGLE' && '단일 일정 등록 완료'}
-                        {scheduleAddMode === 'INTERVAL' && `${intervalCount}회차 주기 반복 일정 일괄 생성`}
-                        {scheduleAddMode === 'DAYS_OF_WEEK' && `${selectedDays.length * weeksCount}개 요일 반복 일정 일괄 생성`}
-                        {scheduleAddMode === 'CALENDAR_PICK' && `선택한 ${pickedDates.length}개 날짜 일정 일괄 생성`}
+                        {scheduleAddMode === 'INTERVAL' && `시작일자(${newDate})부터 총 ${intervalCount}회 주기 반복 일정 추가`}
+                        {scheduleAddMode === 'DAYS_OF_WEEK' && `시작일자(${newDate})부터 총 ${weeksCount}주간 요일 지정 일정 추가 (${selectedDays.length * weeksCount}개)`}
+                        {scheduleAddMode === 'CALENDAR_PICK' && `선택한 ${pickedDates.length}개 날짜 일정 일괄 추가`}
                       </button>
                     )}
                       </form>

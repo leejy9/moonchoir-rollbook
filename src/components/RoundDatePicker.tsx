@@ -41,19 +41,17 @@ export const RoundDatePicker: React.FC<RoundDatePickerProps> = ({
       setViewYear(y);
       setViewMonthIndex(m - 1);
     }
-    setIsOpen((prev) => !prev);
+    setIsOpen(true);
   };
 
-  // Close on outside click
+  // Close on Escape key
   useEffect(() => {
     if (!isOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
   const handlePrevMonth = (e: React.MouseEvent) => {
@@ -126,78 +124,98 @@ export const RoundDatePicker: React.FC<RoundDatePickerProps> = ({
         <span className="picker-arrow">▾</span>
       </button>
 
-      {/* Floating Popover Dialog */}
+      {/* Unified Modal Popup with Dim Backdrop */}
       {isOpen && (
-        <div className="round-date-popover">
-          {/* Header Controller */}
-          <div className="popover-month-nav">
-            <button
-              type="button"
-              className="month-nav-btn"
-              onClick={handlePrevMonth}
-              aria-label="이전 달"
-            >
-              ‹
-            </button>
-            <span className="popover-month-title">
-              {viewYear}년 {viewMonthIndex + 1}월
-            </span>
-            <button
-              type="button"
-              className="month-nav-btn"
-              onClick={handleNextMonth}
-              aria-label="다음 달"
-            >
-              ›
-            </button>
-          </div>
-
-          {/* Quick preset chips */}
-          <div className="popover-quick-chips">
-            <button type="button" onClick={handleSelectToday}>
-              오늘
-            </button>
-            <button type="button" onClick={handleSelectNextThu}>
-              다가오는 목요일
-            </button>
-          </div>
-
-          {/* Weekday Row */}
-          <div className="popover-weekdays-row">
-            {WEEKDAYS.map((wd, i) => (
-              <span
-                key={wd}
-                className={`popover-weekday ${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}`}
+        <div
+          className="picker-modal-backdrop"
+          onClick={() => setIsOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="picker-modal-dialog round-date-popover"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            {/* Header Controller */}
+            <div className="popover-month-nav">
+              <button
+                type="button"
+                className="month-nav-btn"
+                onClick={handlePrevMonth}
+                aria-label="이전 달"
               >
-                {wd}
+                ‹
+              </button>
+              <span className="popover-month-title">
+                {viewYear}년 {viewMonthIndex + 1}월
               </span>
-            ))}
-          </div>
+              <button
+                type="button"
+                className="month-nav-btn"
+                onClick={handleNextMonth}
+                aria-label="다음 달"
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                className="popover-close-btn"
+                onClick={() => setIsOpen(false)}
+                aria-label="닫기"
+                style={{ marginLeft: '6px' }}
+              >
+                ✕
+              </button>
+            </div>
 
-          {/* Days Grid */}
-          <div className="popover-days-grid">
-            {calendarDays.map((cell) => {
-              const isSelected = cell.dateStr === value;
-              const isToday = cell.dateStr === todayStr;
+            {/* Quick preset chips */}
+            <div className="popover-quick-chips">
+              <button type="button" onClick={handleSelectToday}>
+                오늘
+              </button>
+              <button type="button" onClick={handleSelectNextThu}>
+                다가오는 목요일
+              </button>
+            </div>
 
-              return (
-                <button
-                  key={cell.dateStr}
-                  type="button"
-                  className={`popover-day-cell ${cell.isCurrentMonth ? 'in-month' : 'other-month'} ${
-                    isSelected ? 'selected' : ''
-                  } ${isToday ? 'today' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChange(cell.dateStr);
-                    setIsOpen(false);
-                  }}
-                  title={cell.dateStr}
+            {/* Weekday Row */}
+            <div className="popover-weekdays-row">
+              {WEEKDAYS.map((wd, i) => (
+                <span
+                  key={wd}
+                  className={`popover-weekday ${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}`}
                 >
-                  <span className="day-number">{cell.dayNumber}</span>
-                </button>
-              );
-            })}
+                  {wd}
+                </span>
+              ))}
+            </div>
+
+            {/* Days Grid */}
+            <div className="popover-days-grid">
+              {calendarDays.map((cell) => {
+                const isSelected = cell.dateStr === value;
+                const isToday = cell.dateStr === todayStr;
+
+                return (
+                  <button
+                    key={cell.dateStr}
+                    type="button"
+                    className={`popover-day-cell ${cell.isCurrentMonth ? 'in-month' : 'other-month'} ${
+                      isSelected ? 'selected' : ''
+                    } ${isToday ? 'today' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onChange(cell.dateStr);
+                      setIsOpen(false);
+                    }}
+                    title={cell.dateStr}
+                  >
+                    <span className="day-number">{cell.dayNumber}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

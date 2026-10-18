@@ -41,19 +41,17 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
     setPeriod(parsed.isPM ? 'PM' : 'AM');
     setSelectedHour(parsed.hour12);
     setSelectedMinute(parsed.minute);
-    setIsOpen((prev) => !prev);
+    setIsOpen(true);
   };
 
-  // Close on outside click
+  // Close on Escape key
   useEffect(() => {
     if (!isOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
   // Convert current state into HH:mm and emit onChange
@@ -88,6 +86,23 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
     emitChange(period, selectedHour, m);
   };
 
+  // 1-minute step handler (-1 or +1)
+  const handleMinuteStep = (delta: number) => {
+    let nextMin = selectedMinute + delta;
+    if (nextMin < 0) nextMin = 59;
+    if (nextMin > 59) nextMin = 0;
+    setSelectedMinute(nextMin);
+    emitChange(period, selectedHour, nextMin);
+  };
+
+  // 1-minute direct numeric input
+  const handleMinuteDirectInput = (val: number) => {
+    if (isNaN(val)) val = 0;
+    const clamped = Math.max(0, Math.min(59, val));
+    setSelectedMinute(clamped);
+    emitChange(period, selectedHour, clamped);
+  };
+
   const handlePresetClick = (presetVal: string) => {
     onChange(presetVal);
     const [h24, m] = presetVal.split(':').map(Number);
@@ -109,6 +124,7 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
   ];
 
   const HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const QUARTER_MINUTES = [0, 15, 30, 45];
   const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
 
   return (
@@ -128,116 +144,177 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
         <span className="picker-arrow">▾</span>
       </button>
 
-      {/* Floating Popover */}
+      {/* Unified Modal Popup with Dim Backdrop */}
       {isOpen && (
-        <div className="round-time-popover">
-          {/* Popover Header */}
-          <div className="popover-time-header">
-            <div className="popover-time-badge">
-              {period === 'PM' ? '오후' : '오전'} {String(selectedHour).padStart(2, '0')}:{String(selectedMinute).padStart(2, '0')}
+        <div
+          className="picker-modal-backdrop"
+          onClick={() => setIsOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="picker-modal-dialog round-time-popover"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            {/* Popover Header */}
+            <div className="popover-time-header">
+              <div className="popover-time-badge">
+                {period === 'PM' ? '오후' : '오전'} {String(selectedHour).padStart(2, '0')}:{String(selectedMinute).padStart(2, '0')}
+              </div>
+              <button
+                type="button"
+                className="popover-close-btn"
+                onClick={() => setIsOpen(false)}
+                aria-label="닫기"
+              >
+                ✕
+              </button>
             </div>
-            <button
-              type="button"
-              className="popover-close-btn"
-              onClick={() => setIsOpen(false)}
-              aria-label="닫기"
-            >
-              ✕
-            </button>
-          </div>
 
-          {/* Practice Time Presets */}
-          <div className="popover-time-presets">
-            {PRESETS.map((p) => {
-              const isMatch = value === p.val;
-              return (
-                <button
-                  key={p.val}
-                  type="button"
-                  className={`time-preset-chip ${isMatch ? 'active' : ''}`}
-                  onClick={() => handlePresetClick(p.val)}
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
+            {/* Practice Time Presets */}
+            <div className="popover-time-presets">
+              {PRESETS.map((p) => {
+                const isMatch = value === p.val;
+                return (
+                  <button
+                    key={p.val}
+                    type="button"
+                    className={`time-preset-chip ${isMatch ? 'active' : ''}`}
+                    onClick={() => handlePresetClick(p.val)}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* AM / PM Segmented Control */}
-          <div className="popover-period-segment">
-            <button
-              type="button"
-              className={`period-btn ${period === 'AM' ? 'selected' : ''}`}
-              onClick={() => handlePeriodChange('AM')}
-            >
-              오전 (AM)
-            </button>
-            <button
-              type="button"
-              className={`period-btn ${period === 'PM' ? 'selected' : ''}`}
-              onClick={() => handlePeriodChange('PM')}
-            >
-              오후 (PM)
-            </button>
-          </div>
+            {/* AM / PM Segmented Control */}
+            <div className="popover-period-segment">
+              <button
+                type="button"
+                className={`period-btn ${period === 'AM' ? 'selected' : ''}`}
+                onClick={() => handlePeriodChange('AM')}
+              >
+                오전 (AM)
+              </button>
+              <button
+                type="button"
+                className={`period-btn ${period === 'PM' ? 'selected' : ''}`}
+                onClick={() => handlePeriodChange('PM')}
+              >
+                오후 (PM)
+              </button>
+            </div>
 
-          {/* Hour & Minute Picker Columns */}
-          <div className="popover-time-columns">
-            {/* Hour Selector */}
-            <div className="time-column">
-              <span className="column-label">시 (Hour)</span>
-              <div className="hours-grid">
-                {HOURS.map((h) => {
-                  const isSel = selectedHour === h;
-                  return (
-                    <button
-                      key={h}
-                      type="button"
-                      className={`time-cell-btn ${isSel ? 'selected' : ''}`}
-                      onClick={() => handleHourClick(h)}
-                    >
-                      {h}
-                    </button>
-                  );
-                })}
+            {/* Hour & Minute Picker Columns */}
+            <div className="popover-time-columns">
+              {/* Hour Selector */}
+              <div className="time-column">
+                <span className="column-label">시 (Hour)</span>
+                <div className="hours-grid">
+                  {HOURS.map((h) => {
+                    const isSel = selectedHour === h;
+                    return (
+                      <button
+                        key={h}
+                        type="button"
+                        className={`time-cell-btn ${isSel ? 'selected' : ''}`}
+                        onClick={() => handleHourClick(h)}
+                      >
+                        {h}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Minute Selector */}
+              <div className="time-column">
+                <span className="column-label">분 (Minute)</span>
+                {/* 15m Quick Chips */}
+                <div className="popover-quarter-presets">
+                  {QUARTER_MINUTES.map((qm) => {
+                    const isSel = selectedMinute === qm;
+                    return (
+                      <button
+                        key={qm}
+                        type="button"
+                        className={`quarter-preset-chip ${isSel ? 'active' : ''}`}
+                        onClick={() => handleMinuteClick(qm)}
+                      >
+                        {String(qm).padStart(2, '0')}분
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 5m Grid */}
+                <div className="minutes-grid">
+                  {MINUTES.map((m) => {
+                    const isSel = selectedMinute === m;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        className={`time-cell-btn ${isSel ? 'selected' : ''}`}
+                        onClick={() => handleMinuteClick(m)}
+                      >
+                        {String(m).padStart(2, '0')}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 1-minute Stepper & Direct Input */}
+                <div className="minute-fine-tune-row">
+                  <button
+                    type="button"
+                    className="minute-step-btn"
+                    onClick={() => handleMinuteStep(-1)}
+                    title="1분 빼기"
+                  >
+                    -1분
+                  </button>
+                  <div className="minute-input-wrap">
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={selectedMinute}
+                      onChange={(e) => handleMinuteDirectInput(parseInt(e.target.value, 10))}
+                      className="minute-direct-input"
+                      aria-label="분 직접 입력"
+                    />
+                    <span className="minute-unit">분</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="minute-step-btn"
+                    onClick={() => handleMinuteStep(1)}
+                    title="1분 더하기"
+                  >
+                    +1분
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Minute Selector */}
-            <div className="time-column">
-              <span className="column-label">분 (Minute)</span>
-              <div className="minutes-grid">
-                {MINUTES.map((m) => {
-                  const isSel = selectedMinute === m;
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      className={`time-cell-btn ${isSel ? 'selected' : ''}`}
-                      onClick={() => handleMinuteClick(m)}
-                    >
-                      {String(m).padStart(2, '0')}
-                    </button>
-                  );
-                })}
-              </div>
+            {/* Footer Done Button */}
+            <div className="popover-time-footer">
+              <button
+                type="button"
+                className="time-done-btn"
+                onClick={() => {
+                  if (!value) {
+                    emitChange(period, selectedHour, selectedMinute);
+                  }
+                  setIsOpen(false);
+                }}
+              >
+                선택 완료
+              </button>
             </div>
-          </div>
-
-          {/* Footer Done Button */}
-          <div className="popover-time-footer">
-            <button
-              type="button"
-              className="time-done-btn"
-              onClick={() => {
-                if (!value) {
-                  emitChange(period, selectedHour, selectedMinute);
-                }
-                setIsOpen(false);
-              }}
-            >
-              선택 완료
-            </button>
           </div>
         </div>
       )}

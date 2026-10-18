@@ -5243,3 +5243,154 @@ a {
 .time-done-btn:hover {
   filter: brightness(1.05);
 }
+
+/* Universal Picker Modal Backdrop & Centered Dialog */
+.picker-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: pickerBackdropFadeIn 0.15s ease-out;
+}
+
+@keyframes pickerBackdropFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.picker-modal-dialog {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 50px -10px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(15, 23, 42, 0.08) !important;
+  animation: pickerModalScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+@keyframes pickerModalScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.93) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 15m Quick Presets */
+.popover-quarter-presets {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.quarter-preset-chip {
+  flex: 1;
+  padding: 4px 0;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.quarter-preset-chip:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4f46e5;
+}
+
+.quarter-preset-chip.active {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #ffffff;
+}
+
+/* 1-minute Stepper & Direct Input */
+.minute-fine-tune-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.minute-step-btn {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.minute-step-btn:hover {
+  background: #eef2ff;
+  border-color: #a5b4fc;
+  color: #4f46e5;
+}
+
+.minute-step-btn:active {
+  transform: scale(0.95);
+}
+
+.minute-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.minute-direct-input {
+  width: 44px;
+  height: 28px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #1e293b;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0 4px;
+}
+
+.minute-direct-input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.minute-unit {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+@media (max-width: 480px) {
+  .picker-modal-backdrop {
+    padding: 12px;
+  }
+  .picker-modal-dialog {
+    width: 100% !important;
+    max-width: 340px !important;
+  }
+}

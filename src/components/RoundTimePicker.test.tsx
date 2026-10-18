@@ -56,4 +56,24 @@ describe('RoundTimePicker Component', () => {
     );
     expect(html).toContain('시간을 선택하세요');
   });
+
+  it('renders exact 1-minute precision times without rounding error', () => {
+    const html = renderToString(
+      <RoundTimePicker
+        value="19:28"
+        onChange={() => {}}
+      />
+    );
+    expect(html).toContain('오후 07:28');
+  });
+
+  it('handles time values with seconds (e.g. 19:30:00) cleanly', () => {
+    const html = renderToString(
+      <RoundTimePicker
+        value="19:30:00"
+        onChange={() => {}}
+      />
+    );
+    expect(html).toContain('오후 07:30');
+  });
 });
