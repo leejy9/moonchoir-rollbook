@@ -166,6 +166,15 @@ export function App() {
             setShowMemberPortalModal(false);
             setShowBindingModal(true);
           }}
+          onOpenRSVP={(sch) => {
+            setShowMemberPortalModal(false);
+            setRsvSchedule(sch);
+          }}
+          onOpenQRScanner={(sch) => {
+            setShowMemberPortalModal(false);
+            if (sch) setQrTargetSchedule(sch);
+            setShowQRScanner(true);
+          }}
           onLogout={async () => {
             if (profile) {
               await sheetsService.unbindMemberDevice(profile.memberId).catch(console.error);

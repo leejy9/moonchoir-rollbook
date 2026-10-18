@@ -291,8 +291,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
      myReconciliation.finalStatus === '지각' ||
      myReconciliation.finalStatus === '수동인정')
   );
+  // 관리자가 명시적으로 결석/노쇼로 지정한 경우에만 관리자 결석으로 판정 (일반 미출석 마감과 엄격히 분리)
   const isManuallyAbsent = Boolean(
-    myReconciliation?.finalStatus === '결석' && myReconciliation.isManualOverride
+    myReconciliation?.finalStatus === '결석' &&
+    myReconciliation.isManualOverride &&
+    (myReconciliation.adminNote?.includes('결석') || myReconciliation.adminNote?.includes('노쇼'))
   );
 
   // Grouped RSVP lists with deduplication by name/ID so a single person cannot appear twice
@@ -916,6 +919,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </p>
               </div>
             </div>
+          ) : (windowState?.status === 'WINDOW_CLOSED' && myReconciliation?.finalStatus === '결석' && isTargetMember) ? (
+            <div className="my-status-banner absent" style={{ background: '#f8fafc', borderColor: '#cbd5e1' }}>
+              <span className="status-indicator-dot" style={{ background: '#94a3b8' }} />
+              <div>
+                <strong style={{ color: '#475569' }}>출석 마감: 미출석 (일반 결석)</strong>
+                <p className="banner-subtext" style={{ color: '#64748b' }}>
+                  공식 출석 시간이 종료되어 미출석으로 기록되었습니다.
+                </p>
+              </div>
+            </div>
           ) : myVote ? (
             <div className={`my-status-banner voted ${myVote.status.toLowerCase()}`}>
               <span className={`status-indicator-dot ${myVote.status === 'ATTEND' ? 'attend' : 'absent'}`} />
@@ -971,7 +984,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         ? `출석 완료 (${myReconciliation.checkInTime.includes('T') ? myReconciliation.checkInTime.slice(11, 16) : myReconciliation.checkInTime.slice(0, 5)}) · 정상 반영되었습니다.`
                         : isManuallyAbsent
                         ? `관리자에 의해 결석 처리되었습니다 (${myReconciliation?.adminNote || '관리자 결석'}).`
-                        : '금일 연습의 공식 출석 체크가 마감되었습니다.'}
+                        : myReconciliation?.finalStatus === '사유결석'
+                        ? `사전 불참 사유가 등록되어 사유결석 처리되었습니다 (${myReconciliation?.rsvpReason || '사유 불참'}).`
+                        : !isTargetMember
+                        ? '공식 필참 대상이 아니므로 출결 통계 모수에서 제외되었습니다 (미참).'
+                        : '금일 연습의 공식 출석 체크가 마감되었습니다 (미출석).'}
                     </div>
                   </div>
                 </div>

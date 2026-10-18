@@ -278,6 +278,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
     // 2. 일정들을 카드에 매핑 또는 독립 그룹으로 수납
     for (const sch of schedules) {
       if (!showArchivedSchedules && sch.isArchived) continue;
+      if (sch.isCancelled) continue; // 삭제/취소된 일정은 활성 카드 묶음에서 제외하여 일정 리스트와 완벽 연동
       let key = sch.programId;
       if (!key || !groups.has(key)) {
         key = sch.programId || sch.seriesId || sch.title;

@@ -24,14 +24,14 @@ import {
 } from './mockData';
 
 const STORAGE_KEYS = {
-  MEMBERS: 'moonchoir_members_v2',
-  SCHEDULES: 'moonchoir_schedules_v2',
-  RSVP_VOTES: 'moonchoir_rsvp_votes_v2',
-  LOGS: 'moonchoir_logs_v2',
-  CONFIG: 'moonchoir_config_v2',
-  LOCATIONS: 'moonchoir_locations_v2',
-  PENDING_MEMBERS: 'moonchoir_pending_members_v2',
-  PROGRAM_CARDS: 'moonchoir_program_cards_v2',
+  MEMBERS: 'moonchoir_members_v3',
+  SCHEDULES: 'moonchoir_schedules_v3',
+  RSVP_VOTES: 'moonchoir_rsvp_votes_v3',
+  LOGS: 'moonchoir_logs_v3',
+  CONFIG: 'moonchoir_config_v3',
+  LOCATIONS: 'moonchoir_locations_v3',
+  PENDING_MEMBERS: 'moonchoir_pending_members_v3',
+  PROGRAM_CARDS: 'moonchoir_program_cards_v3',
 };
 
 class MemoryStorage {
@@ -94,18 +94,52 @@ export class SheetsService {
   private pendingMemberIds: Set<string>;
 
   constructor() {
-    this.config = loadFromStorage(STORAGE_KEYS.CONFIG, INITIAL_CONFIG);
-    if (!this.config.sheetsWebAppUrl && INITIAL_CONFIG.sheetsWebAppUrl) {
-      this.config.sheetsWebAppUrl = INITIAL_CONFIG.sheetsWebAppUrl;
+    // Schema Evolution: v2의 config 및 members가 존재하면 안전하게 마이그레이션 승계
+    const legacyConfig = loadFromStorage<AppConfig | null>('moonchoir_config_v2', null);
+    const legacyMembers = loadFromStorage<Member[] | null>('moonchoir_members_v2', null);
+    const legacyLocations = loadFromStorage<LocationPreset[] | null>('moonchoir_locations_v2', null);
+
+    this.config = loadFromStorage(STORAGE_KEYS.CONFIG, legacyConfig || INITIAL_CONFIG);
+    if (!this.config.sheetsWebAppUrl && (legacyConfig?.sheetsWebAppUrl || INITIAL_CONFIG.sheetsWebAppUrl)) {
+      this.config.sheetsWebAppUrl = legacyConfig?.sheetsWebAppUrl || INITIAL_CONFIG.sheetsWebAppUrl;
       saveToStorage(STORAGE_KEYS.CONFIG, this.config);
     }
-    this.members = loadFromStorage(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS);
+    this.members = loadFromStorage(STORAGE_KEYS.MEMBERS, legacyMembers || INITIAL_MEMBERS);
     this.schedules = loadFromStorage(STORAGE_KEYS.SCHEDULES, INITIAL_SCHEDULES);
     this.rsvpVotes = loadFromStorage(STORAGE_KEYS.RSVP_VOTES, INITIAL_RSVP_VOTES);
     this.logs = loadFromStorage(STORAGE_KEYS.LOGS, INITIAL_LOGS);
-    this.locations = loadFromStorage(STORAGE_KEYS.LOCATIONS, INITIAL_LOCATION_PRESETS);
+    this.locations = loadFromStorage(STORAGE_KEYS.LOCATIONS, legacyLocations || INITIAL_LOCATION_PRESETS);
     this.programCards = loadFromStorage(STORAGE_KEYS.PROGRAM_CARDS, INITIAL_PROGRAM_CARDS);
     this.pendingMemberIds = new Set(loadFromStorage<string[]>(STORAGE_KEYS.PENDING_MEMBERS, []));
+  }
+
+  public seedTestData(data: {
+    schedules?: Schedule[];
+    rsvpVotes?: RSVPVote[];
+    logs?: RawAttendanceLog[];
+    programCards?: ProgramCard[];
+    members?: Member[];
+  }): void {
+    if (data.schedules) {
+      this.schedules = [...data.schedules];
+      saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+    }
+    if (data.rsvpVotes) {
+      this.rsvpVotes = [...data.rsvpVotes];
+      saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
+    }
+    if (data.logs) {
+      this.logs = [...data.logs];
+      saveToStorage(STORAGE_KEYS.LOGS, this.logs);
+    }
+    if (data.programCards) {
+      this.programCards = [...data.programCards];
+      saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
+    }
+    if (data.members) {
+      this.members = [...data.members];
+      saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+    }
   }
 
   // --- Read Operations ---

@@ -242,7 +242,15 @@ export const INITIAL_MEMBERS: Member[] = [
   },
 ];
 
-export const INITIAL_SCHEDULES: Schedule[] = [
+export const INITIAL_SCHEDULES: Schedule[] = [];
+
+export const INITIAL_RSVP_VOTES: RSVPVote[] = [];
+
+export const INITIAL_LOGS: RawAttendanceLog[] = [];
+
+export const INITIAL_PROGRAM_CARDS: ProgramCard[] = [];
+
+export const TEST_MOCK_SCHEDULES: Schedule[] = [
   // 9월 연습들 (누적 통계 데이터 검증용)
   {
     id: 'sch_20260917',
@@ -359,8 +367,7 @@ export const INITIAL_SCHEDULES: Schedule[] = [
   },
 ];
 
-export const INITIAL_RSVP_VOTES: RSVPVote[] = [
-  // 10/15 연습 사전 투표
+export const TEST_MOCK_RSVP_VOTES: RSVPVote[] = [
   { id: 'v_01', scheduleId: 'sch_20261015', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', status: 'ATTEND', timestamp: '2026-10-14T10:00:00Z' },
   { id: 'v_02', scheduleId: 'sch_20261015', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', status: 'ATTEND', timestamp: '2026-10-14T11:20:00Z' },
   { id: 'v_03', scheduleId: 'sch_20261015', memberId: 'mem_s03', memberName: '박서연', part: '소프라노', status: 'ABSENT', reason: '회사 야근', timestamp: '2026-10-14T12:00:00Z' },
@@ -373,7 +380,7 @@ export const INITIAL_RSVP_VOTES: RSVPVote[] = [
   { id: 'v_10', scheduleId: 'sch_20261015', memberId: 'mem_l01', memberName: '문마에', part: '선생님', status: 'ATTEND', timestamp: '2026-10-14T09:00:00Z' },
 ];
 
-export const INITIAL_LOGS: RawAttendanceLog[] = [
+export const TEST_MOCK_LOGS: RawAttendanceLog[] = [
   // 9/17 출석 로그 샘플
   { id: 'log_917_01', scheduleId: 'sch_20260917', timestamp: '2026-09-17T19:20:00Z', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
   { id: 'log_917_02', scheduleId: 'sch_20260917', timestamp: '2026-09-17T19:25:00Z', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
@@ -394,7 +401,7 @@ export const INITIAL_LOGS: RawAttendanceLog[] = [
   { id: 'log_1001_02', scheduleId: 'sch_20261001', timestamp: '2026-10-01T19:24:00Z', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
   { id: 'log_1001_03', scheduleId: 'sch_20261001', timestamp: '2026-10-01T19:20:00Z', memberId: 'mem_a01', memberName: '정유나', part: '알토', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
   { id: 'log_1001_04', scheduleId: 'sch_20261001', timestamp: '2026-10-01T19:21:00Z', memberId: 'mem_t01', memberName: '윤도현', part: '테너', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_1001_05', scheduleId: 'sch_20261001', timestamp: '2026-10-01T19:45:00Z', memberId: 'mem_b01', memberName: '장기하', part: '베이스', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true }, // 지각
+  { id: 'log_1001_05', scheduleId: 'sch_20261001', timestamp: '2026-10-01T19:45:00Z', memberId: 'mem_b01', memberName: '장기하', part: '베이스', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
 
   // 10/08 출석 로그 샘플
   { id: 'log_1008_01', scheduleId: 'sch_20261008', timestamp: '2026-10-08T19:18:00Z', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
@@ -433,7 +440,7 @@ export const INITIAL_LOGS: RawAttendanceLog[] = [
   {
     id: 'log_03',
     scheduleId: 'sch_20261015',
-    timestamp: '2026-10-15T19:42:10Z', // 10분 지각
+    timestamp: '2026-10-15T19:42:10Z',
     memberId: 'mem_t01',
     memberName: '윤도현',
     part: '테너',
@@ -456,7 +463,7 @@ export const INITIAL_LOGS: RawAttendanceLog[] = [
   },
 ];
 
-export const INITIAL_PROGRAM_CARDS: ProgramCard[] = [
+export const TEST_MOCK_PROGRAM_CARDS: ProgramCard[] = [
   {
     id: 'card_fall_2026',
     title: '2026 하반기 정기연습',
@@ -470,4 +477,5 @@ export const INITIAL_PROGRAM_CARDS: ProgramCard[] = [
     createdAt: '2026-08-01T00:00:00Z',
   },
 ];
+
 

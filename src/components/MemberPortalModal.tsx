@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
-import type { BoundDeviceProfile, Member } from '../types/rollbook';
+import type { BoundDeviceProfile, Member, Schedule } from '../types/rollbook';
 import {
   calculateCumulativeAttendanceWithLifecycle,
   getGamifiedAttendanceLevel,
@@ -13,6 +13,8 @@ interface MemberPortalModalProps {
   onChangeBinding: () => void;
   onLogout?: () => void;
   onRefreshData?: () => void;
+  onOpenRSVP?: (schedule: Schedule) => void;
+  onOpenQRScanner?: (schedule: Schedule) => void;
 }
 
 const getTodayDateString = () => getKSTDateString();
@@ -23,6 +25,8 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   onChangeBinding,
   onLogout,
   onRefreshData,
+  onOpenRSVP,
+  onOpenQRScanner,
 }) => {
   const [activeTab, setActiveTab] = useState<'RECORDS' | 'DASHBOARD'>('RECORDS');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -79,14 +83,17 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
   // 3. 탭 1용: 회차별 통합 리스트 데이터 조립 [연습명칭 / 연습일 / 투표 상태 / 출결 시간]
   const scheduleRecords = useMemo(() => {
-    // 최신 연습일정이 상단에 오도록 내림차순 정렬
-    const sortedSchedules = [...schedules].sort((a, b) => b.date.localeCompare(a.date));
+    // 최신 연습일정이 상단에 오도록 내림차순 정렬 (취소된 일정 제외)
+    const sortedSchedules = [...schedules]
+      .filter((s) => !s.isCancelled)
+      .sort((a, b) => b.date.localeCompare(a.date));
 
     return sortedSchedules.map((s) => {
       const rec = sheetsService.reconcileMemberAttendance(profile.memberId, s.id, profile.name);
       const isPast = s.date < todayStr;
       const isToday = s.date === todayStr;
-      const isExempt = rec?.finalStatus === '미참' || rec?.finalStatus === '모수제외' || Boolean(currentMember.joinedAt && s.date < currentMember.joinedAt);
+      // 정단원/준단원의 출결 상태가 joinedAt 하드코딩으로 무단 미참 처리되지 않도록 reconcile 결과 존중
+      const isExempt = rec?.finalStatus === '미참' || rec?.finalStatus === '모수제외';
 
       let checkInTime = '-';
       const isAttended = rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정' || rec?.finalStatus === '지각';
@@ -114,6 +121,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
       return {
         id: s.id,
+        schedule: s,
         title: s.title,
         date: s.date,
         category: s.category || '정기연습',
@@ -127,7 +135,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         isExempt,
       };
     });
-  }, [schedules, profile.memberId, profile.name, currentMember.joinedAt, todayStr]);
+  }, [schedules, profile.memberId, profile.name, todayStr]);
 
   // 4. 시트 동기화 핸들러
   const handleSyncRemote = async () => {
@@ -395,64 +403,79 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                           {r.date}
                         </span>
 
-                        {/* 3. 투표 상태 */}
+                        {/* 3. 투표 상태 (클릭 시 투표 모달 열림) */}
                         <div style={{ textAlign: 'center' }}>
-                          {r.voteStatus === 'ATTEND' ? (
-                            <span
-                              style={{
-                                background: '#dcfce7',
-                                color: '#15803d',
-                                padding: '3px 8px',
-                                borderRadius: '6px',
-                                fontWeight: 700,
-                                fontSize: '11.5px',
-                              }}
-                            >
-                              참석
-                            </span>
-                          ) : r.voteStatus === 'ABSENT' ? (
-                            <span
-                              style={{
-                                background: '#ffedd5',
-                                color: '#c2410c',
-                                padding: '3px 8px',
-                                borderRadius: '6px',
-                                fontWeight: 700,
-                                fontSize: '11.5px',
-                              }}
-                              title={r.voteReason ? `사유: ${r.voteReason}` : undefined}
-                            >
-                              불참
-                            </span>
-                          ) : r.voteStatus === 'LATE' ? (
-                            <span
-                              style={{
-                                background: '#fef3c7',
-                                color: '#b45309',
-                                padding: '3px 8px',
-                                borderRadius: '6px',
-                                fontWeight: 700,
-                                fontSize: '11.5px',
-                              }}
-                            >
-                              지각
-                            </span>
-                          ) : (
-                            <span
-                              style={{
-                                background: '#f1f5f9',
-                                color: '#94a3b8',
-                                padding: '3px 7px',
-                                borderRadius: '6px',
-                                fontSize: '11px',
-                              }}
-                            >
-                              미투표
-                            </span>
-                          )}
+                          <button
+                            type="button"
+                            disabled={r.isPast || !onOpenRSVP}
+                            onClick={() => onOpenRSVP && onOpenRSVP(r.schedule)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              padding: 0,
+                              cursor: !r.isPast && onOpenRSVP ? 'pointer' : 'default',
+                              display: 'inline-block',
+                            }}
+                            title={!r.isPast && onOpenRSVP ? '클릭하여 참석/불참 투표 변경' : undefined}
+                          >
+                            {r.voteStatus === 'ATTEND' ? (
+                              <span
+                                style={{
+                                  background: '#dcfce7',
+                                  color: '#15803d',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 700,
+                                  fontSize: '11.5px',
+                                }}
+                              >
+                                참석 {!r.isPast && '✏️'}
+                              </span>
+                            ) : r.voteStatus === 'ABSENT' ? (
+                              <span
+                                style={{
+                                  background: '#ffedd5',
+                                  color: '#c2410c',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 700,
+                                  fontSize: '11.5px',
+                                }}
+                                title={r.voteReason ? `사유: ${r.voteReason}` : undefined}
+                              >
+                                불참 {!r.isPast && '✏️'}
+                              </span>
+                            ) : r.voteStatus === 'LATE' ? (
+                              <span
+                                style={{
+                                  background: '#fef3c7',
+                                  color: '#b45309',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 700,
+                                  fontSize: '11.5px',
+                                }}
+                              >
+                                지각 {!r.isPast && '✏️'}
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  background: !r.isPast ? '#e0e7ff' : '#f1f5f9',
+                                  color: !r.isPast ? '#4338ca' : '#94a3b8',
+                                  padding: '3px 7px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: !r.isPast ? 700 : 400,
+                                }}
+                              >
+                                {!r.isPast ? '투표하기 ✍️' : '미투표'}
+                              </span>
+                            )}
+                          </button>
                         </div>
 
-                        {/* 4. 출결 시간 */}
+                        {/* 4. 출결 시간 (당일 미출석 시 출석체크 버튼 지원) */}
                         <div style={{ textAlign: 'right' }}>
                           {r.isAttended ? (
                             <span
@@ -465,6 +488,23 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             >
                               {r.checkInTime}
                             </span>
+                          ) : r.isToday && onOpenQRScanner ? (
+                            <button
+                              type="button"
+                              onClick={() => onOpenQRScanner(r.schedule)}
+                              style={{
+                                background: '#1e1b4b',
+                                color: '#ffffff',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '3px 8px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              QR 출석
+                            </button>
                           ) : r.isExempt ? (
                             <span style={{ color: '#94a3b8', fontSize: '11px' }}>미참</span>
                           ) : r.isPast ? (

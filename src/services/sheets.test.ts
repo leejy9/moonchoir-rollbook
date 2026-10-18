@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RawAttendanceLog, RSVPVote } from '../types/rollbook';
 import { SheetsService, resetStorage } from './sheets';
+import {
+  TEST_MOCK_SCHEDULES,
+  TEST_MOCK_LOGS,
+  TEST_MOCK_RSVP_VOTES,
+  TEST_MOCK_PROGRAM_CARDS,
+} from './mockData';
 
 describe('Sheets Adapter & Attendance Reconciliation', () => {
   let service: SheetsService;
@@ -9,6 +15,12 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     resetStorage();
     service = new SheetsService();
     service.updateConfig({ sheetsWebAppUrl: '' });
+    service.seedTestData({
+      schedules: TEST_MOCK_SCHEDULES,
+      logs: TEST_MOCK_LOGS,
+      rsvpVotes: TEST_MOCK_RSVP_VOTES,
+      programCards: TEST_MOCK_PROGRAM_CARDS,
+    });
   });
 
   it('correctly reconciles on-time attendance, late, excused absence, and unexcused absence', () => {
