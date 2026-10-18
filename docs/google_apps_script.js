@@ -637,13 +637,14 @@ function doPost(e) {
     }
 
     if (action === 'DELETE_SCHEDULE') {
-      // 일정 삭제: 출석로그/사전투표 유무에 따라 연습 취소(isCancelled=TRUE) vs 물리 삭제
+      // 일정 삭제: forceHardDelete=true이면 활동 여부와 무관하게 즉시 물리 삭제
       const scheduleId = String(data.id || data.scheduleId).trim();
+      const forceHardDelete = Boolean(data.forceHardDelete);
       const logSheet = ss.getSheetByName(SHEET_NAMES.LOGS);
       const rsvpSheet = ss.getSheetByName(SHEET_NAMES.RSVP);
       let hasActivity = false;
 
-      if (logSheet) {
+      if (!forceHardDelete && logSheet) {
         const logRows = logSheet.getDataRange().getValues();
         const lHeaders = logRows[0] || [];
         const sIdCol = lHeaders.indexOf('scheduleId');
@@ -657,7 +658,7 @@ function doPost(e) {
         }
       }
 
-      if (!hasActivity && rsvpSheet) {
+      if (!forceHardDelete && !hasActivity && rsvpSheet) {
         const rsvpRows = rsvpSheet.getDataRange().getValues();
         const rHeaders = rsvpRows[0] || [];
         const sIdCol = rHeaders.indexOf('scheduleId');
@@ -679,7 +680,7 @@ function doPost(e) {
 
       for (let i = 1; i < sRows.length; i++) {
         if (String(sRows[i][idCol >= 0 ? idCol : 0]).trim() === scheduleId) {
-          if (hasActivity) {
+          if (hasActivity && !forceHardDelete) {
             if (cancelledCol >= 0) {
               sSheet.getRange(i + 1, cancelledCol + 1).setValue('TRUE');
             }
@@ -697,6 +698,7 @@ function doPost(e) {
       const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
       if (!sheet) return jsonResponse({ success: false, message: '일정캘린더 탭이 없습니다.' });
       const idsToDelete = new Set((data.ids || []).map(function (id) { return String(id).trim(); }));
+      const forceHardDelete = Boolean(data.forceHardDelete);
       const rows = sheet.getDataRange().getValues();
       const headers = rows[0] || [];
       const idCol = headers.indexOf('id');
@@ -704,7 +706,7 @@ function doPost(e) {
 
       const logSheet = ss.getSheetByName(SHEET_NAMES.LOGS);
       const activeScheduleIds = new Set();
-      if (logSheet) {
+      if (!forceHardDelete && logSheet) {
         const logRows = logSheet.getDataRange().getValues();
         const lHeaders = logRows[0] || [];
         const sIdCol = lHeaders.indexOf('scheduleId');
@@ -722,7 +724,7 @@ function doPost(e) {
       for (let i = rows.length - 1; i >= 1; i--) {
         const rowId = String(rows[i][idCol >= 0 ? idCol : 0]).trim();
         if (idsToDelete.has(rowId)) {
-          if (activeScheduleIds.has(rowId)) {
+          if (activeScheduleIds.has(rowId) && !forceHardDelete) {
             if (cancelledCol >= 0) {
               sheet.getRange(i + 1, cancelledCol + 1).setValue('TRUE');
               cancelledCount++;

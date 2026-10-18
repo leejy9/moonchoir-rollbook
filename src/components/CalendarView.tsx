@@ -142,7 +142,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       <div className="calendar-grid-cells">
         {calendarDays.map((day) => {
           const daySchedules = schedulesByDate.get(day.dateStr) || [];
-          const hasSchedules = daySchedules.length > 0;
+          const activeDaySchedules = daySchedules.filter((s) => !s.isCancelled);
+          const hasSchedules = activeDaySchedules.length > 0;
           const isSelected = day.dateStr === selectedDateStr;
 
           return (
@@ -157,7 +158,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               <span className="cell-day-num">{day.dayNumber}</span>
               {hasSchedules && (
                 <div className="cell-dots-row">
-                  {daySchedules.map((s) => (
+                  {activeDaySchedules.map((s) => (
                     <span
                       key={s.id}
                       className={`schedule-dot ${getCategoryDotClass(s.category)}`}
@@ -204,7 +205,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               const rate = totalCount > 0 ? Math.round((attendeesCount / totalCount) * 100) : (attendeesCount + voluntaryCount > 0 ? 100 : 0);
 
               return (
-                <div key={sch.id} className="selected-schedule-item-card">
+                <div
+                  key={sch.id}
+                  className="selected-schedule-item-card"
+                  style={sch.isCancelled ? { opacity: 0.75, background: '#FFF1F2', border: '1px dashed #FDA4AF' } : undefined}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                     <div style={{ flex: 1 }}>
                       <div className="item-card-top">
@@ -236,24 +241,30 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <LiquidGauge percentage={rate} size={48} subText="투표율" />
                   </div>
 
-                  <div className="item-rsvp-row" style={{ marginTop: '12px' }}>
-                    <span className="rsvp-stat-pill">
-                      참석 {attendeesCount}명 · 불참 {absenteesCount}명
-                    </span>
-
-                    <button
-                      type="button"
-                      className="btn-rsvp-action"
-                      onClick={() => onOpenRSVP(sch)}
-                    >
-                      <IconVote size={14} />
-                      <span>
-                        {myVote
-                          ? `내 투표: ${myVote.status === 'ATTEND' ? '참석' : '불참'} (수정)`
-                          : '사전 투표하기'}
+                  {sch.isCancelled ? (
+                    <div style={{ marginTop: '10px', fontSize: '12px', color: '#BE123C', fontWeight: 600, background: '#FFE4E6', padding: '6px 10px', borderRadius: '6px', textAlign: 'center' }}>
+                      📢 이 연습은 관리자에 의해 일정이 취소되었습니다.
+                    </div>
+                  ) : (
+                    <div className="item-rsvp-row" style={{ marginTop: '12px' }}>
+                      <span className="rsvp-stat-pill">
+                        참석 {attendeesCount}명 · 불참 {absenteesCount}명
                       </span>
-                    </button>
-                  </div>
+
+                      <button
+                        type="button"
+                        className="btn-rsvp-action"
+                        onClick={() => onOpenRSVP(sch)}
+                      >
+                        <IconVote size={14} />
+                        <span>
+                          {myVote
+                            ? `내 투표: ${myVote.status === 'ATTEND' ? '참석' : '불참'} (수정)`
+                            : '사전 투표하기'}
+                        </span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

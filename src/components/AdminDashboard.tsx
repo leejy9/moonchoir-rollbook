@@ -450,6 +450,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return getCalendarGrid(adminCalYear, adminCalMonth);
   }, [adminCalYear, adminCalMonth]);
 
+  const [showCancelledSchedules, setShowCancelledSchedules] = useState(false);
+
   const schedulesByDate = useMemo(() => {
     const map = new Map<string, Schedule[]>();
     schedules.forEach((s) => {
@@ -460,7 +462,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return map;
   }, [schedules]);
 
-  const schedulesOnSelectedDate = schedulesByDate.get(adminSelectedDate) || [];
+  // 활성(Active) 일정만 필터링한 맵 (달력 날짜 셀 도트 표시용 - 취소된 일정은 도트 제외)
+  const activeSchedulesByDate = useMemo(() => {
+    const map = new Map<string, Schedule[]>();
+    schedules.forEach((s) => {
+      if (s.isCancelled) return;
+      const list = map.get(s.date) || [];
+      list.push(s);
+      map.set(s.date, list);
+    });
+    return map;
+  }, [schedules]);
+
+  const schedulesOnSelectedDate = useMemo(() => {
+    const list = schedulesByDate.get(adminSelectedDate) || [];
+    if (showCancelledSchedules) return list;
+    return list.filter((s) => !s.isCancelled);
+  }, [schedulesByDate, adminSelectedDate, showCancelledSchedules]);
 
   // --- Schedule Batch Operations State ---
   const [selectedBatchScheduleIds, setSelectedBatchScheduleIds] = useState<string[]>([]);
@@ -470,6 +488,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [allScheduleSearch, setAllScheduleSearch] = useState('');
   const [allScheduleCatFilter, setAllScheduleCatFilter] = useState('ALL');
   const [scheduleToDelete, setScheduleToDelete] = useState<Schedule | null>(null);
+  const [forceHardDeleteSelected, setForceHardDeleteSelected] = useState(false);
   const [cardGroupToDelete, setCardGroupToDelete] = useState<{
     cardId: string;
     title: string;
@@ -673,18 +692,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
 
 
-  const handleDeleteScheduleSingle = async (scheduleId: string, title: string) => {
-    await sheetsService.deleteSchedule(scheduleId);
-    setScheduleSuccessMsg(`'${title}' 일정이 정상적으로 삭제되었습니다.`);
+  const handleDeleteScheduleSingle = async (
+    scheduleId: string,
+    title: string,
+    forceHardDelete: boolean = false
+  ) => {
+    await sheetsService.deleteSchedule(scheduleId, forceHardDelete);
+    setScheduleSuccessMsg(
+      forceHardDelete
+        ? `'${title}' 일정이 구글 시트 및 로컬에서 영구 삭제되었습니다.`
+        : `'${title}' 일정이 정상적으로 삭제되었습니다.`
+    );
     setSelectedBatchScheduleIds((prev) => prev.filter((id) => id !== scheduleId));
     onDataChanged();
     setTimeout(() => setScheduleSuccessMsg(''), 3500);
   };
 
-  const handleDeleteScheduleSeries = async (matchingIds: string[], title: string) => {
-    await sheetsService.deleteSchedules(matchingIds);
-    setScheduleSuccessMsg(`'${title}' 명칭의 전체 ${matchingIds.length}개 일정이 일괄 삭제되었습니다.`);
+  const handleDeleteScheduleSeries = async (
+    matchingIds: string[],
+    title: string,
+    forceHardDelete: boolean = false
+  ) => {
+    await sheetsService.deleteSchedules(matchingIds, forceHardDelete);
+    setScheduleSuccessMsg(
+      forceHardDelete
+        ? `'${title}' 소속 ${matchingIds.length}개 일정이 영구 삭제되었습니다.`
+        : `'${title}' 소속 ${matchingIds.length}개 일정이 일괄 삭제되었습니다.`
+    );
     setSelectedBatchScheduleIds((prev) => prev.filter((id) => !matchingIds.includes(id)));
+    onDataChanged();
+    setTimeout(() => setScheduleSuccessMsg(''), 3500);
+  };
+
+  const handleRestoreScheduleSingle = async (scheduleId: string, title: string) => {
+    await sheetsService.restoreSchedule(scheduleId);
+    setScheduleSuccessMsg(`'${title}' 일정이 정상적으로 복원되었습니다.`);
     onDataChanged();
     setTimeout(() => setScheduleSuccessMsg(''), 3500);
   };
@@ -2258,7 +2300,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         cursor: 'pointer',
                       }}
                     >
-                      📋 전체 등록 일정 ({schedules.length}건)
+                      📋 전체 등록 일정
                     </button>
                     <button
                       type="button"
@@ -2277,7 +2319,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         cursor: 'pointer',
                       }}
                     >
-                      📦 일정 카드 묶음 ({programGroups.length}개 카드)
+                      📦 일정 카드 묶음
                     </button>
                   </div>
 
@@ -2289,7 +2331,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             📅 연습 일정 캘린더
                           </h2>
                           <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
-                            등록된 총 {schedules.length}건의 일정을 월별로 확인하고 관리합니다.
+                            등록된 일정을 월별로 확인하고 관리합니다.
                           </p>
                         </div>
                         <div className="month-switcher-compact">
@@ -2329,7 +2371,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                         <div className="calendar-grid-cells">
                           {adminCalendarGrid.map((day) => {
-                            const daySchedules = schedulesByDate.get(day.dateStr) || [];
+                            const daySchedules = (showCancelledSchedules ? schedulesByDate : activeSchedulesByDate).get(day.dateStr) || [];
                             const isSelected = day.dateStr === adminSelectedDate;
 
                             return (
@@ -2349,7 +2391,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       <span
                                         key={s.id}
                                         className={`schedule-dot cat-${s.category}`}
-                                        title={s.title}
+                                        style={s.isCancelled ? { opacity: 0.35, textDecoration: 'line-through' } : {}}
+                                        title={s.isCancelled ? `[취소됨] ${s.title}` : s.title}
                                       />
                                     ))}
                                   </div>
@@ -2362,10 +2405,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                       {/* Selected Date Schedule List */}
                       <div className="selected-date-schedules-box" style={{ marginTop: '18px' }}>
-                        <div className="box-header-row">
-                          <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#191f28' }}>
-                            📌 {adminSelectedDate} 일정 ({schedulesOnSelectedDate.length}건)
-                          </h4>
+                        <div className="box-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#191f28' }}>
+                              📌 {adminSelectedDate} 일정 ({schedulesOnSelectedDate.length}건)
+                            </h4>
+                            <button
+                              type="button"
+                              onClick={() => setShowCancelledSchedules((prev) => !prev)}
+                              style={{
+                                background: showCancelledSchedules ? '#FEF2F2' : '#F8FAFC',
+                                color: showCancelledSchedules ? '#DC2626' : '#64748B',
+                                border: `1px solid ${showCancelledSchedules ? '#FECACA' : '#CBD5E1'}`,
+                                borderRadius: '6px',
+                                padding: '3px 8px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {showCancelledSchedules ? '🚫 취소된 일정 숨기기' : '👁️ 취소된 일정 포함'}
+                            </button>
+                          </div>
                           <button
                             type="button"
                             className="btn-quick-new-sch"
@@ -2386,22 +2447,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   onClick={() => handleBindScheduleToForm(sch)}
                                   style={{
                                     cursor: 'pointer',
-                                    border: isSelectedForEdit ? '1.5px solid #6366F1' : '1px solid #E2E8F0',
-                                    background: isSelectedForEdit ? '#EEF2FF' : '#FFFFFF',
+                                    border: isSelectedForEdit
+                                      ? '1.5px solid #6366F1'
+                                      : sch.isCancelled
+                                      ? '1px dashed #FDA4AF'
+                                      : '1px solid #E2E8F0',
+                                    background: isSelectedForEdit
+                                      ? '#EEF2FF'
+                                      : sch.isCancelled
+                                      ? '#FFF1F2'
+                                      : '#FFFFFF',
                                     boxShadow: isSelectedForEdit ? '0 0 0 2px rgba(99, 102, 241, 0.2)' : 'none',
+                                    opacity: sch.isCancelled ? 0.75 : 1,
                                     transition: 'all 0.15s ease',
                                   }}
-                                  title="클릭하여 우측에서 일정 정보 수정"
+                                  title={sch.isCancelled ? '취소된 연습입니다' : '클릭하여 우측에서 일정 정보 수정'}
                                 >
                                   <div className="sch-item-info">
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                       {isSelectedForEdit && (
                                         <span style={{ fontSize: '11px', color: '#4F46E5', fontWeight: 700 }}>
                                           ✏️ 편집 중:
                                         </span>
                                       )}
+                                      {sch.isCancelled && (
+                                        <span style={{ fontSize: '11px', color: '#BE123C', background: '#FFE4E6', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                                          🚫 취소됨
+                                        </span>
+                                      )}
                                       <span className="schedule-category-badge">{sch.category}</span>
-                                      <strong style={{ fontSize: '14px', color: '#191f28' }}>{sch.title}</strong>
+                                      <strong
+                                        style={{
+                                          fontSize: '14px',
+                                          color: sch.isCancelled ? '#9F1239' : '#191f28',
+                                          textDecoration: sch.isCancelled ? 'line-through' : 'none',
+                                        }}
+                                      >
+                                        {sch.title}
+                                      </strong>
                                       {sch.checkInPin && (
                                         <span style={{ fontSize: '11px', color: '#64748B', background: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
                                           PIN: {sch.checkInPin}
@@ -2418,49 +2501,94 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     )}
                                   </div>
                                   <div style={{ display: 'flex', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleToggleArchiveSchedule(sch.id, !sch.isArchived)}
-                                      title={sch.isArchived ? '일반 목록으로 복원' : '지난 시즌 아카이브로 보관'}
-                                      style={{
-                                        background: sch.isArchived ? '#EDE9FE' : '#F1F5F9',
-                                        color: sch.isArchived ? '#6D28D9' : '#475569',
-                                        border: `1px solid ${sch.isArchived ? '#C4B5FD' : '#CBD5E1'}`,
-                                        borderRadius: '6px',
-                                        padding: '4px 8px',
-                                        fontSize: '12px',
-                                        fontWeight: 600,
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      {sch.isArchived ? '📂 복원' : '📦 보관'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="btn-edit-sch-mini"
-                                      onClick={() => handleCloneScheduleToForm(sch)}
-                                      title={sch.date < getTodayString() ? "오늘 날짜로 복제" : "일정 복제"}
-                                      style={{
-                                        background: sch.date < getTodayString() ? '#ECFDF5' : '#F8FAFC',
-                                        color: sch.date < getTodayString() ? '#059669' : '#475569',
-                                        border: `1px solid ${sch.date < getTodayString() ? '#A7F3D0' : '#CBD5E1'}`,
-                                        borderRadius: '6px',
-                                        padding: '4px 8px',
-                                        fontSize: '12px',
-                                        fontWeight: 600,
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      {sch.date < getTodayString() ? '📋 오늘로 복제' : '📋 복제'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="btn-delete-sch-mini"
-                                      onClick={() => handleDeleteSchedule(sch.id, sch.title)}
-                                      title="일정 삭제"
-                                    >
-                                      🗑️ 삭제
-                                    </button>
+                                    {sch.isCancelled ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRestoreScheduleSingle(sch.id, sch.title)}
+                                          title="취소된 일정을 다시 정상 일정으로 복원"
+                                          style={{
+                                            background: '#ECFDF5',
+                                            color: '#059669',
+                                            border: '1px solid #A7F3D0',
+                                            borderRadius: '6px',
+                                            padding: '4px 8px',
+                                            fontSize: '12px',
+                                            fontWeight: 700,
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          ↩️ 연습 복원
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (confirm(`'${sch.title}' 일정을 구글 시트 및 앱에서 완전히 영구 삭제하시겠습니까? (복구 불가)`)) {
+                                              handleDeleteScheduleSingle(sch.id, sch.title, true);
+                                            }
+                                          }}
+                                          title="구글 시트에서 완전 영구 삭제"
+                                          style={{
+                                            background: '#FEF2F2',
+                                            color: '#DC2626',
+                                            border: '1px solid #FECACA',
+                                            borderRadius: '6px',
+                                            padding: '4px 8px',
+                                            fontSize: '12px',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          🗑️ 완전 삭제
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleArchiveSchedule(sch.id, !sch.isArchived)}
+                                          title={sch.isArchived ? '일반 목록으로 복원' : '지난 시즌 아카이브로 보관'}
+                                          style={{
+                                            background: sch.isArchived ? '#EDE9FE' : '#F1F5F9',
+                                            color: sch.isArchived ? '#6D28D9' : '#475569',
+                                            border: `1px solid ${sch.isArchived ? '#C4B5FD' : '#CBD5E1'}`,
+                                            borderRadius: '6px',
+                                            padding: '4px 8px',
+                                            fontSize: '12px',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          {sch.isArchived ? '📂 복원' : '📦 보관'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn-edit-sch-mini"
+                                          onClick={() => handleCloneScheduleToForm(sch)}
+                                          title={sch.date < getTodayString() ? "오늘 날짜로 복제" : "일정 복제"}
+                                          style={{
+                                            background: sch.date < getTodayString() ? '#ECFDF5' : '#F8FAFC',
+                                            color: sch.date < getTodayString() ? '#059669' : '#475569',
+                                            border: `1px solid ${sch.date < getTodayString() ? '#A7F3D0' : '#CBD5E1'}`,
+                                            borderRadius: '6px',
+                                            padding: '4px 8px',
+                                            fontSize: '12px',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          {sch.date < getTodayString() ? '📋 오늘로 복제' : '📋 복제'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn-delete-sch-mini"
+                                          onClick={() => handleDeleteSchedule(sch.id, sch.title)}
+                                          title="일정 삭제"
+                                        >
+                                          🗑️ 삭제
+                                        </button>
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -4974,13 +5102,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {scheduleToDelete && (() => {
         const companions = schedules.filter((s) => {
           if (s.id === scheduleToDelete.id) return false;
+          // 1. 소속 일정 카드(programId) 일치 최우선
+          if (scheduleToDelete.programId && s.programId) {
+            return s.programId === scheduleToDelete.programId;
+          }
+          // 2. 반복 시리즈(seriesId) 일치
           if (scheduleToDelete.seriesId && s.seriesId) {
             return s.seriesId === scheduleToDelete.seriesId;
           }
+          // 3. 동일 제목
           return s.title === scheduleToDelete.title;
         });
         const futureCompanions = companions.filter((c) => c.date >= scheduleToDelete.date);
         const isRepeating = companions.length > 0;
+        const attachedCard = scheduleToDelete.programId
+          ? programCards.find((c) => c.id === scheduleToDelete.programId)
+          : null;
 
         return (
           <div className="modal-overlay" style={{ zIndex: 9999 }}>
@@ -5000,37 +5137,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div>📅 <strong>날짜:</strong> {scheduleToDelete.date}</div>
                   <div>🕒 <strong>시간:</strong> {scheduleToDelete.startTime} ~ {scheduleToDelete.endTime}</div>
                   <div>📍 <strong>장소:</strong> {scheduleToDelete.locationName}</div>
+                  {attachedCard && (
+                    <div style={{ color: '#0284C7', fontWeight: 600 }}>
+                      📦 <strong>소속 카드:</strong> {attachedCard.title}
+                    </div>
+                  )}
                   {isRepeating && (
                     <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #CBD5E1', color: '#4F46E5', fontWeight: 600 }}>
-                      ※ 동일 명칭의 반복 일정이 총 {companions.length + 1}회차 존재합니다.
+                      ※ 동일 카드/명칭의 회차가 총 {companions.length + 1}회차 존재합니다.
                     </div>
                   )}
                 </div>
               </div>
 
+              {/* 강제 영구 삭제 옵션 체크박스 */}
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '12px',
+                  color: forceHardDeleteSelected ? '#DC2626' : '#64748B',
+                  background: forceHardDeleteSelected ? '#FEF2F2' : '#F8FAFC',
+                  border: `1px solid ${forceHardDeleteSelected ? '#FECACA' : '#E2E8F0'}`,
+                  borderRadius: '6px',
+                  padding: '8px 10px',
+                  cursor: 'pointer',
+                  marginBottom: '12px',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={forceHardDeleteSelected}
+                  onChange={(e) => setForceHardDeleteSelected(e.target.checked)}
+                />
+                <span style={{ fontWeight: forceHardDeleteSelected ? 700 : 500 }}>
+                  💥 출석/투표 기록이 있어도 구글 시트에서 완전 강제 삭제
+                </span>
+              </label>
+
               {!isRepeating ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#64748B' }}>
-                    구글 스프레드시트 [일정] 탭에서도 해당 행이 영구 삭제됩니다.
+                    {forceHardDeleteSelected
+                      ? '기록 유무와 무관하게 구글 시트에서 행이 완전히 영구 삭제됩니다.'
+                      : '출결이나 투표 기록이 있으면 기록 보존을 위해 [취소] 처리되며, 없으면 행이 영구 삭제됩니다.'}
                   </p>
                   <button
                     type="button"
                     className="btn-primary-large"
-                    style={{ backgroundColor: '#DC2626', minHeight: '44px', fontWeight: 700 }}
+                    style={{ backgroundColor: forceHardDeleteSelected ? '#B91C1C' : '#DC2626', minHeight: '44px', fontWeight: 700 }}
                     onClick={async () => {
                       const id = scheduleToDelete.id;
                       const title = scheduleToDelete.title;
+                      const force = forceHardDeleteSelected;
                       setScheduleToDelete(null);
-                      await handleDeleteScheduleSingle(id, title);
+                      setForceHardDeleteSelected(false);
+                      await handleDeleteScheduleSingle(id, title, force);
                     }}
                   >
-                    🗑️ 일정 영구 삭제
+                    {forceHardDeleteSelected ? '💥 일정 완전 강제 삭제' : '🗑️ 일정 삭제'}
                   </button>
                   <button
                     type="button"
                     className="btn-secondary-cancel"
                     style={{ minHeight: '42px' }}
-                    onClick={() => setScheduleToDelete(null)}
+                    onClick={() => {
+                      setScheduleToDelete(null);
+                      setForceHardDeleteSelected(false);
+                    }}
                   >
                     취소
                   </button>
@@ -5056,12 +5231,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onClick={async () => {
                       const id = scheduleToDelete.id;
                       const title = scheduleToDelete.title;
+                      const force = forceHardDeleteSelected;
                       setScheduleToDelete(null);
-                      await handleDeleteScheduleSingle(id, title);
+                      setForceHardDeleteSelected(false);
+                      await handleDeleteScheduleSingle(id, title, force);
                     }}
                   >
                     <span>1️⃣ 이 회차만 삭제 ({scheduleToDelete.date})</span>
-                    <span style={{ fontSize: '11px', color: '#9F1239', fontWeight: 400, marginTop: '2px' }}>다른 회차 일정은 그대로 유지됩니다.</span>
+                    <span style={{ fontSize: '11px', color: '#9F1239', fontWeight: 400, marginTop: '2px' }}>
+                      {forceHardDeleteSelected ? '이 회차만 구글 시트에서 강제 영구 삭제합니다.' : '다른 회차 일정은 그대로 유지됩니다.'}
+                    </span>
                   </button>
 
                   {futureCompanions.length > 0 && (
@@ -5083,12 +5262,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       onClick={async () => {
                         const targetIds = [scheduleToDelete.id, ...futureCompanions.map((c) => c.id)];
                         const title = scheduleToDelete.title;
+                        const force = forceHardDeleteSelected;
                         setScheduleToDelete(null);
-                        await handleDeleteScheduleSeries(targetIds, title);
+                        setForceHardDeleteSelected(false);
+                        await handleDeleteScheduleSeries(targetIds, title, force);
                       }}
                     >
                       <span>⏩ 오늘 포함 이후 회차 일괄 삭제 ({futureCompanions.length + 1}개)</span>
-                      <span style={{ fontSize: '11px', color: '#9A3412', fontWeight: 400, marginTop: '2px' }}>과거 회차는 보존하고 남은 연습 일정만 삭제합니다.</span>
+                      <span style={{ fontSize: '11px', color: '#9A3412', fontWeight: 400, marginTop: '2px' }}>
+                        {forceHardDeleteSelected ? '이후 회차를 구글 시트에서 강제 영구 삭제합니다.' : '과거 회차는 보존하고 남은 연습 일정만 삭제합니다.'}
+                      </span>
                     </button>
                   )}
 
@@ -5110,19 +5293,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onClick={async () => {
                       const allIds = [scheduleToDelete.id, ...companions.map((c) => c.id)];
                       const title = scheduleToDelete.title;
+                      const force = forceHardDeleteSelected;
                       setScheduleToDelete(null);
-                      await handleDeleteScheduleSeries(allIds, title);
+                      setForceHardDeleteSelected(false);
+                      await handleDeleteScheduleSeries(allIds, title, force);
                     }}
                   >
                     <span>💥 전체 {companions.length + 1}개 회차 모두 삭제</span>
-                    <span style={{ fontSize: '11px', color: '#B91C1C', fontWeight: 400, marginTop: '2px' }}>시리즈에 속한 모든 회차 일정을 영구 삭제합니다.</span>
+                    <span style={{ fontSize: '11px', color: '#B91C1C', fontWeight: 400, marginTop: '2px' }}>
+                      {forceHardDeleteSelected ? '연결된 모든 회차를 구글 시트에서 강제 영구 삭제합니다.' : '시리즈에 속한 모든 회차 일정을 삭제합니다.'}
+                    </span>
                   </button>
 
                   <button
                     type="button"
                     className="btn-secondary-cancel"
                     style={{ minHeight: '40px', marginTop: '4px' }}
-                    onClick={() => setScheduleToDelete(null)}
+                    onClick={() => {
+                      setScheduleToDelete(null);
+                      setForceHardDeleteSelected(false);
+                    }}
                   >
                     취소
                   </button>

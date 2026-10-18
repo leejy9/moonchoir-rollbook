@@ -895,6 +895,20 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     const reconciliations = service.reconcileAttendance(targetScheduleId);
     expect(reconciliations.length).toBeGreaterThan(0);
     expect(reconciliations.every((r) => r.finalStatus === '미참')).toBe(true);
+
+    // restoreSchedule 검증: 다시 복원 시 isCancelled = false
+    await service.restoreSchedule(targetScheduleId);
+    const restored = service.getSchedules().find((s) => s.id === targetScheduleId);
+    expect(restored?.isCancelled).toBe(false);
+  });
+
+  it('forceHardDelete=true 시 출석 기록이 있더라도 일정 목록에서 물리적으로 영구 삭제된다', async () => {
+    const targetScheduleId = 'sch_20261001';
+    // 강제 영구 삭제 호출
+    await service.deleteSchedule(targetScheduleId, true);
+
+    const schedule = service.getSchedules().find((s) => s.id === targetScheduleId);
+    expect(schedule).toBeUndefined();
   });
 });
 

@@ -768,32 +768,51 @@ export class SheetsService {
     return this.schedules[idx];
   }
 
-  public async deleteSchedule(scheduleId: string): Promise<void> {
+  public async restoreSchedule(scheduleId: string): Promise<Schedule> {
+    return this.updateSchedule(scheduleId, { isCancelled: false });
+  }
+
+  public async deleteSchedule(scheduleId: string, forceHardDelete: boolean = false): Promise<void> {
     const hasActivity =
       this.logs.some((l) => l.scheduleId === scheduleId) ||
       this.rsvpVotes.some((v) => v.scheduleId === scheduleId);
 
-    if (hasActivity) {
+    if (hasActivity && !forceHardDelete) {
       // 출석로그나 투표가 있는 경우 물리 삭제하지 않고 [연습 취소]로 보존
       await this.updateSchedule(scheduleId, { isCancelled: true });
       if (this.config.sheetsWebAppUrl) {
-        this.sendToGoogleSheet('DELETE_SCHEDULE', { id: scheduleId }).catch((err) => {
+        this.sendToGoogleSheet('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: false }).catch((err) => {
           console.error('[Sheets API] Schedule cancel sync failed:', err);
         });
       }
     } else {
+      // 활동이 없거나, 관리자가 명시적으로 완전 영구 삭제를 요청한 경우
       this.schedules = this.schedules.filter((s) => s.id !== scheduleId);
       saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
       if (this.config.sheetsWebAppUrl) {
-        this.sendToGoogleSheet('DELETE_SCHEDULE', { id: scheduleId }).catch((err) => {
+        this.sendToGoogleSheet('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: true }).catch((err) => {
           console.error('[Sheets API] Schedule delete sync failed:', err);
         });
       }
     }
   }
 
-  public async deleteSchedules(scheduleIds: string[]): Promise<void> {
+  public async deleteSchedules(scheduleIds: string[], forceHardDelete: boolean = false): Promise<void> {
+    if (forceHardDelete) {
+      // 강제 영구 삭제 모드: 모든 지정 일정을 물리 삭제
+      const idsToDeleteSet = new Set(scheduleIds);
+      this.schedules = this.schedules.filter((s) => !idsToDeleteSet.has(s.id));
+      saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+
+      if (this.config.sheetsWebAppUrl) {
+        this.sendToGoogleSheet('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: true }).catch((err) => {
+          console.error('[Sheets API] Batch schedule hard delete sync failed:', err);
+        });
+      }
+      return;
+    }
+
     const activeScheduleIds = new Set(
       scheduleIds.filter(
         (sid) =>
@@ -815,7 +834,7 @@ export class SheetsService {
     }
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('BATCH_DELETE_SCHEDULES', { ids: scheduleIds }).catch((err) => {
+      this.sendToGoogleSheet('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: false }).catch((err) => {
         console.error('[Sheets API] Batch schedule delete/cancel sync failed:', err);
       });
     }
