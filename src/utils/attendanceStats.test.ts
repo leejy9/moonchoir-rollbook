@@ -479,6 +479,86 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
       // 최신 이력이 '정단원'이므로 정기연습 일정에 필참(true)으로 계산되어야 함
       expect(isMemberRequiredForSchedule(returnedMember, regularSch.date, regularSch)).toBe(true);
     });
+
+    it('ALL 일정은 선생님도 기본 필참 대상에 포함하고, 객원은 제외해야 한다', () => {
+      const teacherMember: Member = {
+        id: 'mem_teacher',
+        name: '박선생',
+        part: '선생님',
+        memberStatus: '선생님',
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        phoneLast4: '9999',
+        joinedAt: '2026-01-01',
+        createdAt: '2026-01-01 00:00:00',
+      };
+
+      const guestMember: Member = {
+        id: 'mem_guest',
+        name: '최객원',
+        part: '객원',
+        memberStatus: '객원',
+        role: 'GUEST',
+        status: 'ACTIVE',
+        phoneLast4: '8888',
+        joinedAt: '2026-01-01',
+        createdAt: '2026-01-01 00:00:00',
+      };
+
+      const regularSch: Schedule = {
+        id: 'sch_all_test',
+        title: '정기연습',
+        date: '2026-10-22',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '제1연습실',
+        category: '정기연습',
+        targetAudienceType: 'ALL',
+      };
+
+      expect(isMemberRequiredForSchedule(teacherMember, regularSch.date, regularSch)).toBe(true);
+      expect(isMemberRequiredForSchedule(guestMember, regularSch.date, regularSch)).toBe(false);
+    });
+
+    it('ALL_WITH_GUESTS 일정은 정단원, 선생님, 객원 모두 필참 대상이어야 한다', () => {
+      const teacherMember: Member = {
+        id: 'mem_teacher_2',
+        name: '박선생',
+        part: '선생님',
+        memberStatus: '선생님',
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        phoneLast4: '9999',
+        joinedAt: '2026-01-01',
+        createdAt: '2026-01-01 00:00:00',
+      };
+
+      const guestMember: Member = {
+        id: 'mem_guest_2',
+        name: '최객원',
+        part: '객원',
+        memberStatus: '객원',
+        role: 'GUEST',
+        status: 'ACTIVE',
+        phoneLast4: '8888',
+        joinedAt: '2026-01-01',
+        createdAt: '2026-01-01 00:00:00',
+      };
+
+      const concertSch: Schedule = {
+        id: 'sch_concert_test',
+        title: '정기연주회',
+        date: '2026-10-25',
+        startTime: '17:00',
+        endTime: '20:00',
+        locationName: '예술의전당',
+        category: '연주',
+        targetAudienceType: 'ALL_WITH_GUESTS',
+      };
+
+      expect(isMemberRequiredForSchedule(teacherMember, concertSch.date, concertSch)).toBe(true);
+      expect(isMemberRequiredForSchedule(guestMember, concertSch.date, concertSch)).toBe(true);
+    });
   });
 });
 

@@ -74,12 +74,26 @@ export function isMemberRequiredForSchedule(
     return true;
   }
 
-  // 4. 전체(ALL) 또는 파트(PARTS) 일정의 경우: 정단원, 준단원만 기본 필참 대상
-  if (effective.status === '정단원' || effective.status === '준단원') {
+  // 4. 전체 + 객원(ALL_WITH_GUESTS): 정단원, 준단원, 선생님, 객원 모두 필참 (연주회/녹음)
+  if (schedule?.targetAudienceType === 'ALL_WITH_GUESTS') {
+    return (
+      effective.status === '정단원' ||
+      effective.status === '준단원' ||
+      effective.status === '선생님' ||
+      effective.status === '객원'
+    );
+  }
+
+  // 5. 전체(ALL) 또는 파트(PARTS) 일정의 경우: 정단원, 준단원, 선생님이 기본 필참 대상
+  if (
+    effective.status === '정단원' ||
+    effective.status === '준단원' ||
+    effective.status === '선생님'
+  ) {
     return true;
   }
 
-  // 휴단원, 객원 등은 전체/파트 일정에서 의무 제외 (자율 대상자)
+  // 휴단원, 객원 등은 기본 전체/파트 일정에서 의무 제외 (자율 대상자 / 모수 제외)
   return false;
 }
 

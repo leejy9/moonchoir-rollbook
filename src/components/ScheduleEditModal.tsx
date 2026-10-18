@@ -387,7 +387,8 @@ export const ScheduleEditModal: React.FC<ScheduleEditModalProps> = ({
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
                   {(
                     [
-                      { key: 'ALL', label: '🌐 전체 단원 필참' },
+                      { key: 'ALL', label: '🌐 전체 (선생님 포함)' },
+                      { key: 'ALL_WITH_GUESTS', label: '🎼 전체 + 객원' },
                       { key: 'PARTS', label: '👥 특정 파트 한정' },
                     ] as const
                   ).map((aud) => (

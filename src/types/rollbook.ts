@@ -84,7 +84,7 @@ export interface Member {
   boundDeviceAt?: string; // 기기 바인딩 일시
 }
 
-export type TargetAudienceType = 'ALL' | 'PARTS' | 'CUSTOM_MEMBERS';
+export type TargetAudienceType = 'ALL' | 'ALL_WITH_GUESTS' | 'PARTS' | 'CUSTOM_MEMBERS';
 
 /**
  * 1-2. Program Card Container for grouping schedules (e.g., 2026 가을 정기연습, 연주회 프로젝트)

@@ -2919,7 +2919,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 ? `👥 파트: ${group.targetParts?.join(', ') || '지정 없음'}`
                                 : group.targetAudienceType === 'CUSTOM_MEMBERS'
                                 ? `🎯 선발단원: ${group.targetMemberIds?.length || 0}명`
-                                : '🌐 전체 단원 필참';
+                                : group.targetAudienceType === 'ALL_WITH_GUESTS'
+                                ? '🎼 전체 + 객원'
+                                : '🌐 전체 (선생님 포함)';
 
                             return (
                               <div
@@ -3338,8 +3340,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <div className="toss-filter-row" style={{ marginBottom: '8px', gap: '6px', flexWrap: 'wrap' }}>
                             {(
                               [
-                                { key: 'ALL', label: '🌐 전체 단원 필참' },
-                                { key: 'PARTS', label: '👥 특정 파트 한정' },
+                                { key: 'ALL', label: '🌐 전체 (선생님 포함)' },
+                                { key: 'ALL_WITH_GUESTS', label: '🎼 전체 + 객원' },
+                                { key: 'PARTS', label: '👥 특정 파트' },
                                 { key: 'CUSTOM_MEMBERS', label: '🎯 선발 단원' },
                               ] as const
                             ).map((aud) => (
@@ -4060,9 +4063,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="toss-filter-row" style={{ marginBottom: '10px', gap: '6px', flexWrap: 'wrap' }}>
                         {(
                           [
-                            { key: 'ALL', label: '🌐 전체 단원 필참' },
-                            { key: 'PARTS', label: '👥 특정 파트 한정' },
-                            { key: 'CUSTOM_MEMBERS', label: '🎯 선발 단원 (수동 지정)' },
+                            { key: 'ALL', label: '🌐 전체 (선생님 포함)' },
+                            { key: 'ALL_WITH_GUESTS', label: '🎼 전체 + 객원' },
+                            { key: 'PARTS', label: '👥 특정 파트' },
+                            { key: 'CUSTOM_MEMBERS', label: '🎯 선발 단원' },
                           ] as const
                         ).map((aud) => (
                           <button
