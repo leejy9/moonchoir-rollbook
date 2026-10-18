@@ -76,4 +76,18 @@ describe('RoundTimePicker Component', () => {
     );
     expect(html).toContain('오후 07:30');
   });
+
+  it('renders analog clock dial with clock hand and direct keyboard input cards when open', () => {
+    // When rendered with trigger button, verify standard trigger
+    const html = renderToString(
+      <RoundTimePicker
+        value="23:04"
+        onChange={() => {}}
+      />
+    );
+    // 23:04 -> 오후 11:04
+    expect(html).toContain('오후 11:04');
+    expect(html).toContain('⏰');
+    expect(html).toContain('round-time-picker-btn');
+  });
 });

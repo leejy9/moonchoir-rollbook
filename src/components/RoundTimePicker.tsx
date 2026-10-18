@@ -19,28 +19,40 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dialRef = useRef<SVGSVGElement>(null);
 
-  // Parse initial 24h string into AM/PM, 12h hour, and minute
+  // Parse initial 24h string into 24-hour number and minute
   const parsed = useMemo(() => {
     if (!value || !/^\d{1,2}:\d{2}(:\d{2})?$/.test(value)) {
-      return { isPM: true, hour12: 7, minute: 30 };
+      return { hour24: 19, minute: 30 };
     }
     const [h24, m] = value.split(':').map(Number);
-    const isPM = h24 >= 12;
-    const hour12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
-    return { isPM, hour12, minute: m };
+    const validH = isNaN(h24) ? 19 : Math.max(0, Math.min(23, h24));
+    const validM = isNaN(m) ? 30 : Math.max(0, Math.min(59, m));
+    return { hour24: validH, minute: validM };
   }, [value]);
 
-  const [period, setPeriod] = useState<'AM' | 'PM'>(parsed.isPM ? 'PM' : 'AM');
-  const [selectedHour, setSelectedHour] = useState<number>(parsed.hour12);
+  const [activeMode, setActiveMode] = useState<'hour' | 'minute'>('hour');
+  const [selectedHour, setSelectedHour] = useState<number>(parsed.hour24);
   const [selectedMinute, setSelectedMinute] = useState<number>(parsed.minute);
 
-  // Sync internal picker state when popover opens
+  const [hourInputText, setHourInputText] = useState<string>(
+    String(parsed.hour24).padStart(2, '0')
+  );
+  const [minuteInputText, setMinuteInputText] = useState<string>(
+    String(parsed.minute).padStart(2, '0')
+  );
+  const [isDragging, setIsDragging] = useState(false);
+
+
+
   const handleOpen = () => {
     if (disabled) return;
-    setPeriod(parsed.isPM ? 'PM' : 'AM');
-    setSelectedHour(parsed.hour12);
+    setSelectedHour(parsed.hour24);
     setSelectedMinute(parsed.minute);
+    setHourInputText(String(parsed.hour24).padStart(2, '0'));
+    setMinuteInputText(String(parsed.minute).padStart(2, '0'));
+    setActiveMode('hour');
     setIsOpen(true);
   };
 
@@ -54,11 +66,10 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
-  // Convert current state into HH:mm and emit onChange
-  const emitChange = (newPeriod: 'AM' | 'PM', newHour: number, newMin: number) => {
-    let h24 = newPeriod === 'PM' ? (newHour === 12 ? 12 : newHour + 12) : (newHour === 12 ? 0 : newHour);
-    if (h24 === 24) h24 = 12;
-    const timeStr = `${String(h24).padStart(2, '0')}:${String(newMin).padStart(2, '0')}`;
+  const emitChange = (h24: number, m: number) => {
+    const clampedH = Math.max(0, Math.min(23, h24));
+    const clampedM = Math.max(0, Math.min(59, m));
+    const timeStr = `${String(clampedH).padStart(2, '0')}:${String(clampedM).padStart(2, '0')}`;
     onChange(timeStr);
   };
 
@@ -71,49 +82,169 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
     return `${isPM ? '오후' : '오전'} ${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }, [value, placeholder]);
 
-  const handlePeriodChange = (newPeriod: 'AM' | 'PM') => {
-    setPeriod(newPeriod);
-    emitChange(newPeriod, selectedHour, selectedMinute);
+  // Subtitle header label, e.g. "오후 07:30 (19:30)"
+  const currentFormattedLabel = useMemo(() => {
+    const isPM = selectedHour >= 12;
+    const h12 = selectedHour === 0 ? 12 : selectedHour > 12 ? selectedHour - 12 : selectedHour;
+    return `${isPM ? '오후' : '오전'} ${String(h12).padStart(2, '0')}:${String(selectedMinute).padStart(2, '0')} (${String(selectedHour).padStart(2, '0')}:${String(selectedMinute).padStart(2, '0')})`;
+  }, [selectedHour, selectedMinute]);
+
+  // Direct Text Input Handlers
+  const handleHourInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, '').slice(0, 2);
+    setHourInputText(raw);
+    if (raw !== '') {
+      let num = parseInt(raw, 10);
+      if (num > 23) num = 23;
+      setSelectedHour(num);
+      emitChange(num, selectedMinute);
+    }
   };
 
-  const handleHourClick = (h: number) => {
-    setSelectedHour(h);
-    emitChange(period, h, selectedMinute);
+  const handleHourInputBlur = () => {
+    setHourInputText(String(selectedHour).padStart(2, '0'));
   };
 
-  const handleMinuteClick = (m: number) => {
-    setSelectedMinute(m);
-    emitChange(period, selectedHour, m);
+  const handleMinuteInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, '').slice(0, 2);
+    setMinuteInputText(raw);
+    if (raw !== '') {
+      let num = parseInt(raw, 10);
+      if (num > 59) num = 59;
+      setSelectedMinute(num);
+      emitChange(selectedHour, num);
+    }
   };
 
-  // 1-minute step handler (-1 or +1)
-  const handleMinuteStep = (delta: number) => {
-    let nextMin = selectedMinute + delta;
-    if (nextMin < 0) nextMin = 59;
-    if (nextMin > 59) nextMin = 0;
-    setSelectedMinute(nextMin);
-    emitChange(period, selectedHour, nextMin);
+  const handleMinuteInputBlur = () => {
+    setMinuteInputText(String(selectedMinute).padStart(2, '0'));
   };
 
-  // 1-minute direct numeric input
-  const handleMinuteDirectInput = (val: number) => {
-    if (isNaN(val)) val = 0;
-    const clamped = Math.max(0, Math.min(59, val));
-    setSelectedMinute(clamped);
-    emitChange(period, selectedHour, clamped);
+  const handleToggleAMPM = (targetPeriod: 'AM' | 'PM') => {
+    let nextH = selectedHour;
+    if (targetPeriod === 'AM' && selectedHour >= 12) {
+      nextH = selectedHour - 12;
+    } else if (targetPeriod === 'PM' && selectedHour < 12) {
+      nextH = selectedHour + 12;
+    }
+    setSelectedHour(nextH);
+    setHourInputText(String(nextH).padStart(2, '0'));
+    emitChange(nextH, selectedMinute);
   };
 
-  const handlePresetClick = (presetVal: string) => {
-    onChange(presetVal);
-    const [h24, m] = presetVal.split(':').map(Number);
-    const isPM = h24 >= 12;
-    const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
-    setPeriod(isPM ? 'PM' : 'AM');
-    setSelectedHour(h12);
-    setSelectedMinute(m);
-    setIsOpen(false);
+  // Clock Dial Pointer Coordinates & Calculation
+  const updateFromPointer = (e: React.PointerEvent<SVGSVGElement>, isFinal: boolean = false) => {
+    if (!dialRef.current) return;
+    const rect = dialRef.current.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = e.clientX - cx;
+    const dy = e.clientY - cy;
+    const dist = Math.hypot(dx, dy);
+    const scaledDist = dist * (256 / rect.width);
+    const deg = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
+
+    if (activeMode === 'hour') {
+      const isInner = scaledDist < 84;
+      const step = Math.round(deg / 30) % 12;
+      const hour = isInner ? step + 12 : step;
+      setSelectedHour(hour);
+      setHourInputText(String(hour).padStart(2, '0'));
+      emitChange(hour, selectedMinute);
+      if (isFinal) {
+        // Auto-switch to minute mode after picking hour
+        setTimeout(() => setActiveMode('minute'), 220);
+      }
+    } else {
+      const minute = Math.round(deg / 6) % 60;
+      setSelectedMinute(minute);
+      setMinuteInputText(String(minute).padStart(2, '0'));
+      emitChange(selectedHour, minute);
+    }
   };
 
+  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDragging(true);
+    updateFromPointer(e, false);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!isDragging) return;
+    updateFromPointer(e, false);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    updateFromPointer(e, true);
+  };
+
+  // Clock Hand Geometry
+  const handGeometry = useMemo(() => {
+    const cx = 128;
+    const cy = 128;
+    let handR = 100;
+    let deg = 0;
+
+    if (activeMode === 'hour') {
+      const isInner = selectedHour >= 12;
+      handR = isInner ? 66 : 100;
+      deg = (selectedHour % 12) * 30;
+    } else {
+      handR = 100;
+      deg = selectedMinute * 6;
+    }
+
+    const rad = (deg - 90) * Math.PI / 180;
+    const tipX = cx + handR * Math.cos(rad);
+    const tipY = cy + handR * Math.sin(rad);
+
+    return { cx, cy, tipX, tipY, handR, deg };
+  }, [activeMode, selectedHour, selectedMinute]);
+
+  // Precomputed Clock Face Number Layouts
+  const hourNumbers = useMemo(() => {
+    const list: Array<{ val: number; x: number; y: number; isInner: boolean }> = [];
+    // Outer ring: 0 ~ 11 (Radius 100)
+    for (let i = 0; i < 12; i++) {
+      const rad = (i * 30 - 90) * Math.PI / 180;
+      list.push({
+        val: i,
+        x: 128 + 100 * Math.cos(rad),
+        y: 128 + 100 * Math.sin(rad),
+        isInner: false,
+      });
+    }
+    // Inner ring: 12 ~ 23 (Radius 66)
+    for (let i = 0; i < 12; i++) {
+      const rad = (i * 30 - 90) * Math.PI / 180;
+      list.push({
+        val: i + 12,
+        x: 128 + 66 * Math.cos(rad),
+        y: 128 + 66 * Math.sin(rad),
+        isInner: true,
+      });
+    }
+    return list;
+  }, []);
+
+  const minuteNumbers = useMemo(() => {
+    const list: Array<{ val: number; label: string; x: number; y: number }> = [];
+    for (let i = 0; i < 12; i++) {
+      const rad = (i * 30 - 90) * Math.PI / 180;
+      const val = i * 5;
+      list.push({
+        val,
+        label: String(val).padStart(2, '0'),
+        x: 128 + 100 * Math.cos(rad),
+        y: 128 + 100 * Math.sin(rad),
+      });
+    }
+    return list;
+  }, []);
+
+  // Quick Rehearsal Presets
   const PRESETS = [
     { label: '오후 7:30 (기본)', val: '19:30' },
     { label: '오후 9:30 (종료)', val: '21:30' },
@@ -123,9 +254,15 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
     { label: '오후 6:00', val: '18:00' },
   ];
 
-  const HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-  const QUARTER_MINUTES = [0, 15, 30, 45];
-  const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+  const handlePresetClick = (presetVal: string) => {
+    onChange(presetVal);
+    const [h24, m] = presetVal.split(':').map(Number);
+    setSelectedHour(h24);
+    setSelectedMinute(m);
+    setHourInputText(String(h24).padStart(2, '0'));
+    setMinuteInputText(String(m).padStart(2, '0'));
+    setIsOpen(false);
+  };
 
   return (
     <div className={`round-time-picker-wrap ${className}`} ref={containerRef}>
@@ -160,7 +297,7 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
             {/* Popover Header */}
             <div className="popover-time-header">
               <div className="popover-time-badge">
-                {period === 'PM' ? '오후' : '오전'} {String(selectedHour).padStart(2, '0')}:{String(selectedMinute).padStart(2, '0')}
+                {currentFormattedLabel}
               </div>
               <button
                 type="button"
@@ -172,149 +309,202 @@ export const RoundTimePicker: React.FC<RoundTimePickerProps> = ({
               </button>
             </div>
 
-            {/* Practice Time Presets */}
-            <div className="popover-time-presets">
-              {PRESETS.map((p) => {
-                const isMatch = value === p.val;
-                return (
+            {/* Big Digital Time Display Row (Clickable & Keyboard Input) */}
+            <div className="analog-digital-display-row">
+              {/* Hour Card */}
+              <div
+                className={`analog-digit-card ${activeMode === 'hour' ? 'active' : ''}`}
+                onClick={() => setActiveMode('hour')}
+              >
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={2}
+                  className="analog-digit-input"
+                  value={hourInputText}
+                  onChange={handleHourInputChange}
+                  onBlur={handleHourInputBlur}
+                  onFocus={() => setActiveMode('hour')}
+                  aria-label="시(Hour) 직접 입력"
+                />
+                <span className="analog-digit-sublabel">시 (Hour)</span>
+              </div>
+
+              <span className="analog-digit-separator">:</span>
+
+              {/* Minute Card */}
+              <div
+                className={`analog-digit-card ${activeMode === 'minute' ? 'active' : ''}`}
+                onClick={() => setActiveMode('minute')}
+              >
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={2}
+                  className="analog-digit-input"
+                  value={minuteInputText}
+                  onChange={handleMinuteInputChange}
+                  onBlur={handleMinuteInputBlur}
+                  onFocus={() => setActiveMode('minute')}
+                  aria-label="분(Minute) 직접 입력"
+                />
+                <span className="analog-digit-sublabel">분 (Minute)</span>
+              </div>
+
+              {/* AM / PM Segmented Toggle */}
+              <div className="analog-period-toggle">
+                <button
+                  type="button"
+                  className={`analog-period-chip ${selectedHour < 12 ? 'active' : ''}`}
+                  onClick={() => handleToggleAMPM('AM')}
+                  aria-label="오전 선택"
+                >
+                  오전
+                </button>
+                <button
+                  type="button"
+                  className={`analog-period-chip ${selectedHour >= 12 ? 'active' : ''}`}
+                  onClick={() => handleToggleAMPM('PM')}
+                  aria-label="오후 선택"
+                >
+                  오후
+                </button>
+              </div>
+            </div>
+
+            {/* Mode Hint */}
+            <div className="analog-mode-hint">
+              {activeMode === 'hour'
+                ? '🕒 시(Hour) 바늘을 터치/드래그하세요 (0~23시)'
+                : '⏱️ 분(Minute) 바늘을 터치/드래그하세요 (0~59분)'}
+            </div>
+
+            {/* Analog Clock Dial Face with Hand Pointer */}
+            <div className="analog-clock-dial-wrap">
+              <svg
+                ref={dialRef}
+                viewBox="0 0 256 256"
+                className="analog-clock-svg"
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+              >
+                {/* Dial Base Circle */}
+                <circle cx="128" cy="128" r="126" fill="#f1f5f9" />
+
+                {/* Clock Hand (Line + Tip Selection Circle) */}
+                <line
+                  x1={handGeometry.cx}
+                  y1={handGeometry.cy}
+                  x2={handGeometry.tipX}
+                  y2={handGeometry.tipY}
+                  stroke="#4f46e5"
+                  strokeWidth="2.5"
+                />
+                <circle
+                  cx={handGeometry.cx}
+                  cy={handGeometry.cy}
+                  r="4"
+                  fill="#4f46e5"
+                />
+                <circle
+                  cx={handGeometry.tipX}
+                  cy={handGeometry.tipY}
+                  r="16"
+                  fill="#4f46e5"
+                  filter="drop-shadow(0px 2px 4px rgba(79, 70, 229, 0.4))"
+                />
+
+                {/* Mode Numbers: Hour (0~23) or Minute (00~55) */}
+                {activeMode === 'hour' ? (
+                  hourNumbers.map((num) => {
+                    const isSelected = selectedHour === num.val;
+                    return (
+                      <text
+                        key={`h-${num.val}`}
+                        x={num.x}
+                        y={num.y}
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        fontSize={num.isInner ? '11' : '13'}
+                        fontWeight={isSelected ? '800' : '600'}
+                        fill={isSelected ? '#ffffff' : num.isInner ? '#64748b' : '#1e293b'}
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        {num.val}
+                      </text>
+                    );
+                  })
+                ) : (
+                  <>
+                    {minuteNumbers.map((m) => {
+                      const isSelected = selectedMinute === m.val;
+                      return (
+                        <text
+                          key={`m-${m.val}`}
+                          x={m.x}
+                          y={m.y}
+                          textAnchor="middle"
+                          dominantBaseline="central"
+                          fontSize="12.5"
+                          fontWeight={isSelected ? '800' : '600'}
+                          fill={isSelected ? '#ffffff' : '#1e293b'}
+                          style={{ pointerEvents: 'none' }}
+                        >
+                          {m.label}
+                        </text>
+                      );
+                    })}
+                    {/* If selected minute is not on 5m mark, show selected number inside tip */}
+                    {selectedMinute % 5 !== 0 && (
+                      <text
+                        x={handGeometry.tipX}
+                        y={handGeometry.tipY}
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        fontSize="12"
+                        fontWeight="800"
+                        fill="#ffffff"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        {String(selectedMinute).padStart(2, '0')}
+                      </text>
+                    )}
+                  </>
+                )}
+              </svg>
+            </div>
+
+            {/* Quick Practice Presets */}
+            <div className="analog-presets-wrap">
+              <span className="analog-presets-title">⚡ 빠른 연습 시간 선택</span>
+              <div className="analog-presets-row">
+                {PRESETS.map((p) => (
                   <button
                     key={p.val}
                     type="button"
-                    className={`time-preset-chip ${isMatch ? 'active' : ''}`}
+                    className={`analog-preset-chip ${value === p.val ? 'selected' : ''}`}
                     onClick={() => handlePresetClick(p.val)}
                   >
                     {p.label}
                   </button>
-                );
-              })}
-            </div>
-
-            {/* AM / PM Segmented Control */}
-            <div className="popover-period-segment">
-              <button
-                type="button"
-                className={`period-btn ${period === 'AM' ? 'selected' : ''}`}
-                onClick={() => handlePeriodChange('AM')}
-              >
-                오전 (AM)
-              </button>
-              <button
-                type="button"
-                className={`period-btn ${period === 'PM' ? 'selected' : ''}`}
-                onClick={() => handlePeriodChange('PM')}
-              >
-                오후 (PM)
-              </button>
-            </div>
-
-            {/* Hour & Minute Picker Columns */}
-            <div className="popover-time-columns">
-              {/* Hour Selector */}
-              <div className="time-column">
-                <span className="column-label">시 (Hour)</span>
-                <div className="hours-grid">
-                  {HOURS.map((h) => {
-                    const isSel = selectedHour === h;
-                    return (
-                      <button
-                        key={h}
-                        type="button"
-                        className={`time-cell-btn ${isSel ? 'selected' : ''}`}
-                        onClick={() => handleHourClick(h)}
-                      >
-                        {h}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Minute Selector */}
-              <div className="time-column">
-                <span className="column-label">분 (Minute)</span>
-                {/* 15m Quick Chips */}
-                <div className="popover-quarter-presets">
-                  {QUARTER_MINUTES.map((qm) => {
-                    const isSel = selectedMinute === qm;
-                    return (
-                      <button
-                        key={qm}
-                        type="button"
-                        className={`quarter-preset-chip ${isSel ? 'active' : ''}`}
-                        onClick={() => handleMinuteClick(qm)}
-                      >
-                        {String(qm).padStart(2, '0')}분
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* 5m Grid */}
-                <div className="minutes-grid">
-                  {MINUTES.map((m) => {
-                    const isSel = selectedMinute === m;
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        className={`time-cell-btn ${isSel ? 'selected' : ''}`}
-                        onClick={() => handleMinuteClick(m)}
-                      >
-                        {String(m).padStart(2, '0')}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* 1-minute Stepper & Direct Input */}
-                <div className="minute-fine-tune-row">
-                  <button
-                    type="button"
-                    className="minute-step-btn"
-                    onClick={() => handleMinuteStep(-1)}
-                    title="1분 빼기"
-                  >
-                    -1분
-                  </button>
-                  <div className="minute-input-wrap">
-                    <input
-                      type="number"
-                      min={0}
-                      max={59}
-                      value={selectedMinute}
-                      onChange={(e) => handleMinuteDirectInput(parseInt(e.target.value, 10))}
-                      className="minute-direct-input"
-                      aria-label="분 직접 입력"
-                    />
-                    <span className="minute-unit">분</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="minute-step-btn"
-                    onClick={() => handleMinuteStep(1)}
-                    title="1분 더하기"
-                  >
-                    +1분
-                  </button>
-                </div>
+                ))}
               </div>
             </div>
 
-            {/* Footer Done Button */}
-            <div className="popover-time-footer">
-              <button
-                type="button"
-                className="time-done-btn"
-                onClick={() => {
-                  if (!value) {
-                    emitChange(period, selectedHour, selectedMinute);
-                  }
-                  setIsOpen(false);
-                }}
-              >
-                선택 완료
-              </button>
-            </div>
+            {/* Done Button */}
+            <button
+              type="button"
+              className="analog-done-btn"
+              onClick={() => {
+                emitChange(selectedHour, selectedMinute);
+                setIsOpen(false);
+              }}
+            >
+              ✓ 시간 선택 완료
+            </button>
           </div>
         </div>
       )}
