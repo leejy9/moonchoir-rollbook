@@ -1,7 +1,7 @@
 # [계획서 03] 단원 생애주기 이력 관리, 일정 카드(컨테이너) 체계 & 데이터 계약 검증
 
 > **작성 일자**: 2026-10-17  
-> **상태**: 계획 수립 (In Planning)  
+> **상태**: ✅ 완료 (Completed) — [Plan 09](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/09_schema_relation_integrity_and_concurrency.md)에서 DELETED 소프트 삭제 및 취소 일정 모수 제외 보강 완료  
 > **담당**: Moonchoir AI 하네스 에이전트  
 > **데이터 계약 스펙**: [docs/DATA_SCHEMA.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/DATA_SCHEMA.md)  
 > **핵심 헌법**: [AGENTS.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/AGENTS.md)

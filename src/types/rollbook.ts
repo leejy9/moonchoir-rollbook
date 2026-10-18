@@ -74,7 +74,7 @@ export interface Member {
   phoneLast4: string; // 뒤 4자리 (본인 인증 및 PIN용)
   role: RoleType;
   createdAt: string; // ISO 8601
-  status: 'ACTIVE' | 'INACTIVE' | 'MERGED';
+  status: 'ACTIVE' | 'INACTIVE' | 'MERGED' | 'DELETED';
   mergedIntoId?: string; // 표준 ID로 통합된 경우 대상 ID
   joinedAt?: string; // YYYY-MM-DD
   memberStatus?: MemberStatus; // 정단원, 준단원, 휴단원, 퇴단원, 선생님, 객원
@@ -159,6 +159,7 @@ export interface Schedule {
   checkInPin?: string; // 현장 4자리 인증 PIN
   description?: string;
   isArchived?: boolean; // Archived/hidden state for past semesters
+  isCancelled?: boolean; // Canceled session flag (preserves logs but excludes from attendance denominator)
 }
 
 /**

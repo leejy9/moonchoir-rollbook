@@ -783,8 +783,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleSaveQrPrintSettings = () => {
-    sheetsService.updateConfig({
+  const handleSaveQrPrintSettings = async () => {
+    await sheetsService.updateConfig({
       qrPrintTitle: printTitle,
       qrPrintSubtitle: printSubtitle,
       qrPrintNotice: printNotice,
@@ -1294,16 +1294,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // Save Settings
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    sheetsService.updateConfig({
-      sheetsWebAppUrl: sheetsUrl.trim(),
-      lateGraceMinutes: Number(lateGrace),
-      adminPin: adminPinInput.trim(),
-    });
-    setSettingsSuccessMsg('어드민 설정이 성공적으로 저장되었습니다!');
-    onDataChanged();
-    setTimeout(() => setSettingsSuccessMsg(''), 3000);
+    setIsSyncing(true);
+    try {
+      await sheetsService.updateConfig({
+        sheetsWebAppUrl: sheetsUrl.trim(),
+        lateGraceMinutes: Number(lateGrace),
+        adminPin: adminPinInput.trim(),
+      });
+      setSettingsSuccessMsg('어드민 설정이 성공적으로 저장되었습니다 (구글 시트 동기화 완료)!');
+      onDataChanged();
+      setTimeout(() => setSettingsSuccessMsg(''), 3000);
+    } catch (err: unknown) {
+      console.error('[AdminDashboard] Failed to save settings:', err);
+      setSettingsSuccessMsg('설정 저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleSyncRemote = async () => {

@@ -146,6 +146,23 @@ journey
 * **F6.6 상설 현장 출석 PIN 단순화**:
   - 과거 일정 명칭 꼬리표 없이 `🔑 당일 현장 출석 PIN: [ 5027 ] [🔄 PIN 재발급]` 단일 체계로 간결화.
 
+### F7. 데이터 무결성, Event Sourcing 원복 & 동시성 보호 (Phase 4.9)
+* **F7.1 Append-Only Event Sourcing 출결 취소 원복**:
+  - 관리자가 출석을 취소/초기화할 때 기존 원천 로그를 절대 물리 삭제하지 않음.
+  - 직전 출석 시각보다 1초 뒤인 **취소 전용 로그 (`adminNote='관리자 출결 취소 (결석 처리)'`)**를 새로 Append 적재하여 감사 추적성 보존 및 안전한 결석/사유결석/미참 원복 보장.
+* **F7.2 단원 소프트 삭제 (`status='DELETED'`)**:
+  - 출석/투표 이력이 있는 단원은 삭제 시 행을 지우지 않고 `status='DELETED'`로 소프트 삭제 처리하여 역대 통계 무결성 100% 보존.
+  - 활동 이력이 없는 오등록 단원만 시트 행 물리 삭제 허용.
+* **F7.3 일정 소프트 취소 (`isCancelled=true`)**:
+  - 출석/투표 이력이 있는 일정은 삭제 시 물리 삭제를 차단하고 `isCancelled=true`로 전환하여 캘린더에 🚫 취소 배지 표시 및 **출석률 통계 모수(분모)에서 자동 제외**.
+  - 활동 이력이 없는 오등록 일정만 시트 행 물리 삭제 허용.
+* **F7.4 구글 시트 8번째 탭 (`환경설정`) 중앙 관리**:
+  - 로컬스토리지에 격리되어 있던 지각 유예시간(10분), 관리자 PIN(1234), 동적 파트/상태 분류 체계, A4 인쇄 서식을 시트 `환경설정` 탭에서 실시간 양방향 관리.
+* **F7.5 합창 현장 동시 스캔 동시성 보호 (GAS `LockService`)**:
+  - 20~30명 동시 스캔 시 스프레드시트 행 덮어쓰기 방지를 위해 `LockService.getScriptLock().waitLock(15000)` 15초 스크립트 락 적용.
+* **F7.6 열 순서 독립 헤더 키 기반 동적 매핑**:
+  - `rows[i][0]` 하드코딩을 전면 제거하고 헤더 이름 기반 맵 매핑으로 구글 시트 컬럼 변경/추가 시에도 하위 호환성 영구 보장.
+
 ---
 
 ## 4. Technical Architecture & Data Contracts
@@ -157,27 +174,34 @@ journey
   ├── 지오로케이션 (GPS ➔ src/utils/geo.ts)
   └── 로컬 캐시 (LocalStorage: 토큰, 오프라인 큐, 목업 DB)
        │
-       ▼ (fetch POST / GET with redirect: follow)
-[Google Apps Script Web App (REST Endpoint)]
+       ▼ (fetch POST / GET with JSON response & no-cors fallback)
+[Google Apps Script Web App (REST Endpoint with LockService 15s Lock)]
        │
        ▼
-[Google Spreadsheet (SSOT)]
-  ├── Members (대원 마스터 명부: id, name, part, phoneLast4, role, createdAt, status, joinedAt, memberStatus, note)
-  ├── Schedules (캘린더 일정 & 반복 규칙 RRULE: locationId, checkInPin)
-  ├── Locations (연습실 장소 프리셋 & 위경도 좌표)
-  ├── RSVP_Votes (사전 참석 투표 로그)
-  ├── Attendance_Logs (원천 타임스탬프 출결 로그 - Append-Only)
-  └── Config (상설 마스터 QR 토큰, 지각 유예 분, 관리자 PIN)
+[Google Spreadsheet (8대 SSOT 탭)]
+  ├── 단원명부 (Member: id, name, part, phoneLast4, role, status, joinedAt, memberStatus, note)
+  ├── 일정캘린더 (Schedule: id, title, date, locationId, latitude, longitude, radiusMeters, isCancelled)
+  ├── 출석원천로그 (RawAttendanceLog: id, scheduleId, memberId, timestamp, distanceMeters, isVerifiedLocation, adminNote)
+  ├── 사전투표_RSVP (RSVPVote: scheduleId, memberId, status, reason, timestamp)
+  ├── 단원변경로그 (MemberStatusHistory: id, memberId, status, part, startDate, endDate, reason)
+  ├── 일정카드 (ProgramCard: id, title, category, defaultLocationId, isArchived)
+  ├── 장소정보 (LocationPreset: id, name, address, latitude, longitude, radiusMeters)
+  └── 환경설정 (SystemConfig: key, value, updatedAt - 지각유예, PIN, 동적태그, 인쇄서식)
 ```
 
 ### 4.2 Data Models Updates
 1. **`Member` (확장 스키마)**:
-   `id | name | part | phoneLast4 | role | createdAt | status | joinedAt (YYYY-MM-DD) | memberStatus (정단원/준단원/휴단원/퇴단원/선생님/객원) | note`
+   `id | name | part | phoneLast4 | role | createdAt | status (ACTIVE/INACTIVE/MERGED/DELETED) | joinedAt (YYYY-MM-DD) | memberStatus (정단원/준단원/휴단원/퇴단원/선생님/객원) | note`
 2. **`LocationPreset`**:
    `id | name | address | latitude | longitude | radiusMeters | isDefault`
 3. **`RecurrenceRule`**:
    `frequency (NONE/DAILY/WEEKLY/MONTHLY) | interval (1, 2..) | byDays (['THU', 'SAT']) | endDate`
 4. **`Schedule`**:
+   `id | programId | title | date | startTime | endTime | locationName | locationId | latitude | longitude | radiusMeters | targetAudienceType | checkInPin | category | description | isCancelled | isArchived`
+5. **`RawAttendanceLog`**:
+   `id | scheduleId | memberId | memberName | part | timestamp | authMethod | isVerifiedLocation | distanceMeters | adminNote`
+6. **`SystemConfig`**:
+   `lateGraceMinutes | adminPin | customParts | customMemberStatuses | customCategories | qrPrintTitle | qrPrintSubtitle | qrPrintNotice`
    기존 필드 + `locationId | checkInPin (외부 연습용 4자리)`
 5. **`Config`**:
    기존 필드 + `masterQrToken (상설 마스터 키)`

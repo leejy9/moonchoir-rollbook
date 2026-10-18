@@ -16,9 +16,10 @@ export function parseKSTDate(dateStr: string): Date {
     return new Date(y, m - 1, d, 12, 0, 0); // 낮 12시로 고정하여 경계값 오류 방지
   }
 
-  // 2. KST 표준 문자열 YYYY-MM-DD HH:mm:ss 형태 처리
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(dateStr)) {
-    const [dPart, tPart] = dateStr.split(' ');
+  // 2. KST 표준 문자열 YYYY-MM-DD HH:mm:ss 또는 YYYY-MM-DDTHH:mm:ss 형태 처리
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(dateStr)) {
+    const separator = dateStr.includes('T') ? 'T' : ' ';
+    const [dPart, tPart] = dateStr.split(separator);
     const [y, m, d] = dPart.split('-').map(Number);
     const timeTokens = tPart.split(':').map(Number);
     const hh = timeTokens[0] || 0;

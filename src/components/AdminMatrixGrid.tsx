@@ -72,12 +72,14 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
         const isPastOrToday = s.date <= todayStr;
         const status = item?.finalStatus || (isRequired ? '결석' : '미참');
 
-        // 정규 필참 일정은 과거 또는 오늘 일정만 결석 및 출석률 모수에 반영 (미래 미진행 일정은 모수 제외)
-        if (isRequired && (isPastOrToday || item?.checkInTime || item?.isManualOverride)) {
+        // 취소된 일정은 출석률 통계 모수(분모)에서 제외
+        if (!s.isCancelled && isRequired && (isPastOrToday || item?.checkInTime || item?.isManualOverride)) {
           requiredSessions += 1;
         }
 
-        if (status === '출석' || status === '수동인정') {
+        if (s.isCancelled) {
+          exempt += 1;
+        } else if (status === '출석' || status === '수동인정') {
           attended += 1;
         } else if (status === '지각') {
           late += 1;
@@ -131,6 +133,11 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
     member: Member,
     schedule: Schedule
   ) => {
+    if (schedule.isCancelled) {
+      alert('취소된 연습 일정입니다. 출결 상태를 수정할 수 없습니다.');
+      return;
+    }
+
     const recList = reconciliationsBySchedule.get(schedule.id) || [];
     const item = recList.find((r) => r.memberId === member.id);
     const rect = e.currentTarget.getBoundingClientRect();
@@ -153,14 +160,14 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
   };
 
   // Quick Status Override Handler
-  const handleSetStatus = async (targetStatus: AttendanceStatus | '초기화') => {
+  const handleSetStatus = async (targetStatus: '출석' | '지각' | '사유결석' | '결석' | '초기화') => {
     if (!popoverTarget) return;
     setIsUpdating(true);
 
     const { member, schedule } = popoverTarget;
 
     try {
-      if (targetStatus === '출석' || targetStatus === '수동인정') {
+      if (targetStatus === '출석') {
         await sheetsService.addCheckInLog({
           id: `log_manual_${Date.now()}`,
           scheduleId: schedule.id,
@@ -170,7 +177,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           timestamp: `${schedule.date}T${schedule.startTime}:00`,
           authMethod: 'MANUAL_BY_ADMIN',
           isVerifiedLocation: true,
-          adminNote: customNote || '관리자 수동 인정',
+          adminNote: customNote || '관리자 수동 출석 인정',
         });
       } else if (targetStatus === '지각') {
         // Log with late timestamp
@@ -197,7 +204,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           timestamp: getKSTTimestampString(),
         });
       } else if (targetStatus === '결석') {
-        // 관리자 결석 처리 (명시적 결석 로그 추가)
+        // 관리자 결석/노쇼 처리
         await sheetsService.addCheckInLog({
           id: `log_absent_${Date.now()}`,
           scheduleId: schedule.id,
@@ -207,10 +214,10 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           timestamp: `${schedule.date}T${schedule.startTime}:00`,
           authMethod: 'MANUAL_BY_ADMIN',
           isVerifiedLocation: true,
-          adminNote: customNote || '관리자 결석 처리',
+          adminNote: customNote || '관리자 결석 처리 (노쇼)',
         });
       } else if (targetStatus === '초기화') {
-        // 기존 수동 보정 및 로그 초기화 (원래 상태로 복귀)
+        // 기존 수동 보정 로그 초기화 (원래 상태로 복귀)
         await sheetsService.clearAttendanceLog(schedule.id, member.id);
       }
 
@@ -223,10 +230,21 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['이름', '파트', '단원상태', ...schedules.map((s) => `${s.date}(${s.title})`), '출석', '지각', '사유결석', '결석', '출석률(%)'];
+    const headers = [
+      '이름',
+      '파트',
+      '단원상태',
+      ...schedules.map((s) => (s.isCancelled ? `${s.date}(${s.title})[취소]` : `${s.date}(${s.title})`)),
+      '출석',
+      '지각',
+      '사유결석',
+      '결석',
+      '출석률(%)',
+    ];
     const rows = sortedMembers.map((m) => {
       const stats = memberStats.get(m.id);
       const sessionStatuses = schedules.map((s) => {
+        if (s.isCancelled) return '취소(미참)';
         const item = reconciliationsBySchedule.get(s.id)?.find((r) => r.memberId === m.id);
         return item?.finalStatus || '결석';
       });
@@ -309,10 +327,15 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                 return (
                   <th
                     key={s.id}
-                    className="matrix-session-col"
-                    title={`${s.title} (${headerDate.fullDate || s.date}) - 출석 ${attendCount}/${members.length}명`}
+                    className={`matrix-session-col ${s.isCancelled ? 'col-cancelled' : ''}`}
+                    title={
+                      s.isCancelled
+                        ? `${s.title} (취소된 연습) - 출결 통계 모수 제외`
+                        : `${s.title} (${headerDate.fullDate || s.date}) - 출석 ${attendCount}/${members.length}명`
+                    }
                   >
                     <div className="session-col-header">
+                      {s.isCancelled && <span className="session-cancelled-badge">취소</span>}
                       <span className="session-date-label">
                         {headerDate.dateLabel}
                       </span>
@@ -378,13 +401,13 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                     let statusLabel = '결석';
                     let timeSub = '';
 
-                    if (status === '출석') {
+                    if (s.isCancelled) {
+                      badgeClass = 'cell-cancelled';
+                      statusLabel = '취소';
+                    } else if (status === '출석' || status === '수동인정') {
                       badgeClass = 'cell-attend';
                       statusLabel = '출석';
                       timeSub = item?.checkInTime ? item.checkInTime.slice(11, 16) : '';
-                    } else if (status === '수동인정') {
-                      badgeClass = 'cell-manual';
-                      statusLabel = '수동';
                     } else if (status === '지각') {
                       badgeClass = 'cell-late';
                       statusLabel = '지각';
@@ -406,7 +429,11 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                         key={s.id}
                         className={`matrix-cell ${badgeClass}`}
                         onClick={(e) => handleCellClick(e, m, s)}
-                        title={`${m.name} · ${s.date}: ${status}${item?.rsvpReason ? ` (${item.rsvpReason})` : ''} - 클릭하여 수정`}
+                        title={
+                          s.isCancelled
+                            ? `${m.name} · ${s.date}: 취소된 연습 (모수 제외)`
+                            : `${m.name} · ${s.date}: ${status}${item?.rsvpReason ? ` (${item.rsvpReason})` : ''} - 클릭하여 수정`
+                        }
                       >
                         <div className="matrix-cell-content">
                           <span className="cell-status-tag">{statusLabel}</span>
@@ -463,7 +490,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                 onClick={() => handleSetStatus('출석')}
                 disabled={isUpdating}
               >
-                🟢 출석으로 인정
+                🟢 출석으로 변경
               </button>
               <button
                 type="button"
@@ -483,19 +510,11 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
               </button>
               <button
                 type="button"
-                className="opt-btn manual"
-                onClick={() => handleSetStatus('수동인정')}
-                disabled={isUpdating}
-              >
-                🔵 수동 인정 (관리자 확인)
-              </button>
-              <button
-                type="button"
                 className="opt-btn absent"
                 onClick={() => handleSetStatus('결석')}
                 disabled={isUpdating}
               >
-                ⚪ 결석으로 변경 (무단결석 처리)
+                ⚪ 결석으로 변경 (무단결석/노쇼)
               </button>
               <button
                 type="button"
@@ -504,7 +523,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                 disabled={isUpdating}
                 style={{ color: '#64748b' }}
               >
-                🔄 보정 초기화 (기본 상태로)
+                🔄 보정 초기화 (기본 상태로 복귀)
               </button>
             </div>
 

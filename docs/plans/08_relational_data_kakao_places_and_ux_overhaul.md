@@ -2,7 +2,7 @@
 
 > **문서 ID**: `08_relational_data_kakao_places_and_ux_overhaul.md`  
 > **생성일자**: 2026-10-17  
-> **상태**: 승인 대기 / 실행 예정  
+> **상태**: ✅ 완료 (Completed) — [Plan 09](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/09_schema_relation_integrity_and_concurrency.md)에서 9대 릴레이션 스키마 불일치 및 동시성 락 전면 해결 완료  
 > **관련 문서**: [docs/PRD.md](../PRD.md), [docs/DATA_SCHEMA.md](../DATA_SCHEMA.md), [docs/tasks.md](../tasks.md), [AGENTS.md](../../AGENTS.md)
 
 ---

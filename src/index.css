@@ -3419,6 +3419,38 @@ a {
   border: 1px dashed #cbd5e1;
 }
 
+.matrix-cell.cell-cancelled {
+  background: #fbfbfb;
+  opacity: 0.7;
+}
+
+.matrix-cell.cell-cancelled .cell-status-tag {
+  background: #fee2e2;
+  color: #ef4444;
+  font-weight: 500;
+  text-decoration: line-through;
+}
+
+.matrix-session-col.col-cancelled {
+  background: #fff5f5;
+  opacity: 0.85;
+}
+
+.matrix-session-col.col-cancelled .session-date-label {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.session-cancelled-badge {
+  font-size: 9px;
+  font-weight: 700;
+  background: #fee2e2;
+  color: #ef4444;
+  padding: 0 4px;
+  border-radius: 4px;
+  line-height: 1.2;
+}
+
 .matrix-cell.cell-upcoming .cell-status-tag {
   background: #f8fafc;
   color: #94a3b8;

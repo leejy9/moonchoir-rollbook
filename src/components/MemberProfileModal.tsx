@@ -558,33 +558,73 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
               </div>
 
               <div className="modern-field-group">
-                <label className="modern-field-label">단원 상태 구분 *</label>
-                <div className="modern-select-wrapper">
-                  <select
-                    className="modern-select"
-                    value={isCustomStatus ? '__CUSTOM__' : (formData.memberStatus || '정단원')}
-                    onChange={(e) => {
-                      if (e.target.value === '__CUSTOM__') {
-                        setIsCustomStatus(true);
-                        if (customStatusInput.trim()) {
-                          setFormData((prev) => ({ ...prev, memberStatus: customStatusInput.trim() as MemberStatus }));
-                        }
-                      } else {
-                        setIsCustomStatus(false);
-                        setFormData((prev) => ({ ...prev, memberStatus: e.target.value as MemberStatus }));
-                      }
-                    }}
-                  >
-                    {STANDARD_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                    {!STANDARD_STATUSES.includes(formData.memberStatus as string) && Boolean(formData.memberStatus) && (
-                      <option value={formData.memberStatus}>{formData.memberStatus} (기존 지정)</option>
-                    )}
-                    <option value="__CUSTOM__">✏️ 기타 (직접 입력)...</option>
-                  </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label className="modern-field-label">단원 상태 구분 *</label>
+                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                    현재: <strong style={{ color: '#1e293b' }}>{formData.memberStatus || '정단원'}</strong>
+                  </span>
+                </div>
+
+                {/* 3열 세그먼트 버튼 그리드 (스크린샷 일치) */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '8px',
+                    marginTop: '6px',
+                  }}
+                >
+                  {[
+                    { key: '정단원', label: '정단원' },
+                    { key: '준단원', label: '준단원' },
+                    { key: '휴단원', label: '휴단' },
+                    { key: '퇴단원', label: '퇴단' },
+                    { key: '선생님', label: '선생님' },
+                    { key: '객원', label: '객원' },
+                    { key: '__CUSTOM__', label: '✏️ 기타' },
+                  ].map((chip) => {
+                    const isSelected = chip.key === '__CUSTOM__'
+                      ? isCustomStatus
+                      : (!isCustomStatus && (formData.memberStatus === chip.key || (chip.key === '휴단원' && formData.memberStatus === '휴단') || (chip.key === '퇴단원' && formData.memberStatus === '퇴단')));
+
+                    return (
+                      <button
+                        key={chip.key}
+                        type="button"
+                        onClick={() => {
+                          if (chip.key === '__CUSTOM__') {
+                            setIsCustomStatus(true);
+                            if (customStatusInput.trim()) {
+                              setFormData((prev) => ({ ...prev, memberStatus: customStatusInput.trim() as MemberStatus }));
+                            }
+                          } else {
+                            setIsCustomStatus(false);
+                            setFormData((prev) => ({ ...prev, memberStatus: chip.key as MemberStatus }));
+                          }
+                        }}
+                        style={{
+                          minHeight: '44px',
+                          padding: '8px 6px',
+                          borderRadius: '8px',
+                          border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                          background: isSelected ? '#eff6ff' : '#ffffff',
+                          color: isSelected ? '#1d4ed8' : '#475569',
+                          fontWeight: isSelected ? 700 : 500,
+                          fontSize: '0.88rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px',
+                          boxShadow: isSelected ? '0 2px 4px rgba(37, 99, 235, 0.15)' : 'none',
+                          transition: 'all 0.15s ease-in-out',
+                        }}
+                      >
+                        {isSelected && <span style={{ fontSize: '0.75rem' }}>✓</span>}
+                        {chip.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {isCustomStatus && (
@@ -604,65 +644,90 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                   />
                 )}
 
-                {/* 기간 정하기 (간결한 1행 토글 & 요약 칩) */}
+                {/* 특정 기간 한정 적용 토글 및 설명 카드 (스크린샷 2 일치) */}
                 <div
                   className={`period-setting-toggle-box ${isCustomPeriod ? 'active' : ''}`}
                   style={{
-                    marginTop: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 12px',
+                    marginTop: '12px',
+                    padding: '12px 14px',
                     background: isCustomPeriod ? '#f0fdf4' : '#f8fafc',
                     border: isCustomPeriod ? '1px solid #86efac' : '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    minHeight: '44px',
+                    borderRadius: '10px',
                     transition: 'all 0.2s ease',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>
-                      🕒 기간 정하기
-                    </span>
-                    {isCustomPeriod && (
-                      <button
-                        type="button"
-                        className="period-summary-card"
-                        onClick={handleOpenPeriodModal}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '3px 8px',
-                          background: '#ffffff',
-                          border: '1px solid #bbf7d0',
-                          borderRadius: '6px',
-                          fontSize: '0.78rem',
-                          color: '#15803d',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          textOverflow: 'ellipsis',
-                          overflow: 'hidden',
-                          whiteSpace: 'nowrap',
-                          margin: 0,
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                    }}
+                    onClick={handleToggleCustomPeriod}
+                  >
+                    <div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>🕒</span>
+                        <span>특정 기간 한정 적용</span>
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '3px' }}>
+                        {isCustomPeriod
+                          ? `[${formData.memberStatus}] 상태를 지정된 기간 동안만 임시 적용합니다.`
+                          : '기본 상시 적용 (상태 변경 시 시트 DB 이력에 항상 자동 기록됩니다)'}
+                      </div>
+                    </div>
+                    <div className="modern-switch" style={{ marginLeft: '12px', flexShrink: 0 }}>
+                      <input
+                        type="checkbox"
+                        id="toggle-custom-period"
+                        checked={isCustomPeriod}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleToggleCustomPeriod();
                         }}
-                      >
+                      />
+                      <span className="modern-switch-slider" />
+                    </div>
+                  </div>
+
+                  {isCustomPeriod && (
+                    <div
+                      className="period-summary-card"
+                      style={{
+                        marginTop: '10px',
+                        paddingTop: '8px',
+                        borderTop: '1px dashed #bbf7d0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#15803d', fontWeight: 600 }}>
                         <span className="period-badge" style={{ padding: '1px 5px', fontSize: '0.7rem' }}>기간 한정</span>
                         <span>{historyStartDate} ~ {historyEndDate === '2999-12-31' ? '무기한' : historyEndDate}</span>
-                        {historyReason && <span style={{ color: '#64748b', fontSize: '0.74rem' }}>({historyReason})</span>}
-                        <span style={{ color: '#047857', textDecoration: 'underline', fontWeight: 700 }}>수정</span>
+                        {historyReason && <span style={{ color: '#64748b', fontWeight: 400 }}>({historyReason})</span>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenPeriodModal();
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#047857',
+                          fontWeight: 700,
+                          fontSize: '0.78rem',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          padding: '2px 4px',
+                        }}
+                      >
+                        수정
                       </button>
-                    )}
-                  </div>
-                  <div className="modern-switch" style={{ marginLeft: '8px', flexShrink: 0 }}>
-                    <input
-                      type="checkbox"
-                      id="toggle-custom-period"
-                      checked={isCustomPeriod}
-                      onChange={handleToggleCustomPeriod}
-                    />
-                    <span className="modern-switch-slider" />
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

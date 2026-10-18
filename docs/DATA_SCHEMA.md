@@ -1,9 +1,10 @@
 # Moonchoir Rollbook — 마스터 데이터 스키마 & 릴레이션 (DATA_SCHEMA.md)
 
-> **버전**: 1.2.0  
+> **버전**: 1.3.0 (동시성 락 및 환경설정 시트화 완료)  
 > **최종 수정일**: 2026-10-18  
-> **단일 진실 공급원 (SSOT)**: 본 문서는 프론트엔드 TypeScript 모델, 구글 시트 7대 탭 구조, 구글 앱스 스크립트(GAS), 그리고 단위 테스트 간의 데이터 계약(Contract) 및 연쇄 영향도(Cascade & Dependency)를 정의합니다.  
-> **핵심 원칙**: 모든 데이터베이스는 구글 시트에 저장/연동되며, 출석 및 단원 상태 변경 이력은 **시트에 원천 로그(DB 형식)로 영구 보존(Append-Only)**됩니다.
+> **단일 진실 공급원 (SSOT)**: 본 문서는 프론트엔드 TypeScript 모델, 구글 시트 8대 탭 구조, 구글 앱스 스크립트(GAS), 그리고 단위 테스트 간의 데이터 계약(Contract) 및 연쇄 영향도(Cascade & Dependency)를 정의합니다.  
+> **핵심 원칙**: 모든 데이터베이스는 구글 시트에 저장/연동되며, 출석 및 단원 상태 변경 이력은 **시트에 원천 로그(DB 형식)로 영구 보존(Append-Only Event Sourcing)**됩니다.
+> **동시성 & 정합성 보장**: 합창단 20~30명 동시 QR 스캔 시 행 덮어쓰기 방지를 위해 **GAS LockService 15초 스크립트 락**이 적용되어 있으며, 모든 읽기/쓰기는 컬럼 순서에 무관한 **헤더 키 기반 동적 매핑**으로 수행됩니다.
 
 ---
 
@@ -11,6 +12,12 @@
 
 ```mermaid
 erDiagram
+    CONFIG {
+        string key PK "설정 키 (adminPin, lateGraceMinutes 등)"
+        string value "설정 값 (JSON 또는 원시 문자열)"
+        string updatedAt "최종 수정일시"
+    }
+
     PROGRAM_CARD ||--o{ SCHEDULE : "contains (1:N)"
     LOCATION_PRESET ||--o{ SCHEDULE : "hosts (1:N)"
     LOCATION_PRESET ||--o{ PROGRAM_CARD : "default venue (1:N)"
@@ -43,6 +50,7 @@ erDiagram
         string locationId FK "연습 장소ID"
         string date "연습 일자"
         string checkInPin "현장 PIN"
+        boolean isCancelled "연습 취소 여부 (모수 제외)"
     }
 
     MEMBER {
@@ -52,6 +60,7 @@ erDiagram
         string memberStatus "현재 상태 (정단원/휴단원 등)"
         string joinedAt "입단일 (모수 시작점)"
         string phoneLast4 "본인확인 PIN"
+        string status "계정 상태 (ACTIVE/INACTIVE/DELETED)"
     }
 
     MEMBER_STATUS_HISTORY {
@@ -69,6 +78,8 @@ erDiagram
         string memberId FK "출석 단원ID"
         string timestamp "출석 시각 (ISO)"
         boolean isVerifiedLocation "GPS 반경 통과여부"
+        number distanceMeters "실측 거리 오차"
+        string adminNote "수동 비고 / 취소 로그 식별자"
     }
 
     RSVP_VOTE {
@@ -81,7 +92,25 @@ erDiagram
 
 ---
 
-## 📌 2. 7대 엔티티 상세 스펙 (무슨 값인지 / 어디로 연결되는지 / 연쇄 수정 관계)
+## 📌 2. 8대 엔티티 상세 스펙 (무슨 값인지 / 어디로 연결되는지 / 연쇄 수정 관계)
+
+### 0) `SystemConfig` (중앙 환경설정 DB — 신규)
+- **구글 시트 탭**: `환경설정`
+- **시트 동기화 액션**: `SAVE_CONFIG`
+- **역할**: 기존 `localStorage`에 머물러 기기 간 공유되지 않던 지각 유예시간, 관리자 PIN, 동적 파트/상태 분류 체계, A4 인쇄 문구를 시트에서 중앙 관리.
+
+| 필드명 (TS) | 시트 헤더/키 | 무슨 값인가 (의미 & 예시) | 타입 / 기본값 | 어디로 연결되는가 | 비고 |
+| :--- | :--- | :--- | :---: | :--- | :--- |
+| `lateGraceMinutes` | `lateGraceMinutes` | 지각 판정 유예시간 (분 단위, 예: `10`) | `number` (10) | 출결 판정 엔진 (`reconcileAttendance`) | 지각 기준 시각 판정 |
+| `adminPin` | `adminPin` | 마스터 관리자 4자리 PIN (예: `1234`) | `string` ('1234') | 관리자 로그인 게이트 | 분실 시 시트에서 직접 수정 가능 |
+| `customParts` | `customParts` | 등록된 파트 목록 (JSON 배열, 예: `["소프라노","알토"...]`) | `string[]` | 파트 드롭다운, 태그 매니저 | 동적 파트 체계 |
+| `customMemberStatuses` | `customMemberStatuses` | 회원 구분 목록 (JSON 배열) | `string[]` | 회원구분 드롭다운 | 정단원/준단원/휴단원 등 |
+| `customCategories` | `customCategories` | 연습 카테고리 목록 (JSON 배열) | `string[]` | 캘린더 분류 뱃지 | 정기연습/추가연습/연주/녹음 |
+| `qrPrintTitle` | `qrPrintTitle` | A4 인쇄용 상단 타이틀 | `string` | 종이 마스터 QR 인쇄 화면 | 현장 배포용 서식 |
+| `qrPrintSubtitle` | `qrPrintSubtitle` | A4 인쇄용 부제목 및 장소 | `string` | 종이 마스터 QR 인쇄 화면 | 현장 배포용 서식 |
+| `qrPrintNotice` | `qrPrintNotice` | A4 인쇄용 안내 문구 | `string` | 종이 마스터 QR 인쇄 화면 | 현장 배포용 서식 |
+
+---
 
 ### 1) `Member` (단원 명부)
 - **구글 시트 탭**: `단원명부`
@@ -90,13 +119,13 @@ erDiagram
 
 | 필드명 (TS) | 시트 헤더명 | 무슨 값인가 (의미 & 예시) | 타입 / 필수 | 어디로 연결되는가 (관계/FK) | 수정/삭제 시 연쇄 영향 (Cascade & 동기화 룰) |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `id` | `id` | 단원 고유 식별자 (예: `m_1740000000000_a1b2`) | `string` (필수) | **단원 마스터 기본키 (PK)**.<br>• `단원변경로그.memberId`<br>• `출석원천로그.memberId`<br>• `사전투표_RSVP.memberId` | • **수정 불가**: 한 번 발급된 ID는 변경되지 않음.<br>• **삭제 차단 (Soft Delete)**: 단원이 삭제되어도 과거 출석 원천로그와 투표 로그의 고아화 방지를 위해 원천로그는 영구 보존됨 (`status='INACTIVE'` 전환). |
+| `id` | `id` | 단원 고유 식별자 (예: `m_1740000000000_a1b2`) | `string` (필수) | **단원 마스터 기본키 (PK)**.<br>• `단원변경로그.memberId`<br>• `출석원천로그.memberId`<br>• `사전투표_RSVP.memberId` | • **수정 불가**: 한 번 발급된 ID는 변경되지 않음.<br>• **삭제 차단 (Soft Delete)**: 출석/투표 이력이 있는 단원은 행을 삭제하지 않고 `status='DELETED'`로 소프트 삭제 처리하여 역대 통계 무결성을 100% 보존. 기록 없는 오등록 단원만 시트 행 물리 삭제. |
 | `name` | `name` | 단원 성명 (예: `홍길동`) | `string` (필수) | UI 화면 표시, 검색 키워드, 로그/투표 비정규화 캐시 | • 이름 수정 시 시트 `단원명부` 행 갱신.<br>• 원천로그는 `memberId`로 조인되므로 이름이 바뀌어도 과거 모든 출석 기록의 정합성이 100% 유지됨. |
-| `part` | `part` | 현재 소속 파트 (예: `소프라노`, `알토`, `테너`, `베이스`, `선생님`, `객원` 또는 직접 입력값) | `string` (필수) | 파트별 집계 및 `MemberStatusHistory.part`로 복제 기록 | • 파트 변경 시 `단원명부` 파트 열 업데이트.<br>• **동시에 `단원변경로그` 시트에 신규 이력 행이 Append**되어 과거 파트 활동 이력이 시트 DB에 보존됨. |
+| `part` | `part` | 현재 소속 파트 (예: `소프라노`, `알토`, `테너`, `베이스`, `선생님`, `객원` 또는 직접 입력값) | `string` (필수) | 파트별 집계 및 `MemberStatusHistory.part`로 복제 기록 | • 파트 변경 시 `단원명부` 파트 열 업데이트.<br>• **동시에 `단원변경로그` 시트에 신규 이력 행이 Append**되고 직전 활성 이력의 `endDate`가 자동으로 마감됨. |
 | `phone` | `phone` | 전체 휴대전화번호 (예: `010-1234-5678`) | `string` (선택) | 단원 비상 연락망, 본인 인증 원천 | • 전화번호 수정 시 `phoneLast4`가 자동 재추출되어 시트 `단원명부`에 동기화 반영됨. |
 | `phoneLast4` | `phoneLast4` | 전화번호 뒤 4자리 (예: `5678`) | `string` (필수) | 단원 본인 인증 PIN 및 기기 등록 키 | • `phone` 입력 시 자동 추출.<br>• 변경 시 단원이 키패드로 본인 확인할 때 입력해야 하는 PIN 번호가 즉시 변경됨. |
 | `role` | `role` | 시스템 권한 (`MEMBER`, `ADMIN`, `GUEST`) | `string` (필수) | 관리자 대시보드 접근 제어 | • `ADMIN`으로 변경 시 관리자 대시보드 메뉴 활성화. |
-| `status` | `status` | 계정 활성화 여부 (`ACTIVE`, `INACTIVE`) | `string` (필수) | 명부 필터링 및 로그인 허용 여부 | • `INACTIVE` 전환 시 단원 앱 접속 차단. |
+| `status` | `status` | 계정 활성화 여부 (`ACTIVE`, `INACTIVE`, `MERGED`, `DELETED`) | `string` (필수) | 명부 필터링 및 활동 감사 | • `DELETED`: 소프트 삭제된 단원 (과거 통계용 보존).<br>• `INACTIVE`: 휴단/퇴단 등으로 일시 비활성화된 계정. |
 | `joinedAt` | `joinedAt` | 단원 입단 일자 (`YYYY-MM-DD`, 예: `2026-10-16`) | `string` (필수) | **출결 모수(분모) 시작 기준점** | • **출결 통계 연쇄 재계산**: $Schedule.date < joinedAt$ 인 과거 연습일정은 해당 단원의 출결 모수(분모)에서 자동 제외됨 (신입 단원의 결석 왜곡 원천 차단). |
 | `memberStatus`| `memberStatus`| 현재 회원상태 (`정단원`, `준단원`, `휴단원`, `객원`, `선생님`, `퇴단원`) | `string` (필수) | 출결 의무 판정 기준 및 `MemberStatusHistory.status` 연동 | • 상태 변경 시 `단원명부` 갱신과 동시에 **`단원변경로그` 시트에 신규 행 Append**.<br>• `휴단원`/`퇴단원` 전환 시 이후 일정의 기본 출결 모수(분모)에서 자동 제외됨. |
 | `note` | `note` | 관리자 비고/특이사항 (예: "가을 정기연주회 솔로") | `string` (선택) | 관리자 프로필 상세 모달 | • 수정 시 `단원명부`의 해당 셀만 업데이트. |
@@ -126,7 +155,7 @@ erDiagram
 ---
 
 ### 3) `ProgramCard` (일정 카드 / 프로젝트 컨테이너)
-- **구글 시트 탭**: `일정카드` (신설)
+- **구글 시트 탭**: `일정카드`
 - **시트 동기화 액션**: `SAVE_PROGRAM_CARD`, `DELETE_PROGRAM_CARD`
 - **역할**: 16주 정기연습, 정기연주회 준비, 워크샵 등 흩어진 일정들을 하나의 학기/프로젝트 묶음(Container)으로 구조화하여 관리.
 
@@ -148,21 +177,22 @@ erDiagram
 ---
 
 ### 4) `Schedule` (개별 연습 일정)
-- **구글 시트 탭**: `일정캘린더` (구버전 `연습일정` 호환)
+- **구글 시트 탭**: `일정캘린더`
 - **시트 동기화 액션**: `CREATE_SCHEDULE`, `UPDATE_SCHEDULE`, `DELETE_SCHEDULE`, `BATCH_UPDATE_SCHEDULES`, `BATCH_DELETE_SCHEDULES`
 - **역할**: 출석 체크(QR/PIN) 및 사전 투표(RSVP)가 실제로 발생하는 날짜별 연습 이벤트.
 
 | 필드명 (TS) | 시트 헤더명 | 무슨 값인가 (의미 & 예시) | 타입 / 필수 | 어디로 연결되는가 (관계/FK) | 수정/삭제 시 연쇄 영향 (Cascade & 동기화 룰) |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `id` | `id` | 일정 고유 식별자 (예: `sch_20261022_01`) | `string` (필수) | **일정 기본키 (PK)**.<br>• `출석원천로그.scheduleId`<br>• `사전투표_RSVP.scheduleId` | • **불변식**: 일정 ID는 절대 변경되지 않음.<br>• **삭제 차단 (Cascade Safety)**: 이미 출석 원천로그가 1건이라도 기록된 일정은 물리 삭제가 차단되며 `isArchived=true`로 소프트 숨김 처리됨. |
+| `id` | `id` | 일정 고유 식별자 (예: `sch_20261022_01`) | `string` (필수) | **일정 기본키 (PK)**.<br>• `출석원천로그.scheduleId`<br>• `사전투표_RSVP.scheduleId` | • **불변식**: 일정 ID는 절대 변경되지 않음.<br>• **삭제 차단 (Cascade Safety)**: 이미 출석 원천로그나 투표가 1건이라도 기록된 일정은 행 물리 삭제가 차단되며 `isCancelled=true`로 소프트 취소 처리되어 출결 통계 모수(분모)에서 안전하게 제외됨. 기록 없는 오등록 일정만 시트 행 물리 삭제. |
+| `isCancelled`| `isCancelled`| **연습 일정 취소 여부 (`true`/`false`)** | `boolean` (선택) | 출결 통계 및 캘린더 표시 | • `true` 시 캘린더에 취소선 및 🚫 배지 표시, **모든 단원의 출석률 모수(분모)에서 자동 제외**. |
 | `programId` | `programId` | 소속된 상위 일정카드 ID (예: `card_2026_fall`) | `string` (선택) | **외래키 (FK)** $\rightarrow$ `일정카드.id` | • 상위 카드가 `🔁 다음 학기로 복제`될 때, 신규 일정으로 복제되면서 새 카드의 `programId`를 부여받음 (과거 일정과 100% 분리). |
-| `title` | `title` | 일정 명칭 (예: `가을 정기연습`, `소프라노 파트연습`) | `string` (필수) | 단원 캘린더, 출석 QR 화면 표시 | • **회차 번호 강제 안 함**: `1회차`, `2회차`를 제목에 강제하지 않아 결항/휴일 발생 시 번호 뒤틀림 방지.<br>• 제목이 바뀌어도 출석 로그는 `scheduleId`로 연결되어 100% 보존. |
+| `title` | `title` | 일정 명칭 (예: `가을 정기연습`, `소프라노 파트연습`) | `string` (필수) | 단원 캘린더, 출석 QR 화면 표시 | • 제목이 바뀌어도 출석 로그는 `scheduleId`로 연결되어 100% 보존. |
 | `date` | `date` | 연습 일자 (`YYYY-MM-DD`, 예: `2026-10-22`) | `string` (필수) | 출결 모수 판정($joinedAt$, $statusHistory$)의 기준일 | • **모수 연쇄 재계산**: 날짜가 변경되면 해당 날짜에 유효한 단원들의 출결 자격이 재판정됨. |
 | `startTime` | `startTime` | 연습 시작 시각 (`HH:mm`, 예: `19:30`) | `string` (필수) | 출석 QR 오픈 시간 및 지각 기준점 | • 시간 변경 시 QR 활성화 타임윈도우(시작 1시간 전 ~ 종료 후 30분) 및 정시/지각 판정선이 자동 재계산됨. |
 | `endTime` | `endTime` | 연습 종료 시각 (`HH:mm`, 예: `22:00`) | `string` (필수) | 출석 QR 마감 시간 | • QR 마감 시각 자동 재계산. |
 | `locationName` | `locationName`| 연습 장소명 (예: `드림 보컬 스튜디오`) | `string` (필수) | 사용자 UI 및 캘린더 안내 | • 장소 프리셋 선택 시 자동 반영. |
-| `locationId` | `locationId` | 연결된 장소 프리셋 ID (예: `loc_dream_01`) | `string` (선택) | **외래키 (FK)** $\rightarrow$ `장소정보.id` | • **관계형 단일 진실 공급원(SSOT)**: `locationId`가 존재하면 본 일정의 좌표/반경은 `장소정보`의 최신 값을 실시간 참조함. 장소정보 수정 시 모든 일정이 즉시 동기화됨. |
-| `targetLat` | `latitude` | 장소 위도 (예: `37.498092`) | `number` (선택) | 모바일 네이티브 Geolocation 검증 (`geo.ts`) | • 프리셋 없을 때만 직접 입력 폴백. 카카오 API로 유효 좌표 미확보 시 저장 차단. |
+| `locationId` | `locationId` | 연결된 장소 프리셋 ID (예: `loc_dream_01`) | `string` (선택) | **외래키 (FK)** $\rightarrow$ `장소정보.id` | • **관계형 단일 진실 공급원(SSOT)**: `locationId`가 존재하면 본 일정의 좌표/반경은 `장소정보`의 최신 값을 실시간 참조함. |
+| `targetLat` | `latitude` | 장소 위도 (예: `37.498092`) | `number` (선택) | 모바일 네이티브 Geolocation 검증 (`geo.ts`) | • 프리셋 없을 때만 직접 입력 폴백. |
 | `targetLon` | `longitude` | 장소 경도 (예: `127.027610`) | `number` (선택) | 모바일 네이티브 Geolocation 검증 (`geo.ts`) | • 프리셋 없을 때만 직접 입력 폴백. |
 | `radiusMeters` | `radiusMeters`| 출석 인정 반경 (미터, 기본 `100`) | `number` (선택) | Haversine 공식 거리 오차 허용 한계 | • `locationId` 프리셋의 최신 반경이 실시간 반영됨 (50m ~ 500m). |
 | `targetAudienceType` | `targetAudienceType` | 참석 대상 필터 (`ALL`, `PARTS`, `CUSTOM_MEMBERS`) | `string` (선택) | 출결 통계 및 개인 홈 화면 분기 기준 | • `ALL`: 전체 필참<br>• `PARTS`: 특정 파트 한정<br>• `CUSTOM_MEMBERS`: 선발 단원 수동 지정 |
@@ -232,41 +262,43 @@ erDiagram
 
 ## 📌 3. 구글 시트 연동 및 로그 DB화 아키텍처 (Logs as Google Sheets DB)
 
-### 1) 7대 구글 시트 탭 매핑표
-문콰이어 출석부의 모든 영속 데이터는 구글 시트의 7개 탭에 관계형 데이터베이스(RDBMS) 형식으로 보존됩니다.
+### 1) 8대 구글 시트 탭 매핑표
+문콰이어 출석부의 모든 영속 데이터는 구글 시트의 8개 탭에 관계형 데이터베이스(RDBMS) 형식으로 보존됩니다.
 
 | 탭 이름 (Sheet Name) | 주체 엔티티 | 저장 방식 (Storage Pattern) | 인덱스 키 (PK / FK) | 설명 |
 | :--- | :--- | :--- | :--- | :--- |
-| **`출석원천로그`** | `RawAttendanceLog` | **Append-Only (절대 수정/삭제 불가)** | PK: `id`<br>FK: `scheduleId`, `memberId` | QR/PIN 출석 시각, 단원ID, GPS 통과여부를 불변 이벤트 로그로 시트에 한 줄씩 영구 적재. |
-| **`단원변경로그`** | `MemberStatusHistory` | **Append-Only (감사 로그 DB)** | PK: `id`<br>FK: `memberId` | 단원의 상태(휴단/정단원 등)나 파트가 변경될 때마다 효력 기간(`startDate`~`endDate`)과 사유를 누적 기록. |
-| **`단원명부`** | `Member` | In-place Upsert | PK: `id` | 단원의 현재 프로필, 입단일, 전화번호 뒷자리, 최신 상태 관리. |
-| **`일정캘린더`** | `Schedule` | In-place Upsert / Soft Delete | PK: `id`<br>FK: `programId`, `locationId` | 개별 연습일정 이벤트 (출석 로그가 있는 일정은 삭제 차단). |
+| **`환경설정`** | `SystemConfig` | Key-Value / In-place Upsert | PK: `key` | 지각 유예시간(10분), 관리자 PIN(1234), 동적 분류 체계(파트/상태/카테고리), A4 인쇄 서식을 중앙 관리. |
+| **`출석원천로그`** | `RawAttendanceLog` | **Append-Only (물리 삭제 절대 불가)** | PK: `id`<br>FK: `scheduleId`, `memberId` | QR/PIN 출석 시각, GPS 오차거리, GPS 검증 통과여부 및 **관리자 취소 로그**를 불변 이벤트 로그로 시트에 한 줄씩 영구 적재. |
+| **`단원변경로그`** | `MemberStatusHistory` | **Append-Only (감사 로그 DB)** | PK: `id`<br>FK: `memberId` | 단원의 상태(휴단/정단원 등)나 파트가 변경될 때마다 효력 기간(`startDate`~`endDate`)과 사유를 누적 기록. 직전 활성 이력은 자동 마감. |
+| **`단원명부`** | `Member` | In-place Upsert / Soft Delete | PK: `id` | 단원의 현재 프로필, 입단일, PIN, 최신 상태 관리. 이력이 있는 단원은 삭제 시 `status='DELETED'`로 보존. |
+| **`일정캘린더`** | `Schedule` | In-place Upsert / Soft Cancel | PK: `id`<br>FK: `programId`, `locationId` | 개별 연습일정. 이력이 있는 일정은 `isCancelled=true`로 전환하여 통계 모수에서 제외. |
 | **`일정카드`** | `ProgramCard` | In-place Upsert / Archive | PK: `id`<br>FK: `defaultLocationId` | 학기별 정기연습 묶음 컨테이너. |
 | **`사전투표_RSVP`** | `RSVPVote` | In-place Upsert (1인 1표) | PK: `id`<br>FK: `scheduleId`, `memberId` | 일정별 참석/불참 사전 투표. |
 | **`장소정보`** | `LocationPreset` | In-place Upsert | PK: `id` | 연습실 명칭, 도로명/상세주소, 입구 위치, GPS 좌표. |
 
-### 2) 원천 로그 분리 (Event Sourcing) 및 투영 뷰 (Projection View)
+### 2) 원천 로그 분리 (Event Sourcing) 및 출결 원복 아키텍처
 1. **불변 원천 데이터 (Ground Truth)**:
-   - `출석원천로그`와 `단원변경로그`는 한번 구글 시트에 기록되면 어떤 사용자나 스크립트도 덮어쓰거나 행을 삭제하지 않습니다.
-2. **동적 투영 뷰 (Projection View)**:
+   - `출석원천로그`와 `단원변경로그`는 한번 구글 시트에 기록되면 어떤 사용자나 스크립트도 덮어쓰거나 행을 물리 삭제하지 않습니다.
+2. **출결 취소 원복 로직 (Append-Only Cancellation)**:
+   - 관리자가 출결 매트릭스나 명부에서 잘못 체크된 출석을 "취소/초기화"할 때, 기존 출석 행을 물리 삭제하지 않습니다.
+   - 직전 출석 시각보다 1초 뒤인 **취소 로그 (`adminNote: '관리자 출결 취소 (결석 처리)'`)**를 새로 Append 적재합니다.
+   - 투영 엔진(`reconcileAttendance`)은 동일 일정/단원에 대해 시계열로 정렬된 로그들을 재생(Replay)하며, 마지막 유효 로그가 취소 로그이면 출석을 무효화하고 원래의 결석/사유결석/미참 상태로 복원합니다.
+3. **동적 투영 뷰 (Projection View)**:
    - "누적 출석률", "지각 횟수", "결석률", "게스트 출석 뱃지"는 시트에 고정된 숫자로 저장되는 것이 아니라, **`출석원천로그` + `단원변경로그` + `입단일(joinedAt)`을 읽어 실시간으로 계산**됩니다.
-   - 따라서 합창단의 출결 룰(예: "지각 2회 = 결석 1회 처리", "휴단 기간 모수 제외")이 미래에 변경되더라도, 원천 로그가 100% 보존되어 있으므로 과거 모든 통계를 오차 없이 언제든 재계산할 수 있습니다.
 
 ---
 
 ## 📌 4. 전체 데이터 연쇄 영향도 매트릭스 (Master Cascade & Impact Matrix)
 
-시스템에서 특정 데이터가 추가/수정/삭제될 때, 연관된 다른 데이터들이 어떻게 반응해야 하는지(Business Reaction Rules)를 명확히 정의합니다.
-
 | 부모/주체 이벤트 (Trigger Action) | 수정/영향 대상 엔티티 | 영향받는 자식/연계 엔티티 | 시스템 연쇄 처리 규칙 (Cascade Rule) | 데이터 보호 이유 및 정합성 보장 |
 | :--- | :--- | :--- | :--- | :--- |
 | **단원 입단일(`joinedAt`) 수정** | `Member` | `CumulativeMemberAttendance` (통계 투영) | $Schedule.date < joinedAt$ 인 모든 연습일정을 **해당 단원의 출결 모수(분모)에서 즉시 제외**. | 중도 입단 단원이 이전 연습 결석으로 처리되어 출석률이 왜곡되는 문제 원천 차단. |
 | **단원 상태(`memberStatus`) 또는 파트(`part`) 수정** | `Member` | `MemberStatusHistory` (`단원변경로그`) | 1) `단원명부` 현재 값 갱신.<br>2) **`단원변경로그` 시트에 신규 이력 행 자동 Append**.<br>3) 직전 활성 이력의 종료일을 `새_시작일 - 1일`로 자동 마감. | 과거 특정 날짜의 출결 의무와 소속 파트를 영구적으로 역산/추적할 수 있는 감사 로그 보존. |
-| **단원 삭제 (퇴단 처리)** | `Member` | `RawAttendanceLog`, `RSVPVote`, `MemberStatusHistory` | **원천 데이터 절대 삭제 금지 (No Delete / Restrict)**.<br>단원 계정만 `INACTIVE`로 전환하며, 과거 출석 원천로그와 투표 내역은 온전히 보존. | 전체 합창단 역대 출석 총계 및 연습별 참석자 명부 무결성 영구 유지. |
-| **일정 날짜/시간/장소 수정** | `Schedule` | `RawAttendanceLog`, `RSVPVote` | **외래키 불변 (`scheduleId` 유지)**.<br>일정의 속성이 변경되어도 연결된 출석 로그와 투표 로그는 고아화되지 않고 그대로 유지됨. | In-place 업데이트로 과거 출석 체크 내역 보존. |
-| **일정 삭제 시도** | `Schedule` | `RawAttendanceLog` | 1) 출석 로그가 0건인 일정 $\rightarrow$ 물리 삭제 허용.<br>2) **출석 로그가 1건이라도 있는 일정 $\rightarrow$ 물리 삭제 차단 (`isArchived=true` 전환)**. | 원천 로그 고아화 및 출결 증빙 소실 원천 차단. |
-| **일정카드(`ProgramCard`) 복제** | `ProgramCard` | `Schedule` | 1) 카드 복제 시 소속 일정 템플릿을 복제하여 **신규 `scheduleId`, 신규 `checkInPin` 발급**.<br>2) **기존 출석 원천로그와 투표 로그는 1건도 복제하지 않음 (0건으로 깨끗이 시작)**. | 새 학기/시즌의 출결 데이터와 이전 학기 출결 데이터를 100% 독립 격리. |
-| **장소 프리셋(`LocationPreset`) 좌표 수정** | `LocationPreset` | `Schedule` | 장소의 위경도/반경이 변경되면, 해당 `locationId`를 참조하는 향후 일정의 좌표도 자동 동기화. | 연습실 이전 또는 GPS 오차 발생 시 현장 출석 검증의 정확도 유지. |
+| **단원 삭제 시도** | `Member` | `RawAttendanceLog`, `RSVPVote` | 1) 출석/투표 이력이 0건인 단원 $\rightarrow$ 시트 행 물리 삭제.<br>2) **이력이 1건이라도 있는 단원 $\rightarrow$ 물리 삭제 차단 (`status='DELETED'` 소프트 삭제)**. | 과거 출석 원천로그의 단원 정보 고아화 방지 및 역대 통계 무결성 100% 보존. |
+| **일정 삭제 시도** | `Schedule` | `RawAttendanceLog`, `RSVPVote` | 1) 출석/투표 이력이 0건인 일정 $\rightarrow$ 시트 행 물리 삭제.<br>2) **이력이 1건이라도 있는 일정 $\rightarrow$ 물리 삭제 차단 (`isCancelled=true` 소프트 취소)**. | 원천 로그 고아화 방지 및 캘린더/매트릭스에서 출석률 모수(분모) 안전 제외. |
+| **관리자 출결 취소/초기화** | `AdminMatrixGrid` | `RawAttendanceLog` | 기존 로그 행 물리 삭제 금지 $\rightarrow$ **취소 전용 로그 Append 적재**. | Event Sourcing 불변식 준수 및 감사 추적성 보존. |
+| **환경설정 변경** | `SystemConfig` | 전역 앱 동작 | `SAVE_CONFIG` 액션을 통해 구글 시트 `환경설정` 탭에 Key-Value로 즉시 동기화. | 여러 관리자 기기 및 단원 앱 간 동일한 룰 공유. |
+| **장소 프리셋(`LocationPreset`) 좌표 수정** | `LocationPreset` | `Schedule` | 장소의 위경도/반경이 변경되면, 해당 `locationId`를 참조하는 일정들의 좌표도 자동 동기화. | 연습실 이전 또는 GPS 오차 발생 시 현장 출석 검증의 정확도 유지. |
 
 ---
 
@@ -274,18 +306,24 @@ erDiagram
 
 ### 1) 출결 모수(분모) 동적 판정 알고리즘
 단원 $M$과 연습일정 $S$에 대해:
-1. **입단일 검증**:
+1. **취소된 연습 검증**:
+   $$S.isCancelled = \text{true} \implies \text{전원 모수 제외 (분모 0, '미참' 처리)}$$
+2. **입단일 검증**:
    $$S.date < M.joinedAt \implies \text{모수 제외 (해당 없음, 분모 0)}$$
-2. **생애주기 이력(`MemberStatusHistory`) 검증**:
+3. **생애주기 이력(`MemberStatusHistory`) 검증**:
    $M$의 이력 중 $H.startDate \le S.date \le H.endDate$를 만족하는 이력 $H$의 상태를 조회:
    - $H.status \in \{\text{'정단원'}, \text{'준단원'}\}$: **필수 출결 대상 (기본 모수 = 1)**
    - $H.status \in \{\text{'휴단원'}, \text{'퇴단원'}, \text{'객원'}, \text{'선생님'}\}$: **기본 모수 제외 (기본 모수 = 0)**
-3. **자발적 옵트인(Opt-in) 예외 가산**:
+4. **자발적 옵트인(Opt-in) 예외 가산**:
    - 기본 모수가 0인 단원이라도 해당 일정 $S$에 실제 출석 로그(`RawAttendanceLog`)가 존재하는 경우:
      $$\text{모수(분모)} \leftarrow \text{모수} + 1, \quad \text{출석(분자)} \leftarrow \text{출석} + 1$$
    - 출석률 100%를 보존하며, 대시보드에 `[💡 게스트 N회]` 뱃지를 부여하여 기여도를 공정하게 인정.
 
-### 2) 구글 시트 헤더 키 기반 동적 매핑
+### 2) 동시성 제어 (Concurrency Control via LockService)
+- 합창 연습 현장에서는 20~30명의 단원이 1~2분 사이에 동시에 QR 코드를 스캔합니다.
+- 동시 요청으로 인한 스프레드시트 행 덮어쓰기(Race Condition)를 방지하기 위해, 구글 앱스 스크립트(GAS)의 `doPost` 진입점에 `LockService.getScriptLock().waitLock(15000)`를 적용하여 모든 쓰기 작업을 15초 대기 락 하에서 안전하게 순차 처리(Serialized Execution)합니다.
+
+### 3) 구글 시트 헤더 키 기반 동적 매핑
 - 프론트엔드와 GAS는 시트 컬럼의 순서(Index)가 아닌 **고유 헤더 키(`id`, `name`, `startDate` 등)**를 기반으로 읽고 씁니다.
 - 구글 시트에서 관리자가 열의 위치를 바꾸거나 새로운 비고 열을 삽입하더라도, 기존 시스템 통신은 결코 깨지지 않고 하위 호환성을 유지합니다.
 

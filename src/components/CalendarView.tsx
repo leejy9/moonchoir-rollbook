@@ -209,13 +209,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <div style={{ flex: 1 }}>
                       <div className="item-card-top">
                         <span className="schedule-category-badge">{sch.category}</span>
+                        {sch.isCancelled && (
+                          <span className="schedule-category-badge" style={{ background: '#fef0f0', color: '#f04452', border: '1px solid #fed7d7', fontWeight: 700 }}>
+                            🚫 연습 취소
+                          </span>
+                        )}
                         <span className="item-time-badge">
                           <IconClock size={13} />
                           <span>{sch.startTime} ~ {sch.endTime}</span>
                         </span>
                       </div>
 
-                      <h4 className="item-card-title">{sch.title}</h4>
+                      <h4 className="item-card-title" style={sch.isCancelled ? { textDecoration: 'line-through', opacity: 0.6 } : undefined}>
+                        {sch.title}
+                      </h4>
                       <div className="item-card-loc">
                         <IconLocation size={14} />
                         <span>{sch.locationName}</span>
@@ -313,12 +320,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                 <div className="feed-content-column" style={{ flex: 1, minWidth: 0 }}>
                   <div className="feed-title-row" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span className="feed-title" style={{ fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span className="feed-title" style={{ fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: sch.isCancelled ? 'line-through' : undefined, opacity: sch.isCancelled ? 0.6 : 1 }}>
                       {sch.title}
                     </span>
-                    <span className="schedule-category-badge" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                      {sch.category}
-                    </span>
+                    {sch.isCancelled ? (
+                      <span className="schedule-category-badge" style={{ fontSize: '9px', padding: '1px 5px', background: '#fef0f0', color: '#f04452', border: '1px solid #fed7d7' }}>
+                        취소
+                      </span>
+                    ) : (
+                      <span className="schedule-category-badge" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                        {sch.category}
+                      </span>
+                    )}
                   </div>
                   <div className="feed-meta-row" style={{ fontSize: '11px', color: '#8b95a1', marginTop: '1px' }}>
                     <span>{sch.startTime}~{sch.endTime}</span>

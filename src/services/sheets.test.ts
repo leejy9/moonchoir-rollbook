@@ -31,9 +31,9 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(park?.finalStatus).toBe('사유결석');
     expect(park?.rsvpReason).toBe('회사 야근');
 
-    // 장기하: MANUAL_BY_ADMIN -> 수동인정
+    // 장기하: MANUAL_BY_ADMIN -> 출석 (수동 오버라이드 플래그 true)
     const jang = reconciled.find((r) => r.memberName === '장기하');
-    expect(jang?.finalStatus).toBe('수동인정');
+    expect(jang?.finalStatus).toBe('출석');
     expect(jang?.isManualOverride).toBe(true);
 
     // 미투표 + 노로그 정규 단원 (조현아) -> 결석
@@ -60,7 +60,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     });
 
     let rec = service.reconcileAttendance('sch_20261022').find((r) => r.memberName === '김하은');
-    expect(rec?.finalStatus).toBe('수동인정');
+    expect(rec?.finalStatus).toBe('출석');
 
     // 2. 관리자가 결석으로 변경 (오버라이드)
     await service.addCheckInLog({
@@ -83,21 +83,32 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     rec = service.reconcileAttendance('sch_20261022').find((r) => r.memberName === '김하은');
     expect(rec?.finalStatus).toBe('결석'); // 의무 대상자이므로 기본 결석으로 복귀
 
-    // 4. 스케줄 ID 프리픽스가 다른 과거 잔존 로그가 있는 경우에도 함께 초기화되는지 검증
+    // 4. 출결 취소 시 원천 로그가 물리 삭제되지 않고, 취소 로그가 적재되며 최종 판정이 원래 결석으로 투영되는지 검증
     await service.addCheckInLog({
       id: 'log_prefix_legacy',
       scheduleId: 'sch_20261022',
       memberId: 'mem_s01',
       memberName: '김하은',
       part: '소프라노',
-      timestamp: '2026-10-22T19:30:00',
+      timestamp: '2026-10-22T19:40:00',
       authMethod: 'QR_WEB_CAM',
       isVerifiedLocation: true,
     });
-    // 파생된 ID 'sch_20261022_klyd' 로 clear 요청
-    await service.clearAttendanceLog('sch_20261022_klyd', 'mem_s01');
-    const remainingLogs = service.getLogs('sch_20261022').filter((l) => l.memberId === 'mem_s01');
-    expect(remainingLogs.length).toBe(0);
+    // 출결 정상 등록 확인
+    rec = service.reconcileAttendance('sch_20261022').find((r) => r.memberName === '김하은');
+    expect(rec?.finalStatus).toBe('출석');
+
+    // 출결 취소(원복) 요청
+    await service.clearAttendanceLog('sch_20261022', 'mem_s01');
+
+    // Event Sourcing 불변식: 원천 로그는 물리 삭제되지 않고 취소 로그가 추가되어 보존됨
+    const memberLogs = service.getLogs('sch_20261022').filter((l) => l.memberId === 'mem_s01');
+    const latestLog = memberLogs[memberLogs.length - 1];
+    expect(latestLog.adminNote).toContain('취소');
+
+    // 투영 뷰: 최종 상태는 원래의 '결석'으로 안전하게 복귀됨
+    rec = service.reconcileAttendance('sch_20261022').find((r) => r.memberName === '김하은');
+    expect(rec?.finalStatus).toBe('결석');
   });
 
   it('guarantees append-only behavior for check-in logs', async () => {
@@ -595,7 +606,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(recSept?.finalStatus).toBe('출석');
 
     const recOct = service.reconcileAttendance('sch_oct_01').find((r) => r.memberId === memberA.id);
-    expect(recOct?.finalStatus).toBe('수동인정');
+    expect(recOct?.finalStatus).toBe('출석');
   });
 
   it('prioritizes dynamic preset coordinates and radius over outdated schedule snapshots', async () => {
@@ -824,6 +835,66 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(log.timestamp).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
     expect(log.timestamp.includes('T')).toBe(false);
     expect(log.timestamp.endsWith('Z')).toBe(false);
+  });
+
+  it('단원 삭제 시 활동 로그가 있으면 status=DELETED 로 소프트 삭제하고, 일반 getMembers 목록에서 제외하되 역대 로그는 보존한다', async () => {
+    const testMemberId = 'mem_soft_del_test';
+    await service.addMember({
+      id: testMemberId,
+      name: '소프트삭제단원',
+      part: '테너',
+      phoneLast4: '9999',
+      role: 'MEMBER',
+      createdAt: '2026-10-01 10:00:00',
+      status: 'ACTIVE',
+      joinedAt: '2026-10-01',
+      memberStatus: '정단원',
+      note: '',
+    });
+
+    // 출석 로그 1건 추가
+    await service.addCheckInLog({
+      id: 'log_del_test',
+      scheduleId: 'sch_20261001',
+      memberId: testMemberId,
+      memberName: '소프트삭제단원',
+      part: '테너',
+      timestamp: '2026-10-01 19:30:00',
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    });
+
+    // 삭제 실행
+    await service.deleteMember(testMemberId);
+
+    // 일반 목록에서는 숨김 처리됨
+    const activeList = service.getMembers();
+    expect(activeList.some((m) => m.id === testMemberId)).toBe(false);
+
+    // includeDeleted=true 시 보존되어 있음 확인
+    const allList = service.getMembers(false, true);
+    const softDeleted = allList.find((m) => m.id === testMemberId);
+    expect(softDeleted).toBeDefined();
+    expect(softDeleted?.status).toBe('DELETED');
+
+    // 과거 출석 원천 로그는 100% 보존됨
+    const logs = service.getLogs('sch_20261001');
+    expect(logs.some((l) => l.memberId === testMemberId)).toBe(true);
+  });
+
+  it('일정 삭제 시 출석 기록이 있으면 isCancelled=true 로 소프트 취소하고 출결 판정 시 미참으로 안전 투영한다', async () => {
+    const targetScheduleId = 'sch_20261001';
+    // 출석 기록이 있는 일정 삭제 시도
+    await service.deleteSchedule(targetScheduleId);
+
+    const schedule = service.getSchedules().find((s) => s.id === targetScheduleId);
+    expect(schedule).toBeDefined();
+    expect(schedule?.isCancelled).toBe(true);
+
+    // 취소된 일정에 대한 출결 판정: 결석이 아닌 '미참'으로 안전 투영 (모수 분모 제외)
+    const reconciliations = service.reconcileAttendance(targetScheduleId);
+    expect(reconciliations.length).toBeGreaterThan(0);
+    expect(reconciliations.every((r) => r.finalStatus === '미참')).toBe(true);
   });
 });
 

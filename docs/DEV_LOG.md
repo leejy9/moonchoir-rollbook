@@ -15,6 +15,7 @@
 8. [2026-10-17: Phase 4.3 — 1인 1투표 보장, 1인 1기기 락, 대형 팝업 QR 긍정 경험](#2026-10-17-phase-43-1인-1투표-보장-1인-1기기-락-대형-팝업-qr-긍정-경험-음악-역량-풀-qr-영구설정--일정-아카이브)
 9. [2026-10-17: Phase 4.5 & Phase 4.6 — 데이터 파이프라인 정합성 복원, 마이페이지 2탭 개편 & 3대 구조 개혁](#2026-10-17-phase-45--phase-46-데이터-파이프라인-정합성-복원-마이페이지-2탭-개편--3대-구조-개혁)
 10. [2026-10-17: Phase 4.7 — 게이미피케이션 출석부, 일정카드 대상자 분리, 2열 인라인 관리, 단원 ID 안전 통합 & 실시간 시간 윈도우 프로토콜 (Tasks 45~50)](#2026-10-17-phase-47--게이미피케이션-출석부-일정카드-대상자-분리-2열-인라인-관리-단원-id-안전-통합--실시간-시간-윈도우-프로토콜-tasks-4550)
+11. [2026-10-18: Phase 4.9 — 데이터 릴레이션·스키마 무결성 확립 & 동시성 락 & 환경설정 시트화](#2026-10-18-phase-49--데이터-릴레이션스키마-무결성-확립--동시성-락--환경설정-시트화)
 
 ---
 
@@ -791,5 +792,47 @@
 - 브라우저 서브에이전트 실화면 검증:
   - 카드 삭제 확인 모달 및 소속 일정 일괄 삭제 옵션 렌더링 확인 (`card_delete_modal_1792300160074.png`).
   - 개별 일정 삭제 확인 모달 안정적 표출 및 조기 닫힘 현상 원천 해소 확인 (`schedule_delete_modal_1792300188629.png`).
+
+---
+
+## [2026-10-18] Phase 4.9: 데이터 릴레이션·스키마 무결성 확립 & 동시성 락 & 환경설정 시트화
+
+### 1. 배경 및 사용자 인터뷰 (/grill-me)
+- 스프레드시트 ↔ 프론트/백엔드 간 릴레이션(연결관계) 및 스키마(작업 흐름) 전수 분석 결과 9대 잠재 결함 및 동시성 복병이 발견됨.
+- 인터뷰를 통해 다음과 같은 절대 원칙을 도출하고 전면 개편 실행:
+  1. **출결 취소 원복 (#1)**: 물리 삭제 절대 금지. `adminNote='관리자 출결 취소 (결석 처리)'` 취소 로그 Append 적재(Event Sourcing)로 원복.
+  2. **단원 삭제 (#2)**: 출석/투표 이력이 있는 단원은 `status='DELETED'`로 소프트 삭제하여 역대 통계 무결성 100% 보존. 무기록 단원만 물리 삭제.
+  3. **일정 삭제 (#3)**: 출석/투표 이력이 있는 일정은 `isCancelled=true`로 전환하여 캘린더/매트릭스에 🚫 취소선 표기 및 **출석률 통계 모수(분모)에서 자동 제외**.
+  4. **통신 프로토콜 정규화 (#4 & #8)**: `no-cors` 침묵 실패를 걷어내고 정식 JSON 응답 수신 구조(+fallback)로 전환.
+  5. **누락 컬럼 동기화 (#5 & #6)**: `일정캘린더`에 `locationId, latitude, longitude, radiusMeters, isCancelled` 추가, `출석원천로그`에 `distanceMeters` 추가.
+  6. **열 순서 독립성 (#7)**: GAS 및 클라이언트에서 `rows[i][0]` 하드코딩 제거하고 헤더 키 기반 동적 인덱스 매핑으로 전면 교체.
+  7. **환경설정 시트 탭 신설 (#9)**: 시트에 `환경설정` (`CONFIG`) 탭을 신설하여 지각 유예시간(10분), 관리자 PIN(1234), 파트/상태 분류, A4 인쇄 서식을 중앙 관리.
+  8. **(복병) 동시성 제어**: 합창 현장 20~30명 동시 스캔 시 시트 행 덮어쓰기 방지를 위한 **GAS `LockService` 15초 스크립트 락** 적용.
+
+### 2. 주요 아키텍처 및 구현 내용
+1. **Google Apps Script (`google-apps-script.js`)**:
+   - `SHEET_NAMES.CONFIG = '환경설정'` 신설 및 8대 탭 스키마(`ensureSheetStructure`) 정의.
+   - `doPost` 전체에 `LockService.getScriptLock().waitLock(15000)` 및 `try-finally` 락 해제 적용.
+   - 모든 CRUD 핸들러를 헤더 이름 기반 맵 매핑으로 전면 리팩토링.
+   - `UPDATE_MEMBER` 시 `단원변경로그`의 직전 오픈 이력을 `newStartDate - 1일`로 시트 상에서 자동 마감.
+2. **도메인 모델 & 날짜 유틸 (`rollbook.ts`, `date.ts`)**:
+   - `Member.status`에 `'DELETED'` 추가. `Schedule`에 `isCancelled?: boolean` 추가.
+   - `parseKSTDate` 정규식을 `[ T]` 구분자로 확장하여 `ISO(T)`와 `KST(공백)`가 섞였을 때 ASCII 문자열 정렬 역전 현상(`' ' < 'T'`)을 완벽 방지.
+3. **시트 어댑터 & 출결 판정 엔진 (`sheets.ts`)**:
+   - `clearAttendanceLog`: 직전 로그보다 1초 뒤인 취소 로그 Append.
+   - `reconcileAttendance`: `parseKSTDate().getTime()` 기반 밀리초 숫자 정렬로 이벤트 소싱 순서 보장, 취소 로그 감지 시 유효 출석 미인정(원래 상태 복원), 취소된 일정 전원 모수 제외.
+   - `deleteMember` / `deleteSchedule`: 활동 이력 확인 후 소프트 삭제/취소 vs 물리 삭제 조건 분기.
+4. **프론트엔드 UI 연동 (`AdminMatrixGrid.tsx`, `CalendarView.tsx`, `AdminDashboard.tsx`)**:
+   - 취소된 일정에 `col-cancelled` 및 `cell-cancelled` 스타일 적용, 출석률 통계 모수 분모에서 제외.
+   - 캘린더 뷰에 `🚫 연습 취소` 뱃지 및 취소선 표시.
+   - 환경설정 저장 시 구글 시트 동기화 완료 피드백 제공.
+
+### 3. 센서 검증 결과 (Green Bar)
+- `npm run typecheck`: 0 errors (100% 통과)
+- `npm run lint`: 0 warnings, 0 errors
+- `npm test`: 14 test files, 91/91 tests pass (단위 테스트 2건 추가 완료, 100% 통과)
+- `npm run build`: Production bundle 빌드 성공
+- 관련 문서 최신화: [Plan 09](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/09_schema_relation_integrity_and_concurrency.md), [DATA_SCHEMA.md v1.3.0](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/DATA_SCHEMA.md), [PRD.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/PRD.md), [tasks.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/tasks.md)
+
 
 

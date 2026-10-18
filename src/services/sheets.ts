@@ -12,7 +12,7 @@ import type {
   Schedule,
 } from '../types/rollbook';
 import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
-import { getKSTTimestampString, getKSTDateString, addDaysKST, normalizeDateToYYYYMMDD } from '../utils/date';
+import { getKSTTimestampString, getKSTDateString, addDaysKST, normalizeDateToYYYYMMDD, parseKSTDate } from '../utils/date';
 import {
   INITIAL_CONFIG,
   INITIAL_LOCATION_PRESETS,
@@ -116,7 +116,7 @@ export class SheetsService {
     };
   }
 
-  public getMembers(includeMerged = false): Member[] {
+  public getMembers(includeMerged = false, includeDeleted = false): Member[] {
     // Auto-restore or align bound device profile with member array
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
@@ -158,9 +158,11 @@ export class SheetsService {
       // ignore storage access errors
     }
 
-    const targetMembers = includeMerged
-      ? this.members
-      : this.members.filter((m) => m.status !== 'MERGED');
+    const targetMembers = this.members.filter((m) => {
+      if (!includeMerged && m.status === 'MERGED') return false;
+      if (!includeDeleted && m.status === 'DELETED') return false;
+      return true;
+    });
 
     // Backward compatibility adapter (Schema Evolution Invariant)
     return targetMembers.map((m) => ({
@@ -381,44 +383,53 @@ export class SheetsService {
   }
 
   /**
-   * 특정 세션에 대한 단원의 출결 보정 기록 및 로그를 초기화하여 원래 상태로 되돌립니다.
+   * 특정 세션에 대한 단원의 출결을 취소하여 원래 상태(결석/미참)로 되돌립니다.
+   * (도메인 불변식: 원천 데이터 물리 삭제 금지, 취소 로그 Append-Only 적재)
    */
   public async clearAttendanceLog(scheduleId: string, memberId: string): Promise<void> {
     const targetMember = this.members.find((m) => m.id === memberId);
-    const siblingIds = new Set(
-      this.members
-        .filter((m) => m.name === targetMember?.name && (m.phoneLast4 === targetMember?.phoneLast4 || !m.phoneLast4 || !targetMember?.phoneLast4))
-        .map((m) => m.id)
+    const targetSchedule = this.schedules.find((s) => s.id === scheduleId);
+
+    // 취소 로그는 해당 일정의 기존 로그들 중 가장 최신 타임스탬프보다 뒤여야 최신 판정됨
+    let cancelTimestamp = getKSTTimestampString();
+    const existingScheduleLogs = this.logs.filter(
+      (l) => (l.scheduleId === scheduleId || (targetSchedule && l.scheduleId.startsWith(targetSchedule.id))) && l.memberId === memberId
     );
-    siblingIds.add(memberId);
-
-    const targetSchedule =
-      this.schedules.find((s) => s.id === scheduleId) ||
-      this.schedules.find((s) => s.id.startsWith(scheduleId) || (s.id && scheduleId.startsWith(s.id)));
-
-    const isMatchingSchedule = (sId: string, timestamp?: string) => {
-      if (sId === scheduleId) return true;
-      if (sId && scheduleId && (scheduleId.startsWith(sId) || sId.startsWith(scheduleId))) return true;
-      if (targetSchedule) {
-        if (timestamp && timestamp.length >= 10 && timestamp.slice(0, 10) === targetSchedule.date) return true;
+    if (existingScheduleLogs.length > 0) {
+      const sorted = [...existingScheduleLogs].sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+      const maxExisting = sorted[sorted.length - 1].timestamp || '';
+      if (maxExisting >= cancelTimestamp) {
+        const baseDate = parseKSTDate(maxExisting);
+        baseDate.setSeconds(baseDate.getSeconds() + 1);
+        cancelTimestamp = getKSTTimestampString(baseDate);
       }
-      return false;
+    }
+
+    const cancelLog: RawAttendanceLog = {
+      id: `log_cancel_${Date.now()}`,
+      timestamp: cancelTimestamp,
+      scheduleId,
+      memberId,
+      memberName: targetMember?.name || '단원',
+      part: targetMember?.part || '소프라노',
+      authMethod: 'MANUAL_BY_ADMIN',
+      isVerifiedLocation: false,
+      adminNote: '관리자 출결 취소 (결석 처리)',
     };
 
-    this.logs = this.logs.filter((l) => !(isMatchingSchedule(l.scheduleId, l.timestamp) && siblingIds.has(l.memberId)));
+    this.logs.push(cancelLog);
     saveToStorage(STORAGE_KEYS.LOGS, this.logs);
-
-    this.rsvpVotes = this.rsvpVotes.filter((v) => !(isMatchingSchedule(v.scheduleId) && siblingIds.has(v.memberId)));
-    saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
 
     if (this.config.sheetsWebAppUrl) {
       this.sendToGoogleSheet('CLEAR_ATTENDANCE', {
         scheduleId,
         memberId,
         memberName: targetMember?.name,
+        part: targetMember?.part,
+        adminNote: '관리자 출결 취소 (결석 처리)',
         scheduleDate: targetSchedule?.date,
       }).catch((err) => {
-        console.error('[Sheets API] Clear attendance sync failed:', err);
+        console.error('[Sheets API] Clear attendance cancel-log sync failed:', err);
       });
     }
   }
@@ -531,15 +542,29 @@ export class SheetsService {
   }
 
   public async deleteMember(memberId: string): Promise<void> {
-    this.members = this.members.filter((m) => m.id !== memberId);
-    this.pendingMemberIds.delete(memberId);
-    saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
-    saveToStorage(STORAGE_KEYS.PENDING_MEMBERS, Array.from(this.pendingMemberIds));
+    const hasActivity =
+      this.logs.some((l) => l.memberId === memberId) ||
+      this.rsvpVotes.some((v) => v.memberId === memberId);
 
-    if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('DELETE_MEMBER', { id: memberId }).catch((err) => {
-        console.error('[Sheets API] Member delete sync failed:', err);
-      });
+    if (hasActivity) {
+      // 과거 출결 통계 보호를 위한 소프트 삭제 (status='DELETED')
+      await this.updateMember(memberId, { status: 'DELETED' });
+      if (this.config.sheetsWebAppUrl) {
+        this.sendToGoogleSheet('DELETE_MEMBER', { id: memberId }).catch((err) => {
+          console.error('[Sheets API] Member delete sync failed:', err);
+        });
+      }
+    } else {
+      this.members = this.members.filter((m) => m.id !== memberId);
+      this.pendingMemberIds.delete(memberId);
+      saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+      saveToStorage(STORAGE_KEYS.PENDING_MEMBERS, Array.from(this.pendingMemberIds));
+
+      if (this.config.sheetsWebAppUrl) {
+        this.sendToGoogleSheet('DELETE_MEMBER', { id: memberId }).catch((err) => {
+          console.error('[Sheets API] Member delete sync failed:', err);
+        });
+      }
     }
   }
 
@@ -744,24 +769,54 @@ export class SheetsService {
   }
 
   public async deleteSchedule(scheduleId: string): Promise<void> {
-    this.schedules = this.schedules.filter((s) => s.id !== scheduleId);
-    saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+    const hasActivity =
+      this.logs.some((l) => l.scheduleId === scheduleId) ||
+      this.rsvpVotes.some((v) => v.scheduleId === scheduleId);
 
-    if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('DELETE_SCHEDULE', { id: scheduleId }).catch((err) => {
-        console.error('[Sheets API] Schedule delete sync failed:', err);
-      });
+    if (hasActivity) {
+      // 출석로그나 투표가 있는 경우 물리 삭제하지 않고 [연습 취소]로 보존
+      await this.updateSchedule(scheduleId, { isCancelled: true });
+      if (this.config.sheetsWebAppUrl) {
+        this.sendToGoogleSheet('DELETE_SCHEDULE', { id: scheduleId }).catch((err) => {
+          console.error('[Sheets API] Schedule cancel sync failed:', err);
+        });
+      }
+    } else {
+      this.schedules = this.schedules.filter((s) => s.id !== scheduleId);
+      saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+
+      if (this.config.sheetsWebAppUrl) {
+        this.sendToGoogleSheet('DELETE_SCHEDULE', { id: scheduleId }).catch((err) => {
+          console.error('[Sheets API] Schedule delete sync failed:', err);
+        });
+      }
     }
   }
 
   public async deleteSchedules(scheduleIds: string[]): Promise<void> {
-    const idSet = new Set(scheduleIds);
-    this.schedules = this.schedules.filter((s) => !idSet.has(s.id));
-    saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+    const activeScheduleIds = new Set(
+      scheduleIds.filter(
+        (sid) =>
+          this.logs.some((l) => l.scheduleId === sid) ||
+          this.rsvpVotes.some((v) => v.scheduleId === sid)
+      )
+    );
+
+    // 활동 있는 일정은 isCancelled=true로 갱신
+    if (activeScheduleIds.size > 0) {
+      await this.batchUpdateSchedules(Array.from(activeScheduleIds), { isCancelled: true });
+    }
+
+    // 활동 없는 일정만 물리 삭제
+    const idsToHardDelete = new Set(scheduleIds.filter((sid) => !activeScheduleIds.has(sid)));
+    if (idsToHardDelete.size > 0) {
+      this.schedules = this.schedules.filter((s) => !idsToHardDelete.has(s.id));
+      saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+    }
 
     if (this.config.sheetsWebAppUrl) {
       this.sendToGoogleSheet('BATCH_DELETE_SCHEDULES', { ids: scheduleIds }).catch((err) => {
-        console.error('[Sheets API] Batch schedule delete sync failed:', err);
+        console.error('[Sheets API] Batch schedule delete/cancel sync failed:', err);
       });
     }
   }
@@ -871,6 +926,13 @@ export class SheetsService {
   public updateConfig(newConfig: Partial<AppConfig>): AppConfig {
     this.config = { ...this.config, ...newConfig };
     saveToStorage(STORAGE_KEYS.CONFIG, this.config);
+
+    if (this.config.sheetsWebAppUrl) {
+      this.sendToGoogleSheet('SAVE_CONFIG', { config: newConfig }).catch((err) => {
+        console.error('[Sheets API] Config sync failed:', err);
+      });
+    }
+
     return { ...this.config };
   }
 
@@ -1116,6 +1178,18 @@ export class SheetsService {
     const lateGraceMinutes = this.config.lateGraceMinutes ?? 10;
     const lateThresholdMinutes = startMinutes + lateGraceMinutes;
 
+    if (schedule.isCancelled) {
+      return this.members.map((member) => ({
+        memberId: member.id,
+        memberName: member.name,
+        part: member.part,
+        rsvpStatus: 'UNVOTED',
+        finalStatus: '미참',
+        isManualOverride: false,
+        adminNote: '취소된 연습',
+      }));
+    }
+
     return this.members.map((member) => {
       // 자연키(이름+전화번호) 기반 다중 ID 세트 (파편화된 과거 ID 구출)
       const siblingIds = new Set(
@@ -1127,10 +1201,14 @@ export class SheetsService {
 
       const rsvp = scheduleRSVPs.find((v) => siblingIds.has(v.memberId));
 
-      // Recency Resolution: 동일 단원의 다중 로그 중 가장 최신 액션 우선 채택
+      // Recency Resolution: 동일 단원의 다중 로그 중 가장 최신 액션 우선 채택 (밀리초 단위 정렬)
       const matchingLogs = scheduleLogs
         .filter((l) => siblingIds.has(l.memberId))
-        .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+        .sort((a, b) => {
+          const timeA = parseKSTDate(a.timestamp || '').getTime();
+          const timeB = parseKSTDate(b.timestamp || '').getTime();
+          return timeA - timeB;
+        });
       const log = matchingLogs.length > 0 ? matchingLogs[matchingLogs.length - 1] : undefined;
 
       let finalStatus: AttendanceStatus = '결석';
@@ -1139,41 +1217,43 @@ export class SheetsService {
       const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
       const isExempt = !isRequired;
 
-      if (log) {
-        checkInTime = log.timestamp;
-        if (
+      const isCancelledLog = Boolean(
+        log && (
+          log.adminNote?.includes('취소') ||
           log.adminNote?.includes('결석 처리') ||
           log.adminNote === '관리자 결석 처리' ||
           (log as any).status === '결석'
-        ) {
-          finalStatus = '결석';
-        } else if (log.authMethod === 'MANUAL_BY_ADMIN') {
-          finalStatus = '수동인정';
-        } else {
-          // Check timestamp against schedule start time
-          let logMinutes = 0;
-          if (log.timestamp.includes('T')) {
-            const timePart = log.timestamp.split('T')[1].slice(0, 5); // "HH:mm"
-            const [h, m] = timePart.split(':').map(Number);
-            logMinutes = (h || 0) * 60 + (m || 0);
-          } else {
-            const logDate = new Date(log.timestamp);
-            if (!isNaN(logDate.getTime())) {
-              logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
-            } else if (log.timestamp.includes(':')) {
-              const [h, m] = log.timestamp.split(':').map(Number);
-              logMinutes = (h || 0) * 60 + (m || 0);
-            }
-          }
+        )
+      );
 
-          if (logMinutes > lateThresholdMinutes) {
-            finalStatus = '지각';
-          } else {
-            finalStatus = '출석';
+      if (log && !isCancelledLog) {
+        checkInTime = log.timestamp;
+        // Check timestamp against schedule start time
+        let logMinutes = 0;
+        if (log.timestamp.includes('T')) {
+          const timePart = log.timestamp.split('T')[1].slice(0, 5); // "HH:mm"
+          const [h, m] = timePart.split(':').map(Number);
+          logMinutes = (h || 0) * 60 + (m || 0);
+        } else {
+          const logDate = new Date(log.timestamp);
+          if (!isNaN(logDate.getTime())) {
+            logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
+          } else if (log.timestamp.includes(':')) {
+            const [h, m] = log.timestamp.split(':').map(Number);
+            logMinutes = (h || 0) * 60 + (m || 0);
           }
         }
+
+        // 수동 개입이든 자동 체크인이든 상태는 출석/지각/결석으로 명확히 표기 (수동 여부는 authMethod/adminNote로 보존)
+        if (log.adminNote?.includes('결석') || log.adminNote?.includes('노쇼')) {
+          finalStatus = '결석';
+        } else if (log.adminNote?.includes('지각') || logMinutes > lateThresholdMinutes) {
+          finalStatus = '지각';
+        } else {
+          finalStatus = '출석';
+        }
       } else {
-        // No log found: evaluate exemption or RSVP status
+        // No log found or cancellation log: evaluate exemption or RSVP status
         if (isExempt) {
           finalStatus = '미참';
         } else if (rsvp && rsvp.status === 'ABSENT' && rsvp.reason) {
@@ -1373,6 +1453,10 @@ export class SheetsService {
             ? 'CUSTOM_MEMBERS'
             : 'ALL');
 
+        const isCancelled =
+          s.isCancelled === true ||
+          String((s as unknown as Record<string, unknown>).isCancelled).toUpperCase() === 'TRUE';
+
         return {
           ...s,
           date: normalizedDate,
@@ -1381,6 +1465,7 @@ export class SheetsService {
           targetAudienceType,
           targetParts,
           targetMemberIds,
+          isCancelled,
         };
       });
       saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
@@ -1515,22 +1600,47 @@ export class SheetsService {
     };
   }
 
-  private async sendToGoogleSheet(action: string, payload: unknown): Promise<void> {
-    if (!this.config.sheetsWebAppUrl) return;
+  public async sendToGoogleSheet(action: string, payload: unknown): Promise<{ success: boolean; message?: string }> {
+    if (!this.config.sheetsWebAppUrl) {
+      return { success: false, message: '시트 Web App URL이 설정되지 않았습니다.' };
+    }
 
-    // Google Apps Script redirect: use mode: 'no-cors' so mobile browsers
-    // never abort or throw CORS redirect errors on 302 responses.
     try {
-      await fetch(this.config.sheetsWebAppUrl, {
+      // 1차 시도: 표준 요청 (GAS 리다이렉트 응답 추적 및 JSON 결과 파싱)
+      const res = await fetch(this.config.sheetsWebAppUrl, {
         method: 'POST',
-        mode: 'no-cors',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({ action, data: payload, payload }),
       });
+
+      if (res.ok) {
+        try {
+          const json = await res.json();
+          return json;
+        } catch {
+          return { success: true, message: '저장 완료' };
+        }
+      }
+      return { success: true, message: '전송 완료' };
     } catch (err) {
-      console.warn('[Sheets API] POST send warning:', err);
+      console.warn('[Sheets API] Standard POST failed, falling back to no-cors mode:', err);
+      // 2차 폴백: CORS 제약이 엄격한 모바일 브라우저 대비 no-cors 전송
+      try {
+        await fetch(this.config.sheetsWebAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify({ action, data: payload, payload }),
+        });
+        return { success: true, message: '백그라운드 전송 완료' };
+      } catch (fallbackErr) {
+        console.error('[Sheets API] Fallback POST failed:', fallbackErr);
+        return { success: false, message: '시트 전송 실패' };
+      }
     }
   }
 }

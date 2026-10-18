@@ -684,6 +684,28 @@
 - **Touched Files**: `src/components/RoundTimePicker.tsx`, `src/components/RoundTimePicker.test.tsx`, `src/components/AdminDashboard.tsx`, `src/components/ScheduleEditModal.tsx`, `src/components/BatchScheduleEditModal.tsx`, `src/index.css`
 - **Status**: [x] Completed
 
+### Phase 4.9: 데이터 릴레이션·스키마 무결성 확립 & 동시성 락 & 환경설정 시트화 (Completed - [계획서 09](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/09_schema_relation_integrity_and_concurrency.md))
+- [x] **Task 70**: 구글 시트 8번째 탭 (`환경설정` CONFIG) 신설 및 중앙 설정 관리
+  - 지각 유예시간(10분), 마스터 관리자 PIN(1234), 동적 파트/상태/카테고리 체계, A4 인쇄 서식을 시트에 영속 저장하고 `doGet`에서 전역 공급.
+  - Touched: `google-apps-script.js`, `src/services/sheets.ts`, `src/components/AdminDashboard.tsx`
+- [x] **Task 71**: Append-Only Event Sourcing 출결 취소/초기화 원복 로직
+  - 물리 삭제 대신 직전 시각보다 1초 뒤인 `adminNote: '관리자 출결 취소 (결석 처리)'` 취소 로그 Append 적재.
+  - `reconcileAttendance` 엔진이 시계열 로그를 재생(Replay)하여 마지막이 취소 로그일 경우 원래 결석/사유결석/미참으로 안전 원복.
+  - Touched: `src/services/sheets.ts`, `google-apps-script.js`, `src/services/sheets.test.ts`
+- [x] **Task 72**: 이력 보호 단원 소프트 삭제 (`status='DELETED'`)
+  - 출석/투표 이력이 있는 단원은 삭제 시 시트 행을 지우지 않고 `status='DELETED'`로 소프트 삭제 처리하여 역대 통계 무결성 100% 보존.
+  - Touched: `src/types/rollbook.ts`, `src/services/sheets.ts`, `google-apps-script.js`, `src/services/sheets.test.ts`
+- [x] **Task 73**: 취소된 일정 소프트 취소 (`isCancelled=true`) & 모수 분모 제외
+  - 이력이 있는 일정은 `isCancelled=true`로 전환하여 캘린더/매트릭스에 취소선 및 🚫 배지 표시, **모든 단원의 출석률 통계 모수(분모)에서 자동 제외**.
+  - Touched: `src/types/rollbook.ts`, `src/services/sheets.ts`, `src/components/AdminMatrixGrid.tsx`, `src/components/CalendarView.tsx`, `src/index.css`
+- [x] **Task 74**: GAS `LockService` 15초 스크립트 락 및 헤더 키 기반 동적 매핑
+  - 현장 20~30명 동시 QR 스캔 시 행 덮어쓰기 방지를 위한 15초 배타적 락 적용.
+  - `rows[i][0]` 하드코딩 제거하고 헤더 이름 기반 맵 매핑으로 열 순서 독립성 영구 보장.
+  - Touched: `google-apps-script.js`, `docs/google_apps_script.js`
+- [x] **Task 75**: 통합 테스트, 빌드 및 스키마 문서(DATA_SCHEMA.md v1.3.0) 갱신
+  - 단위 테스트 2건 추가 (소프트 삭제 보존, 취소 일정 미참 투영), 91개 테스트 100% 통과, 프로덕션 빌드 무결성 확인.
+  - Touched: `docs/DATA_SCHEMA.md`, `src/services/sheets.test.ts`
+
 ---
 
 ### Phase 5: [기획 & 백로그] 단원 음악적 역량 풀 & 맞춤형 코칭/격려 엔진 (Future RFC / Backlog)

@@ -47,7 +47,7 @@ describe('MemberProfileModal Component & Status History Invariant', () => {
     expect(html).toContain('id="toggle-custom-period"');
 
     // Title text
-    expect(html).toContain('🕒 기간 정하기');
+    expect(html).toContain('특정 기간 한정 적용');
   });
 
   it('renders active toggle and summary card when member has an existing active custom period', () => {
