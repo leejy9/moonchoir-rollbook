@@ -38,7 +38,7 @@ describe('MemberProfileModal Component & Status History Invariant', () => {
     vi.clearAllMocks();
   });
 
-  it('renders modern toggle switch with always-save DB history guidance by default', () => {
+  it('renders compact modern period toggle switch row by default', () => {
     const html = renderToString(<MemberProfileModal {...defaultProps} />);
 
     // Toggle switch container and elements
@@ -46,9 +46,8 @@ describe('MemberProfileModal Component & Status History Invariant', () => {
     expect(html).toContain('modern-switch');
     expect(html).toContain('id="toggle-custom-period"');
 
-    // Title and guidance text
-    expect(html).toContain('🕒 특정 기간 한정 적용');
-    expect(html).toContain('기본 상시 적용 (상태 변경 시 시트 DB 이력에 항상 자동 기록됩니다)');
+    // Title text
+    expect(html).toContain('🕒 기간 정하기');
   });
 
   it('renders active toggle and summary card when member has an existing active custom period', () => {
@@ -79,7 +78,7 @@ describe('MemberProfileModal Component & Status History Invariant', () => {
     expect(html).toContain('기간 한정');
     expect(html).toContain('2026-12-31');
     expect(html).toContain('개인 사정으로 휴단');
-    expect(html).toContain('기간·사유 수정');
+    expect(html).toContain('수정');
   });
 
   it('ensures sheetsService.updateMember ALWAYS records and dispatches effectiveHistoryItem to DB on status change', async () => {

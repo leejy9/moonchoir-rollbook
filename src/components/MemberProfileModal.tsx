@@ -540,149 +540,111 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
               </div>
 
               <div className="modern-field-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <label className="modern-field-label" style={{ margin: 0 }}>단원 상태 구분 *</label>
-                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                    현재: <strong style={{ color: '#1e293b' }}>{formData.memberStatus || '정단원'}</strong>
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-                    gap: '8px',
-                    marginBottom: '8px',
-                  }}
-                >
-                  {[
-                    { key: '정단원', label: '정단원', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
-                    { key: '준단원', label: '준단원', color: '#0284c7', bg: '#f0f9ff', border: '#bae6fd' },
-                    { key: '휴단원', label: '휴단', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
-                    { key: '퇴단원', label: '퇴단', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
-                    { key: '선생님', label: '선생님', color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
-                    { key: '객원', label: '객원', color: '#0d9488', bg: '#f0fdfa', border: '#99f6e4' },
-                    { key: '__CUSTOM__', label: '✏️ 기타', color: '#475569', bg: '#f8fafc', border: '#cbd5e1' },
-                  ].map((chip) => {
-                    const isSelected = chip.key === '__CUSTOM__' ? isCustomStatus : (!isCustomStatus && formData.memberStatus === chip.key);
-                    return (
-                      <button
-                        key={chip.key}
-                        type="button"
-                        onClick={() => {
-                          if (chip.key === '__CUSTOM__') {
-                            setIsCustomStatus(true);
-                            if (customStatusInput.trim()) {
-                              setFormData((prev) => ({ ...prev, memberStatus: customStatusInput.trim() as MemberStatus }));
-                            }
-                          } else {
-                            setIsCustomStatus(false);
-                            setFormData((prev) => ({ ...prev, memberStatus: chip.key as MemberStatus }));
-                          }
-                        }}
-                        style={{
-                          minHeight: '44px',
-                          padding: '8px 6px',
-                          borderRadius: '8px',
-                          border: isSelected ? `2px solid ${chip.color}` : '1px solid #e2e8f0',
-                          background: isSelected ? chip.bg : '#ffffff',
-                          color: isSelected ? chip.color : '#475569',
-                          fontWeight: isSelected ? 700 : 500,
-                          fontSize: '0.88rem',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '4px',
-                          boxShadow: isSelected ? `0 2px 4px ${chip.border}` : 'none',
-                          transition: 'all 0.15s ease-in-out',
-                        }}
-                      >
-                        {isSelected && <span style={{ fontSize: '0.75rem' }}>✓</span>}
-                        {chip.label}
-                      </button>
-                    );
-                  })}
+                <label className="modern-field-label">단원 상태 구분 *</label>
+                <div className="modern-select-wrapper">
+                  <select
+                    className="modern-select"
+                    value={isCustomStatus ? '__CUSTOM__' : (formData.memberStatus || '정단원')}
+                    onChange={(e) => {
+                      if (e.target.value === '__CUSTOM__') {
+                        setIsCustomStatus(true);
+                        if (customStatusInput.trim()) {
+                          setFormData((prev) => ({ ...prev, memberStatus: customStatusInput.trim() as MemberStatus }));
+                        }
+                      } else {
+                        setIsCustomStatus(false);
+                        setFormData((prev) => ({ ...prev, memberStatus: e.target.value as MemberStatus }));
+                      }
+                    }}
+                  >
+                    {STANDARD_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                    {!STANDARD_STATUSES.includes(formData.memberStatus as string) && Boolean(formData.memberStatus) && (
+                      <option value={formData.memberStatus}>{formData.memberStatus} (기존 지정)</option>
+                    )}
+                    <option value="__CUSTOM__">✏️ 기타 (직접 입력)...</option>
+                  </select>
                 </div>
 
                 {isCustomStatus && (
-                  <div style={{ marginTop: '6px' }}>
-                    <input
-                      type="text"
-                      className="modern-input"
-                      value={customStatusInput}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setCustomStatusInput(val);
-                        setFormData((prev) => ({ ...prev, memberStatus: (val.trim() || '기타') as MemberStatus }));
-                      }}
-                      placeholder="단원 상태 직접 입력 (예: 임원진, 특별휴단, 명예단원)"
-                      required={isCustomStatus}
-                      autoFocus
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    className="modern-input"
+                    style={{ marginTop: '8px' }}
+                    value={customStatusInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCustomStatusInput(val);
+                      setFormData((prev) => ({ ...prev, memberStatus: (val.trim() || '기타') as MemberStatus }));
+                    }}
+                    placeholder="단원 상태 직접 입력 (예: 임원진, 특별휴단, 명예단원)"
+                    required={isCustomStatus}
+                    autoFocus
+                  />
                 )}
 
-                {/* 특정 기간 한정 적용 토글 및 기간 요약 카드 */}
-                <div className={`period-setting-toggle-box ${isCustomPeriod ? 'active' : ''}`}>
-                  <div className="modern-switch-wrap" onClick={handleToggleCustomPeriod}>
-                    <div className="period-toggle-info">
-                      <span className="period-toggle-title">
-                        🕒 특정 기간 한정 적용
-                      </span>
-                      <span className="period-toggle-desc">
-                        {isCustomPeriod 
-                          ? `[${formData.memberStatus}] 상태를 정해진 기간 동안만 임시 적용합니다.`
-                          : '기본 상시 적용 (상태 변경 시 시트 DB 이력에 항상 자동 기록됩니다)'}
-                      </span>
-                    </div>
-                    <div className="modern-switch">
-                      <input
-                        type="checkbox"
-                        id="toggle-custom-period"
-                        checked={isCustomPeriod}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          handleToggleCustomPeriod();
-                        }}
-                      />
-                      <span className="modern-switch-slider" />
-                    </div>
-                  </div>
-
-                  {/* 토글 ON일 때 요약 카드 표시 (팝업으로 열리는 트리거) */}
-                  {isCustomPeriod && (
-                    <div className="period-summary-card" onClick={handleOpenPeriodModal}>
-                      <div className="period-summary-content">
-                        <div className="period-summary-dates">
-                          <span className="period-calendar-icon">📅</span>
-                          <span className="period-dates-text">
-                            {historyStartDate} ~ {historyEndDate === '2999-12-31' ? '무기한' : historyEndDate}
-                          </span>
-                          <span className="period-badge">기간 한정</span>
-                        </div>
-                        {historyReason ? (
-                          <div className="period-summary-reason">
-                            사유: {historyReason}
-                          </div>
-                        ) : (
-                          <div className="period-summary-reason" style={{ color: '#94a3b8' }}>
-                            사유 미입력 (터치하여 사유 및 기간 수정)
-                          </div>
-                        )}
-                      </div>
+                {/* 기간 정하기 (간결한 1행 토글 & 요약 칩) */}
+                <div
+                  className={`period-setting-toggle-box ${isCustomPeriod ? 'active' : ''}`}
+                  style={{
+                    marginTop: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    background: isCustomPeriod ? '#f0fdf4' : '#f8fafc',
+                    border: isCustomPeriod ? '1px solid #86efac' : '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    minHeight: '44px',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>
+                      🕒 기간 정하기
+                    </span>
+                    {isCustomPeriod && (
                       <button
                         type="button"
-                        className="period-edit-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenPeriodModal();
+                        className="period-summary-card"
+                        onClick={handleOpenPeriodModal}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '3px 8px',
+                          background: '#ffffff',
+                          border: '1px solid #bbf7d0',
+                          borderRadius: '6px',
+                          fontSize: '0.78rem',
+                          color: '#15803d',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          textOverflow: 'ellipsis',
+                          overflow: 'hidden',
+                          whiteSpace: 'nowrap',
+                          margin: 0,
                         }}
                       >
-                        ✏️ 기간·사유 수정
+                        <span className="period-badge" style={{ padding: '1px 5px', fontSize: '0.7rem' }}>기간 한정</span>
+                        <span>{historyStartDate} ~ {historyEndDate === '2999-12-31' ? '무기한' : historyEndDate}</span>
+                        {historyReason && <span style={{ color: '#64748b', fontSize: '0.74rem' }}>({historyReason})</span>}
+                        <span style={{ color: '#047857', textDecoration: 'underline', fontWeight: 700 }}>수정</span>
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  <div className="modern-switch" style={{ marginLeft: '8px', flexShrink: 0 }}>
+                    <input
+                      type="checkbox"
+                      id="toggle-custom-period"
+                      checked={isCustomPeriod}
+                      onChange={handleToggleCustomPeriod}
+                    />
+                    <span className="modern-switch-slider" />
+                  </div>
                 </div>
               </div>
 

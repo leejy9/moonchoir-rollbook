@@ -995,7 +995,7 @@ export class SheetsService {
       const recentStatusList: AttendanceStatus[] = [];
 
       for (const { schedule, reconciliation } of sessionReconciliations) {
-        const isRequired = isMemberRequiredForSchedule(m, schedule.date);
+        const isRequired = isMemberRequiredForSchedule(m, schedule.date, schedule);
         const item = reconciliation.find((r) => r.memberId === m.id);
         const hasCheckedIn = item && (item.finalStatus === '출석' || item.finalStatus === '수동인정' || item.finalStatus === '지각');
 
