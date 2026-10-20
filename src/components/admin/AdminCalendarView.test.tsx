@@ -68,8 +68,7 @@ describe('AdminCalendarView Component', () => {
     expect(html).toContain('2026');
     expect(html).toContain('10');
     expect(html).toContain('월');
-    expect(html).toContain('연습 일정 캘린더');
-    expect(html).toContain('등록된 일정을 월별로 확인하고 관리합니다.');
+    expect(html).toContain('캘린더');
     expect(html).toContain('이전 달');
     expect(html).toContain('다음 달');
   });
@@ -130,7 +129,7 @@ describe('AdminCalendarView Component', () => {
     expect(html).toContain('21:00');
     expect(html).toContain('PIN:');
     expect(html).toContain('1234');
-    expect(html).toContain('+ 이 날짜로 새 일정 등록');
+    expect(html).toContain('+ 일정 추가');
     expect(html).toContain('복제');
     expect(html).toContain('삭제');
   });

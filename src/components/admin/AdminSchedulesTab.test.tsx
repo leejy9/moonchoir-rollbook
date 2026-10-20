@@ -145,39 +145,38 @@ function createMockProps(overrides: Partial<AdminSchedulesTabProps> = {}): Admin
 }
 
 describe('AdminSchedulesTab Component', () => {
-  it('renders subsegment pill bar with 3 tabs', () => {
+  it('renders unified subsegment pill bar', () => {
     const props = createMockProps();
     const html = renderToString(<AdminSchedulesTab {...props} />);
 
-    expect(html).toContain('연습 일정 등록 &amp; 캘린더');
-    expect(html).toContain('출석 QR 코드');
-    expect(html).toContain('회차별 출결 &amp; 사전투표(RSVP)');
+    expect(html).toContain('캘린더');
+    expect(html).toContain('일정');
+    expect(html).toContain('카드');
+    expect(html).toContain('QR');
+    expect(html).toContain('출결');
+    expect(html).toContain('+ 일정 등록');
   });
 
   it('renders calendar view when scheduleViewTab is CALENDAR', () => {
     const props = createMockProps({ scheduleViewTab: 'CALENDAR' });
     const html = renderToString(<AdminSchedulesTab {...props} />);
 
-    expect(html).toContain('캘린더 날짜별 보기');
-    expect(html).toContain('전체 등록 일정');
-    expect(html).toContain('일정 카드 묶음');
-    // AdminCalendarView header
-    expect(html).toContain('연습 일정 캘린더');
+    expect(html).toContain('캘린더');
+    expect(html).toContain('+ 일정 추가');
   });
 
   it('renders list view when scheduleViewTab is ALL_LIST', () => {
     const props = createMockProps({ scheduleViewTab: 'ALL_LIST' });
     const html = renderToString(<AdminSchedulesTab {...props} />);
 
-    expect(html).toContain('전체 등록 일정');
-    expect(html).toContain('정기연습 1회차');
+    expect(html).toContain('전체 구분');
   });
 
   it('renders card view when scheduleViewTab is PROGRAM_CARDS', () => {
     const props = createMockProps({ scheduleViewTab: 'PROGRAM_CARDS' });
     const html = renderToString(<AdminSchedulesTab {...props} />);
 
-    expect(html).toContain('일정 카드 묶음');
+    expect(html).toContain('+ 카드 등록');
     expect(html).toContain('정기연습 1회차');
   });
 });

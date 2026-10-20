@@ -127,7 +127,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
   setEditingProgramCard,
   selectedProgramCardId,
   scheduleSuccessMsg,
-  setScheduleSuccessMsg,
+  setScheduleSuccessMsg: _setScheduleSuccessMsg,
   scheduleViewTab,
   setScheduleViewTab,
   selectedBatchScheduleIds,
@@ -167,8 +167,27 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
   handleRegenSessionPin,
   pinRegenMsg,
 }) => {
-  // Sub-segments for unified major categories: LIST (default), QR, SESSION
+  // Unified sub-tabs: CALENDAR, ALL_LIST, PROGRAM_CARDS, QR, SESSION
   const [scheduleSubTab, setScheduleSubTab] = useState<'LIST' | 'QR' | 'SESSION'>('LIST');
+  const [isFormDrawerOpen, setIsFormDrawerOpen] = useState(false);
+
+  const openScheduleFormFocus = (sch: Schedule | null) => {
+    setRightPanelMode('SCHEDULE_FORM');
+    setEditingScheduleForForm(sch);
+    setIsFormDrawerOpen(true);
+  };
+
+  const openCardFormFocus = (card: ProgramCard | null) => {
+    setEditingProgramCard(card);
+    setRightPanelMode('CARD_FORM');
+    setIsFormDrawerOpen(true);
+  };
+
+  const closeFormFocus = () => {
+    setIsFormDrawerOpen(false);
+    setEditingScheduleForForm(null);
+    setEditingProgramCard(null);
+  };
 
   // Interactive Month Calendar State (SCHEDULES > LIST)
   const [adminCalYear, setAdminCalYear] = useState(() => new Date().getFullYear());
@@ -337,433 +356,462 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
   };
 
   return (
-    <div className="admin-tab-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Sub-segment Pill Bar */}
-      <div className="subsegment-pill-bar">
-        <button
-          type="button"
-          className={`subsegment-pill ${scheduleSubTab === 'LIST' ? 'active' : ''}`}
-          onClick={() => setScheduleSubTab('LIST')}
-        >
-          📅 연습 일정 등록 & 캘린더
-        </button>
-        <button
-          type="button"
-          className={`subsegment-pill ${scheduleSubTab === 'QR' ? 'active' : ''}`}
-          onClick={() => setScheduleSubTab('QR')}
-        >
-          🖨️ 출석 QR 코드
-        </button>
-        <button
-          type="button"
-          className={`subsegment-pill ${scheduleSubTab === 'SESSION' ? 'active' : ''}`}
-          onClick={() => setScheduleSubTab('SESSION')}
-        >
-          🗳️ 회차별 출결 & 사전투표(RSVP)
-        </button>
-      </div>
-
-      {/* Sub-tab 1: SESSION ATTENDANCE DETAIL & MANUAL OVERRIDE */}
-      {scheduleSubTab === 'SESSION' && currentSchedule && (
-        <div>
-          {/* Rehearsal Selector */}
-          <div className="schedule-selector-row">
-            <label className="selector-label" htmlFor="schedule-select">
-              관리할 일정 선택:
-            </label>
-            <select
-              id="schedule-select"
-              className="select-input"
-              value={currentSchedule.id}
-              onChange={(e) => setSelectedScheduleId(e.target.value)}
-            >
-              {schedules.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.date} | {s.title} ({s.category})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Session Overview Card */}
-          <div className="toss-section-card">
-            <div className="section-title-row">
-              <div>
-                <h3 className="section-title">{currentSchedule.title}</h3>
-                <p className="section-subtitle">
-                  📍 {currentSchedule.locationName} · {currentSchedule.date} ({currentSchedule.startTime}~{currentSchedule.endTime})
-                </p>
-              </div>
-              {currentSchedule.checkInPin && (
-                <div
-                  style={{
-                    backgroundColor: '#f2f4f6',
-                    padding: '6px 12px',
-                    borderRadius: '8px',
-                    textAlign: 'center',
-                  }}
-                >
-                  <span style={{ fontSize: '11px', color: '#8b95a1', display: 'block' }}>현장 PIN</span>
-                  <span style={{ fontSize: '16px', fontWeight: 700, color: '#191f28', letterSpacing: '2px' }}>
-                    {currentSchedule.checkInPin}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Part Rate Bars */}
-            <div className="toss-part-grid" style={{ marginTop: '12px' }}>
-              {['소프라노', '알토', '테너', '베이스'].map((p) => {
-                const partMembers = reconciledList.filter((r) => r.part === p);
-                const present = partMembers.filter(
-                  (r) => r.finalStatus === '출석' || r.finalStatus === '수동인정' || r.finalStatus === '지각'
-                ).length;
-                const rate = partMembers.length > 0 ? Math.round((present / partMembers.length) * 100) : 0;
-                return (
-                  <div key={p} className="toss-part-card">
-                    <div className="toss-part-header">
-                      <span className={`part-badge part-${p}`}>{p}</span>
-                      <span className="toss-part-rate">{rate}%</span>
-                    </div>
-                    <div className="toss-progress-bar">
-                      <div className={`toss-progress-fill part-${p}`} style={{ width: `${rate}%` }} />
-                    </div>
-                    <span className="toss-part-detail">
-                      {present}명 / 총 {partMembers.length}명
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Members List */}
-          <div className="toss-section-card">
-            <div className="toss-filter-row">
-              {(['전체', '출석', '지각', '사유결석', '결석'] as const).map((tabName) => (
-                <button
-                  key={tabName}
-                  type="button"
-                  className={`toss-filter-tab ${sessionFilter === tabName ? 'active' : ''}`}
-                  onClick={() => setSessionFilter(tabName)}
-                >
-                  {tabName}
-                </button>
-              ))}
-            </div>
-
-            <div className="toss-member-list">
-              {filteredSessionList.map((row) => (
-                <div key={row.memberId} className="toss-member-item">
-                  <div className="toss-member-left">
-                    <div className="toss-member-name-row">
-                      <span className={`part-badge part-${row.part}`}>{row.part}</span>
-                      <span className="toss-member-name">{row.memberName}</span>
-                      {row.isManualOverride && (
-                        <span className="badge-manual" title="관리자가 직접 출석 인정 처리함">
-                          수동인정
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="toss-member-meta">
-                      {row.checkInTime ? (
-                        <span className="meta-text text-checked">
-                          ✓ 체크인 {row.checkInTime.slice(11, 16)} ({row.authMethod?.startsWith('QR') ? 'QR 스캔' : 'PIN 입력'})
-                          {row.distanceMeters !== undefined && ` · ${row.distanceMeters}m`}
-                        </span>
-                      ) : row.rsvpStatus ? (
-                        <span className={`meta-text text-rsvp-${row.rsvpStatus}`}>
-                          사전투표: {row.rsvpStatus === 'ATTEND' ? '참석' : '결석'}
-                          {row.rsvpReason && ` (${row.rsvpReason})`}
-                        </span>
-                      ) : (
-                        <span className="meta-text text-unvoted">체크인 기록 없음 · 사전 미투표</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="toss-member-right">
-                    <span className={`status-pill status-${getStatusPillClass(row.finalStatus)}`}>
-                      {row.finalStatus}
-                    </span>
-
-                    {row.finalStatus !== '출석' && row.finalStatus !== '수동인정' && (
-                      <button
-                        type="button"
-                        className="toss-btn-override"
-                        onClick={() =>
-                          setOverrideTarget({
-                            id: row.memberId,
-                            name: row.memberName,
-                            part: row.part,
-                          })
-                        }
-                      >
-                        출석 인정
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+    <div className="admin-tab-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      {/* Drill-down Form Focus View: hides upper sub-tabs and list when open */}
+      {isFormDrawerOpen ? (
+        <div className="admin-form-card" id="admin-schedule-form-container">
+          {rightPanelMode === 'CARD_FORM' ? (
+            <AdminProgramCardForm
+              key={editingProgramCard ? editingProgramCard.id : 'new-card'}
+              initialCard={editingProgramCard}
+              dynamicCategories={dynamicCategories}
+              dynamicParts={dynamicParts}
+              locationPresets={locationPresets}
+              members={members}
+              onSave={async (cardData) => {
+                await handleSaveProgramCard(cardData);
+                setIsFormDrawerOpen(false);
+              }}
+              onCancel={closeFormFocus}
+              successMessage={scheduleSuccessMsg}
+            />
+          ) : (
+            <AdminScheduleForm
+              key={editingScheduleForForm ? editingScheduleForForm.id : 'new-sch-' + adminSelectedDate}
+              editingSchedule={editingScheduleForForm}
+              prefilledDate={adminSelectedDate}
+              prefilledProgramCardId={selectedProgramCardId || undefined}
+              programCards={programCards}
+              dynamicCategories={dynamicCategories}
+              dynamicParts={dynamicParts}
+              locationPresets={locationPresets}
+              members={members}
+              onSave={async (payload) => {
+                await handleSaveScheduleFromForm(payload);
+                setIsFormDrawerOpen(false);
+              }}
+              onCancelEdit={closeFormFocus}
+              onOpenCreateCard={() => openCardFormFocus(null)}
+              onOpenEditCard={(card) => openCardFormFocus(card)}
+              onOpenLocationPickerModal={() => setIsScheduleLocationModalOpen(true)}
+              successMessage={scheduleSuccessMsg}
+            />
+          )}
         </div>
-      )}
-
-      {/* Sub-tab 2: 출석 QR 코드 & 현장 PIN 보조 */}
-      {scheduleSubTab === 'QR' && (
-        <div className="qr-print-card">
-          <div style={{ marginBottom: '16px' }}>
-            <h2 className="section-title" style={{ margin: 0 }}>출석 QR 코드</h2>
-            <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
-              연습실 벽면 부착 및 스크린 디스플레이용 QR 코드입니다. 단원들이 스캔하면 진행 중인 일정으로 자동 매칭되어 즉시 출석 체크됩니다.
-            </p>
-          </div>
-
-          {/* Printable Frame */}
-          <div className="printable-qr-container">
-            <h2 className="print-choir-title">{printTitle}</h2>
-            <h3 className="print-schedule-title">{printSubtitle}</h3>
-
-            <div className="printable-qr-frame">
-              <QRCodeSVG value={activeQrPayload} size={280} level="H" />
-            </div>
-
-            <p className="print-instruction">{printNotice}</p>
-          </div>
-
-          {/* Slim 1-line Universal On-Site PIN Assistance Card */}
+      ) : (
+        <>
+          {/* Unified Single Sub-Navigation Row + Action Button */}
           <div
             style={{
-              marginTop: '16px',
-              background: '#F8FAFC',
-              border: '1px solid #E2E8F0',
-              borderRadius: '10px',
-              padding: '12px 18px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              gap: '8px',
               flexWrap: 'wrap',
-              gap: '10px',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
-                🔑 당일 현장 출석 PIN:
-              </span>
-              <span
-                style={{
-                  fontSize: '22px',
-                  fontWeight: 800,
-                  color: 'var(--brand-accent)',
-                  letterSpacing: '4px',
-                  fontFamily: 'monospace',
-                  background: '#EEF2FF',
-                  padding: '2px 12px',
-                  borderRadius: '8px',
-                }}
-              >
-                {sheetsService.getActiveOnSitePin() || currentSchedule?.checkInPin || '5027'}
-              </span>
-              <span style={{ fontSize: '12px', color: '#64748B' }}>
-                (카메라 스캔이 불가능한 단원은 [홈 → 출석하기 → PIN 입력]을 이용하세요)
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {pinRegenMsg && (
-                <span style={{ fontSize: '11.5px', color: '#059669', fontWeight: 600 }}>
-                  {pinRegenMsg}
-                </span>
-              )}
+            <div className="subsegment-pill-bar" style={{ flex: '1 1 auto' }}>
               <button
                 type="button"
-                className="btn-sync"
-                style={{ fontSize: '12px', padding: '5px 10px', margin: 0 }}
-                onClick={handleRegenSessionPin}
-                title="새로운 4자리 PIN을 즉시 재발급합니다"
-              >
-                🔄 PIN 재발급
-              </button>
-            </div>
-          </div>
-
-          {/* Custom QR Title Editor */}
-          <div className="admin-form-card" style={{ marginTop: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <h3 className="section-title" style={{ margin: 0 }}>출석 QR 인쇄 문구 커스텀</h3>
-              <button
-                type="button"
-                onClick={handleSaveQrPrintSettings}
-                style={{
-                  background: '#4F46E5',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '6px 14px',
-                  fontSize: '12.5px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
+                className={`subsegment-pill ${scheduleSubTab === 'LIST' && scheduleViewTab === 'CALENDAR' ? 'active' : ''}`}
+                onClick={() => {
+                  setScheduleSubTab('LIST');
+                  setScheduleViewTab('CALENDAR');
                 }}
               >
-                <span>💾 문구 영구 저장</span>
+                캘린더
+              </button>
+              <button
+                type="button"
+                className={`subsegment-pill ${scheduleSubTab === 'LIST' && scheduleViewTab === 'ALL_LIST' ? 'active' : ''}`}
+                onClick={() => {
+                  setScheduleSubTab('LIST');
+                  setScheduleViewTab('ALL_LIST');
+                }}
+              >
+                일정
+              </button>
+              <button
+                type="button"
+                className={`subsegment-pill ${scheduleSubTab === 'LIST' && scheduleViewTab === 'PROGRAM_CARDS' ? 'active' : ''}`}
+                onClick={() => {
+                  setScheduleSubTab('LIST');
+                  setScheduleViewTab('PROGRAM_CARDS');
+                }}
+              >
+                카드
+              </button>
+              <button
+                type="button"
+                className={`subsegment-pill ${scheduleSubTab === 'QR' ? 'active' : ''}`}
+                onClick={() => setScheduleSubTab('QR')}
+              >
+                QR
+              </button>
+              <button
+                type="button"
+                className={`subsegment-pill ${scheduleSubTab === 'SESSION' ? 'active' : ''}`}
+                onClick={() => setScheduleSubTab('SESSION')}
+              >
+                출결
               </button>
             </div>
-            {qrTextSavedMsg && (
-              <div className="success-banner" style={{ marginBottom: '12px', fontSize: '13px' }}>
-                ✅ QR 인쇄 문구가 저장되었습니다. 페이지를 새로고침해도 유지됩니다.
+
+            {scheduleSubTab === 'LIST' && (
+              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                {scheduleViewTab === 'PROGRAM_CARDS' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleOpenCreateProgramCard();
+                      setIsFormDrawerOpen(true);
+                    }}
+                    style={{
+                      background: 'var(--brand-primary)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '8px 14px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      minHeight: '38px',
+                    }}
+                  >
+                    + 카드 등록
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => openScheduleFormFocus(null)}
+                    style={{
+                      background: 'var(--brand-primary)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '8px 14px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      minHeight: '38px',
+                    }}
+                  >
+                    + 일정 등록
+                  </button>
+                )}
               </div>
             )}
-            <div className="form-stack">
-              <div>
-                <label className="form-label">인쇄 상단 타이틀</label>
-                <input
-                  type="text"
-                  className="input-text"
-                  value={printTitle}
-                  onChange={(e) => {
-                    setPrintTitle(e.target.value);
-                    sheetsService.updateConfig({ qrPrintTitle: e.target.value });
-                  }}
-                />
+          </div>
+
+          {scheduleSuccessMsg && <div className="success-banner">{scheduleSuccessMsg}</div>}
+
+          {/* Sub-tab 1: SESSION ATTENDANCE DETAIL & MANUAL OVERRIDE */}
+          {scheduleSubTab === 'SESSION' && currentSchedule && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* Rehearsal Selector */}
+              <div className="schedule-selector-row">
+                <label className="selector-label" htmlFor="schedule-select">
+                  회차
+                </label>
+                <select
+                  id="schedule-select"
+                  className="select-input"
+                  value={currentSchedule.id}
+                  onChange={(e) => setSelectedScheduleId(e.target.value)}
+                >
+                  {schedules.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.date} | {s.title} ({s.category})
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div>
-                <label className="form-label">부제목 및 장소</label>
-                <input
-                  type="text"
-                  className="input-text"
-                  value={printSubtitle}
-                  onChange={(e) => {
-                    setPrintSubtitle(e.target.value);
-                    sheetsService.updateConfig({ qrPrintSubtitle: e.target.value });
-                  }}
-                />
+
+              {/* Session Overview Card */}
+              <div className="toss-section-card">
+                <div className="section-title-row">
+                  <div>
+                    <h3 className="section-title">{currentSchedule.title}</h3>
+                    <p style={{ fontSize: '12px', color: '#6b7684', marginTop: '2px' }}>
+                      {currentSchedule.date} ({currentSchedule.startTime}~{currentSchedule.endTime}) · {currentSchedule.locationName}
+                    </p>
+                  </div>
+                  {currentSchedule.checkInPin && (
+                    <div
+                      style={{
+                        backgroundColor: '#f2f4f6',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <span style={{ fontSize: '11px', color: '#8b95a1', display: 'block' }}>PIN</span>
+                      <span style={{ fontSize: '16px', fontWeight: 700, color: '#191f28', letterSpacing: '2px' }}>
+                        {currentSchedule.checkInPin}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Part Rate Bars */}
+                <div className="toss-part-grid" style={{ marginTop: '8px' }}>
+                  {['소프라노', '알토', '테너', '베이스'].map((p) => {
+                    const partMembers = reconciledList.filter((r) => r.part === p);
+                    const present = partMembers.filter(
+                      (r) => r.finalStatus === '출석' || r.finalStatus === '수동인정' || r.finalStatus === '지각'
+                    ).length;
+                    const rate = partMembers.length > 0 ? Math.round((present / partMembers.length) * 100) : 0;
+                    return (
+                      <div key={p} className="toss-part-card">
+                        <div className="toss-part-header">
+                          <span className={`part-badge part-${p}`}>{p}</span>
+                          <span className="toss-part-rate">{rate}%</span>
+                        </div>
+                        <div className="toss-progress-bar">
+                          <div className={`toss-progress-fill part-${p}`} style={{ width: `${rate}%` }} />
+                        </div>
+                        <span className="toss-part-detail">
+                          {present} / {partMembers.length}명
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div>
-                <label className="form-label">안내 문구</label>
-                <input
-                  type="text"
-                  className="input-text"
-                  value={printNotice}
-                  onChange={(e) => {
-                    setPrintNotice(e.target.value);
-                    sheetsService.updateConfig({ qrPrintNotice: e.target.value });
-                  }}
-                />
+
+              {/* Members List */}
+              <div className="toss-section-card">
+                <div className="toss-filter-row">
+                  {(['전체', '출석', '지각', '사유결석', '결석'] as const).map((tabName) => (
+                    <button
+                      key={tabName}
+                      type="button"
+                      className={`toss-filter-chip ${sessionFilter === tabName ? 'active' : ''}`}
+                      onClick={() => setSessionFilter(tabName)}
+                    >
+                      {tabName}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="toss-member-list">
+                  {filteredSessionList.map((row) => (
+                    <div key={row.memberId} className="toss-member-item">
+                      <div className="toss-member-left">
+                        <div className="toss-member-name-row">
+                          <span className={`part-badge part-${row.part}`}>{row.part}</span>
+                          <span className="toss-member-name">{row.memberName}</span>
+                          {row.isManualOverride && (
+                            <span className="badge-manual" title="관리자가 직접 출석 인정 처리함">
+                              수동인정
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="toss-member-meta">
+                          {row.checkInTime ? (
+                            <span className="meta-text text-checked">
+                              체크인 {row.checkInTime.slice(11, 16)} ({row.authMethod?.startsWith('QR') ? 'QR' : 'PIN'})
+                              {row.distanceMeters !== undefined && ` · ${row.distanceMeters}m`}
+                            </span>
+                          ) : row.rsvpStatus ? (
+                            <span className={`meta-text text-rsvp-${row.rsvpStatus}`}>
+                              투표: {row.rsvpStatus === 'ATTEND' ? '참석' : '결석'}
+                              {row.rsvpReason && ` (${row.rsvpReason})`}
+                            </span>
+                          ) : (
+                            <span className="meta-text text-unvoted">미출석 · 미투표</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="toss-member-right">
+                        <span className={`status-pill status-${getStatusPillClass(row.finalStatus)}`}>
+                          {row.finalStatus}
+                        </span>
+
+                        {row.finalStatus !== '출석' && row.finalStatus !== '수동인정' && (
+                          <button
+                            type="button"
+                            className="toss-btn-override"
+                            onClick={() =>
+                              setOverrideTarget({
+                                id: row.memberId,
+                                name: row.memberName,
+                                part: row.part,
+                              })
+                            }
+                          >
+                            출석 인정
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="print-action-row" style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-            <button
-              type="button"
-              className="btn-qr-action-secondary"
-              onClick={handleRefreshMasterQR}
-            >
-              <IconRefresh size={18} />
-              <span>마스터 QR 보안 갱신</span>
-            </button>
-            <button
-              type="button"
-              className="btn-qr-action-primary"
-              onClick={() => window.print()}
-            >
-              🖨️ A4 종이 QR 인쇄하기
-            </button>
-          </div>
-        </div>
-      )}
+          {/* Sub-tab 2: 출석 QR 코드 & 현장 PIN 보조 */}
+          {scheduleSubTab === 'QR' && (
+            <div className="qr-print-card">
+              {/* Printable Frame */}
+              <div className="printable-qr-container">
+                <h2 className="print-choir-title">{printTitle}</h2>
+                <h3 className="print-schedule-title">{printSubtitle}</h3>
 
-      {/* Sub-tab 3: ADD RECURRING SCHEDULE & INTEGRATED CALENDAR */}
-      {scheduleSubTab === 'LIST' && (
-        <div className="admin-schedules-split-grid">
-          {/* Left Column: Interactive Month Calendar & Selected Day Schedules */}
-          <div className="admin-calendar-col">
-            <div className="admin-form-card" style={{ padding: '20px' }}>
-              {/* View Mode Switcher */}
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '8px',
-                  marginBottom: '16px',
-                  background: '#F1F5F9',
-                  padding: '4px',
-                  borderRadius: '10px',
-                  width: 'fit-content',
-                }}
-              >
-                <button
-                  type="button"
-                  className={`btn-sub-tab ${scheduleViewTab === 'CALENDAR' ? 'active' : ''}`}
-                  onClick={() => {
-                    setScheduleViewTab('CALENDAR');
-                    setRightPanelMode('SCHEDULE_FORM');
-                  }}
-                  style={{
-                    minHeight: '36px',
-                    padding: '0 16px',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    border: 'none',
-                    borderRadius: '8px',
-                    background: scheduleViewTab === 'CALENDAR' ? '#FFFFFF' : 'transparent',
-                    color: scheduleViewTab === 'CALENDAR' ? '#1E293B' : '#64748B',
-                    boxShadow: scheduleViewTab === 'CALENDAR' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  📅 캘린더 날짜별 보기
-                </button>
-                <button
-                  type="button"
-                  className={`btn-sub-tab ${scheduleViewTab === 'ALL_LIST' ? 'active' : ''}`}
-                  onClick={() => {
-                    setScheduleViewTab('ALL_LIST');
-                    setRightPanelMode('SCHEDULE_FORM');
-                  }}
-                  style={{
-                    minHeight: '36px',
-                    padding: '0 16px',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    border: 'none',
-                    borderRadius: '8px',
-                    background: scheduleViewTab === 'ALL_LIST' ? '#FFFFFF' : 'transparent',
-                    color: scheduleViewTab === 'ALL_LIST' ? '#1E293B' : '#64748B',
-                    boxShadow: scheduleViewTab === 'ALL_LIST' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  📋 전체 등록 일정
-                </button>
-                <button
-                  type="button"
-                  className={`btn-sub-tab ${scheduleViewTab === 'PROGRAM_CARDS' ? 'active' : ''}`}
-                  onClick={() => {
-                    setScheduleViewTab('PROGRAM_CARDS');
-                    setRightPanelMode('CARD_FORM');
-                  }}
-                  style={{
-                    minHeight: '36px',
-                    padding: '0 16px',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    border: 'none',
-                    borderRadius: '8px',
-                    background: scheduleViewTab === 'PROGRAM_CARDS' ? '#FFFFFF' : 'transparent',
-                    color: scheduleViewTab === 'PROGRAM_CARDS' ? '#1E293B' : '#64748B',
-                    boxShadow: scheduleViewTab === 'PROGRAM_CARDS' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  📦 일정 카드 묶음
-                </button>
+                <div className="printable-qr-frame">
+                  <QRCodeSVG value={activeQrPayload} size={260} level="H" />
+                </div>
+
+                <p className="print-instruction">{printNotice}</p>
               </div>
 
+              {/* Slim 1-line Universal On-Site PIN Assistance Card */}
+              <div
+                style={{
+                  marginTop: '14px',
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+                    현장 PIN
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '20px',
+                      fontWeight: 800,
+                      color: 'var(--brand-accent)',
+                      letterSpacing: '3px',
+                      fontFamily: 'monospace',
+                      background: '#EEF2FF',
+                      padding: '2px 10px',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    {sheetsService.getActiveOnSitePin() || currentSchedule?.checkInPin || '5027'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {pinRegenMsg && (
+                    <span style={{ fontSize: '11.5px', color: '#059669', fontWeight: 600 }}>
+                      {pinRegenMsg}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="btn-sync"
+                    style={{ fontSize: '12px', padding: '6px 12px', margin: 0, width: 'auto', minHeight: '36px', whiteSpace: 'nowrap' }}
+                    onClick={handleRegenSessionPin}
+                  >
+                    PIN 재발급
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom QR Title Editor */}
+              <div className="admin-form-card" style={{ marginTop: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h3 className="section-title" style={{ margin: 0 }}>인쇄 문구 설정</h3>
+                  <button
+                    type="button"
+                    onClick={handleSaveQrPrintSettings}
+                    style={{
+                      background: '#4F46E5',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '6px 14px',
+                      fontSize: '12.5px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    저장
+                  </button>
+                </div>
+                {qrTextSavedMsg && (
+                  <div className="success-banner" style={{ marginBottom: '12px', fontSize: '13px' }}>
+                    저장되었습니다.
+                  </div>
+                )}
+                <div className="form-stack">
+                  <div>
+                    <label className="form-label">제목</label>
+                    <input
+                      type="text"
+                      className="input-text"
+                      value={printTitle}
+                      onChange={(e) => {
+                        setPrintTitle(e.target.value);
+                        sheetsService.updateConfig({ qrPrintTitle: e.target.value });
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">부제목</label>
+                    <input
+                      type="text"
+                      className="input-text"
+                      value={printSubtitle}
+                      onChange={(e) => {
+                        setPrintSubtitle(e.target.value);
+                        sheetsService.updateConfig({ qrPrintSubtitle: e.target.value });
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">안내 문구</label>
+                    <input
+                      type="text"
+                      className="input-text"
+                      value={printNotice}
+                      onChange={(e) => {
+                        setPrintNotice(e.target.value);
+                        sheetsService.updateConfig({ qrPrintNotice: e.target.value });
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="print-action-row" style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+                <button
+                  type="button"
+                  className="btn-qr-action-secondary"
+                  onClick={handleRefreshMasterQR}
+                >
+                  <IconRefresh size={16} />
+                  <span>QR 갱신</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-qr-action-primary"
+                  onClick={() => window.print()}
+                >
+                  인쇄
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Sub-tab 3: CALENDAR / ALL_LIST / PROGRAM_CARDS (Full-Width Clean View) */}
+          {scheduleSubTab === 'LIST' && (
+            <div className="admin-form-card" style={{ padding: '16px' }}>
               {scheduleViewTab === 'CALENDAR' ? (
                 <AdminCalendarView
                   adminCalYear={adminCalYear}
@@ -776,25 +824,25 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                   selectedDate={adminSelectedDate}
                   onSelectDate={(dateStr) => {
                     setAdminSelectedDate(dateStr);
-                    setRightPanelMode('SCHEDULE_FORM');
                   }}
                   showCancelledSchedules={showCancelledSchedules}
                   onToggleShowCancelled={() => setShowCancelledSchedules((prev) => !prev)}
                   schedulesOnSelectedDate={schedulesOnSelectedDate}
                   editingScheduleId={editingScheduleForForm?.id}
-                  onSelectScheduleForEdit={handleBindScheduleToForm}
+                  onSelectScheduleForEdit={(sch) => {
+                    handleBindScheduleToForm(sch);
+                    setIsFormDrawerOpen(true);
+                  }}
                   onQuickNewSchedule={() => {
-                    setEditingScheduleForForm(null);
-                    setRightPanelMode('SCHEDULE_FORM');
-                    setScheduleSuccessMsg(`우측 폼에 [${adminSelectedDate}] 날짜가 세팅되었습니다. 새 일정을 작성해주세요.`);
-                    setTimeout(() => setScheduleSuccessMsg(''), 3000);
-                    const el = document.getElementById('admin-schedule-form-container');
-                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    openScheduleFormFocus(null);
                   }}
                   onRestoreSchedule={handleRestoreScheduleSingle}
                   onDeleteScheduleSingle={handleDeleteScheduleSingle}
                   onToggleArchiveSchedule={handleToggleArchiveSchedule}
-                  onCloneSchedule={handleCloneScheduleToForm}
+                  onCloneSchedule={(sch) => {
+                    handleCloneScheduleToForm(sch);
+                    setIsFormDrawerOpen(true);
+                  }}
                   onDeleteSchedule={handleDeleteSchedule}
                 />
               ) : scheduleViewTab === 'ALL_LIST' ? (
@@ -812,9 +860,15 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                   showArchivedSchedules={showArchivedSchedules}
                   onToggleShowArchived={() => setShowArchivedSchedules((prev) => !prev)}
                   editingScheduleId={editingScheduleForForm?.id}
-                  onSelectScheduleForEdit={handleBindScheduleToForm}
+                  onSelectScheduleForEdit={(sch) => {
+                    handleBindScheduleToForm(sch);
+                    setIsFormDrawerOpen(true);
+                  }}
                   onToggleArchiveSchedule={handleToggleArchiveSchedule}
-                  onCloneSchedule={handleCloneScheduleToForm}
+                  onCloneSchedule={(sch) => {
+                    handleCloneScheduleToForm(sch);
+                    setIsFormDrawerOpen(true);
+                  }}
                   onDeleteSchedule={handleDeleteSchedule}
                 />
               ) : (
@@ -822,8 +876,14 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                   programGroups={programGroups}
                   locationPresets={locationPresets}
                   editingScheduleId={editingScheduleForForm?.id}
-                  onOpenCreateCard={handleOpenCreateProgramCard}
-                  onOpenEditCard={handleOpenEditProgramCard}
+                  onOpenCreateCard={() => {
+                    handleOpenCreateProgramCard();
+                    setIsFormDrawerOpen(true);
+                  }}
+                  onOpenEditCard={(card) => {
+                    handleOpenEditProgramCard(card);
+                    setIsFormDrawerOpen(true);
+                  }}
                   onRequestDeleteCard={setCardGroupToDelete}
                   onAddRehearsal={(group) => {
                     const addRehearsalSchedule: Schedule = {
@@ -835,67 +895,28 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                       locationName: group.locationName,
                       category: '추가연습',
                       programId: group.cardId,
-                      targetAudienceType: group.targetAudienceType || 'ALL',
+                      targetAudienceType: group.targetAudienceType || 'PARTS',
                       targetParts: group.targetParts,
                       targetMemberIds: group.targetMemberIds,
                     };
-                    setEditingScheduleForForm(addRehearsalSchedule);
-                    setRightPanelMode('SCHEDULE_FORM');
-                    setScheduleSuccessMsg(`[${group.title}]에 등록할 추가연습 정보를 우측 폼에 세팅했습니다. 날짜를 확인하고 등록을 눌러주세요.`);
-                    setTimeout(() => setScheduleSuccessMsg(''), 4500);
-                    const el = document.getElementById('admin-schedule-form-container');
-                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    openScheduleFormFocus(addRehearsalSchedule);
                   }}
                   onDuplicateSeries={handleDuplicateSelectedSeries}
                   onToggleArchiveGroup={handleToggleArchiveGroup}
-                  onSelectScheduleForEdit={handleBindScheduleToForm}
-                  onCloneSchedule={handleCloneScheduleToForm}
+                  onSelectScheduleForEdit={(sch) => {
+                    handleBindScheduleToForm(sch);
+                    setIsFormDrawerOpen(true);
+                  }}
+                  onCloneSchedule={(sch) => {
+                    handleCloneScheduleToForm(sch);
+                    setIsFormDrawerOpen(true);
+                  }}
                   onDeleteSchedule={handleDeleteSchedule}
                 />
               )}
             </div>
-          </div>
-
-          {/* Right Column: Inline Program Card Form OR Schedule Registration Form */}
-          <div className="admin-form-col">
-            <div className="admin-form-card" id="admin-schedule-form-container">
-              {rightPanelMode === 'CARD_FORM' ? (
-                <AdminProgramCardForm
-                  key={editingProgramCard ? editingProgramCard.id : 'new-card'}
-                  initialCard={editingProgramCard}
-                  dynamicCategories={dynamicCategories}
-                  dynamicParts={dynamicParts}
-                  locationPresets={locationPresets}
-                  members={members}
-                  onSave={handleSaveProgramCard}
-                  onCancel={() => {
-                    setRightPanelMode('SCHEDULE_FORM');
-                    setEditingProgramCard(null);
-                  }}
-                  successMessage={scheduleSuccessMsg}
-                />
-              ) : (
-                <AdminScheduleForm
-                  key={editingScheduleForForm ? editingScheduleForForm.id : 'new-sch-' + adminSelectedDate}
-                  editingSchedule={editingScheduleForForm}
-                  prefilledDate={adminSelectedDate}
-                  prefilledProgramCardId={selectedProgramCardId || undefined}
-                  programCards={programCards}
-                  dynamicCategories={dynamicCategories}
-                  dynamicParts={dynamicParts}
-                  locationPresets={locationPresets}
-                  members={members}
-                  onSave={handleSaveScheduleFromForm}
-                  onCancelEdit={() => setEditingScheduleForForm(null)}
-                  onOpenCreateCard={handleOpenCreateProgramCard}
-                  onOpenEditCard={handleOpenEditProgramCard}
-                  onOpenLocationPickerModal={() => setIsScheduleLocationModalOpen(true)}
-                  successMessage={scheduleSuccessMsg}
-                />
-              )}
-            </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
     </div>
   );

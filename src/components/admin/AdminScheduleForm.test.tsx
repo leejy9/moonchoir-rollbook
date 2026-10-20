@@ -45,12 +45,13 @@ describe('AdminScheduleForm Component', () => {
       />
     );
 
-    expect(html).toContain('연습 및 연주 일정 등록 (반복 엔진)');
-    expect(html).toContain('1회성 단일 일정');
-    expect(html).toContain('요일별 주간 반복');
-    expect(html).toContain('간격 주기 반복');
-    expect(html).toContain('달력에서 콕콕 선택');
-    expect(html).toContain('소속 일정 카드 (컨테이너)');
+    expect(html).toContain('일정 등록');
+    expect(html).toContain('단일');
+    expect(html).toContain('매주');
+    expect(html).toContain('주기');
+    expect(html).toContain('직접선택');
+    expect(html).toContain('카드');
+    expect(html).toContain('Soprano, Alto, Tenor, Bass');
   });
 
   it('renders edit form when editingSchedule is provided', () => {
@@ -80,9 +81,9 @@ describe('AdminScheduleForm Component', () => {
       />
     );
 
-    expect(html).toContain('✏️ 일정 인라인 수정');
+    expect(html).toContain('일정 수정');
     expect(html).toContain('모차르트 집중 연습 1회차');
-    expect(html).toContain('✕ 신규 등록으로 복귀');
-    expect(html).toContain('💾 수정 내용 저장');
+    expect(html).toContain('← 뒤로');
+    expect(html).toContain('저장');
   });
 });

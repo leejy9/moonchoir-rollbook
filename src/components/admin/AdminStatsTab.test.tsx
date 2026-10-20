@@ -59,8 +59,8 @@ describe('AdminStatsTab Component', () => {
       />
     );
 
-    expect(html).toContain('조회 기간 설정');
-    expect(html).toContain('최근 3개월');
+    expect(html).toContain('기간 (');
+    expect(html).toContain('3개월');
     expect(html).toContain('비교 분석');
     expect(html).toContain('김철수');
     expect(html).toContain('이영희');

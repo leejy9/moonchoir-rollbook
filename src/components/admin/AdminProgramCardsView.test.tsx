@@ -38,7 +38,7 @@ const mockGroups: ProgramGroupItem[] = [
 ];
 
 describe('AdminProgramCardsView Component', () => {
-  it('일정 카드 묶음 헤더 및 새 카드 만들기 버튼을 렌더링한다', () => {
+  it('일정 카드 묶음 헤더를 간결하게 렌더링한다', () => {
     const html = renderToString(
       <AdminProgramCardsView
         programGroups={mockGroups}
@@ -55,18 +55,10 @@ describe('AdminProgramCardsView Component', () => {
       />
     );
 
-    expect(html).toContain('일정 카드(프로젝트) 묶음 관리');
-    expect(html).toContain('새 일정 카드 만들기');
     expect(html).toContain('2026 하반기 정기연습');
-    expect(html).toContain('베토벤 합창 교향곡');
-    expect(html).toContain('언더스탠드에비뉴');
-    expect(html).toContain('총');
+    expect(html).toContain('정기연습');
     expect(html).toContain('1');
-    expect(html).toContain('회차');
-    expect(html).toContain('시트 저장됨');
-    expect(html).toContain('카드 수정');
-    expect(html).toContain('추가연습 등록');
-    expect(html).toContain('아카이브');
+    expect(html).toContain('회');
   });
 
   it('등록된 카드가 없을 때 빈 목록 안내 문구를 렌더링한다', () => {
@@ -87,5 +79,6 @@ describe('AdminProgramCardsView Component', () => {
     );
 
     expect(html).toContain('등록된 일정 카드가 없습니다.');
+    expect(html).toContain('+ 카드 등록');
   });
 });

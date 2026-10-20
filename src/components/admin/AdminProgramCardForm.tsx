@@ -24,6 +24,13 @@ export const AdminProgramCardForm: React.FC<AdminProgramCardFormProps> = ({
   onCancel,
   successMessage,
 }) => {
+  const defaultChoirParts = React.useMemo(() => {
+    const filtered = dynamicParts.filter(
+      (p) => !p.includes('선생님') && !p.includes('객원') && !p.includes('지휘') && !p.includes('반주')
+    );
+    return filtered.length > 0 ? filtered : dynamicParts;
+  }, [dynamicParts]);
+
   const [cardTitle, setCardTitle] = useState(() => initialCard?.title || '');
   const [cardCategory, setCardCategory] = useState<ScheduleCategory>(() => initialCard?.category || '정기연습');
   const [cardDesc, setCardDesc] = useState(() => initialCard?.description || '');
@@ -33,12 +40,54 @@ export const AdminProgramCardForm: React.FC<AdminProgramCardFormProps> = ({
   const [cardDefaultStartTime, setCardDefaultStartTime] = useState(() => initialCard?.defaultStartTime || '19:30');
   const [cardDefaultEndTime, setCardDefaultEndTime] = useState(() => initialCard?.defaultEndTime || '21:30');
   const [cardAudienceType, setCardAudienceType] = useState<TargetAudienceType>(
-    () => initialCard?.targetAudienceType || 'ALL'
+    () => initialCard?.targetAudienceType || 'PARTS'
   );
-  const [cardTargetParts, setCardTargetParts] = useState<string[]>(() => initialCard?.targetParts || []);
+  const [cardTargetParts, setCardTargetParts] = useState<string[]>(() => {
+    if (initialCard) {
+      if (initialCard.targetAudienceType === 'PARTS' && initialCard.targetParts) {
+        return initialCard.targetParts;
+      }
+      if (initialCard.targetAudienceType === 'ALL' || initialCard.targetAudienceType === 'ALL_WITH_GUESTS') {
+        return [...dynamicParts];
+      }
+      return defaultChoirParts;
+    }
+    return defaultChoirParts;
+  });
   const [cardTargetMemberIds, setCardTargetMemberIds] = useState<string[]>(() => initialCard?.targetMemberIds || []);
+  const [isAudienceDropdownOpen, setIsAudienceDropdownOpen] = useState(false);
+  const [isCustomMemberModalOpen, setIsCustomMemberModalOpen] = useState(false);
   const [cardMemberSearch, setCardMemberSearch] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const getAudienceSummaryLabel = () => {
+    if (cardAudienceType === 'CUSTOM_MEMBERS') {
+      return `개별 선택 (${cardTargetMemberIds.length}명)`;
+    }
+    if (cardAudienceType === 'ALL' || cardTargetParts.length === dynamicParts.length) {
+      return `전체 (${dynamicParts.join(', ')})`;
+    }
+    if (cardTargetParts.length === 0) {
+      return '대상 선택';
+    }
+    return cardTargetParts.join(', ');
+  };
+
+  const handleTogglePartInDropdown = (part: string) => {
+    setCardAudienceType('PARTS');
+    setCardTargetParts((prev) =>
+      prev.includes(part) ? prev.filter((p) => p !== part) : [...prev, part]
+    );
+  };
+
+  const handleToggleAllParts = () => {
+    setCardAudienceType('PARTS');
+    if (cardTargetParts.length === dynamicParts.length) {
+      setCardTargetParts(defaultChoirParts);
+    } else {
+      setCardTargetParts([...dynamicParts]);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,35 +119,20 @@ export const AdminProgramCardForm: React.FC<AdminProgramCardFormProps> = ({
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '12px' }}>
-        <div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#EEF2FF', color: '#4F46E5', fontSize: '11px', fontWeight: 700, padding: '3px 8px', borderRadius: '12px', marginBottom: '6px' }}>
-            📦 일정 카드(컨테이너) 관리
-          </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="btn-nav-back"
+            style={{ padding: '6px 12px', fontSize: '13px', whiteSpace: 'nowrap' }}
+          >
+            ← 뒤로
+          </button>
           <h2 className="section-title" style={{ margin: 0 }}>
-            {initialCard ? `[${initialCard.title}] 속성 수정` : '새 일정 카드(묶음) 등록'}
+            {initialCard ? '카드 수정' : '카드 등록'}
           </h2>
-          <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
-            정기연습, 연주회, 특정 프로젝트를 카드 하나로 묶고 구글 시트에 영구 보존합니다.
-          </p>
         </div>
-        <button
-          type="button"
-          onClick={onCancel}
-          style={{
-            background: '#F1F5F9',
-            color: '#475569',
-            border: '1px solid #CBD5E1',
-            borderRadius: '8px',
-            padding: '6px 12px',
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          ✕ 일정 등록으로 복귀
-        </button>
       </div>
 
       {successMessage && <div className="success-banner">{successMessage}</div>}
@@ -106,13 +140,13 @@ export const AdminProgramCardForm: React.FC<AdminProgramCardFormProps> = ({
       <form onSubmit={handleSubmit} className="form-stack">
         <div>
           <label className="form-label" htmlFor="card-title">
-            카드 명칭 (프로그램/행사명)
+            이름
           </label>
           <input
             id="card-title"
             type="text"
             className="input-text"
-            placeholder="예: 2026 하반기 정기연습, 10월 경찰의 날 행사"
+            placeholder="예: 2026 하반기 정기연습, 가을 연주회"
             value={cardTitle}
             onChange={(e) => setCardTitle(e.target.value)}
             required
@@ -121,7 +155,7 @@ export const AdminProgramCardForm: React.FC<AdminProgramCardFormProps> = ({
 
         <div className="form-row-2">
           <div>
-            <label className="form-label">기본 일정 구분</label>
+            <label className="form-label">구분</label>
             <select
               className="select-input"
               value={cardCategory}
@@ -135,13 +169,13 @@ export const AdminProgramCardForm: React.FC<AdminProgramCardFormProps> = ({
             </select>
           </div>
           <div>
-            <label className="form-label">기본 연습실 장소</label>
+            <label className="form-label">장소</label>
             <select
               className="select-input"
               value={cardDefaultLocationId}
               onChange={(e) => setCardDefaultLocationId(e.target.value)}
             >
-              <option value="">선택 안 함 (회차별 개별 지정)</option>
+              <option value="">선택 안 함</option>
               {locationPresets.map((loc) => (
                 <option key={loc.id} value={loc.id}>
                   {loc.name}
@@ -153,14 +187,14 @@ export const AdminProgramCardForm: React.FC<AdminProgramCardFormProps> = ({
 
         <div className="form-row-2">
           <div>
-            <label className="form-label">기본 시작 시각</label>
+            <label className="form-label">시작</label>
             <RoundTimePicker
               value={cardDefaultStartTime}
               onChange={(val) => setCardDefaultStartTime(val)}
             />
           </div>
           <div>
-            <label className="form-label">기본 종료 시각</label>
+            <label className="form-label">종료</label>
             <RoundTimePicker
               value={cardDefaultEndTime}
               onChange={(val) => setCardDefaultEndTime(val)}
@@ -168,109 +202,116 @@ export const AdminProgramCardForm: React.FC<AdminProgramCardFormProps> = ({
           </div>
         </div>
 
-        {/* Card Default Audience Selector */}
-        <div className="toss-section-card" style={{ padding: '12px', margin: '4px 0' }}>
-          <span className="form-label" style={{ marginBottom: '6px', display: 'block', fontSize: '13px' }}>
-            기본 참석 대상자 (통계 모수 필터)
-          </span>
-          <div className="toss-filter-row" style={{ marginBottom: '8px', gap: '6px', flexWrap: 'wrap' }}>
-            {(
-              [
-                { key: 'ALL', label: '🌐 전체 (선생님 포함)' },
-                { key: 'ALL_WITH_GUESTS', label: '🎼 전체 + 객원' },
-                { key: 'PARTS', label: '👥 특정 파트' },
-                { key: 'CUSTOM_MEMBERS', label: '🎯 선발 단원' },
-              ] as const
-            ).map((aud) => (
-              <button
-                key={aud.key}
-                type="button"
-                className={`toss-filter-chip ${cardAudienceType === aud.key ? 'active' : ''}`}
-                onClick={() => setCardAudienceType(aud.key)}
-              >
-                <span>{aud.label}</span>
-              </button>
-            ))}
-          </div>
+        {/* Card Default Audience Multi-Select Dropdown */}
+        <div style={{ position: 'relative' }}>
+          <label className="form-label">참석 대상</label>
+          <button
+            type="button"
+            onClick={() => setIsAudienceDropdownOpen((prev) => !prev)}
+            className="select-input"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              textAlign: 'left',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {getAudienceSummaryLabel()}
+            </span>
+            <span style={{ fontSize: '11px', color: '#64748B', marginLeft: '8px' }}>
+              {isAudienceDropdownOpen ? '▲' : '▼'}
+            </span>
+          </button>
 
-          {cardAudienceType === 'PARTS' && (
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-              {dynamicParts.map((part) => {
-                const isSel = cardTargetParts.includes(part);
-                return (
-                  <button
-                    key={part}
-                    type="button"
-                    onClick={() => {
-                      setCardTargetParts((prev) =>
-                        prev.includes(part) ? prev.filter((p) => p !== part) : [...prev, part]
-                      );
-                    }}
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      border: isSel ? '1.5px solid #059669' : '1px solid #CBD5E1',
-                      background: isSel ? '#D1FAE5' : '#FFFFFF',
-                      color: isSel ? '#047857' : '#334155',
-                      fontWeight: isSel ? 700 : 500,
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {part} {isSel ? '✓' : ''}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {isAudienceDropdownOpen && (
+            <div
+              style={{
+                marginTop: '6px',
+                background: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                borderRadius: '12px',
+                padding: '10px',
+                boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '6px', borderBottom: '1px solid #F1F5F9' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>파트 중복 선택</span>
+                <button
+                  type="button"
+                  onClick={handleToggleAllParts}
+                  style={{
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    color: '#4F46E5',
+                    background: '#EEF2FF',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  {cardTargetParts.length === dynamicParts.length ? '기본 4파트만' : '전체 선택'}
+                </button>
+              </div>
 
-          {cardAudienceType === 'CUSTOM_MEMBERS' && (
-            <div style={{ marginTop: '6px' }}>
-              <input
-                type="text"
-                className="input-text"
-                placeholder="이름 또는 파트로 검색..."
-                value={cardMemberSearch}
-                onChange={(e) => setCardMemberSearch(e.target.value)}
-                style={{ marginBottom: '6px', fontSize: '12px', padding: '5px 8px' }}
-              />
-              <div style={{ maxHeight: '120px', overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '4px' }}>
-                {members
-                  .filter((m) => {
-                    if (!cardMemberSearch.trim()) return true;
-                    const q = cardMemberSearch.toLowerCase();
-                    return m.name.toLowerCase().includes(q) || m.part.toLowerCase().includes(q);
-                  })
-                  .map((m) => {
-                    const isSel = cardTargetMemberIds.includes(m.id);
-                    return (
-                      <div
-                        key={m.id}
-                        onClick={() => {
-                          setCardTargetMemberIds((prev) =>
-                            isSel ? prev.filter((id) => id !== m.id) : [...prev, m.id]
-                          );
-                        }}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '4px 6px',
-                          borderRadius: '4px',
-                          background: isSel ? '#EEF2FF' : 'transparent',
-                          cursor: 'pointer',
-                          fontSize: '11.5px',
-                        }}
-                      >
-                        <span>
-                          <strong>{m.name}</strong> ({m.part} · {m.phoneLast4 || '0000'})
-                        </span>
-                        <span style={{ color: isSel ? '#4F46E5' : '#94A3B8', fontWeight: 600 }}>
-                          {isSel ? '선택됨 ✓' : '+ 추가'}
-                        </span>
-                      </div>
-                    );
-                  })}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+                {dynamicParts.map((part) => {
+                  const isChecked = cardAudienceType === 'PARTS' && cardTargetParts.includes(part);
+                  return (
+                    <label
+                      key={part}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        background: isChecked ? '#EEF2FF' : '#F8FAFC',
+                        border: isChecked ? '1px solid #C7D2FE' : '1px solid #E2E8F0',
+                        fontSize: '13px',
+                        fontWeight: isChecked ? 700 : 500,
+                        color: isChecked ? '#4F46E5' : '#334155',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleTogglePartInDropdown(part)}
+                        style={{ width: '16px', height: '16px', accentColor: '#4F46E5' }}
+                      />
+                      <span>{part}</span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCardAudienceType('CUSTOM_MEMBERS');
+                    setIsAudienceDropdownOpen(false);
+                    setIsCustomMemberModalOpen(true);
+                  }}
+                  style={{
+                    fontSize: '12.5px',
+                    fontWeight: 700,
+                    color: '#0F766E',
+                    background: '#F0FDFA',
+                    border: '1px solid #99F6E4',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    width: '100%',
+                    textAlign: 'center',
+                  }}
+                >
+                  개별 단원 직접 선택 ({cardTargetMemberIds.length}명)
+                </button>
               </div>
             </div>
           )}
@@ -278,38 +319,124 @@ export const AdminProgramCardForm: React.FC<AdminProgramCardFormProps> = ({
 
         <div>
           <label className="form-label" htmlFor="card-desc">
-            카드 상세 설명 (선택)
+            메모
           </label>
           <textarea
             id="card-desc"
             className="input-textarea"
-            placeholder="예: 2026년 정기연주회 준비를 위한 총 12회차 집중 연습 및 본공연"
+            placeholder="설명 (선택)"
             value={cardDesc}
             onChange={(e) => setCardDesc(e.target.value)}
             rows={3}
           />
         </div>
 
-        <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+        <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
           <button
             type="submit"
             className="btn-primary-large"
-            style={{ minHeight: '44px', flex: 1 }}
+            style={{ minHeight: '46px', flex: 1 }}
             disabled={isSubmitting}
           >
-            {isSubmitting ? '저장 중...' : '💾 구글 시트에 카드 저장'}
+            {isSubmitting ? '저장 중...' : '저장'}
           </button>
           <button
             type="button"
             className="btn-secondary-cancel"
-            style={{ minHeight: '44px' }}
+            style={{ minHeight: '46px', whiteSpace: 'nowrap' }}
             onClick={onCancel}
             disabled={isSubmitting}
           >
-            ✕ 닫기
+            취소
           </button>
         </div>
       </form>
+
+      {/* Custom Member Picker Modal */}
+      {isCustomMemberModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal-card" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title" style={{ fontSize: '17px' }}>
+                개별 단원 선택 ({cardTargetMemberIds.length}명)
+              </h2>
+            </div>
+
+            <input
+              type="text"
+              className="input-text"
+              placeholder="이름 또는 파트 검색..."
+              value={cardMemberSearch}
+              onChange={(e) => setCardMemberSearch(e.target.value)}
+              style={{ minHeight: '40px' }}
+            />
+
+            <div
+              style={{
+                maxHeight: '280px',
+                overflowY: 'auto',
+                border: '1px solid #E2E8F0',
+                borderRadius: '10px',
+                padding: '6px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+              }}
+            >
+              {members
+                .filter((m) => {
+                  if (!cardMemberSearch.trim()) return true;
+                  const q = cardMemberSearch.toLowerCase();
+                  return m.name.toLowerCase().includes(q) || m.part.toLowerCase().includes(q);
+                })
+                .map((m) => {
+                  const isSel = cardTargetMemberIds.includes(m.id);
+                  return (
+                    <label
+                      key={m.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        background: isSel ? '#EEF2FF' : 'transparent',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="checkbox"
+                          checked={isSel}
+                          onChange={() => {
+                            setCardTargetMemberIds((prev) =>
+                              isSel ? prev.filter((id) => id !== m.id) : [...prev, m.id]
+                            );
+                          }}
+                          style={{ width: '16px', height: '16px', accentColor: '#4F46E5' }}
+                        />
+                        <strong>{m.name}</strong>
+                        <span style={{ color: '#64748B', fontSize: '12px' }}>{m.part}</span>
+                      </div>
+                      <span style={{ color: '#94A3B8', fontSize: '11.5px' }}>{m.phoneLast4 || ''}</span>
+                    </label>
+                  );
+                })}
+            </div>
+
+            <div className="modal-button-group">
+              <button
+                type="button"
+                className="btn-primary-large"
+                onClick={() => setIsCustomMemberModalOpen(false)}
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

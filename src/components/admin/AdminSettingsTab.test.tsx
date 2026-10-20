@@ -51,26 +51,26 @@ describe('AdminSettingsTab Component', () => {
     const props = createMockProps();
     const html = renderToString(<AdminSettingsTab {...props} />);
 
-    expect(html).toContain('구글 스프레드시트 연동');
-    expect(html).toContain('연습실 장소 (GPS 반경)');
-    expect(html).toContain('파트 &amp; 태그 설정');
+    expect(html).toContain('시트 연동');
+    expect(html).toContain('장소 관리');
+    expect(html).toContain('태그 관리');
   });
 
   it('renders sheets settings by default', () => {
     const props = createMockProps();
     const html = renderToString(<AdminSettingsTab {...props} />);
 
-    expect(html).toContain('스마트 출결 시스템 환경설정');
+    expect(html).toContain('시트 연동');
     expect(html).toContain('Google Apps Script Web App URL');
-    expect(html).toContain('지각 유예 기준 (분)');
-    expect(html).toContain('관리자 마스터 PIN 번호');
+    expect(html).toContain('지각 유예 (분)');
+    expect(html).toContain('관리자 PIN');
   });
 
   it('renders location preset preview within sheets subtab', () => {
     const props = createMockProps();
     const html = renderToString(<AdminSettingsTab {...props} />);
 
-    expect(html).toContain('등록된 연습실 장소 프리셋');
+    expect(html).toContain('등록된 장소');
     expect(html).toContain('메인 연습실');
   });
 });

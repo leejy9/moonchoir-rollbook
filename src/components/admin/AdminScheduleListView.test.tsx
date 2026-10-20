@@ -50,19 +50,18 @@ describe('AdminScheduleListView Component', () => {
       />
     );
 
-    expect(html).toContain('전체 등록 일정 일괄 관리');
-    expect(html).toContain('일정명, 날짜, 장소, 곡목 검색...');
-    expect(html).toContain('전체 카테고리');
+    expect(html).toContain('검색...');
+    expect(html).toContain('전체 구분');
     expect(html).toContain('정기연습');
     expect(html).toContain('연주');
     expect(html).toContain('정기연습 1회차');
     expect(html).toContain('연주회 리허설');
-    expect(html).toContain('회차');
-    expect(html).toContain('언더스탠드에비뉴');
-    expect(html).toContain('성남아트센터');
+    expect(html).toContain('10.18');
+    expect(html).toContain('19:00');
+    expect(html).toContain('선택');
   });
 
-  it('선택된 일정이 있을 때 일괄 작업 바(수정, 복제, 아카이브, 삭제 버튼)를 렌더링한다', () => {
+  it('선택된 일정이 있을 때 일괄 작업 바(수정, 복제, 보관, 삭제 버튼)를 렌더링한다', () => {
     const html = renderToString(
       <AdminScheduleListView
         schedules={mockSchedules}
@@ -85,9 +84,9 @@ describe('AdminScheduleListView Component', () => {
     );
 
     expect(html).toContain('일괄 수정');
-    expect(html).toContain('아카이브');
+    expect(html).toContain('보관');
     expect(html).toContain('일괄 삭제');
-    expect(html).toContain('선택 해제');
+    expect(html).toContain('해제');
   });
 
   it('일정이 전혀 없을 때 빈 목록 안내 문구를 렌더링한다', () => {

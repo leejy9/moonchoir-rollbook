@@ -22,6 +22,19 @@ export interface AdminScheduleListViewProps {
   onDeleteSchedule: (id: string, title: string) => void;
 }
 
+const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+
+function formatShortDateWithWeekday(dateStr: string): string {
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
+  const [y, m, d] = parts;
+  const dateObj = new Date(y, m - 1, d);
+  const weekday = WEEKDAY_NAMES[dateObj.getDay()] || '';
+  const mm = String(m).padStart(2, '0');
+  const dd = String(d).padStart(2, '0');
+  return `${mm}.${dd} (${weekday})`;
+}
+
 export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
   schedules,
   categories,
@@ -44,6 +57,8 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [showPastSchedules, setShowPastSchedules] = useState(false);
+  const [isSelectMode, setIsSelectMode] = useState(() => selectedBatchScheduleIds.length > 0);
+  const [expandedScheduleIds, setExpandedScheduleIds] = useState<Set<string>>(new Set());
 
   const todayStr = getKSTDateString();
 
@@ -71,57 +86,47 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
     filteredSchedules.length > 0 &&
     filteredSchedules.every((s) => selectedBatchScheduleIds.includes(s.id));
 
-  return (
-    <div className="admin-schedule-list-view-root">
-      {/* Title & Description */}
-      <div style={{ marginBottom: '14px' }}>
-        <h2 className="section-title" style={{ margin: 0 }}>
-          📋 전체 등록 일정 일괄 관리
-        </h2>
-        <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
-          반복 등록된 일정들을 한눈에 확인하고, 다중 선택하여 일괄 삭제하거나 장소/시간을 일괄 수정합니다.
-        </p>
-      </div>
+  const showBulkControls = isSelectMode || selectedBatchScheduleIds.length > 0;
 
+  const toggleExpandRow = (id: string) => {
+    setExpandedScheduleIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  return (
+    <div className="admin-schedule-list-view-root" style={{ width: '100%' }}>
       {/* Search & Filter Bar */}
       <div
         style={{
           display: 'flex',
-          gap: '10px',
+          gap: '8px',
           alignItems: 'center',
-          marginBottom: '12px',
+          marginBottom: '10px',
           flexWrap: 'wrap',
         }}
       >
-        <div style={{ flex: 1, minWidth: '180px', position: 'relative' }}>
+        <div style={{ flex: '1 1 160px', minWidth: '140px' }}>
           <input
             type="text"
             className="modern-input"
-            placeholder="일정명, 날짜, 장소, 곡목 검색..."
+            placeholder="검색..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ height: '38px', paddingLeft: '32px', fontSize: '13px' }}
+            style={{ height: '38px', padding: '0 12px', fontSize: '13px' }}
           />
-          <span
-            style={{
-              position: 'absolute',
-              left: '10px',
-              top: '10px',
-              color: '#94A3B8',
-              fontSize: '13px',
-            }}
-          >
-            🔍
-          </span>
         </div>
 
         <select
           className="modern-select"
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          style={{ width: 'auto', minWidth: '120px', height: '38px', fontSize: '13px' }}
+          style={{ width: 'auto', minWidth: '96px', height: '38px', fontSize: '13px', padding: '0 28px 0 10px' }}
         >
-          <option value="ALL">전체 카테고리</option>
+          <option value="ALL">전체 구분</option>
           {categories.map((cat) => (
             <option key={cat} value={cat}>
               {cat}
@@ -137,14 +142,15 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
             color: showPastSchedules ? '#2563EB' : '#64748B',
             border: `1px solid ${showPastSchedules ? '#93C5FD' : '#CBD5E1'}`,
             borderRadius: '8px',
-            padding: '0 12px',
+            padding: '0 10px',
             height: '38px',
-            fontSize: '12.5px',
+            fontSize: '12px',
             fontWeight: 600,
             cursor: 'pointer',
+            whiteSpace: 'nowrap',
           }}
         >
-          {showPastSchedules ? '⏱️ 지난 일정 숨기기' : `⏱️ 지난 일정 보기 (${pastSchedulesCount}건)`}
+          {showPastSchedules ? '지난 일정 숨김' : `지난 일정 (${pastSchedulesCount})`}
         </button>
 
         <button
@@ -155,264 +161,332 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
             color: showArchivedSchedules ? '#6D28D9' : '#64748B',
             border: `1px solid ${showArchivedSchedules ? '#C4B5FD' : '#CBD5E1'}`,
             borderRadius: '8px',
-            padding: '0 12px',
+            padding: '0 10px',
             height: '38px',
-            fontSize: '12.5px',
+            fontSize: '12px',
             fontWeight: 600,
             cursor: 'pointer',
+            whiteSpace: 'nowrap',
           }}
         >
-          {showArchivedSchedules ? '📂 지난 시즌 숨기기' : '📁 지난 시즌 아카이브'}
+          {showArchivedSchedules ? '보관함 숨김' : '보관함'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (showBulkControls) {
+              setIsSelectMode(false);
+              onClearSelection();
+            } else {
+              setIsSelectMode(true);
+            }
+          }}
+          style={{
+            background: showBulkControls ? '#EEF2FF' : '#F8FAFC',
+            color: showBulkControls ? '#4F46E5' : '#475569',
+            border: `1px solid ${showBulkControls ? '#C7D2FE' : '#CBD5E1'}`,
+            borderRadius: '8px',
+            padding: '0 10px',
+            height: '38px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {showBulkControls ? '선택 종료' : '선택'}
         </button>
       </div>
 
-      {/* Bulk Action Bar */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          background: selectedBatchScheduleIds.length > 0 ? '#EEF2FF' : '#F8FAFC',
-          border: `1px solid ${selectedBatchScheduleIds.length > 0 ? '#C7D2FE' : '#E2E8F0'}`,
-          borderRadius: '10px',
-          padding: '10px 14px',
-          marginBottom: '14px',
-          flexWrap: 'wrap',
-          gap: '10px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      {/* Bulk Action Bar (Only visible when select mode is active or items are selected) */}
+      {showBulkControls && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: selectedBatchScheduleIds.length > 0 ? '#EEF2FF' : '#F8FAFC',
+            border: `1px solid ${selectedBatchScheduleIds.length > 0 ? '#C7D2FE' : '#E2E8F0'}`,
+            borderRadius: '10px',
+            padding: '8px 12px',
+            marginBottom: '10px',
+            flexWrap: 'wrap',
+            gap: '8px',
+          }}
+        >
           <label
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               cursor: 'pointer',
-              fontSize: '13px',
+              fontSize: '12.5px',
               fontWeight: 700,
               color: '#334155',
+              whiteSpace: 'nowrap',
             }}
           >
             <input
               type="checkbox"
               checked={isAllSelected}
               onChange={() => onSelectAllSchedules(filteredSchedules.map((s) => s.id))}
-              style={{ width: '18px', height: '18px', accentColor: '#4F46E5', cursor: 'pointer' }}
+              style={{ width: '16px', height: '16px', accentColor: '#4F46E5', cursor: 'pointer' }}
             />
-            전체 선택 ({filteredSchedules.length}건 중 {selectedBatchScheduleIds.length}개 선택됨)
+            전체 ({selectedBatchScheduleIds.length}/{filteredSchedules.length})
           </label>
+
+          {selectedBatchScheduleIds.length > 0 && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={onOpenBatchEdit}
+                style={{
+                  background: '#4F46E5',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '5px 10px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                일괄 수정
+              </button>
+              <button
+                type="button"
+                onClick={() => onDuplicateSeries()}
+                style={{
+                  background: '#10B981',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '5px 10px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                복제
+              </button>
+              <button
+                type="button"
+                onClick={() => onBatchArchive(true)}
+                style={{
+                  background: '#8B5CF6',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '5px 10px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                보관
+              </button>
+              <button
+                type="button"
+                onClick={() => onBatchArchive(false)}
+                style={{
+                  background: '#EDE9FE',
+                  color: '#6D28D9',
+                  border: '1px solid #C4B5FD',
+                  borderRadius: '6px',
+                  padding: '5px 10px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                복원
+              </button>
+              <button
+                type="button"
+                onClick={onBatchDelete}
+                style={{
+                  background: '#EF4444',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '5px 10px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                일괄 삭제
+              </button>
+              <button
+                type="button"
+                onClick={onClearSelection}
+                style={{
+                  background: '#FFFFFF',
+                  color: '#64748B',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '6px',
+                  padding: '5px 10px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                해제
+              </button>
+            </div>
+          )}
         </div>
+      )}
 
-        {selectedBatchScheduleIds.length > 0 && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={onOpenBatchEdit}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: '#4F46E5',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '6px 14px',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                minHeight: '36px',
-              }}
-            >
-              ✏️ {selectedBatchScheduleIds.length}개 일괄 수정
-            </button>
-            <button
-              type="button"
-              onClick={() => onDuplicateSeries()}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: '#10B981',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '6px 14px',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                minHeight: '36px',
-              }}
-              title="선택한 일정을 새 시작 날짜로 통째로 복제"
-            >
-              🔁 복제
-            </button>
-            <button
-              type="button"
-              onClick={() => onBatchArchive(true)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: '#8B5CF6',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '6px 14px',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                minHeight: '36px',
-              }}
-              title="선택한 일정을 지난 시즌 아카이브로 보관"
-            >
-              📦 {selectedBatchScheduleIds.length}개 아카이브
-            </button>
-            <button
-              type="button"
-              onClick={() => onBatchArchive(false)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: '#EDE9FE',
-                color: '#6D28D9',
-                border: '1px solid #C4B5FD',
-                borderRadius: '8px',
-                padding: '6px 14px',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                minHeight: '36px',
-              }}
-              title="선택한 일정을 일반 목록으로 복원"
-            >
-              📂 보관 해제
-            </button>
-            <button
-              type="button"
-              onClick={onBatchDelete}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: '#EF4444',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '6px 14px',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                minHeight: '36px',
-              }}
-            >
-              🗑️ {selectedBatchScheduleIds.length}개 일괄 삭제
-            </button>
-            <button
-              type="button"
-              onClick={onClearSelection}
-              style={{
-                background: '#FFFFFF',
-                color: '#64748B',
-                border: '1px solid #CBD5E1',
-                borderRadius: '8px',
-                padding: '6px 12px',
-                fontSize: '13px',
-                cursor: 'pointer',
-                minHeight: '36px',
-              }}
-            >
-              선택 해제
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Schedule List Cards */}
+      {/* 100% Width Mobile Accordion Schedule List */}
       {filteredSchedules.length > 0 ? (
         <div
           style={{
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px',
-            maxHeight: '520px',
-            overflowY: 'auto',
+            gap: '6px',
+            width: '100%',
           }}
         >
           {filteredSchedules.map((sch) => {
             const isChecked = selectedBatchScheduleIds.includes(sch.id);
             const isSelectedForEdit = editingScheduleId === sch.id;
+            const isExpanded = expandedScheduleIds.has(sch.id);
 
             return (
               <div
                 key={sch.id}
                 data-testid={`all-sch-item-${sch.id}`}
-                onClick={() => onSelectScheduleForEdit(sch)}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
+                  width: '100%',
                   background: isSelectedForEdit ? '#EEF2FF' : isChecked ? '#F5F3FF' : '#FFFFFF',
                   border: isSelectedForEdit
                     ? '1.5px solid #6366F1'
                     : `1px solid ${isChecked ? '#DDD6FE' : '#E2E8F0'}`,
-                  boxShadow: isSelectedForEdit ? '0 0 0 2px rgba(99, 102, 241, 0.2)' : 'none',
                   borderRadius: '10px',
-                  padding: '10px 14px',
-                  gap: '12px',
+                  overflow: 'hidden',
                   transition: 'all 0.15s ease',
-                  cursor: 'pointer',
                 }}
-                title="클릭하여 우측에서 일정 정보 수정"
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => onToggleSelectSchedule(sch.id)}
-                    onClick={(e) => e.stopPropagation()}
+                {/* Default 1-line Summary Row: Date · Time · Title */}
+                <div
+                  onClick={() => toggleExpandRow(sch.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '11px 12px',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    minHeight: '44px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                    {showBulkControls && (
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => onToggleSelectSchedule(sch.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          accentColor: '#4F46E5',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
+                    <span
+                      style={{
+                        fontSize: '12.5px',
+                        fontWeight: 700,
+                        color: '#2563EB',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {formatShortDateWithWeekday(sch.date)}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '12.5px',
+                        fontWeight: 600,
+                        color: '#64748B',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {sch.startTime}
+                    </span>
+                    <strong
+                      style={{
+                        fontSize: '13.5px',
+                        color: '#1E293B',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      {sch.title}
+                    </strong>
+                  </div>
+
+                  <span
                     style={{
-                      width: '18px',
-                      height: '18px',
-                      accentColor: '#4F46E5',
-                      cursor: 'pointer',
+                      fontSize: '11px',
+                      color: '#94A3B8',
+                      flexShrink: 0,
+                      marginLeft: '4px',
                     }}
-                  />
-                  <div>
+                  >
+                    {isExpanded ? '▴' : '▾'}
+                  </span>
+                </div>
+
+                {/* Expanded Detail & Action Panel */}
+                {isExpanded && (
+                  <div
+                    style={{
+                      padding: '10px 12px 12px',
+                      borderTop: '1px solid #F1F5F9',
+                      background: '#F8FAFC',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}
+                  >
                     <div
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px',
+                        gap: '6px',
                         flexWrap: 'wrap',
+                        fontSize: '12px',
+                        color: '#475569',
                       }}
                     >
-                      {isSelectedForEdit && (
-                        <span style={{ fontSize: '11px', color: '#4F46E5', fontWeight: 700 }}>
-                          ✏️ 편집 중:
-                        </span>
-                      )}
-                      <span
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: 800,
-                          color: '#3B82F6',
-                          background: '#EFF6FF',
-                          padding: '2px 8px',
-                          borderRadius: '6px',
-                        }}
-                      >
-                        {sch.date}
-                      </span>
                       <span className="schedule-category-badge">{sch.category}</span>
-                      <strong style={{ fontSize: '13.5px', color: '#1E293B' }}>{sch.title}</strong>
+                      <span>
+                        {sch.date} ({sch.startTime}~{sch.endTime})
+                      </span>
+                      <span>· {sch.locationName}</span>
                       {sch.seriesIndex && sch.seriesTotal && (
                         <span
                           style={{
                             fontSize: '11px',
                             color: '#059669',
                             background: '#ECFDF5',
-                            border: '1px solid #A7F3D0',
                             padding: '1px 6px',
                             borderRadius: '4px',
                             fontWeight: 600,
@@ -426,97 +500,116 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
                           style={{
                             fontSize: '11px',
                             color: '#64748B',
-                            background: '#F1F5F9',
+                            background: '#E2E8F0',
                             padding: '1px 6px',
                             borderRadius: '4px',
                           }}
                         >
-                          PIN: {sch.checkInPin}
+                          PIN {sch.checkInPin}
                         </span>
                       )}
                     </div>
-                    <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#64748B' }}>
-                      🕒 {sch.startTime} ~ {sch.endTime} · 📍 {sch.locationName}
-                    </p>
+
                     {sch.description && (
-                      <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: '#94A3B8' }}>
-                        메모: {sch.description}
+                      <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>
+                        {sch.description}
                       </p>
                     )}
-                  </div>
-                </div>
 
-                <div
-                  style={{ display: 'flex', gap: '6px', flexShrink: 0 }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {sch.seriesId && (
-                    <button
-                      type="button"
-                      className="btn-edit-sch-mini"
-                      onClick={() => onDuplicateSeries(sch.seriesId)}
-                      title="이 일정 묶음을 통째로 복제"
-                      style={{
-                        background: '#F0FDF4',
-                        color: '#059669',
-                        border: '1px solid #BBF7D0',
-                        borderRadius: '6px',
-                        padding: '5px 8px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        minHeight: '34px',
-                      }}
+                    <div
+                      style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      🔁 시즌 복제
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onToggleArchiveSchedule(sch.id, !sch.isArchived)}
-                    title={sch.isArchived ? '일반 목록으로 복원' : '지난 시즌 아카이브로 보관'}
-                    style={{
-                      background: sch.isArchived ? '#EDE9FE' : '#F1F5F9',
-                      color: sch.isArchived ? '#6D28D9' : '#475569',
-                      border: `1px solid ${sch.isArchived ? '#C4B5FD' : '#CBD5E1'}`,
-                      borderRadius: '6px',
-                      padding: '5px 8px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      minHeight: '34px',
-                    }}
-                  >
-                    {sch.isArchived ? '📂 복원' : '📦 보관'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-edit-sch-mini"
-                    onClick={() => onCloneSchedule(sch)}
-                    title={sch.date < todayStr ? '오늘 날짜로 복제' : '일정 복제'}
-                    style={{
-                      background: sch.date < todayStr ? '#ECFDF5' : '#F8FAFC',
-                      color: sch.date < todayStr ? '#059669' : '#475569',
-                      border: `1px solid ${sch.date < todayStr ? '#A7F3D0' : '#CBD5E1'}`,
-                      borderRadius: '6px',
-                      padding: '5px 10px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      minHeight: '34px',
-                    }}
-                  >
-                    {sch.date < todayStr ? '📋 오늘로 복제' : '📋 복제'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-delete-sch-mini"
-                    onClick={() => onDeleteSchedule(sch.id, sch.title)}
-                    style={{ minHeight: '34px', padding: '5px 8px' }}
-                  >
-                    🗑️ 삭제
-                  </button>
-                </div>
+                      <button
+                        type="button"
+                        onClick={() => onSelectScheduleForEdit(sch)}
+                        style={{
+                          background: '#EEF2FF',
+                          color: '#4F46E5',
+                          border: '1px solid #C7D2FE',
+                          borderRadius: '6px',
+                          padding: '5px 12px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onCloneSchedule(sch)}
+                        style={{
+                          background: '#FFFFFF',
+                          color: '#475569',
+                          border: '1px solid #CBD5E1',
+                          borderRadius: '6px',
+                          padding: '5px 12px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        복제
+                      </button>
+                      {sch.seriesId && (
+                        <button
+                          type="button"
+                          onClick={() => onDuplicateSeries(sch.seriesId)}
+                          style={{
+                            background: '#F0FDF4',
+                            color: '#059669',
+                            border: '1px solid #BBF7D0',
+                            borderRadius: '6px',
+                            padding: '5px 12px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          시즌 복제
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onToggleArchiveSchedule(sch.id, !sch.isArchived)}
+                        style={{
+                          background: sch.isArchived ? '#EDE9FE' : '#FFFFFF',
+                          color: sch.isArchived ? '#6D28D9' : '#475569',
+                          border: `1px solid ${sch.isArchived ? '#C4B5FD' : '#CBD5E1'}`,
+                          borderRadius: '6px',
+                          padding: '5px 12px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {sch.isArchived ? '복원' : '보관'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteSchedule(sch.id, sch.title)}
+                        style={{
+                          background: '#FEF2F2',
+                          color: '#DC2626',
+                          border: '1px solid #FECACA',
+                          borderRadius: '6px',
+                          padding: '5px 12px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

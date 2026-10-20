@@ -32,10 +32,11 @@ describe('AdminProgramCardForm Component', () => {
       />
     );
 
-    expect(html).toContain('새 일정 카드(묶음) 등록');
-    expect(html).toContain('구글 시트에 카드 저장');
-    expect(html).toContain('일정 등록으로 복귀');
-    expect(html).toContain('기본 일정 구분');
+    expect(html).toContain('카드 등록');
+    expect(html).toContain('저장');
+    expect(html).toContain('← 뒤로');
+    expect(html).toContain('구분');
+    expect(html).toContain('Soprano, Alto, Tenor, Bass');
   });
 
   it('renders edit form with initialCard values', () => {
@@ -63,7 +64,7 @@ describe('AdminProgramCardForm Component', () => {
       />
     );
 
-    expect(html).toContain('[2026 가을 정기연주회] 속성 수정');
+    expect(html).toContain('카드 수정');
     expect(html).toContain('2026 가을 정기연주회');
     expect(html).toContain('연주회 프로젝트 묶음');
   });

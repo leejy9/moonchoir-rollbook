@@ -211,69 +211,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Top Header */}
       <header className="admin-header">
         <div className="admin-header-left">
-          <button type="button" className="btn-nav-back" onClick={onBackToHome}>
-            ← 홈으로
+          <button
+            type="button"
+            className="btn-nav-back"
+            onClick={onBackToHome}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            ← 홈
           </button>
           <img
             src={moonchoirLogo}
             alt="Moonchoir"
-            style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }}
+            style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
           />
-          <div>
-            <h1 className="admin-title">문콰이어 관리자 센터</h1>
-            <p className="admin-subtitle">스마트 출결 통계 분석 및 단원 관리 시스템</p>
-          </div>
+          <h1 className="admin-title" style={{ whiteSpace: 'nowrap' }}>
+            관리자
+          </h1>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           <a
             href="https://docs.google.com/spreadsheets/d/1VYT0HgsrR82ORbd4bxq8doVXvyBvwobgIv3kjE3flX8/edit"
             target="_blank"
             rel="noopener noreferrer"
             className="btn-open-sheet-header"
             title="구글 스프레드시트 열기"
+            style={{ whiteSpace: 'nowrap' }}
           >
-            📊 구글 시트 열기 ↗
+            시트 ↗
           </a>
-          <button type="button" className="btn-logout" onClick={handleLogout}>
+          <button
+            type="button"
+            className="btn-logout"
+            onClick={handleLogout}
+            style={{ whiteSpace: 'nowrap' }}
+          >
             로그아웃
           </button>
         </div>
       </header>
 
       {/* Modern Toss 4 Primary Navigation Tabs */}
-      <nav className="admin-subtabs admin-primary-tabs" style={{ display: 'flex', gap: '8px', paddingBottom: '8px' }}>
+      <nav className="admin-subtabs admin-primary-tabs" style={{ display: 'flex', gap: '6px', padding: '4px' }}>
         <button
           type="button"
           className={`subtab-btn ${adminTab === 'ROSTER' ? 'active' : ''}`}
           onClick={() => setAdminTab('ROSTER')}
         >
-          <IconUsers size={18} />
-          <span>인적사항 & 출결</span>
+          <IconUsers size={16} />
+          <span>단원</span>
         </button>
         <button
           type="button"
           className={`subtab-btn ${adminTab === 'SCHEDULES' ? 'active' : ''}`}
           onClick={() => setAdminTab('SCHEDULES')}
         >
-          <IconCalendar size={18} />
-          <span>연습관리 (일정·QR)</span>
+          <IconCalendar size={16} />
+          <span>일정</span>
         </button>
         <button
           type="button"
           className={`subtab-btn ${adminTab === 'STATS' ? 'active' : ''}`}
           onClick={() => setAdminTab('STATS')}
         >
-          <IconStats size={18} />
-          <span>통계 & 대시보드</span>
+          <IconStats size={16} />
+          <span>통계</span>
         </button>
         <button
           type="button"
           className={`subtab-btn ${adminTab === 'SETTINGS' ? 'active' : ''}`}
           onClick={() => setAdminTab('SETTINGS')}
         >
-          <IconSettings size={18} />
-          <span>환경설정</span>
+          <IconSettings size={16} />
+          <span>설정</span>
         </button>
       </nav>
 

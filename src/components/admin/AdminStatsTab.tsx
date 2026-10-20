@@ -49,22 +49,17 @@ export const AdminStatsTab: React.FC<AdminStatsTabProps> = ({
       {/* 1. Period Selector Chips */}
       <div className="toss-section-card">
         <div className="section-title-row">
-          <div>
-            <h3 className="section-title">조회 기간 설정</h3>
-            <p className="section-subtitle">
-              선택 기간 내 총 {cumulativeSessions.length}회차 연습 기준 누적 통계
-            </p>
-          </div>
+          <h3 className="section-title">기간 ({cumulativeSessions.length}회)</h3>
         </div>
 
-        <div className="toss-filter-row" style={{ marginTop: '8px' }}>
+        <div className="toss-filter-row" style={{ marginTop: '4px' }}>
           {(
             [
-              { key: '1M', label: '최근 1개월' },
-              { key: '3M', label: '최근 3개월' },
-              { key: '6M', label: '최근 6개월' },
-              { key: 'YEAR', label: '올해 전체' },
-              { key: 'ALL', label: '전체 일정' },
+              { key: '1M', label: '1개월' },
+              { key: '3M', label: '3개월' },
+              { key: '6M', label: '6개월' },
+              { key: 'YEAR', label: '올해' },
+              { key: 'ALL', label: '전체' },
             ] as const
           ).map((p) => (
             <button
@@ -156,17 +151,12 @@ export const AdminStatsTab: React.FC<AdminStatsTabProps> = ({
       {/* 3. Filter & Search Controls */}
       <div className="toss-section-card">
         <div className="section-title-row">
-          <div>
-            <h3 className="section-title">대원별 성적표 & 태그 필터</h3>
-            <p className="section-subtitle">
-              체크박스로 특정 단원들을 다중 선택하여 비교할 수 있습니다.
-            </p>
-          </div>
+          <h3 className="section-title">단원 통계</h3>
           <div style={{ display: 'flex', gap: '6px' }}>
             <button
               type="button"
               className="btn-sync"
-              style={{ padding: '6px 10px', fontSize: '12px' }}
+              style={{ padding: '6px 10px', fontSize: '12px', width: 'auto' }}
               onClick={selectAllFiltered}
             >
               전체 선택
@@ -175,7 +165,7 @@ export const AdminStatsTab: React.FC<AdminStatsTabProps> = ({
               <button
                 type="button"
                 className="btn-sync"
-                style={{ padding: '6px 10px', fontSize: '12px' }}
+                style={{ padding: '6px 10px', fontSize: '12px', width: 'auto' }}
                 onClick={clearSelection}
               >
                 초기화

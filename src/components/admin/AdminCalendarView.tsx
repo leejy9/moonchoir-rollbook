@@ -54,14 +54,9 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
     <div className="admin-calendar-view-root">
       {/* Calendar Header with Month Switcher */}
       <div className="admin-cal-header-row">
-        <div>
-          <h2 className="section-title" style={{ margin: 0 }}>
-            📅 연습 일정 캘린더
-          </h2>
-          <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
-            등록된 일정을 월별로 확인하고 관리합니다.
-          </p>
-        </div>
+        <h2 className="section-title" style={{ margin: 0 }}>
+          캘린더
+        </h2>
         <div className="month-switcher-compact">
           <button
             type="button"
@@ -141,9 +136,9 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
             gap: '8px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#191f28' }}>
-              📌 {selectedDate} 일정 ({schedulesOnSelectedDate.length}건)
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#191f28' }}>
+              {selectedDate} ({schedulesOnSelectedDate.length}건)
             </h4>
             <button
               type="button"
@@ -157,17 +152,19 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                 fontSize: '11px',
                 fontWeight: 600,
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
               }}
             >
-              {showCancelledSchedules ? '🚫 취소된 일정 숨기기' : '👁️ 취소된 일정 포함'}
+              {showCancelledSchedules ? '취소 일정 숨김' : '취소 일정 보기'}
             </button>
           </div>
           <button
             type="button"
             className="btn-quick-new-sch"
             onClick={onQuickNewSchedule}
+            style={{ whiteSpace: 'nowrap' }}
           >
-            + 이 날짜로 새 일정 등록
+            + 일정 추가
           </button>
         </div>
 
@@ -197,15 +194,9 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                     opacity: sch.isCancelled ? 0.75 : 1,
                     transition: 'all 0.15s ease',
                   }}
-                  title={sch.isCancelled ? '취소된 연습입니다' : '클릭하여 우측에서 일정 정보 수정'}
                 >
                   <div className="sch-item-info">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      {isSelectedForEdit && (
-                        <span style={{ fontSize: '11px', color: '#4F46E5', fontWeight: 700 }}>
-                          ✏️ 편집 중:
-                        </span>
-                      )}
                       {sch.isCancelled && (
                         <span
                           style={{
@@ -217,7 +208,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                             fontWeight: 700,
                           }}
                         >
-                          🚫 취소됨
+                          취소됨
                         </span>
                       )}
                       <span className="schedule-category-badge">{sch.category}</span>
@@ -245,22 +236,21 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                       )}
                     </div>
                     <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7684' }}>
-                      🕒 {sch.startTime} ~ {sch.endTime} · 📍 {sch.locationName}
+                      {sch.startTime} ~ {sch.endTime} · {sch.locationName}
                     </p>
                     {sch.description && (
                       <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b95a1' }}>
-                        곡목: {sch.description}
+                        {sch.description}
                       </p>
                     )}
                   </div>
-                  <div style={{ display: 'flex', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                     {sch.isCancelled ? (
                       <>
                         {onRestoreSchedule && (
                           <button
                             type="button"
                             onClick={() => onRestoreSchedule(sch.id, sch.title)}
-                            title="취소된 일정을 다시 정상 일정으로 복원"
                             style={{
                               background: '#ECFDF5',
                               color: '#059669',
@@ -270,9 +260,10 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                               fontSize: '12px',
                               fontWeight: 700,
                               cursor: 'pointer',
+                              whiteSpace: 'nowrap',
                             }}
                           >
-                            ↩️ 연습 복원
+                            복원
                           </button>
                         )}
                         {onDeleteScheduleSingle && (
@@ -281,13 +272,12 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                             onClick={() => {
                               if (
                                 confirm(
-                                  `'${sch.title}' 일정을 구글 시트 및 앱에서 완전히 영구 삭제하시겠습니까? (복구 불가)`
+                                  `'${sch.title}' 일정을 영구 삭제하시겠습니까? (복구 불가)`
                                 )
                               ) {
                                 onDeleteScheduleSingle(sch.id, sch.title, true);
                               }
                             }}
-                            title="구글 시트에서 완전 영구 삭제"
                             style={{
                               background: '#FEF2F2',
                               color: '#DC2626',
@@ -297,9 +287,10 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                               fontSize: '12px',
                               fontWeight: 600,
                               cursor: 'pointer',
+                              whiteSpace: 'nowrap',
                             }}
                           >
-                            🗑️ 완전 삭제
+                            영구삭제
                           </button>
                         )}
                       </>
@@ -309,7 +300,6 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                           <button
                             type="button"
                             onClick={() => onToggleArchiveSchedule(sch.id, !sch.isArchived)}
-                            title={sch.isArchived ? '일반 목록으로 복원' : '지난 시즌 아카이브로 보관'}
                             style={{
                               background: sch.isArchived ? '#EDE9FE' : '#F1F5F9',
                               color: sch.isArchived ? '#6D28D9' : '#475569',
@@ -319,9 +309,10 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                               fontSize: '12px',
                               fontWeight: 600,
                               cursor: 'pointer',
+                              whiteSpace: 'nowrap',
                             }}
                           >
-                            {sch.isArchived ? '📂 복원' : '📦 보관'}
+                            {sch.isArchived ? '복원' : '보관'}
                           </button>
                         )}
                         {onCloneSchedule && (
@@ -329,7 +320,6 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                             type="button"
                             className="btn-edit-sch-mini"
                             onClick={() => onCloneSchedule(sch)}
-                            title={sch.date < todayStr ? '오늘 날짜로 복제' : '일정 복제'}
                             style={{
                               background: sch.date < todayStr ? '#ECFDF5' : '#F8FAFC',
                               color: sch.date < todayStr ? '#059669' : '#475569',
@@ -339,9 +329,10 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                               fontSize: '12px',
                               fontWeight: 600,
                               cursor: 'pointer',
+                              whiteSpace: 'nowrap',
                             }}
                           >
-                            {sch.date < todayStr ? '📋 오늘로 복제' : '📋 복제'}
+                            복제
                           </button>
                         )}
                         {onDeleteSchedule && (
@@ -349,9 +340,8 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                             type="button"
                             className="btn-delete-sch-mini"
                             onClick={() => onDeleteSchedule(sch.id, sch.title)}
-                            title="일정 삭제"
                           >
-                            🗑️ 삭제
+                            삭제
                           </button>
                         )}
                       </>
@@ -363,7 +353,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
           </div>
         ) : (
           <p className="empty-subtext" style={{ padding: '16px 0', textAlign: 'center', margin: 0 }}>
-            해당 날짜에 등록된 일정이 없습니다. 우측 폼에서 새 일정을 등록해보세요.
+            등록된 일정이 없습니다.
           </p>
         )}
       </div>

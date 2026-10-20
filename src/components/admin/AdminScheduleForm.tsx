@@ -67,9 +67,16 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
   onOpenLocationPickerModal,
   successMessage,
 }) => {
-  const defaultLoc = locationPresets[0];
+  const defaultLoc = locationPresets.find((l) => l.isDefault) || locationPresets[0];
 
-  // Form local state initialized cleanly from editingSchedule or props
+  // Default 4 choir parts (exclude guest/teacher by default for new schedule)
+  const defaultChoirParts = React.useMemo(() => {
+    const filtered = dynamicParts.filter(
+      (p) => !p.includes('선생님') && !p.includes('객원') && !p.includes('지휘') && !p.includes('반주')
+    );
+    return filtered.length > 0 ? filtered : dynamicParts;
+  }, [dynamicParts]);
+
   const [scheduleAddMode, setScheduleAddMode] = useState<ScheduleAddMode>('SINGLE');
   const [newTitle, setNewTitle] = useState(() => editingSchedule?.title || '');
   const [newDate, setNewDate] = useState(() => editingSchedule?.date || prefilledDate || getKSTDateString());
@@ -116,18 +123,35 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
     () => editingSchedule?.programId || prefilledProgramCardId || ''
   );
 
-  // Audience selector parameters
-  const [newTargetAudienceType, setNewTargetAudienceType] = useState<TargetAudienceType>(
-    () => editingSchedule?.targetAudienceType || 'ALL'
-  );
-  const [newTargetParts, setNewTargetParts] = useState<PartType[]>(() => editingSchedule?.targetParts || []);
+  // Audience selector parameters (Default: PARTS with 4 main choir parts)
+  const [newTargetAudienceType, setNewTargetAudienceType] = useState<TargetAudienceType>(() => {
+    if (editingSchedule?.targetAudienceType) {
+      return editingSchedule.targetAudienceType;
+    }
+    return 'PARTS';
+  });
+  const [newTargetParts, setNewTargetParts] = useState<PartType[]>(() => {
+    if (editingSchedule) {
+      if (editingSchedule.targetAudienceType === 'PARTS' && editingSchedule.targetParts) {
+        return editingSchedule.targetParts;
+      }
+      if (editingSchedule.targetAudienceType === 'ALL' || editingSchedule.targetAudienceType === 'ALL_WITH_GUESTS') {
+        return [...dynamicParts];
+      }
+      return defaultChoirParts;
+    }
+    return defaultChoirParts;
+  });
   const [newTargetMemberIds, setNewTargetMemberIds] = useState<string[]>(
     () => editingSchedule?.targetMemberIds || []
   );
+  const [isAudienceDropdownOpen, setIsAudienceDropdownOpen] = useState(false);
+  const [isCustomMemberModalOpen, setIsCustomMemberModalOpen] = useState(false);
   const [customMemberSearch, setCustomMemberSearch] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Day toggle
+  const isEditingExisting = Boolean(editingSchedule && editingSchedule.id);
+
   const toggleDaySelection = (dayKey: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN') => {
     setSelectedDays((prev) => {
       if (prev.includes(dayKey)) {
@@ -138,7 +162,6 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
     });
   };
 
-  // Location Preset Handler
   const handleLocationPresetChange = (presetId: string) => {
     setSelectedLocationPresetId(presetId);
     if (presetId === 'custom') {
@@ -157,7 +180,6 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
     }
   };
 
-  // Program Card change handler
   const handleProgramCardChange = (cardId: string) => {
     setSelectedProgramCardId(cardId);
     if (!cardId) return;
@@ -175,23 +197,51 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
     if (card.defaultEndTime) setNewEndTime(card.defaultEndTime);
     if (card.targetAudienceType) {
       setNewTargetAudienceType(card.targetAudienceType);
-      setNewTargetParts(card.targetParts || []);
+      setNewTargetParts(card.targetParts || defaultChoirParts);
       setNewTargetMemberIds(card.targetMemberIds || []);
     }
   };
 
-  // Submit Handler
+  const getAudienceSummaryLabel = () => {
+    if (newTargetAudienceType === 'CUSTOM_MEMBERS') {
+      return `개별 선택 (${newTargetMemberIds.length}명)`;
+    }
+    if (newTargetAudienceType === 'ALL' || newTargetParts.length === dynamicParts.length) {
+      return `전체 (${dynamicParts.join(', ')})`;
+    }
+    if (newTargetParts.length === 0) {
+      return '대상 선택';
+    }
+    return newTargetParts.join(', ');
+  };
+
+  const handleTogglePartInDropdown = (part: PartType) => {
+    setNewTargetAudienceType('PARTS');
+    setNewTargetParts((prev) =>
+      prev.includes(part) ? prev.filter((p) => p !== part) : [...prev, part]
+    );
+  };
+
+  const handleToggleAllParts = () => {
+    setNewTargetAudienceType('PARTS');
+    if (newTargetParts.length === dynamicParts.length) {
+      setNewTargetParts(defaultChoirParts);
+    } else {
+      setNewTargetParts([...dynamicParts]);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
     if (!newTitle.trim()) {
-      alert('일정 명칭을 입력해주세요.');
+      alert('일정 이름을 입력해주세요.');
       document.getElementById('sch-title')?.focus();
       return;
     }
     if (scheduleAddMode !== 'CALENDAR_PICK' && !newDate.trim()) {
-      alert('시작 기준 날짜를 입력해주세요.');
+      alert('날짜를 입력해주세요.');
       return;
     }
     if (scheduleAddMode === 'CALENDAR_PICK' && pickedDates.length === 0) {
@@ -202,19 +252,19 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
       (scheduleAddMode === 'DAYS_OF_WEEK' || (scheduleAddMode === 'INTERVAL' && intervalUnit === 'WEEKS')) &&
       selectedDays.length === 0
     ) {
-      alert('반복할 요일을 최소 1개 이상 선택해주세요.');
+      alert('요일을 최소 1개 이상 선택해주세요.');
       return;
     }
 
-    const effectiveLocName = newLocName.trim() || defaultLoc?.name || '연습실';
+    const foundLoc = locationPresets.find((l) => l.id === selectedLocationPresetId);
+    const effectiveLocName = foundLoc?.name || newLocName.trim() || defaultLoc?.name || '연습실';
     const finalCategory = isCustomNewCategory
       ? ((customNewCategoryInput.trim() || '기타행사') as ScheduleCategory)
       : newCategory;
-    const foundLoc = locationPresets.find((l) => l.id === selectedLocationPresetId);
 
     setIsSubmitting(true);
     try {
-      if (editingSchedule) {
+      if (isEditingExisting && editingSchedule) {
         const updates: Partial<Schedule> = {
           title: newTitle.trim(),
           date: newDate,
@@ -275,7 +325,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
         });
 
         if (generated.length === 0) {
-          alert('생성할 수 있는 일정 날짜가 없습니다. 날짜 및 반복 설정을 확인해주세요.');
+          alert('생성할 수 있는 일정 날짜가 없습니다.');
           return;
         }
 
@@ -291,36 +341,29 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
 
   return (
     <div id="admin-schedule-form-container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
-        <div>
-          <h2 className="section-title" style={{ margin: 0 }}>
-            {editingSchedule ? '✏️ 일정 인라인 수정' : '연습 및 연주 일정 등록 (반복 엔진)'}
-          </h2>
-          <p className="section-subtitle" style={{ margin: '4px 0 0' }}>
-            {editingSchedule
-              ? `선택된 [${editingSchedule.title}] 일정을 수정하여 시트에 즉시 반영합니다.`
-              : '네이버/애플 캘린더처럼 매주 특정 요일 반복 일정을 손쉽게 전개하여 등록합니다.'}
-          </p>
-        </div>
-        {editingSchedule && (
+      {/* Top Focus Header */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '8px',
+          marginBottom: '14px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
             onClick={onCancelEdit}
-            style={{
-              background: '#F1F5F9',
-              color: '#475569',
-              border: '1px solid #CBD5E1',
-              borderRadius: '6px',
-              padding: '5px 10px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
+            className="btn-nav-back"
+            style={{ padding: '6px 12px', fontSize: '13px', whiteSpace: 'nowrap' }}
           >
-            ✕ 신규 등록으로 복귀
+            ← 뒤로
           </button>
-        )}
+          <h2 className="section-title" style={{ margin: 0 }}>
+            {isEditingExisting ? '일정 수정' : '일정 등록'}
+          </h2>
+        </div>
       </div>
 
       {successMessage && <div className="success-banner">{successMessage}</div>}
@@ -330,7 +373,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
             <label className="form-label" htmlFor="sch-program-card" style={{ margin: 0 }}>
-              소속 일정 카드 (컨테이너)
+              카드
             </label>
             <div style={{ display: 'flex', gap: '4px' }}>
               <button
@@ -345,9 +388,10 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
                   fontSize: '11px',
                   fontWeight: 700,
                   cursor: 'pointer',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                + 새 카드 만들기
+                + 새 카드
               </button>
               {selectedProgramCardId && (
                 <button
@@ -365,9 +409,10 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
                     fontSize: '11px',
                     fontWeight: 600,
                     cursor: 'pointer',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  ✏️ 선택 카드 수정
+                  카드 수정
                 </button>
               )}
             </div>
@@ -378,7 +423,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
             value={selectedProgramCardId}
             onChange={(e) => handleProgramCardChange(e.target.value)}
           >
-            <option value="">선택 안 함 (독립 단일 일정)</option>
+            <option value="">선택 안 함 (단일 일정)</option>
             {programCards.map((card) => (
               <option key={card.id} value={card.id}>
                 {card.title} [{card.category}]
@@ -389,13 +434,13 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
 
         <div>
           <label className="form-label" htmlFor="sch-title">
-            일정 명칭 (회차명)
+            이름
           </label>
           <input
             id="sch-title"
             type="text"
             className="input-text"
-            placeholder="예: 2026 하반기 정기연습 1회차, 10월 경찰의 날 연주"
+            placeholder="예: 정기연습 1회차, 가을 연주회"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             required
@@ -403,53 +448,57 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
         </div>
 
         {/* Schedule Mode Selector (Hidden during edit) */}
-        {!editingSchedule && (
-          <div className="schedule-mode-tabs" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {!isEditingExisting && (
+          <div className="subsegment-pill-bar" style={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
             <button
               type="button"
-              className={`mode-tab-btn ${scheduleAddMode === 'SINGLE' ? 'active' : ''}`}
+              className={`subsegment-pill ${scheduleAddMode === 'SINGLE' ? 'active' : ''}`}
               onClick={() => setScheduleAddMode('SINGLE')}
+              style={{ textAlign: 'center', padding: '6px 4px' }}
             >
-              1회성 단일 일정
+              단일
             </button>
             <button
               type="button"
-              className={`mode-tab-btn ${scheduleAddMode === 'DAYS_OF_WEEK' ? 'active' : ''}`}
+              className={`subsegment-pill ${scheduleAddMode === 'DAYS_OF_WEEK' ? 'active' : ''}`}
               onClick={() => setScheduleAddMode('DAYS_OF_WEEK')}
+              style={{ textAlign: 'center', padding: '6px 4px' }}
             >
-              요일별 주간 반복
+              매주
             </button>
             <button
               type="button"
-              className={`mode-tab-btn ${scheduleAddMode === 'INTERVAL' ? 'active' : ''}`}
+              className={`subsegment-pill ${scheduleAddMode === 'INTERVAL' ? 'active' : ''}`}
               onClick={() => setScheduleAddMode('INTERVAL')}
+              style={{ textAlign: 'center', padding: '6px 4px' }}
             >
-              간격 주기 반복
+              주기
             </button>
             <button
               type="button"
-              className={`mode-tab-btn ${scheduleAddMode === 'CALENDAR_PICK' ? 'active' : ''}`}
+              className={`subsegment-pill ${scheduleAddMode === 'CALENDAR_PICK' ? 'active' : ''}`}
               onClick={() => setScheduleAddMode('CALENDAR_PICK')}
+              style={{ textAlign: 'center', padding: '6px 4px' }}
             >
-              달력에서 콕콕 선택
+              직접선택
             </button>
           </div>
         )}
 
         {/* Mode: DAYS_OF_WEEK Sub-settings */}
-        {!editingSchedule && scheduleAddMode === 'DAYS_OF_WEEK' && (
+        {!isEditingExisting && scheduleAddMode === 'DAYS_OF_WEEK' && (
           <div className="toss-section-card" style={{ padding: '12px' }}>
             <span className="form-label" style={{ marginBottom: '6px', display: 'block' }}>
-              반복할 요일 선택
+              요일
             </span>
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
               {DAYS_OF_WEEK.map((d) => {
-                const isSel = selectedDays.includes(d.key as any);
+                const isSel = selectedDays.includes(d.key);
                 return (
                   <button
                     key={d.key}
                     type="button"
-                    onClick={() => toggleDaySelection(d.key as any)}
+                    onClick={() => toggleDaySelection(d.key)}
                     style={{
                       padding: '6px 12px',
                       borderRadius: '8px',
@@ -460,14 +509,14 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
                       cursor: 'pointer',
                     }}
                   >
-                    {d.label}요일
+                    {d.label}
                   </button>
                 );
               })}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <label className="form-label" style={{ margin: 0, whiteSpace: 'nowrap' }}>
-                반복 주차 수:
+                반복 주수
               </label>
               <input
                 type="number"
@@ -478,30 +527,30 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
                 onChange={(e) => setWeeksCount(Math.max(1, parseInt(e.target.value) || 1))}
                 style={{ width: '80px', padding: '6px 8px' }}
               />
-              <span style={{ fontSize: '13px', color: '#64748B' }}>주간 전개 (총 {selectedDays.length * weeksCount}회차)</span>
+              <span style={{ fontSize: '13px', color: '#64748B' }}>주 ({selectedDays.length * weeksCount}회)</span>
             </div>
           </div>
         )}
 
         {/* Mode: INTERVAL Sub-settings */}
-        {!editingSchedule && scheduleAddMode === 'INTERVAL' && (
+        {!isEditingExisting && scheduleAddMode === 'INTERVAL' && (
           <div className="toss-section-card" style={{ padding: '12px' }}>
             <div className="form-row-2">
               <div>
-                <label className="form-label">반복 주기 단위</label>
+                <label className="form-label">주기 단위</label>
                 <select
                   className="select-input"
                   value={intervalUnit}
-                  onChange={(e) => setIntervalUnit(e.target.value as any)}
+                  onChange={(e) => setIntervalUnit(e.target.value as 'DAYS' | 'WEEKS' | 'MONTHS' | 'YEARS')}
                 >
-                  <option value="DAYS">일(Day) 간격</option>
-                  <option value="WEEKS">주(Week) 간격</option>
-                  <option value="MONTHS">월(Month) 간격</option>
-                  <option value="YEARS">년(Year) 간격</option>
+                  <option value="DAYS">일 간격</option>
+                  <option value="WEEKS">주 간격</option>
+                  <option value="MONTHS">월 간격</option>
+                  <option value="YEARS">년 간격</option>
                 </select>
               </div>
               <div>
-                <label className="form-label">반복 횟수</label>
+                <label className="form-label">횟수</label>
                 <input
                   type="number"
                   className="input-text"
@@ -516,11 +565,11 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
         )}
 
         {/* Mode: CALENDAR_PICK Sub-settings */}
-        {!editingSchedule && scheduleAddMode === 'CALENDAR_PICK' && (
+        {!isEditingExisting && scheduleAddMode === 'CALENDAR_PICK' && (
           <div className="toss-section-card" style={{ padding: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '13px', fontWeight: 700 }}>
-                {pickCalYear}년 {pickCalMonth + 1}월 (선택된 날짜: {pickedDates.length}개)
+                {pickCalYear}년 {pickCalMonth + 1}월 ({pickedDates.length}개 선택)
               </span>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <button
@@ -580,109 +629,116 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
           </div>
         )}
 
-        {/* Audience Selector */}
-        <div className="toss-section-card" style={{ padding: '12px', margin: '4px 0' }}>
-          <span className="form-label" style={{ marginBottom: '6px', display: 'block' }}>
-            참석 대상자 (통계 모수 필터)
-          </span>
-          <div className="toss-filter-row" style={{ marginBottom: '8px', gap: '6px', flexWrap: 'wrap' }}>
-            {(
-              [
-                { key: 'ALL', label: '🌐 전체 (선생님 포함)' },
-                { key: 'ALL_WITH_GUESTS', label: '🎼 전체 + 객원' },
-                { key: 'PARTS', label: '👥 특정 파트' },
-                { key: 'CUSTOM_MEMBERS', label: '🎯 선발 단원' },
-              ] as const
-            ).map((aud) => (
-              <button
-                key={aud.key}
-                type="button"
-                className={`toss-filter-chip ${newTargetAudienceType === aud.key ? 'active' : ''}`}
-                onClick={() => setNewTargetAudienceType(aud.key)}
-              >
-                <span>{aud.label}</span>
-              </button>
-            ))}
-          </div>
+        {/* Audience Multi-Select Dropdown */}
+        <div style={{ position: 'relative' }}>
+          <label className="form-label">참석 대상</label>
+          <button
+            type="button"
+            onClick={() => setIsAudienceDropdownOpen((prev) => !prev)}
+            className="select-input"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              textAlign: 'left',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {getAudienceSummaryLabel()}
+            </span>
+            <span style={{ fontSize: '11px', color: '#64748B', marginLeft: '8px' }}>
+              {isAudienceDropdownOpen ? '▲' : '▼'}
+            </span>
+          </button>
 
-          {newTargetAudienceType === 'PARTS' && (
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-              {dynamicParts.map((part) => {
-                const isSel = newTargetParts.includes(part);
-                return (
-                  <button
-                    key={part}
-                    type="button"
-                    onClick={() => {
-                      setNewTargetParts((prev) =>
-                        prev.includes(part) ? prev.filter((p) => p !== part) : [...prev, part]
-                      );
-                    }}
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      border: isSel ? '1.5px solid #059669' : '1px solid #CBD5E1',
-                      background: isSel ? '#D1FAE5' : '#FFFFFF',
-                      color: isSel ? '#047857' : '#334155',
-                      fontWeight: isSel ? 700 : 500,
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {part} {isSel ? '✓' : ''}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {isAudienceDropdownOpen && (
+            <div
+              style={{
+                marginTop: '6px',
+                background: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                borderRadius: '12px',
+                padding: '10px',
+                boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '6px', borderBottom: '1px solid #F1F5F9' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>파트 중복 선택</span>
+                <button
+                  type="button"
+                  onClick={handleToggleAllParts}
+                  style={{
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    color: '#4F46E5',
+                    background: '#EEF2FF',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  {newTargetParts.length === dynamicParts.length ? '기본 4파트만' : '전체 선택'}
+                </button>
+              </div>
 
-          {newTargetAudienceType === 'CUSTOM_MEMBERS' && (
-            <div style={{ marginTop: '6px' }}>
-              <input
-                type="text"
-                className="input-text"
-                placeholder="이름 또는 파트로 단원 검색..."
-                value={customMemberSearch}
-                onChange={(e) => setCustomMemberSearch(e.target.value)}
-                style={{ marginBottom: '6px', fontSize: '12px', padding: '5px 8px' }}
-              />
-              <div style={{ maxHeight: '120px', overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '4px' }}>
-                {members
-                  .filter((m) => {
-                    if (!customMemberSearch.trim()) return true;
-                    const q = customMemberSearch.toLowerCase();
-                    return m.name.toLowerCase().includes(q) || m.part.toLowerCase().includes(q);
-                  })
-                  .map((m) => {
-                    const isSel = newTargetMemberIds.includes(m.id);
-                    return (
-                      <div
-                        key={m.id}
-                        onClick={() => {
-                          setNewTargetMemberIds((prev) =>
-                            isSel ? prev.filter((id) => id !== m.id) : [...prev, m.id]
-                          );
-                        }}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '4px 6px',
-                          borderRadius: '4px',
-                          background: isSel ? '#EEF2FF' : 'transparent',
-                          cursor: 'pointer',
-                          fontSize: '11.5px',
-                        }}
-                      >
-                        <span>
-                          <strong>{m.name}</strong> ({m.part} · {m.phoneLast4 || '0000'})
-                        </span>
-                        <span style={{ color: isSel ? '#4F46E5' : '#94A3B8', fontWeight: 600 }}>
-                          {isSel ? '선택됨 ✓' : '+ 추가'}
-                        </span>
-                      </div>
-                    );
-                  })}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+                {dynamicParts.map((part) => {
+                  const isChecked = newTargetAudienceType === 'PARTS' && newTargetParts.includes(part);
+                  return (
+                    <label
+                      key={part}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        background: isChecked ? '#EEF2FF' : '#F8FAFC',
+                        border: isChecked ? '1px solid #C7D2FE' : '1px solid #E2E8F0',
+                        fontSize: '13px',
+                        fontWeight: isChecked ? 700 : 500,
+                        color: isChecked ? '#4F46E5' : '#334155',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleTogglePartInDropdown(part)}
+                        style={{ width: '16px', height: '16px', accentColor: '#4F46E5' }}
+                      />
+                      <span>{part}</span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewTargetAudienceType('CUSTOM_MEMBERS');
+                    setIsAudienceDropdownOpen(false);
+                    setIsCustomMemberModalOpen(true);
+                  }}
+                  style={{
+                    fontSize: '12.5px',
+                    fontWeight: 700,
+                    color: '#0F766E',
+                    background: '#F0FDFA',
+                    border: '1px solid #99F6E4',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    width: '100%',
+                    textAlign: 'center',
+                  }}
+                >
+                  개별 단원 직접 선택 ({newTargetMemberIds.length}명)
+                </button>
               </div>
             </div>
           )}
@@ -692,7 +748,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
           {scheduleAddMode !== 'CALENDAR_PICK' ? (
             <div>
               <label className="form-label" htmlFor="sch-date">
-                시작 기준 날짜
+                날짜
               </label>
               <RoundDatePicker
                 id="sch-date"
@@ -702,15 +758,15 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
             </div>
           ) : (
             <div>
-              <label className="form-label">달력 선택 날짜</label>
+              <label className="form-label">선택 날짜</label>
               <div style={{ padding: '10px 12px', background: '#F1F5F9', borderRadius: '8px', fontSize: '13px', color: '#475569' }}>
-                {pickedDates.length > 0 ? `선택된 ${pickedDates.length}개 날짜로 전개` : '달력에서 날짜를 1개 이상 선택하세요.'}
+                {pickedDates.length > 0 ? `${pickedDates.length}개 선택됨` : '날짜를 선택하세요'}
               </div>
             </div>
           )}
 
           <div>
-            <label className="form-label">일정 구분</label>
+            <label className="form-label">구분</label>
             <select
               className="select-input"
               value={isCustomNewCategory ? '__CUSTOM__' : newCategory}
@@ -728,7 +784,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
                   {cat}
                 </option>
               ))}
-              <option value="__CUSTOM__">✏️ + 새 구분 직접 추가...</option>
+              <option value="__CUSTOM__">+ 직접 입력...</option>
             </select>
             {isCustomNewCategory && (
               <input
@@ -737,7 +793,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
                 style={{ marginTop: '6px' }}
                 value={customNewCategoryInput}
                 onChange={(e) => setCustomNewCategoryInput(e.target.value)}
-                placeholder="새 일정 구분 직접 입력 (예: 총연습)"
+                placeholder="구분 입력 (예: 총연습)"
                 required={isCustomNewCategory}
                 autoFocus
               />
@@ -748,7 +804,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
         <div className="form-row-2">
           <div>
             <label className="form-label" htmlFor="sch-start">
-              시작 시각
+              시작
             </label>
             <RoundTimePicker
               id="sch-start"
@@ -759,7 +815,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
 
           <div>
             <label className="form-label" htmlFor="sch-end">
-              종료 시각
+              종료
             </label>
             <RoundTimePicker
               id="sch-end"
@@ -769,30 +825,28 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
           </div>
         </div>
 
-        {/* Unified Location Selector */}
-        <div style={{ marginTop: '4px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        {/* Unified Location Selector (Single clean dropdown) */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
             <label className="form-label" htmlFor="sch-loc-select" style={{ marginBottom: 0 }}>
-              연습 장소
+              장소
             </label>
             <button
               type="button"
               onClick={onOpenLocationPickerModal}
               style={{
-                fontSize: '12px',
+                fontSize: '11.5px',
                 color: '#4F46E5',
-                fontWeight: 600,
+                fontWeight: 700,
                 background: '#EEF2FF',
                 border: '1px solid #C7D2FE',
                 borderRadius: '6px',
-                padding: '4px 10px',
+                padding: '3px 8px',
                 cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
+                whiteSpace: 'nowrap',
               }}
             >
-              🗺️ + 새 장소 등록 (검색/GPS)
+              + 장소 추가
             </button>
           </div>
           <select
@@ -809,86 +863,145 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
           >
             {locationPresets.map((loc) => (
               <option key={loc.id} value={loc.id}>
-                {loc.name} {loc.address ? `(${loc.address})` : ''} · 반경 {loc.radiusMeters}m
+                {loc.name} ({loc.radiusMeters}m)
               </option>
             ))}
-            <option value="__NEW_LOCATION__">🗺️ + 새 연습실 등록 (지도/키워드 검색)...</option>
+            <option value="custom">직접 입력</option>
+            <option value="__NEW_LOCATION__">+ 새 장소 등록...</option>
           </select>
-          <div style={{ marginTop: '6px' }}>
-            <label className="form-label" htmlFor="sch-loc" style={{ fontSize: '12px', color: '#64748B' }}>
-              일정 표기용 장소명 (수정 가능)
-            </label>
+
+          {selectedLocationPresetId === 'custom' && (
             <input
               id="sch-loc"
               type="text"
               className="input-text"
+              style={{ marginTop: '6px' }}
               value={newLocName}
               onChange={(e) => setNewLocName(e.target.value)}
-              placeholder="장소명 (예: 서초 앙상블 연습실)"
+              placeholder="장소명 직접 입력"
             />
-          </div>
+          )}
         </div>
 
-        <label className="form-label" htmlFor="sch-desc">
-          상세 설명 / 연습 곡목 (선택)
-        </label>
-        <textarea
-          id="sch-desc"
-          className="input-textarea"
-          placeholder="예: 모차르트 레퀴엠 파트 연습 및 암보 런스루"
-          value={newDesc}
-          onChange={(e) => setNewDesc(e.target.value)}
-          rows={4}
-        />
+        <div>
+          <label className="form-label" htmlFor="sch-desc">
+            메모
+          </label>
+          <textarea
+            id="sch-desc"
+            className="input-textarea"
+            placeholder="연습 곡목 또는 안내사항 (선택)"
+            value={newDesc}
+            onChange={(e) => setNewDesc(e.target.value)}
+            rows={3}
+          />
+        </div>
 
-        {editingSchedule ? (
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              type="submit"
-              className="btn-primary-large"
-              disabled={isSubmitting}
-              style={{ minHeight: '44px', flex: 1, fontWeight: 700 }}
-            >
-              {isSubmitting ? '⏳ 저장 중...' : '💾 수정 내용 저장'}
-            </button>
-            <button
-              type="button"
-              onClick={onCancelEdit}
-              style={{
-                minHeight: '44px',
-                padding: '0 18px',
-                background: '#F1F5F9',
-                border: '1px solid #CBD5E1',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: 600,
-                color: '#475569',
-                cursor: 'pointer',
-              }}
-            >
-              취소
-            </button>
-          </div>
-        ) : (
+        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
           <button
             type="submit"
             className="btn-primary-large"
             disabled={isSubmitting}
-            style={{ minHeight: '44px', fontWeight: 700 }}
+            style={{ minHeight: '46px', flex: 1, fontWeight: 700 }}
           >
-            {isSubmitting ? (
-              '⏳ 일정 등록 중...'
-            ) : (
-              <>
-                {scheduleAddMode === 'SINGLE' && '💾 단일 일정 등록 완료'}
-                {scheduleAddMode === 'INTERVAL' && `💾 총 ${intervalCount}회 주기 반복 일정 추가`}
-                {scheduleAddMode === 'DAYS_OF_WEEK' && `💾 총 ${weeksCount}주간 요일 지정 일정 추가 (${selectedDays.length * weeksCount}개)`}
-                {scheduleAddMode === 'CALENDAR_PICK' && `💾 선택한 ${pickedDates.length}개 날짜 일정 일괄 추가`}
-              </>
-            )}
+            {isSubmitting ? '저장 중...' : isEditingExisting ? '저장' : '등록'}
           </button>
-        )}
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            className="btn-secondary-cancel"
+            style={{ minHeight: '46px', whiteSpace: 'nowrap' }}
+          >
+            취소
+          </button>
+        </div>
       </form>
+
+      {/* Custom Member Picker Modal */}
+      {isCustomMemberModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal-card" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title" style={{ fontSize: '17px' }}>
+                개별 단원 선택 ({newTargetMemberIds.length}명)
+              </h2>
+            </div>
+
+            <input
+              type="text"
+              className="input-text"
+              placeholder="이름 또는 파트 검색..."
+              value={customMemberSearch}
+              onChange={(e) => setCustomMemberSearch(e.target.value)}
+              style={{ minHeight: '40px' }}
+            />
+
+            <div
+              style={{
+                maxHeight: '280px',
+                overflowY: 'auto',
+                border: '1px solid #E2E8F0',
+                borderRadius: '10px',
+                padding: '6px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+              }}
+            >
+              {members
+                .filter((m) => {
+                  if (!customMemberSearch.trim()) return true;
+                  const q = customMemberSearch.toLowerCase();
+                  return m.name.toLowerCase().includes(q) || m.part.toLowerCase().includes(q);
+                })
+                .map((m) => {
+                  const isSel = newTargetMemberIds.includes(m.id);
+                  return (
+                    <label
+                      key={m.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        background: isSel ? '#EEF2FF' : 'transparent',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="checkbox"
+                          checked={isSel}
+                          onChange={() => {
+                            setNewTargetMemberIds((prev) =>
+                              isSel ? prev.filter((id) => id !== m.id) : [...prev, m.id]
+                            );
+                          }}
+                          style={{ width: '16px', height: '16px', accentColor: '#4F46E5' }}
+                        />
+                        <strong>{m.name}</strong>
+                        <span style={{ color: '#64748B', fontSize: '12px' }}>{m.part}</span>
+                      </div>
+                      <span style={{ color: '#94A3B8', fontSize: '11.5px' }}>{m.phoneLast4 || ''}</span>
+                    </label>
+                  );
+                })}
+            </div>
+
+            <div className="modal-button-group">
+              <button
+                type="button"
+                className="btn-primary-large"
+                onClick={() => setIsCustomMemberModalOpen(false)}
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

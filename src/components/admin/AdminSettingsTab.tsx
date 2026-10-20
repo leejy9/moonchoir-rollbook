@@ -260,21 +260,21 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
           className={`subsegment-pill ${settingsSubTab === 'SHEETS' ? 'active' : ''}`}
           onClick={() => setSettingsSubTab('SHEETS')}
         >
-          🔗 구글 스프레드시트 연동
+          시트 연동
         </button>
         <button
           type="button"
           className={`subsegment-pill ${settingsSubTab === 'LOCATIONS' ? 'active' : ''}`}
           onClick={() => setSettingsSubTab('LOCATIONS')}
         >
-          📍 연습실 장소 (GPS 반경)
+          장소 관리
         </button>
         <button
           type="button"
           className={`subsegment-pill ${settingsSubTab === 'TAXONOMY' ? 'active' : ''}`}
           onClick={() => setSettingsSubTab('TAXONOMY')}
         >
-          🏷️ 파트 & 태그 설정
+          태그 관리
         </button>
       </div>
 
@@ -282,12 +282,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
       {settingsSubTab === 'LOCATIONS' && (
         <div className="admin-form-card">
           <div className="section-title-row">
-            <div>
-              <h2 className="section-title">연습실 장소 및 GPS 반경 설정</h2>
-              <p className="section-subtitle">
-                단원이 현장에서 출석 체크할 때 GPS 반경 내에 있는지 검증할 장소를 관리합니다.
-              </p>
-            </div>
+            <h2 className="section-title">장소 관리</h2>
           </div>
 
           {presetSuccessMsg && (
@@ -517,23 +512,15 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
       {settingsSubTab === 'TAXONOMY' && (
         <div className="admin-form-card">
           <div className="section-title-row">
-            <div>
-              <h2 className="section-title">카테고리 및 태그 동적 관리</h2>
-              <p className="section-subtitle">
-                합창단 구성에 맞춰 파트, 단원 구분, 연습 분류 태그를 자유롭게 추가하거나 삭제할 수 있습니다.
-              </p>
-            </div>
+            <h2 className="section-title">태그 관리</h2>
           </div>
 
-          <div className="toss-section-card" style={{ marginTop: '16px' }}>
+          <div className="toss-section-card" style={{ marginTop: '14px' }}>
             <div className="tag-manager-group">
               <div className="tag-manager-title">
                 <IconTag size={16} color="var(--brand-accent)" />
-                <span>파트 (Parts) 태그 관리</span>
+                <span>파트</span>
               </div>
-              <p className="form-hint" style={{ marginBottom: '8px' }}>
-                소프라노, 알토 외에 바리톤, 메조소프라노, 반주자, 지휘자 등을 추가할 수 있습니다.
-              </p>
               <div className="tag-chips-wrap">
                 {dynamicParts.map((part) => (
                   <span key={part} className="removable-tag-chip">
@@ -553,12 +540,12 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                 <input
                   type="text"
                   className="input-text"
-                  placeholder="새 파트명 (예: 바리톤, 반주자)"
+                  placeholder="파트 추가 (예: 바리톤, 반주자)"
                   value={newPartInput}
                   onChange={(e) => setNewPartInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddPart())}
                 />
-                <button type="button" className="btn-sync" onClick={handleAddPart}>
+                <button type="button" className="btn-sync" style={{ width: 'auto', padding: '0 16px' }} onClick={handleAddPart}>
                   추가
                 </button>
               </div>
@@ -567,11 +554,8 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
             <div className="tag-manager-group">
               <div className="tag-manager-title">
                 <IconUsers size={16} color="var(--brand-accent)" />
-                <span>단원 구분 (Member Status) 태그 관리</span>
+                <span>단원 구분</span>
               </div>
-              <p className="form-hint" style={{ marginBottom: '8px' }}>
-                정단원, 준단원 외에 명예단원, 객원연주자 등을 자유롭게 등록하세요.
-              </p>
               <div className="tag-chips-wrap">
                 {dynamicMemberStatuses.map((st) => (
                   <span key={st} className="removable-tag-chip">
@@ -591,12 +575,12 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                 <input
                   type="text"
                   className="input-text"
-                  placeholder="새 구분명 (예: 명예단원, 인턴단원)"
+                  placeholder="구분 추가 (예: 명예단원)"
                   value={newStatusInput}
                   onChange={(e) => setNewStatusInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddMemberStatus())}
                 />
-                <button type="button" className="btn-sync" onClick={handleAddMemberStatus}>
+                <button type="button" className="btn-sync" style={{ width: 'auto', padding: '0 16px' }} onClick={handleAddMemberStatus}>
                   추가
                 </button>
               </div>
@@ -605,11 +589,8 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
             <div className="tag-manager-group" style={{ marginBottom: 0 }}>
               <div className="tag-manager-title">
                 <IconCalendar size={16} color="var(--brand-accent)" />
-                <span>일정 카테고리 (Schedule Category) 태그 관리</span>
+                <span>일정 구분</span>
               </div>
-              <p className="form-hint" style={{ marginBottom: '8px' }}>
-                정기연습, 추가연습 외에 워크숍, MT, 정기연주회, 프로필촬영 등을 등록하세요.
-              </p>
               <div className="tag-chips-wrap">
                 {dynamicCategories.map((cat) => (
                   <span key={cat} className="removable-tag-chip">
@@ -629,12 +610,12 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                 <input
                   type="text"
                   className="input-text"
-                  placeholder="새 카테고리명 (예: 하계MT, 음원녹음)"
+                  placeholder="일정 구분 추가 (예: 워크숍, 녹음)"
                   value={newCategoryInput}
                   onChange={(e) => setNewCategoryInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCategory())}
                 />
-                <button type="button" className="btn-sync" onClick={handleAddCategory}>
+                <button type="button" className="btn-sync" style={{ width: 'auto', padding: '0 16px' }} onClick={handleAddCategory}>
                   추가
                 </button>
               </div>
@@ -646,7 +627,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
       {/* Sub-tab: SHEETS */}
       {settingsSubTab === 'SHEETS' && (
         <div className="admin-form-card">
-          <h2 className="section-title">스마트 출결 시스템 환경설정</h2>
+          <h2 className="section-title">시트 연동</h2>
 
           {settingsSuccessMsg && <div className="success-banner">{settingsSuccessMsg}</div>}
           {syncStatusMsg && (
@@ -667,9 +648,6 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
               value={sheetsUrl}
               onChange={(e) => setSheetsUrl(e.target.value)}
             />
-            <p className="form-hint">
-              * 배포된 Apps Script URL을 연동하면 구글 시트와 실시간 양방향 동기화됩니다.
-            </p>
 
             <div className="settings-action-row">
               <button
@@ -680,7 +658,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
               >
                 <IconSync size={16} className={isSyncing ? 'spin-icon' : ''} />
                 <span>
-                  {isSyncing ? '구글 시트와 통신 중...' : '구글 시트 연결 테스트 & 데이터 수신'}
+                  {isSyncing ? '동기화 중...' : '시트 연결 및 데이터 수신'}
                 </span>
               </button>
             </div>
@@ -688,7 +666,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
             <div className="form-row-2">
               <div>
                 <label className="form-label" htmlFor="late-grace">
-                  지각 유예 기준 (분)
+                  지각 유예 (분)
                 </label>
                 <input
                   id="late-grace"
@@ -699,12 +677,11 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                   value={lateGrace}
                   onChange={(e) => setLateGrace(Number(e.target.value))}
                 />
-                <span className="form-hint">시작 시간 + n분까지 출석 인정</span>
               </div>
 
               <div>
                 <label className="form-label" htmlFor="admin-pin-cfg">
-                  관리자 마스터 PIN 번호
+                  관리자 PIN
                 </label>
                 <input
                   id="admin-pin-cfg"
@@ -714,19 +691,18 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                   value={adminPinInput}
                   onChange={(e) => setAdminPinInput(e.target.value)}
                 />
-                <span className="form-hint">대시보드 진입 4~8자리 비밀번호</span>
               </div>
             </div>
 
             <button type="submit" className="btn-primary-large">
-              설정 저장하기
+              저장
             </button>
           </form>
 
           {/* Location Presets View */}
           <div className="toss-section-card" style={{ marginTop: '20px' }}>
-            <h3 className="section-title">등록된 연습실 장소 프리셋 ({locationPresets.length}곳)</h3>
-            <div className="toss-member-list" style={{ marginTop: '10px' }}>
+            <h3 className="section-title">등록된 장소 ({locationPresets.length}곳)</h3>
+            <div className="toss-member-list" style={{ marginTop: '8px' }}>
               {locationPresets.map((loc) => (
                 <div key={loc.id} className="toss-member-item">
                   <div className="toss-member-left">
@@ -734,17 +710,16 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                       {loc.name} {loc.isDefault && <span className="part-badge">기본</span>}
                     </span>
                     <span className="meta-text" style={{ fontSize: '12px' }}>
-                      {loc.address || '주소 미등록'} {loc.detailAddress ? `· ${loc.detailAddress}` : ''} (인정 반경{' '}
-                      {loc.radiusMeters}m)
+                      {loc.address || '주소 미등록'} {loc.detailAddress ? `· ${loc.detailAddress}` : ''} ({loc.radiusMeters}m)
                     </span>
                   </div>
                   <button
                     type="button"
                     className="btn-qr-action-secondary"
                     onClick={() => setSettingsSubTab('LOCATIONS')}
-                    style={{ fontSize: '12px', padding: '4px 10px', minHeight: '32px' }}
+                    style={{ fontSize: '12px', padding: '4px 10px', minHeight: '32px', flex: 'none' }}
                   >
-                    관리 이동
+                    관리
                   </button>
                 </div>
               ))}
