@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { bindDeviceProfile, getOrCreateDeviceId } from '../services/auth';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, PartType } from '../types/rollbook';
-import { getKSTTimestampString } from '../utils/date';
+import { buildNewMember } from '../utils/newMember';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface BindingModalProps {
@@ -15,31 +15,6 @@ function formatPhoneNumber(val: string): string {
   if (digits.length <= 3) return digits;
   if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
-}
-
-function buildNewMember(
-  name: string,
-  part: PartType,
-  phone: string,
-  phoneLast4: string,
-  deviceId: string
-): Member {
-  const kstNow = getKSTTimestampString();
-  const currentYear = new Date().getFullYear();
-  return {
-    id: `mem_new_${Date.now()}`,
-    name,
-    part,
-    phone,
-    phoneLast4,
-    role: part === '선생님' ? 'ADMIN' : part === '객원' ? 'GUEST' : 'MEMBER',
-    createdAt: kstNow,
-    status: 'ACTIVE',
-    joinedAt: `${currentYear}-01-01`,
-    memberStatus: part === '선생님' ? '선생님' : part === '객원' ? '객원' : '정단원',
-    boundDeviceId: deviceId,
-    boundDeviceAt: kstNow,
-  };
 }
 
 export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }) => {
