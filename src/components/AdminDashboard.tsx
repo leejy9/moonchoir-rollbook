@@ -10,13 +10,11 @@ import {
 import {
   IconCalendar,
   IconSettings,
-  IconStats,
   IconUsers,
 } from './Icons';
 import { LocationPickerModal } from './LocationPickerModal';
 import { BatchScheduleEditModal } from './BatchScheduleEditModal';
 import { AdminAttendanceTab } from './admin/AdminAttendanceTab';
-import { AdminStatsTab } from './admin/AdminStatsTab';
 import { AdminSchedulesTab } from './admin/AdminSchedulesTab';
 import { AdminSettingsTab } from './admin/AdminSettingsTab';
 import { ScheduleDeleteModal } from './admin/ScheduleDeleteModal';
@@ -32,7 +30,7 @@ interface AdminDashboardProps {
   refreshTrigger?: number;
 }
 
-type AdminTab = 'ROSTER' | 'SCHEDULES' | 'STATS' | 'SETTINGS';
+type AdminTab = 'ROSTER' | 'SCHEDULES' | 'SETTINGS';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onBackToHome,
@@ -85,22 +83,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     overrideReason,
     setOverrideReason,
     handleManualOverrideSubmit,
-    periodOption,
-    setPeriodOption,
-    partFilter,
-    setPartFilter,
-    memberStatusFilter,
-    setMemberStatusFilter,
-    searchQuery,
-    setSearchQuery,
-    selectedMemberIds,
-    cumulativeSessions,
-    filteredSummaries,
-    selectedSummaries,
-    selectedAvgRate,
-    toggleSelectMember,
-    selectAllFiltered,
-    clearSelection,
   } = useAttendanceAdmin({
     schedules,
     members,
@@ -254,7 +236,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </header>
 
-      {/* Modern Toss 4 Primary Navigation Tabs */}
+      {/* Primary Navigation Tabs */}
       <nav className="admin-subtabs admin-primary-tabs" style={{ display: 'flex', gap: '6px', padding: '4px' }}>
         <button
           type="button"
@@ -271,14 +253,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           <IconCalendar size={16} />
           <span>일정</span>
-        </button>
-        <button
-          type="button"
-          className={`subtab-btn ${adminTab === 'STATS' ? 'active' : ''}`}
-          onClick={() => setAdminTab('STATS')}
-        >
-          <IconStats size={16} />
-          <span>통계</span>
         </button>
         <button
           type="button"
@@ -315,32 +289,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           handleOpenEditMemberModal={handleOpenEditMemberModal}
           handleSaveMemberProfile={handleSaveMemberProfile}
           handleDeleteMemberProfile={handleDeleteMemberProfile}
-        />
-      )}
-
-      {/* ============================================================== */}
-      {/* TAB 3: [통계 & 대시보드] CUMULATIVE STATS & MULTI-COMPARE     */}
-      {/* ============================================================== */}
-      {adminTab === 'STATS' && (
-        <AdminStatsTab
-          periodOption={periodOption}
-          setPeriodOption={setPeriodOption}
-          partFilter={partFilter}
-          setPartFilter={setPartFilter}
-          memberStatusFilter={memberStatusFilter}
-          setMemberStatusFilter={setMemberStatusFilter}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          selectedMemberIds={selectedMemberIds}
-          cumulativeSessions={cumulativeSessions}
-          filteredSummaries={filteredSummaries}
-          selectedSummaries={selectedSummaries}
-          selectedAvgRate={selectedAvgRate}
-          toggleSelectMember={toggleSelectMember}
-          selectAllFiltered={selectAllFiltered}
-          clearSelection={clearSelection}
-          dynamicParts={dynamicParts}
-          dynamicMemberStatuses={dynamicMemberStatuses}
         />
       )}
 

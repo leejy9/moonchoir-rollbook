@@ -51,6 +51,8 @@ describe('AdminSettingsTab Component', () => {
     const props = createMockProps();
     const html = renderToString(<AdminSettingsTab {...props} />);
 
+    expect(html).toContain('admin-settings-layout');
+    expect(html).toContain('admin-settings-nav');
     expect(html).toContain('시트 연동');
     expect(html).toContain('장소 관리');
     expect(html).toContain('태그 관리');

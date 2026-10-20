@@ -168,6 +168,35 @@ a {
     max-width: 1440px;
   }
 
+  .app-shell[data-display-mode='DESKTOP'] .admin-schedule-list-items {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .app-shell[data-display-mode='DESKTOP'] .admin-settings-layout {
+    display: grid;
+    grid-template-columns: 190px minmax(0, 1fr);
+    align-items: start;
+    gap: 20px;
+  }
+
+  .app-shell[data-display-mode='DESKTOP'] .admin-settings-nav {
+    position: sticky;
+    top: 16px;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-shell[data-display-mode='DESKTOP'] .admin-settings-nav .subsegment-pill {
+    min-height: 44px;
+    text-align: left;
+  }
+
+  .app-shell[data-display-mode='DESKTOP'] .admin-settings-content {
+    min-width: 0;
+  }
+
   .app-shell:not([data-display-mode='MOBILE']) .home-container {
     width: min(100%, 1320px);
     margin: 0 auto;
@@ -4680,6 +4709,17 @@ a {
   grid-template-columns: 1fr 1fr;
   gap: 20px;
   align-items: start;
+}
+
+.admin-schedule-list-items {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.admin-schedule-list-item {
+  min-width: 0;
 }
 
 @media (max-width: 1024px) {

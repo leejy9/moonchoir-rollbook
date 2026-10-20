@@ -60,7 +60,7 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
-  const [showPastSchedules, setShowPastSchedules] = useState(false);
+  const [showPastSchedules, setShowPastSchedules] = useState(true);
   const [isSelectMode, setIsSelectMode] = useState(() => selectedBatchScheduleIds.length > 0);
   const [expandedScheduleIds, setExpandedScheduleIds] = useState<Set<string>>(new Set());
 
@@ -154,7 +154,7 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
             whiteSpace: 'nowrap',
           }}
         >
-          {showPastSchedules ? '지난 일정 숨김' : `지난 일정 (${pastSchedulesCount})`}
+          {showPastSchedules ? '지난 일정 숨기기' : `지난 일정 보기 (${pastSchedulesCount})`}
         </button>
 
         <button
@@ -348,15 +348,10 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
         </div>
       )}
 
-      {/* 100% Width Mobile Accordion Schedule List */}
+      {/* Responsive schedule list: compact on mobile, two columns on desktop */}
       {filteredSchedules.length > 0 ? (
         <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-            width: '100%',
-          }}
+          className="admin-schedule-list-items"
         >
           {filteredSchedules.map((sch) => {
             const isChecked = selectedBatchScheduleIds.includes(sch.id);
@@ -367,6 +362,7 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
               <div
                 key={sch.id}
                 data-testid={`all-sch-item-${sch.id}`}
+                className="admin-schedule-list-item"
                 style={{
                   width: '100%',
                   background: isSelectedForEdit ? '#EEF2FF' : isChecked ? '#F5F3FF' : '#FFFFFF',

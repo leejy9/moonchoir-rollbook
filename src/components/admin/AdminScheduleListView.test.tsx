@@ -25,6 +25,16 @@ const mockSchedules: Schedule[] = [
     locationName: '성남아트센터',
     category: '연주',
   },
+  {
+    id: 'sch-past',
+    title: '경찰의날 녹음',
+    date: '2001-10-21',
+    startTime: '14:00',
+    endTime: '18:00',
+    locationName: '성남아트센터',
+    category: '녹음',
+    isArchived: false,
+  },
 ];
 
 describe('AdminScheduleListView Component', () => {
@@ -56,6 +66,8 @@ describe('AdminScheduleListView Component', () => {
     expect(html).toContain('연주');
     expect(html).toContain('정기연습 1회차');
     expect(html).toContain('연주회 리허설');
+    expect(html).toContain('경찰의날 녹음');
+    expect(html).toContain('지난 일정 숨기기');
     expect(html).toContain('10.18');
     expect(html).toContain('19:00');
     expect(html).toContain('선택');

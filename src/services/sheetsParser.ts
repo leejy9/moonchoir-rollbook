@@ -154,6 +154,9 @@ export function parseRemoteSchedules(rawSchedules: Schedule[]): Schedule[] {
     const isCancelled =
       s.isCancelled === true ||
       String((s as unknown as Record<string, unknown>).isCancelled).toUpperCase() === 'TRUE';
+    const isArchived =
+      s.isArchived === true ||
+      String((s as unknown as Record<string, unknown>).isArchived).toUpperCase() === 'TRUE';
 
     return {
       ...s,
@@ -163,6 +166,7 @@ export function parseRemoteSchedules(rawSchedules: Schedule[]): Schedule[] {
       targetAudienceType,
       targetParts,
       targetMemberIds,
+      isArchived,
       isCancelled,
     };
   });

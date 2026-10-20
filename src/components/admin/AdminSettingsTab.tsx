@@ -259,9 +259,9 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
   };
 
   return (
-    <div className="admin-tab-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div className="admin-tab-body admin-settings-layout">
       {/* Sub-segment Pill Bar */}
-      <div className="subsegment-pill-bar">
+      <div className="subsegment-pill-bar admin-settings-nav">
         <button
           type="button"
           className={`subsegment-pill ${settingsSubTab === 'SHEETS' ? 'active' : ''}`}
@@ -285,6 +285,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
         </button>
       </div>
 
+      <div className="admin-settings-content">
       {/* Sub-tab: LOCATIONS */}
       {settingsSubTab === 'LOCATIONS' && (
         <div className="admin-form-card">
@@ -739,6 +740,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
           </div>
         </div>
       )}
+      </div>
 
       {/* ============================================================== */}
       {/* MODAL: Delete Location Confirmation                            */}
