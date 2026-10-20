@@ -758,11 +758,10 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
 
               <div className="modern-field-group">
                 <label className="modern-field-label">입단일</label>
-                <input
-                  type="date"
-                  className="modern-input"
+                <RoundDatePicker
                   value={formData.joinedAt || ''}
-                  onChange={(e) => setFormData({ ...formData, joinedAt: e.target.value })}
+                  onChange={(date) => setFormData({ ...formData, joinedAt: date })}
+                  placeholder="입단일 선택"
                 />
               </div>
             </div>
@@ -1136,4 +1135,3 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     </div>
   );
 };
-

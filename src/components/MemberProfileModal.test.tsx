@@ -62,6 +62,14 @@ describe('MemberProfileModal Component & Status History Invariant', () => {
     expect(html).toContain('객원');
   });
 
+  it('uses the custom calendar picker for the join date', () => {
+    const html = renderToString(<MemberProfileModal {...defaultProps} />);
+
+    expect(html).toContain('2026. 01. 01.');
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).not.toContain('type="date"');
+  });
+
   it('renders active toggle and summary card when member has an existing active custom period', () => {
     const memberWithActiveLeave: Member = {
       ...mockMemberDefault,
