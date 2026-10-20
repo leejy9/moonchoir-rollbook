@@ -245,9 +245,8 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
     return list.filter((s) => !s.isCancelled);
   }, [schedulesByDate, adminSelectedDate, showCancelledSchedules]);
 
-  // 일정 카드(Program Card) 컨테이너 그룹핑 (시트 DB 카드 + 미분류 일정)
+  // 일정 카드(Program Card) 컨테이너 그룹핑 (실제 등록된 카드만 표시 - 미분류 단일 일정 제외)
   const programGroups = useMemo(() => {
-    const cards = sheetsService.getProgramCards();
     const groups = new Map<
       string,
       {
@@ -270,8 +269,8 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
       }
     >();
 
-    // 1. 등록된 카드들 먼저 세팅
-    for (const card of cards) {
+    // 1. 실제 등록된 카드들만 세팅
+    for (const card of programCards) {
       if (!showArchivedSchedules && card.isArchived) continue;
       const cardLoc = locationPresets.find((l) => l.id === card.defaultLocationId);
       groups.set(card.id, {
@@ -294,34 +293,13 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
       });
     }
 
-    // 2. 일정들을 카드에 매핑 또는 독립 그룹으로 수납
+    // 2. 등록된 카드에 소속된 일정들만 매핑 (카드 미지정 단일 일정은 카드 탭에서 제외)
     for (const sch of schedules) {
       if (!showArchivedSchedules && sch.isArchived) continue;
-      if (sch.isCancelled) continue; // 삭제/취소된 일정은 활성 카드 묶음에서 제외하여 일정 리스트와 완벽 연동
-      let key = sch.programId;
-      if (!key || !groups.has(key)) {
-        key = sch.programId || sch.seriesId || sch.title;
-      }
-      if (!groups.has(key)) {
-        groups.set(key, {
-          cardId: key,
-          title: sch.title,
-          category: sch.category,
-          description: sch.description,
-          locationName: sch.locationName,
-          startTime: sch.startTime,
-          endTime: sch.endTime,
-          targetAudienceType: sch.targetAudienceType || 'ALL',
-          targetParts: sch.targetParts,
-          targetMemberIds: sch.targetMemberIds,
-          schedules: [],
-          startDate: sch.date,
-          endDate: sch.date,
-          isArchived: Boolean(sch.isArchived),
-          isRegisteredCard: false,
-        });
-      }
-      const g = groups.get(key)!;
+      if (sch.isCancelled) continue;
+      if (!sch.programId || !groups.has(sch.programId)) continue;
+
+      const g = groups.get(sch.programId)!;
       g.schedules.push(sch);
       if (!g.startDate || sch.date < g.startDate) g.startDate = sch.date;
       if (!g.endDate || sch.date > g.endDate) g.endDate = sch.date;
@@ -331,7 +309,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
       g.schedules.sort((a, b) => a.date.localeCompare(b.date));
       return g;
     });
-  }, [schedules, showArchivedSchedules, locationPresets, defaultLocName]);
+  }, [programCards, schedules, showArchivedSchedules, locationPresets, defaultLocName]);
 
   // QR Print text settings state
   const [printTitle, setPrintTitle] = useState(
@@ -849,6 +827,16 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                 <AdminScheduleListView
                   schedules={schedules}
                   categories={dynamicCategories}
+                  programCards={programCards}
+                  onAssignProgramCard={async (scheduleId, cardId) => {
+                    await sheetsService.updateSchedule(scheduleId, { programId: cardId });
+                    const cardTitle = cardId
+                      ? programCards.find((c) => c.id === cardId)?.title || '선택한 카드'
+                      : '단일 일정(카드 해제)';
+                    _setScheduleSuccessMsg(`소속 카드가 [${cardTitle}](으)로 변경되었습니다.`);
+                    _onDataChanged();
+                    setTimeout(() => _setScheduleSuccessMsg(''), 3000);
+                  }}
                   selectedBatchScheduleIds={selectedBatchScheduleIds}
                   onToggleSelectSchedule={handleToggleSelectSchedule}
                   onSelectAllSchedules={handleSelectAllSchedules}

@@ -62,14 +62,14 @@ describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () 
     expect(html).not.toContain('다음 일정 보기');
   });
 
-  it('renders carousel switcher bar when multiple schedules exist for today', async () => {
+  it('renders carousel switcher bar when multiple active/upcoming schedules exist for today', async () => {
     const sch1: Schedule = {
       id: 'sch_test_multi_1',
-      title: '오전 파트연습',
+      title: '저녁 파트연습',
       category: '추가연습',
       date: todayStr,
-      startTime: '10:00',
-      endTime: '12:00',
+      startTime: '22:00',
+      endTime: '23:00',
       locationName: '제1연습실',
       targetLat: 37.5665,
       targetLon: 126.978,
@@ -78,11 +78,11 @@ describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () 
 
     const sch2: Schedule = {
       id: 'sch_test_multi_2',
-      title: '오후 전체연습',
+      title: '심야 전체연습',
       category: '정기연습',
       date: todayStr,
-      startTime: '19:30',
-      endTime: '21:30',
+      startTime: '23:00',
+      endTime: '23:59',
       locationName: '제1연습실',
       targetLat: 37.5665,
       targetLon: 126.978,
@@ -107,11 +107,11 @@ describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () 
     expect(html).toContain('이전 일정 보기');
     expect(html).toContain('다음 일정 보기');
     expect(html).toMatch(/1<!-- -->\/<!-- -->2/);
-    expect(html).toContain('오전 파트연습 (10:00)');
-    expect(html).toContain('오후 전체연습 (19:30)');
+    expect(html).toContain('저녁 파트연습 (22:00)');
+    expect(html).toContain('심야 전체연습 (23:00)');
   });
 
-  it('prioritizes upcoming/open schedule over closed schedule on the same date', async () => {
+  it('hides already concluded schedule on today and displays only upcoming/open schedule', async () => {
     // schClosed was at 00:00~01:00 (already closed)
     const schClosed: Schedule = {
       id: 'sch_test_closed',
@@ -154,9 +154,9 @@ describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () 
       />
     );
 
-    // The top-priority card displayed should be the upcoming one
+    // Concluded schedule is hidden; only the upcoming schedule is displayed
     expect(html).toContain('야간 총연습 (예정)');
-    expect(html).toContain('(23:59)');
+    expect(html).not.toContain('새벽 특훈 (종료)');
   });
 
   it('does NOT display 오늘 출석 체크 완료 when admin manually marked absent', async () => {
@@ -201,6 +201,36 @@ describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () 
     // 출석 완료 배너가 뜨지 않고 결석 안내가 떠야 함
     expect(html).not.toContain('오늘 출석 체크 완료');
     expect(html).toContain('관리자 확인: 결석 처리');
+  });
+
+  it('does NOT fall back to past schedule when today has no schedule', async () => {
+    const pastSch: Schedule = {
+      id: 'sch_test_past_only',
+      title: '경찰의날 녹음 (과거)',
+      category: '녹음',
+      date: '2026-10-16',
+      startTime: '21:00',
+      endTime: '22:00',
+      locationName: '10월 16일 테스트 장소',
+      targetLat: 37.5665,
+      targetLon: 126.978,
+      radiusMeters: 100,
+    };
+    await sheetsService.addSchedule(pastSch);
+
+    const html = renderToString(
+      <HomeView
+        profile={mockProfile}
+        onOpenQRScanner={() => {}}
+        onOpenRSVP={() => {}}
+        onOpenAdmin={() => {}}
+        onChangeProfile={() => {}}
+        refreshTrigger={0}
+      />
+    );
+
+    expect(html).not.toContain('경찰의날 녹음 (과거)');
+    expect(html).toContain('연습 일정이 없습니다');
   });
 });
 

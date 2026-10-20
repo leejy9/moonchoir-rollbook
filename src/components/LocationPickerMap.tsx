@@ -26,7 +26,7 @@ interface KakaoPlaceItem {
   category_group_name?: string;
 }
 
-const KAKAO_APP_KEY = import.meta.env.VITE_KAKAO_MAP_API_KEY || '1465ed6063afca1d3ea91711cbdeb84a';
+const KAKAO_APP_KEY = import.meta.env.VITE_KAKAO_MAP_API_KEY || 'b561a814596382d5c23cd278a3539f46';
 
 // Custom modern SVG marker for Leaflet
 const createCustomMarker = () => {
@@ -74,6 +74,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
 
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
   const [kakaoLoaded, setKakaoLoaded] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<KakaoPlaceItem[]>([]);
@@ -335,6 +336,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
     }
 
     setSearchResults([]);
+    setIsSearchModalOpen(false);
     setSearchFeedback(`✓ [${item.place_name}] 위치가 지도에 정상 반영되었습니다. (${foundLat}, ${foundLon})`);
   };
 
@@ -433,199 +435,74 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
 
   return (
     <div className="location-picker-map-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {/* 1. Kakao Places & Road Address Search Box */}
-      <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-          <label className="form-label" style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B', margin: 0 }}>
-            🔍 장소명 또는 도로명 주소 검색
+      {/* 1. Unified Address Input + 2 Action Buttons (Search Popup & Current GPS) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568', margin: 0 }}>
+            주소 *
           </label>
           <span style={{ fontSize: '11px', color: kakaoLoaded ? '#059669' : '#64748B', fontWeight: 600 }}>
             {kakaoLoaded ? '⚡ 카카오맵 연동' : '🌐 검색 연동'}
           </span>
         </div>
+
         <div style={{ display: 'flex', gap: '6px' }}>
           <input
             type="text"
             className="modern-input"
-            style={{ flex: 1, fontSize: '13.5px' }}
-            placeholder="예: 예술의전당, 서해문화회관, 연수구 한나루로"
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                e.stopPropagation();
-                handleSearchKakaoPlaces(e);
-              }
-            }}
+            style={{ flex: 1, backgroundColor: '#F8FAFC', fontSize: '13.5px' }}
+            placeholder="주소·장소 검색을 눌러 선택하세요"
+            value={address}
+            onChange={(e) => onChangeLocation(lat, lon, e.target.value)}
           />
           <button
             type="button"
             className="btn-qr-action-primary"
-            style={{ width: 'auto', padding: '0 16px', minHeight: '42px', fontSize: '13px', whiteSpace: 'nowrap' }}
+            style={{ width: 'auto', padding: '0 14px', minHeight: '42px', fontSize: '13px', whiteSpace: 'nowrap' }}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              handleSearchKakaoPlaces(e);
+              setIsSearchModalOpen(true);
             }}
-            disabled={isSearching}
           >
-            {isSearching ? '검색 중...' : '검색'}
+            🔍 검색
           </button>
           <button
             type="button"
             className="btn-qr-action-secondary"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleOpenDaumPostcode();
-            }}
+            onClick={handleGetCurrentGPS}
+            disabled={isLocatingGPS}
             style={{ width: 'auto', padding: '0 12px', minHeight: '42px', fontSize: '12.5px', whiteSpace: 'nowrap' }}
-            title="다음 우편번호 팝업 열기"
           >
-            우편번호
+            {isLocatingGPS ? '수신 중...' : '📍 현위치'}
           </button>
         </div>
 
-        {/* Search feedback note */}
         {searchFeedback && (
           <div
             style={{
-              marginTop: '8px',
               fontSize: '12px',
               fontWeight: 600,
               color: searchFeedback.startsWith('✓') ? '#059669' : searchFeedback.startsWith('⚠️') ? '#DC2626' : '#4F46E5',
               background: searchFeedback.startsWith('✓') ? '#ECFDF5' : searchFeedback.startsWith('⚠️') ? '#FEF2F2' : '#EEF2FF',
               padding: '6px 10px',
               borderRadius: '6px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '6px',
             }}
           >
-            <span>{searchFeedback}</span>
-            {searchFeedback.startsWith('⚠️') && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleOpenDaumPostcode();
-                }}
-                style={{
-                  background: '#DC2626',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '4px',
-                  padding: '3px 8px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                우편번호로 정확한 주소 찾기 ↗
-              </button>
-            )}
+            {searchFeedback}
           </div>
         )}
-
-        {/* Search Results Dropdown List */}
-        {searchResults.length > 0 && (
-          <div
-            style={{
-              marginTop: '8px',
-              background: '#FFFFFF',
-              border: '1px solid #CBD5E1',
-              borderRadius: '8px',
-              maxHeight: '190px',
-              overflowY: 'auto',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-            }}
-          >
-            <div style={{ padding: '6px 10px', background: '#F1F5F9', fontSize: '11.5px', color: '#475569', fontWeight: 700 }}>
-              검색 결과 ({searchResults.length}건) — 등록할 장소를 클릭하세요:
-            </div>
-            {searchResults.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => handleSelectPlace(item)}
-                style={{
-                  padding: '8px 12px',
-                  borderBottom: '1px solid #F1F5F9',
-                  cursor: 'pointer',
-                  fontSize: '12.5px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '2px',
-                  transition: 'background 0.1s',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#EEF2FF')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = '#FFFFFF')}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <strong style={{ color: '#1E293B' }}>{item.place_name}</strong>
-                  {item.category_group_name && (
-                    <span style={{ fontSize: '11px', color: '#6366F1', background: '#EEF2FF', padding: '1px 6px', borderRadius: '4px' }}>
-                      {item.category_group_name}
-                    </span>
-                  )}
-                </div>
-                <span style={{ fontSize: '11.5px', color: '#64748B' }}>
-                  {item.road_address_name || item.address_name}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 2. Direct Address Input & One-Touch GPS */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568', margin: 0 }}>
-            기본 도로명 주소 *
-          </label>
-          <button
-            type="button"
-            className="btn-qr-action-secondary"
-            onClick={handleGetCurrentGPS}
-            disabled={isLocatingGPS}
-            style={{ width: 'auto', padding: '4px 10px', minHeight: '32px', fontSize: '12px' }}
-          >
-            {isLocatingGPS ? 'GPS 수신 중...' : '📍 현재 내 위치로 설정'}
-          </button>
-        </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          <input
-            type="text"
-            className="modern-input"
-            style={{ flex: 1, backgroundColor: '#F8FAFC', fontSize: '13.5px' }}
-            placeholder="상단 검색 또는 우측 [주소 검색] 버튼을 눌러주세요"
-            value={address}
-            onChange={(e) => onChangeLocation(lat, lon, e.target.value)}
-          />
-          <button
-            type="button"
-            className="btn-qr-action-secondary"
-            style={{ width: 'auto', padding: '0 14px', fontSize: '13px', whiteSpace: 'nowrap', minHeight: '42px' }}
-            onClick={handleOpenDaumPostcode}
-          >
-            주소 검색
-          </button>
-        </div>
 
         {/* Detail Address Input */}
         <div>
           <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568' }}>
-            상세 주소 (층 / 호수 / 연습실명)
+            상세 주소 (층 / 호수)
           </label>
           <input
             type="text"
             className="modern-input"
             style={{ fontSize: '13.5px' }}
-            placeholder="예: 대경빌딩 4층 대연습실, 지하 1층 소극장"
+            placeholder="예: 4층 대연습실, 지하 1층 소극장"
             value={detailAddress}
             onChange={(e) => onChangeDetailAddress?.(e.target.value)}
           />
@@ -634,18 +511,202 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
         {/* Entrance Note Input */}
         <div>
           <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568' }}>
-            입구 위치 / 진입 방법 (오시는 길 안내)
+            오시는 길 메모
           </label>
           <input
             type="text"
             className="modern-input"
             style={{ fontSize: '13.5px' }}
-            placeholder="예: 정문 우측 계단으로 진입 / 후문 주차장 엘리베이터 이용"
+            placeholder="예: 정문 우측 계단 진입"
             value={entranceNote}
             onChange={(e) => onChangeEntranceNote?.(e.target.value)}
           />
         </div>
       </div>
+
+      {/* Standalone Place & Address Search Popup Modal */}
+      {isSearchModalOpen && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 1300 }}
+          onClick={() => setIsSearchModalOpen(false)}
+        >
+          <div
+            className="modal-container"
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              maxHeight: '82vh',
+              background: '#FFFFFF',
+              borderRadius: '16px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#1E293B' }}>
+                  장소 · 도로명 검색
+                </h3>
+                <span style={{ fontSize: '11px', color: kakaoLoaded ? '#059669' : '#64748B', fontWeight: 600 }}>
+                  {kakaoLoaded ? '⚡ 카카오맵' : '🌐 오픈맵'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSearchModalOpen(false)}
+                style={{
+                  background: '#F1F5F9',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '30px',
+                  height: '30px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  color: '#475569',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <input
+                type="text"
+                className="modern-input"
+                style={{ flex: 1, fontSize: '13.5px' }}
+                placeholder="지하철역, 건물명, 도로명 입력 (예: 가정역, 예술의전당)"
+                value={searchKeyword}
+                autoFocus
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSearchKakaoPlaces(e);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn-qr-action-primary"
+                style={{ width: 'auto', padding: '0 16px', minHeight: '42px', fontSize: '13px', whiteSpace: 'nowrap' }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSearchKakaoPlaces(e);
+                }}
+                disabled={isSearching}
+              >
+                {isSearching ? '검색...' : '검색'}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: '#64748B' }}>
+                목록에서 장소를 터치하면 좌표와 주소가 자동 반영됩니다.
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsSearchModalOpen(false);
+                  handleOpenDaumPostcode();
+                }}
+                style={{
+                  background: '#EEF2FF',
+                  color: '#4F46E5',
+                  border: '1px solid #C7D2FE',
+                  borderRadius: '6px',
+                  padding: '4px 8px',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                우편번호 검색 ↗
+              </button>
+            </div>
+
+            <div
+              style={{
+                flex: 1,
+                minHeight: '180px',
+                maxHeight: '340px',
+                overflowY: 'auto',
+                border: '1px solid #E2E8F0',
+                borderRadius: '10px',
+                background: '#F8FAFC',
+              }}
+            >
+              {searchResults.length > 0 ? (
+                searchResults.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => handleSelectPlace(item)}
+                    style={{
+                      padding: '10px 12px',
+                      borderBottom: '1px solid #E2E8F0',
+                      background: '#FFFFFF',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '3px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                      <strong style={{ color: '#1E293B' }}>{item.place_name}</strong>
+                      {item.category_group_name && (
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            color: '#6366F1',
+                            background: '#EEF2FF',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {item.category_group_name}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '12px', color: '#64748B' }}>
+                      {item.road_address_name || item.address_name}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div
+                  style={{
+                    height: '180px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#94A3B8',
+                    fontSize: '12.5px',
+                    padding: '16px',
+                    textAlign: 'center',
+                  }}
+                >
+                  {isSearching
+                    ? '장소를 검색하고 있습니다...'
+                    : searchFeedback && searchFeedback.startsWith('⚠️')
+                    ? searchFeedback
+                    : '검색어를 입력하고 [검색]을 눌러주세요.'}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 3. Interactive Map Container with Coordinates Badge */}
       <div style={{ position: 'relative', width: '100%', height: '280px', borderRadius: '12px', overflow: 'hidden', border: '1.5px solid #E2E8F0', zIndex: 1 }}>

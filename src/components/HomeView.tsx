@@ -168,18 +168,47 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   // Candidate schedules for currently focused day, sorted by priority descending
   const activeDateSchedules = useMemo(() => {
-    let list = schedulesByDate.get(selectedDateStr) || [];
-    if (list.length === 0) {
-      const todayList = schedulesByDate.get(todayStr) || [];
-      if (todayList.length > 0) {
-        list = todayList;
-      } else {
-        const nextSch = schedules.find((s) => s.date >= todayStr);
-        list = nextSch ? schedulesByDate.get(nextSch.date) || [nextSch] : schedules.slice(0, 1);
+    const directList = schedulesByDate.get(selectedDateStr) || [];
+    if (directList.length === 0) {
+      // 사용자가 오늘이 아닌 다른 날짜(예: 일정 없는 날)를 직접 클릭한 경우에는 과거 일정을 억지로 끌어오지 않고 빈 상태 표시
+      if (selectedDateStr !== todayStr) {
+        return [];
       }
+      // 오늘 날짜에 일정이 없을 때만 오늘 이후 예정된 가장 가까운 미래 일정을 표시 (이미 지난 과거 연습 제외)
+      const nextSch = schedules.find(
+        (s) => !s.isCancelled && !s.isArchived && s.date > todayStr
+      );
+      return nextSch
+        ? (schedulesByDate.get(nextSch.date) || [nextSch]).filter(
+            (s) => !s.isCancelled && !s.isArchived
+          )
+        : [];
     }
 
-    return [...list].sort((a, b) => {
+    // 오늘 날짜인 경우 이미 종료된 연습(WINDOW_CLOSED)이 아닌 진행 중/예정 연습만 남김
+    // (단, 사용자가 달력에서 과거 날짜를 직접 클릭한 경우에는 해당 날짜 기록 열람 허용)
+    const filteredList =
+      selectedDateStr === todayStr
+        ? directList.filter((s) => {
+            if (s.isCancelled || s.isArchived) return false;
+            return getCheckInWindowState(s, currentNow).status !== 'WINDOW_CLOSED';
+          })
+        : directList.filter((s) => !s.isCancelled && !s.isArchived);
+
+    if (filteredList.length === 0 && selectedDateStr === todayStr) {
+      // 오늘 연습이 모두 시간이 지나 종료되었다면 다음 미래 연습으로 자동 전환
+      const nextSch = schedules.find(
+        (s) => !s.isCancelled && !s.isArchived && s.date > todayStr
+      );
+      if (nextSch) {
+        return (schedulesByDate.get(nextSch.date) || [nextSch]).filter(
+          (s) => !s.isCancelled && !s.isArchived
+        );
+      }
+      return [];
+    }
+
+    return [...filteredList].sort((a, b) => {
       const scoreA = getSchedulePriorityScore(a);
       const scoreB = getSchedulePriorityScore(b);
       if (scoreB !== scoreA) {
@@ -187,7 +216,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       }
       return a.startTime.localeCompare(b.startTime);
     });
-  }, [schedulesByDate, selectedDateStr, todayStr, schedules, getSchedulePriorityScore]);
+  }, [schedulesByDate, selectedDateStr, todayStr, schedules, currentNow, getSchedulePriorityScore]);
 
   // Safe active schedule resolution (Clamping & Fallback Guard)
   const activeSchedule: Schedule | undefined = useMemo(() => {
@@ -375,12 +404,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
       ? 100
       : 0;
 
-  // Upcoming future schedules (from today onwards)
+  // Upcoming future schedules (from today onwards, excluding already-concluded today schedules)
   const upcomingSchedules = useMemo(() => {
     return schedules
-      .filter((s) => s.date >= todayStr && !s.isArchived)
+      .filter((s) => {
+        if (s.isArchived || s.isCancelled) return false;
+        if (s.date < todayStr) return false;
+        if (s.date === todayStr) {
+          return getCheckInWindowState(s, currentNow).status !== 'WINDOW_CLOSED';
+        }
+        return true;
+      })
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [schedules, todayStr]);
+  }, [schedules, todayStr, currentNow]);
 
   const handleProfileClick = () => {
     if (onOpenProfilePortal) {

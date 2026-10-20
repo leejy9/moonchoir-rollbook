@@ -86,9 +86,8 @@ export function App() {
 
   const currentSchedule =
     qrTargetSchedule ||
-    activeSchedules.find((s) => s.date === todayStr) ||
-    activeSchedules.find((s) => s.date >= todayStr) ||
-    activeSchedules[0];
+    activeSchedules.find((s) => !s.isCancelled && !s.isArchived && s.date === todayStr) ||
+    activeSchedules.find((s) => !s.isCancelled && !s.isArchived && s.date >= todayStr);
 
   // If user has not bound a device yet, show binding prompt
   const isBound = profile !== null;

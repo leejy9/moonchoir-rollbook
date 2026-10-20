@@ -73,13 +73,9 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       >
         <div className="modal-header-clean">
           <div className="profile-header-meta">
-            <span className="profile-pill-tag">🗺️ 장소 등록 & 설정</span>
-            <div className="profile-header-title-wrap">
-              <h2 className="modal-heading-name">
-                {initialPreset ? `'${initialPreset.name}' 장소 수정` : '새 연습실/공연장 등록'}
-              </h2>
-              <span className="modal-heading-sub">도로명 주소 검색 및 출석 인정 반경 설정</span>
-            </div>
+            <h2 className="modal-heading-name" style={{ margin: 0 }}>
+              {initialPreset ? `'${initialPreset.name}' 수정` : '새 장소 등록'}
+            </h2>
           </div>
           <button
             type="button"

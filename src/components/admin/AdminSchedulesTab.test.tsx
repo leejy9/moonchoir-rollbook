@@ -172,11 +172,23 @@ describe('AdminSchedulesTab Component', () => {
     expect(html).toContain('전체 구분');
   });
 
-  it('renders card view when scheduleViewTab is PROGRAM_CARDS', () => {
-    const props = createMockProps({ scheduleViewTab: 'PROGRAM_CARDS' });
+  it('renders card view when scheduleViewTab is PROGRAM_CARDS (only registered cards, no unclassified single schedules)', () => {
+    const props = createMockProps({
+      scheduleViewTab: 'PROGRAM_CARDS',
+      programCards: [
+        {
+          id: 'card-1',
+          title: '2026 정기연습 카드',
+          category: '정기연습',
+          createdAt: '2026-10-01T00:00:00Z',
+        },
+      ],
+    });
     const html = renderToString(<AdminSchedulesTab {...props} />);
 
     expect(html).toContain('+ 카드 등록');
-    expect(html).toContain('정기연습 1회차');
+    expect(html).toContain('2026 정기연습 카드');
+    // Unclassified single schedule (mockSchedules[0] without programId) must NOT appear as a card
+    expect(html).not.toContain('정기연습 1회차');
   });
 });

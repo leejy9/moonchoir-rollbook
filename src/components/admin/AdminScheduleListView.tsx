@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import type { Schedule } from '../../types/rollbook';
+import type { ProgramCard, Schedule } from '../../types/rollbook';
 import { getKSTDateString } from '../../utils/date';
 
 export interface AdminScheduleListViewProps {
   schedules: Schedule[];
   categories: string[];
+  programCards?: ProgramCard[];
+  onAssignProgramCard?: (scheduleId: string, cardId: string | undefined) => void;
   selectedBatchScheduleIds: string[];
   onToggleSelectSchedule: (id: string) => void;
   onSelectAllSchedules: (ids: string[]) => void;
@@ -38,6 +40,8 @@ function formatShortDateWithWeekday(dateStr: string): string {
 export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
   schedules,
   categories,
+  programCards = [],
+  onAssignProgramCard,
   selectedBatchScheduleIds,
   onToggleSelectSchedule,
   onSelectAllSchedules,
@@ -514,6 +518,46 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
                       <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>
                         {sch.description}
                       </p>
+                    )}
+
+                    {/* Individual Card Assignment Selector (소속 카드 연결/변경) */}
+                    {programCards.length > 0 && onAssignProgramCard && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          fontSize: '12px',
+                          color: '#475569',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>소속 카드</span>
+                        <select
+                          className="modern-select"
+                          value={sch.programId || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            onAssignProgramCard(sch.id, val ? val : undefined);
+                          }}
+                          style={{
+                            height: '32px',
+                            fontSize: '12px',
+                            padding: '0 26px 0 8px',
+                            width: 'auto',
+                            maxWidth: '220px',
+                          }}
+                        >
+                          <option value="">미지정 (단일 일정)</option>
+                          {programCards
+                            .filter((c) => !c.isArchived || c.id === sch.programId)
+                            .map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.title} ({c.category})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
                     )}
 
                     <div
