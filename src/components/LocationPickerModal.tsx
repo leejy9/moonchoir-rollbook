@@ -21,6 +21,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   const [entranceNote, setEntranceNote] = useState(initialPreset?.entranceNote || '');
   const [latitude, setLatitude] = useState(initialPreset?.latitude || 37.5665);
   const [longitude, setLongitude] = useState(initialPreset?.longitude || 126.978);
+  const [coordinatesConfirmed, setCoordinatesConfirmed] = useState(Boolean(initialPreset));
   const [radiusMeters, setRadiusMeters] = useState(initialPreset?.radiusMeters || 100);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -35,6 +36,10 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
     }
 
     const isDefaultCoords = Math.abs(latitude - 37.5665) < 0.0001 && Math.abs(longitude - 126.978) < 0.0001;
+    if (address.trim() && !coordinatesConfirmed) {
+      setErrorMsg('선택한 주소의 좌표를 확인하지 못했습니다. 지도에서 출입구 위치를 직접 지정해주세요.');
+      return;
+    }
     if (address.trim() && isDefaultCoords && !address.includes('명동')) {
       setErrorMsg('📍 지도 검색 또는 현재 위치 설정을 통해 실제 좌표를 지정해주세요. (기본 서울 명동 좌표로 잘못 저장되지 않도록 방지합니다.)');
       return;
@@ -117,12 +122,17 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
               onChangeLocation={(lat, lon, addr) => {
                 setLatitude(lat);
                 setLongitude(lon);
+                setCoordinatesConfirmed(true);
                 if (addr) {
                   setAddress(addr);
                   if (!name.trim()) {
                     setName(addr.split(' ')[0] || addr);
                   }
                 }
+              }}
+              onAddressSelected={(addr) => {
+                setAddress(addr);
+                setCoordinatesConfirmed(false);
               }}
               onChangeDetailAddress={(detail) => setDetailAddress(detail)}
               onChangeEntranceNote={(note) => setEntranceNote(note)}

@@ -38,6 +38,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
   const [presetFormEntranceNote, setPresetFormEntranceNote] = useState('');
   const [presetFormLat, setPresetFormLat] = useState<number>(37.5665);
   const [presetFormLon, setPresetFormLon] = useState<number>(126.978);
+  const [presetCoordinatesConfirmed, setPresetCoordinatesConfirmed] = useState(false);
   const [presetFormRadius, setPresetFormRadius] = useState<number>(100);
   const [presetFormIsDefault, setPresetFormIsDefault] = useState<boolean>(false);
   const [presetSuccessMsg, setPresetSuccessMsg] = useState<string | null>(null);
@@ -61,6 +62,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
     setPresetFormEntranceNote('');
     setPresetFormLat(37.5665);
     setPresetFormLon(126.978);
+    setPresetCoordinatesConfirmed(false);
     setPresetFormRadius(100);
     setPresetFormIsDefault(false);
   };
@@ -73,6 +75,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
     setPresetFormEntranceNote(loc.entranceNote || '');
     setPresetFormLat(loc.latitude);
     setPresetFormLon(loc.longitude);
+    setPresetCoordinatesConfirmed(true);
     setPresetFormRadius(loc.radiusMeters || 100);
     setPresetFormIsDefault(loc.isDefault || false);
 
@@ -91,6 +94,10 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
     }
 
     const isDefaultCoords = Math.abs(presetFormLat - 37.5665) < 0.0001 && Math.abs(presetFormLon - 126.978) < 0.0001;
+    if (presetFormAddress.trim() && !presetCoordinatesConfirmed) {
+      alert('선택한 주소의 좌표를 확인하지 못했습니다. 지도에서 출입구 위치를 직접 지정해주세요.');
+      return;
+    }
     if (presetFormAddress.trim() && isDefaultCoords && !presetFormAddress.includes('명동')) {
       alert(
         '📍 지도 검색 또는 현재 위치 설정을 통해 실제 좌표를 지정해주세요.\n(기본 서울 명동 좌표로 잘못 저장되지 않도록 보호합니다.)'
@@ -462,12 +469,17 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                   onChangeLocation={(lat, lon, addr) => {
                     setPresetFormLat(lat);
                     setPresetFormLon(lon);
+                    setPresetCoordinatesConfirmed(true);
                     if (addr) {
                       setPresetFormAddress(addr);
                       if (!presetFormName.trim()) {
                         setPresetFormName(addr.split(' ')[0] || addr);
                       }
                     }
+                  }}
+                  onAddressSelected={(addr) => {
+                    setPresetFormAddress(addr);
+                    setPresetCoordinatesConfirmed(false);
                   }}
                   onChangeDetailAddress={(detail) => setPresetFormDetailAddress(detail)}
                   onChangeEntranceNote={(note) => setPresetFormEntranceNote(note)}
