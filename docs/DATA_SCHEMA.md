@@ -1,7 +1,7 @@
 # Moonchoir Rollbook — 마스터 데이터 스키마 & 릴레이션 (DATA_SCHEMA.md)
 
-> **버전**: 1.3.0 (동시성 락 및 환경설정 시트화 완료)  
-> **최종 수정일**: 2026-10-18  
+> **버전**: 1.4.0 (MVP 아키텍처 리커버리 & 단일 순수 출결·통계 엔진 SSOT 확립)  
+> **최종 수정일**: 2026-10-20  
 > **단일 진실 공급원 (SSOT)**: 본 문서는 프론트엔드 TypeScript 모델, 구글 시트 8대 탭 구조, 구글 앱스 스크립트(GAS), 그리고 단위 테스트 간의 데이터 계약(Contract) 및 연쇄 영향도(Cascade & Dependency)를 정의합니다.  
 > **핵심 원칙**: 모든 데이터베이스는 구글 시트에 저장/연동되며, 출석 및 단원 상태 변경 이력은 **시트에 원천 로그(DB 형식)로 영구 보존(Append-Only Event Sourcing)**됩니다.
 > **동시성 & 정합성 보장**: 합창단 20~30명 동시 QR 스캔 시 행 덮어쓰기 방지를 위해 **GAS LockService 15초 스크립트 락**이 적용되어 있으며, 모든 읽기/쓰기는 컬럼 순서에 무관한 **헤더 키 기반 동적 매핑**으로 수행됩니다.
@@ -125,7 +125,8 @@ erDiagram
 | `phone` | `phone` | 전체 휴대전화번호 (예: `010-1234-5678`) | `string` (선택) | 단원 비상 연락망, 본인 인증 원천 | • 전화번호 수정 시 `phoneLast4`가 자동 재추출되어 시트 `단원명부`에 동기화 반영됨. |
 | `phoneLast4` | `phoneLast4` | 전화번호 뒤 4자리 (예: `5678`) | `string` (필수) | 단원 본인 인증 PIN 및 기기 등록 키 | • `phone` 입력 시 자동 추출.<br>• 변경 시 단원이 키패드로 본인 확인할 때 입력해야 하는 PIN 번호가 즉시 변경됨. |
 | `role` | `role` | 시스템 권한 (`MEMBER`, `ADMIN`, `GUEST`) | `string` (필수) | 관리자 대시보드 접근 제어 | • `ADMIN`으로 변경 시 관리자 대시보드 메뉴 활성화. |
-| `status` | `status` | 계정 활성화 여부 (`ACTIVE`, `INACTIVE`, `MERGED`, `DELETED`) | `string` (필수) | 명부 필터링 및 활동 감사 | • `DELETED`: 소프트 삭제된 단원 (과거 통계용 보존).<br>• `INACTIVE`: 휴단/퇴단 등으로 일시 비활성화된 계정. |
+| `status` | `status` | 계정 활성화 여부 (`ACTIVE`, `INACTIVE`, `MERGED`, `DELETED`) | `string` (필수) | 명부 필터링 및 활동 감사 | • `DELETED`: 소프트 삭제된 단원 (과거 통계용 보존).<br>• `MERGED`: 중복 정리로 대표 계정(`mergedIntoId`)에 통합된 계정 (원천 로그 연결을 위해 물리 삭제 영구 차단).<br>• `INACTIVE`: 휴단/퇴단 등으로 일시 비활성화된 계정. |
+| `mergedIntoId` | `mergedIntoId` | 통합된 대표 단원 ID (예: `mem_s01`) | `string` (선택) | **자기참조 외래키 (FK)** $\rightarrow$ `단원명부.id` | • **원천 로그 불변 보존**: 단원 병합(`MERGE_MEMBERS`) 시 과거 `출석원천로그.memberId`를 덮어쓰지 않고, 피병합 단원에 `status='MERGED'` 및 `mergedIntoId=대표ID`만 기록.<br>• 투영 엔진(`resolveMergedMemberIds`)이 이 체인을 따라 대표 단원의 출결·통계를 합산. |
 | `joinedAt` | `joinedAt` | 단원 입단 일자 (`YYYY-MM-DD`, 예: `2026-10-16`) | `string` (필수) | **출결 모수(분모) 시작 기준점** | • **출결 통계 연쇄 재계산**: $Schedule.date < joinedAt$ 인 과거 연습일정은 해당 단원의 출결 모수(분모)에서 자동 제외됨 (신입 단원의 결석 왜곡 원천 차단). |
 | `memberStatus`| `memberStatus`| 현재 회원상태 (`정단원`, `준단원`, `휴단원`, `객원`, `선생님`, `퇴단원`) | `string` (필수) | 출결 의무 판정 기준 및 `MemberStatusHistory.status` 연동 | • 상태 변경 시 `단원명부` 갱신과 동시에 **`단원변경로그` 시트에 신규 행 Append**.<br>• `휴단원`/`퇴단원` 전환 시 이후 일정의 기본 출결 모수(분모)에서 자동 제외됨. |
 | `note` | `note` | 관리자 비고/특이사항 (예: "가을 정기연주회 솔로") | `string` (선택) | 관리자 프로필 상세 모달 | • 수정 시 `단원명부`의 해당 셀만 업데이트. |
@@ -283,8 +284,14 @@ erDiagram
    - 관리자가 출결 매트릭스나 명부에서 잘못 체크된 출석을 "취소/초기화"할 때, 기존 출석 행을 물리 삭제하지 않습니다.
    - 직전 출석 시각보다 1초 뒤인 **취소 로그 (`adminNote: '관리자 출결 취소 (결석 처리)'`)**를 새로 Append 적재합니다.
    - 투영 엔진(`reconcileAttendance`)은 동일 일정/단원에 대해 시계열로 정렬된 로그들을 재생(Replay)하며, 마지막 유효 로그가 취소 로그이면 출석을 무효화하고 원래의 결석/사유결석/미참 상태로 복원합니다.
-3. **동적 투영 뷰 (Projection View)**:
-   - "누적 출석률", "지각 횟수", "결석률", "게스트 출석 뱃지"는 시트에 고정된 숫자로 저장되는 것이 아니라, **`출석원천로그` + `단원변경로그` + `입단일(joinedAt)`을 읽어 실시간으로 계산**됩니다.
+3. **동적 투영 뷰 (Projection View) 및 단일 순수 수식 엔진 (`src/utils/attendanceStats.ts`)**:
+   - "누적 출석률", "지각 횟수", "결석률", "게스트 출석 뱃지"는 시트에 고정된 숫자로 저장되는 것이 아니라, **`출석원천로그` + `단원변경로그` + `입단일(joinedAt)` + `병합체인(mergedIntoId)`을 읽어 `src/utils/attendanceStats.ts`의 단일 순수 함수로 실시간 계산**됩니다.
+   - **전 화면 단일 엔진 공유**: 관리자 통계(`AdminStatsTab`), 관리자 매트릭스(`AdminMatrixGrid`), 단원 마이페이지(`MemberPortalModal`), 단원 프로필(`MemberProfileModal`), 홈 화면(`HomeView`) 모두 동일한 `reconcileSingleMemberAttendance` 및 `calculateCumulativeAttendanceWithLifecycle`를 호출합니다.
+   - **확정된 수식 규칙**:
+     - **사유결석(`excused`)**: 사전투표 불참+사유 기재 후 미출석 시 `사유결석`으로 표기하되, **출석률 분모(`totalSessions`)에 포함** (`빠진 건 빠진 것`).
+     - **지각(`late`)**: `lateGraceMinutes` 초과 출석 시 지각 횟수(`late`)는 별도 기록하되, **출석률 계산에서는 100% 출석으로 인정** (`attendanceRate = Math.round(((attended + late) / totalSessions) * 100)`).
+     - **비대상/자율 참여(`미참` / `guestAttended`)**: 필참 대상이 아닌 단원이 미출석하면 분모에서 제외(`미참`), 자발적으로 출석하면 분모 `+1` & 출석 `+1`(`guestAttended`)로 산입.
+     - **추측 매칭 금지**: 이름(`memberName`), 날짜(`date`), 일정 ID 접미사(`scheduleId.startsWith`) 기반 추측 매칭은 전면 폐기되었으며 오직 정확한 PK(`memberId`, `scheduleId`)와 명시적 `mergedIntoId` 체인만 사용합니다.
 
 ---
 
@@ -292,6 +299,8 @@ erDiagram
 
 | 부모/주체 이벤트 (Trigger Action) | 수정/영향 대상 엔티티 | 영향받는 자식/연계 엔티티 | 시스템 연쇄 처리 규칙 (Cascade Rule) | 데이터 보호 이유 및 정합성 보장 |
 | :--- | :--- | :--- | :--- | :--- |
+| **단원 중복 병합 (`MERGE_MEMBERS`)** | `Member` | `RawAttendanceLog`, `RSVPVote` | 1) 피병합 단원을 `status='MERGED'`, `mergedIntoId=canonicalId`로 설정하고 물리 삭제 영구 차단.<br>2) **`출석원천로그.memberId`는 절대 덮어쓰지 않고 원본 보존**.<br>3) 투영 시 `resolveMergedMemberIds`로 합산. | Append-Only 원천 로그 불변성 준수 및 동명이인 오병합 방지. |
+| **일정카드 대상자 수정 (`SAVE_PROGRAM_CARD`)** | `ProgramCard` | `Schedule` (`programId` 자식 일정) | 상위 카드의 참석 대상(`targetAudienceType`, `targetParts`, `targetMemberIds`) 변경 시 소속 하위 일정들의 대상자도 일괄 업데이트(확인 팝업) 지원 및 개별 일정 수정 허용. | 카드 묶음 단위 운영 편의성과 회차별 예외 유연성 동시 확보. |
 | **단원 입단일(`joinedAt`) 수정** | `Member` | `CumulativeMemberAttendance` (통계 투영) | $Schedule.date < joinedAt$ 인 모든 연습일정을 **해당 단원의 출결 모수(분모)에서 즉시 제외**. | 중도 입단 단원이 이전 연습 결석으로 처리되어 출석률이 왜곡되는 문제 원천 차단. |
 | **단원 상태(`memberStatus`) 또는 파트(`part`) 수정** | `Member` | `MemberStatusHistory` (`단원변경로그`) | 1) `단원명부` 현재 값 갱신.<br>2) **`단원변경로그` 시트에 신규 이력 행 자동 Append**.<br>3) 직전 활성 이력의 종료일을 `새_시작일 - 1일`로 자동 마감. | 과거 특정 날짜의 출결 의무와 소속 파트를 영구적으로 역산/추적할 수 있는 감사 로그 보존. |
 | **단원 삭제 시도** | `Member` | `RawAttendanceLog`, `RSVPVote` | 1) 출석/투표 이력이 0건인 단원 $\rightarrow$ 시트 행 물리 삭제.<br>2) **이력이 1건이라도 있는 단원 $\rightarrow$ 물리 삭제 차단 (`status='DELETED'` 소프트 삭제)**. | 과거 출석 원천로그의 단원 정보 고아화 방지 및 역대 통계 무결성 100% 보존. |

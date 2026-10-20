@@ -72,8 +72,11 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
         const isPastOrToday = s.date <= todayStr;
         const status = item?.finalStatus || (isRequired ? '결석' : '미참');
 
-        // 취소된 일정은 출석률 통계 모수(분모)에서 제외
-        if (!s.isCancelled && isRequired && (isPastOrToday || item?.checkInTime || item?.isManualOverride)) {
+        const hasCheckedIn =
+          status === '출석' || status === '수동인정' || status === '지각';
+
+        // 취소된 일정은 출석률 통계 모수(분모)에서 제외, 비필참 일정도 자발적 출석 시 모수에 포함
+        if (!s.isCancelled && (isRequired ? (isPastOrToday || hasCheckedIn) : hasCheckedIn)) {
           requiredSessions += 1;
         }
 
@@ -85,7 +88,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           late += 1;
         } else if (status === '사유결석') {
           excused += 1;
-        } else if (status === '미참' || status === '모수제외' || (!isPastOrToday && !item?.checkInTime && !item?.isManualOverride)) {
+        } else if (status === '미참' || status === '모수제외' || (!isPastOrToday && !hasCheckedIn)) {
           exempt += 1;
         } else {
           absent += 1;
@@ -93,8 +96,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
       });
 
       // Standard rate formula: 지각도 1.0 인정 (별도 감점 없이 출석률 산출)
-      const denominator = requiredSessions > 0 ? requiredSessions : (attended + late > 0 ? attended + late : 0);
-      const rate = denominator > 0 ? Math.round(((attended + late) / denominator) * 100) : 0;
+      const rate = requiredSessions > 0 ? Math.min(100, Math.round(((attended + late) / requiredSessions) * 100)) : 0;
 
       map.set(m.id, { attended, late, excused, absent, exempt, rate });
     });

@@ -208,14 +208,18 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
     const finalPhone = formatPhoneNumber(digits);
     const finalLast4 = digits.length >= 4 ? digits.slice(-4) : (targetMember.phoneLast4 || '0000');
 
+    // Enforce 1-person 1-device lock consistently even from duplicate registration prompt
+    if (targetMember.boundDeviceId && targetMember.boundDeviceId !== currentDeviceId) {
+      setDuplicatePromptMember(null);
+      setErrorMsg(
+        '이미 다른 기기(스마트폰)에 연동되어 있는 계정입니다.\n기존 기기에서 [연동 해제]를 먼저 진행하셨거나 기기 교체 시 관리자에게 초기화를 요청하세요.'
+      );
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setErrorMsg('');
-
-      // Transfer device binding if needed
-      if (targetMember.boundDeviceId && targetMember.boundDeviceId !== currentDeviceId) {
-        await sheetsService.unbindMemberDevice(targetMember.id).catch(console.warn);
-      }
 
       const updated: Partial<Member> = {
         phoneLast4: finalLast4,

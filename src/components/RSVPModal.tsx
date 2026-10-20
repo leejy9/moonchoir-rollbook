@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, RSVPStatus, RSVPVote, Schedule } from '../types/rollbook';
 import { getKSTTimestampString } from '../utils/date';
+import { isRsvpOpenForSchedule } from '../utils/timeWindow';
 
 interface RSVPModalProps {
   schedule: Schedule;
@@ -26,6 +27,11 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
 
   const handleCancelVote = async () => {
     if (!currentVote) return;
+    if (!isRsvpOpenForSchedule(schedule)) {
+      alert('연습 시작 1시간 전부터는 사전 투표를 변경하거나 취소할 수 없습니다.');
+      onClose();
+      return;
+    }
     setIsSubmitting(true);
     await sheetsService.cancelRSVP(schedule.id, profile.memberId);
     setIsSubmitting(false);
@@ -38,6 +44,11 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isRsvpOpenForSchedule(schedule)) {
+      alert('연습 시작 1시간 전부터는 사전 투표를 변경할 수 없습니다.');
+      onClose();
+      return;
+    }
     setIsSubmitting(true);
 
     const vote: RSVPVote = {

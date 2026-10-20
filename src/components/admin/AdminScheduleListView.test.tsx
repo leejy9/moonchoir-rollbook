@@ -7,7 +7,7 @@ const mockSchedules: Schedule[] = [
   {
     id: 'sch-1',
     title: '정기연습 1회차',
-    date: '2026-10-18',
+    date: '2099-10-18',
     startTime: '19:00',
     endTime: '21:00',
     locationName: '언더스탠드에비뉴',
@@ -19,7 +19,7 @@ const mockSchedules: Schedule[] = [
   {
     id: 'sch-2',
     title: '연주회 리허설',
-    date: '2026-11-01',
+    date: '2099-11-01',
     startTime: '14:00',
     endTime: '18:00',
     locationName: '성남아트센터',

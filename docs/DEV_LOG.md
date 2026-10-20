@@ -16,6 +16,7 @@
 9. [2026-10-17: Phase 4.5 & Phase 4.6 — 데이터 파이프라인 정합성 복원, 마이페이지 2탭 개편 & 3대 구조 개혁](#2026-10-17-phase-45--phase-46-데이터-파이프라인-정합성-복원-마이페이지-2탭-개편--3대-구조-개혁)
 10. [2026-10-17: Phase 4.7 — 게이미피케이션 출석부, 일정카드 대상자 분리, 2열 인라인 관리, 단원 ID 안전 통합 & 실시간 시간 윈도우 프로토콜 (Tasks 45~50)](#2026-10-17-phase-47--게이미피케이션-출석부-일정카드-대상자-분리-2열-인라인-관리-단원-id-안전-통합--실시간-시간-윈도우-프로토콜-tasks-4550)
 11. [2026-10-18: Phase 4.9 — 데이터 릴레이션·스키마 무결성 확립 & 동시성 락 & 환경설정 시트화](#2026-10-18-phase-49--데이터-릴레이션스키마-무결성-확립--동시성-락--환경설정-시트화)
+12. [2026-10-20: Phase 5 — MVP 아키텍처 리커버리, 불순물 폴백 제거 & 단일 순수 출결·통계 엔진(SSOT) 통합](#2026-10-20-phase-5-mvp-아키텍처-리커버리-불순물-폴백-제거--단일-순수-출결통계-엔진ssot-통합)
 
 ---
 
@@ -833,6 +834,40 @@
 - `npm test`: 14 test files, 91/91 tests pass (단위 테스트 2건 추가 완료, 100% 통과)
 - `npm run build`: Production bundle 빌드 성공
 - 관련 문서 최신화: [Plan 09](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/09_schema_relation_integrity_and_concurrency.md), [DATA_SCHEMA.md v1.3.0](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/DATA_SCHEMA.md), [PRD.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/PRD.md), [tasks.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/tasks.md)
+
+---
+
+## [2026-10-20] Phase 5: MVP 아키텍처 리커버리, 불순물 폴백 제거 & 단일 순수 출결·통계 엔진(SSOT) 통합
+
+### 1. 배경 및 확정된 MVP 도메인 기준
+- 바이브코딩 과정에서 기능들이 누적되며 출결·통계 수식이 4개 파일(`sheets.ts`, `MemberPortalModal.tsx`, `MemberProfileModal.tsx`, `AdminMatrixGrid.tsx`)로 파편화되고, 임시방편으로 들어간 이름(`memberName`)/일정 접미사(`scheduleId.startsWith`)/날짜(`date`) 추측 매칭이 동명이인 및 같은 날 다중 일정을 오염시키는 문제가 진단됨.
+- 아직 실제 운영 데이터가 없는 MVP 단계임을 확인하고, 레거시 호환용 땜질 코드를 과감히 걷어내어 **구글 시트 원본 기준의 간결한 아키텍처**로 재정립함:
+  1. **1인 1기기 잠금 유지 (`boundDeviceId`)**: 스마트폰 기반 본인 확인의 핵심 장치로 유지하며, 신규 등록 중복 안내 경로에서도 타 기기 연동을 임의 해제하지 않도록 통일.
+  2. **일정카드(`ProgramCard`) ➔ 일정(`Schedule`) 대상자 연동**: 상위 카드의 참석 대상 변경 시 하위 일정 일괄 동기화 및 개별 일정 수정 지원.
+  3. **비대상자 일정 가시성 (`[🌿 자율 참여 연습]`)**: 대상이 아닌 일정도 캘린더/홈에 표시하되 자율 참여 배지를 부여하고, 미출석 시 분모 제외(`미참`), 자발적 출석 시 분모 `+1` & 출석 `+1`(`guestAttended`)로 집계.
+  4. **사유결석(`excused`)**: 출석률 분모(`totalSessions`)에 포함하고 결석 사유 및 `excused` 횟수로 표시 ("빠진 건 빠진 거니까").
+  5. **지각(`late`)**: 출석률 계산에서는 100% 출석으로 인정(`(attended + late) / totalSessions`)하되, 지각 횟수(`late`)와 로그는 별도 집계.
+
+### 2. 주요 아키텍처 및 구현 내용
+1. **단일 순수 출결·통계 엔진 통합 (`src/utils/attendanceStats.ts`)**:
+   - `resolveMergedMemberIds`, `reconcileSingleMemberAttendance`, `calculateCumulativeAttendanceWithLifecycle`를 유일한 계산 엔진(SSOT)으로 확립.
+   - `sheets.ts`, `MemberPortalModal.tsx`, `MemberProfileModal.tsx`, `AdminMatrixGrid.tsx`의 중복 계산 로직을 제거하고 단일 엔진으로 연결 (자율 참여 출석 시 매트릭스 출석률이 100%를 넘던 버그 함께 해결).
+2. **불순물·추측성 매칭 제거 및 원천 로그 불변성 복원 (`src/services/sheets.ts`, `google-apps-script.js`, `src/components/HomeView.tsx`)**:
+   - `v2` 스토리지 마이그레이션, `getMembers()` 호출 시 가짜 단원을 생성해 시트에 등록하던 읽기 부수효과 제거.
+   - `getRSVPVotes()`, `getLogs()`, `reconcileMemberAttendance()`, `fetchRemoteData()`, `HomeView.tsx`에서 `memberName`, `scheduleId.startsWith`, `date` 추측 매칭을 전면 제거하고 정확한 PK(`memberId`, `scheduleId`) 및 `mergedIntoId` 체인만 사용.
+   - 단원 병합(`mergeDuplicateMembers` / `MERGE_MEMBERS`) 시 `RawAttendanceLog.memberId`를 덮어쓰지 않고 보존하며, `MERGED` 행의 물리 삭제를 차단.
+   - 중복 스크립트 `gas/Code.gs` 및 중복 하위 폴더 `moonchoir-rollbook/`를 제거하고 `google-apps-script.js`와 `docs/google_apps_script.js`로 일원화 (`seedInitialData` 내 `phone` 열 밀림 버그 수정).
+3. **시트 동기화 확증, 멱등성 및 사전투표 1시간 전 마감 (`src/utils/timeWindow.ts`, `src/components/RSVPModal.tsx`, `src/components/BindingModal.tsx`)**:
+   - `sendToGoogleSheet()`의 `mode: 'no-cors'` 가짜 성공 폴백 제거.
+   - `RECORD_ATTENDANCE`에서 `log.id` 중복 체크로 재시도 멱등성 보장, `REGISTER_MEMBER`에서 스크립트 락 내부 중복 단원 생성 차단.
+   - `isRsvpOpenForSchedule()`을 통해 연습 시작 1시간 전부터 단원 사전투표 변경/취소를 마감하고 현장 QR/PIN 체크인 모드로 전환.
+
+### 3. 센서 검증 결과 (Green Bar)
+- `npm run typecheck`: 0 errors (100% 통과)
+- `npm run lint`: 0 warnings, 0 errors
+- `npm test`: 28 test files, 132/132 tests pass (100% 통과)
+- 관련 문서 동기화 완료: [ARCHITECTURE_RECOVERY.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/ARCHITECTURE_RECOVERY.md), [Plan 10](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/10_architecture_recovery_roadmap.md), [DATA_SCHEMA.md v1.4.0](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/DATA_SCHEMA.md), [PRD.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/PRD.md), [GOOGLE_SHEETS_GUIDE.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/GOOGLE_SHEETS_GUIDE.md), [tasks.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/tasks.md)
+
 
 
 

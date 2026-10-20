@@ -22,25 +22,26 @@
 ### Step 2. Apps Script 편집기 열기 및 코드 붙여넣기
 1. 상단 메뉴에서 **[확장 프로그램] ➔ [Apps Script]**를 클릭합니다.
 2. 기본으로 적혀있는 `function myFunction() {}` 코드를 **모두 지웁니다.**
-3. 프로젝트 내 [`gas/Code.gs`](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/gas/Code.gs) (또는 [`docs/google_apps_script.js`](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/google_apps_script.js)) 파일의 **전체 내용을 복사하여 붙여넣습니다.**
+3. 프로젝트 루트의 [`google-apps-script.js`](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/google-apps-script.js) (또는 동일 사본인 [`docs/google_apps_script.js`](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/google_apps_script.js)) 파일의 **전체 내용을 복사하여 붙여넣습니다.** *(과거 5대 탭 구버전 `gas/Code.gs`는 폐기되었습니다.)*
 4. 상단 디스켓 아이콘(저장) 또는 `Ctrl + S` (`Cmd + S`)를 눌러 저장합니다.
 
 ---
 
-### Step 3. 5대 탭 자동 초기화 (`setupMoonchoirSheets` 실행)
-1. 상단 툴바의 실행 함수 선택 드롭다운(기본 `doGet` 등)에서 **`setupMoonchoirSheets`**를 선택합니다.
-2. 바로 옆의 **[▶ 실행]** 버튼을 클릭합니다.
-3. 최초 1회 실행 시 **"승인 필요"** 팝업이 뜹니다:
+### Step 3. 8대 탭 자동 초기화 (`seedInitialData` 또는 첫 동기화 실행)
+1. 상단 툴바의 실행 함수 선택 드롭다운에서 **`seedInitialData`** (또는 `doGet`)를 선택하고 **[▶ 실행]** 버튼을 클릭합니다.
+2. 최초 1회 실행 시 **"승인 필요"** 팝업이 뜹니다:
    - [권한 검토] 클릭 ➔ 자신의 구글 계정 선택
    - "Google에서 확인하지 않은 앱" 경고가 뜨면 좌측 하단의 **[고급]** 클릭 ➔ **[프로젝트 제목(안전하지 않음)으로 이동]** 클릭
    - [허용] 클릭
-4. 하단 실행 로그에 `🎉 문콰이어 스프레드시트 5대 탭 초기화가 완료되었습니다!`가 출력됩니다.
-5. 구글 시트로 돌아가 보면 아래 5개 탭이 자동으로 완벽히 포맷팅되어 생성된 것을 확인할 수 있습니다:
-   - **`Members`**: 대원 마스터 명부 (초기 15명 샘플 포함)
-   - **`Schedules`**: 10월 목요 연습 및 연주회 일정
-   - **`RSVP_Votes`**: 사전 참석/불참 투표 로그
-   - **`Attendance_Logs`**: 원천 출석 체크 타임스탬프 로그 (Append-Only)
-   - **`Config`**: 연습실 좌표, 지각 유예 시간, 관리자 PIN 설정
+3. 구글 시트로 돌아가 보면 아래 **8대 공식 한글 탭**이 헤더 키 기반으로 자동 생성됩니다:
+   - **`단원명부`**: 단원 마스터 명부 (`id`, `name`, `part`, `phoneLast4`, `phone`, `role`, `status`, `joinedAt`, `memberStatus`, `note`, `boundDeviceId`, `boundDeviceAt`, `mergedIntoId`)
+   - **`일정캘린더`**: 연습 및 연주 일정 (`id`, `title`, `date`, `startTime`, `endTime`, `locationName`, `category`, `programId`, `seriesId`, `targetAudienceType`, `targetParts`, `targetMemberIds`, `checkInPin`, `description`, `isArchived`, `locationId`, `latitude`, `longitude`, `radiusMeters`, `isCancelled`)
+   - **`사전투표_RSVP`**: 사전 참석/불참 현재 응답 (1인 1투표 Upsert, 연습 1시간 전 마감)
+   - **`출석원천로그`**: 원천 출석 체크 타임스탬프 로그 (Append-Only 불변 보존, `log.id` 멱등성 보장)
+   - **`장소정보`**: 연습실 주소, 상세주소, 오시는 길, GPS 위경도 및 인정 반경 프리셋
+   - **`단원변경로그`**: 단원 상태/파트 생애주기 변경 감사 로그 (Append-Only)
+   - **`일정카드`**: 학기/프로젝트 단위 상위 일정 묶음 컨테이너 (`ProgramCard`)
+   - **`환경설정`**: 지각 유예시간, 관리자 PIN, 동적 파트/상태/카테고리 분류 체계, QR 인쇄 서식
 
 ---
 

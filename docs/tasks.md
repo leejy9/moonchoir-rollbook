@@ -116,6 +116,23 @@
 - [ ] **Task 55**: 부드러운 워딩(`[🌿 자율 참여 연습]`) & 담백한 미응답자 토글 명단 UI
 - [ ] **Task 56**: 현장 출석 PIN 단일화 & 전수 통합 검증 (Green Bar)
 
+### Phase 5: Architecture Recovery & 정식 운영 전 보안 관문 ([복구 계획 10](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/10_architecture_recovery_roadmap.md))
+- [x] **Task 73**: Step 1 — 불순물·추측성 매칭 제거 및 엄격한 기본키(PK)·원천 로그 불변성 복원 (`sheets.ts`, `google-apps-script.js`, `HomeView.tsx`)
+  - `getMembers()` 읽기 부수효과, `v2` 스토리지 마이그레이션, `memberName`·`scheduleId prefix`·`date` 추측 매칭 전면 제거
+  - 단원 병합(`MERGE_MEMBERS`) 시 `RawAttendanceLog.memberId` 불변 보존 및 `mergedIntoId` 체인 기반 조회 확립
+  - 구버전 5대 탭 `gas/Code.gs` 삭제 및 8대 탭 `google-apps-script.js` 단일화 (초기 시드 `phone` 열 밀림 버그 수정)
+- [x] **Task 74**: Step 2 — 4곳으로 쪼개진 출결·통계 수식 엔진 단일화 (`src/utils/attendanceStats.ts`)
+  - `reconcileSingleMemberAttendance`, `calculateCumulativeAttendanceWithLifecycle`, `resolveMergedMemberIds` 단일 순수 엔진으로 `sheets.ts`, `MemberPortalModal.tsx`, `MemberProfileModal.tsx`, `AdminMatrixGrid.tsx` 통합
+  - 확정 기준 반영: 사유결석 분모 포함, 지각 출석률 100% 인정(지각 횟수 별도), 비대상자 자율 참여(`[🌿 자율 참여 연습]`) 시 미출석은 분모 제외·출석 시 분모+1/출석+1(`guestAttended`)
+- [x] **Task 75**: Step 3 — 시트 동기화 확증, 출석 멱등성(`log.id`), 1시간 전 RSVP 마감 및 1인 1기기 잠금 일관성 보장
+  - `sendToGoogleSheet()`의 `no-cors` 가짜 성공 폴백 제거, `RECORD_ATTENDANCE` `log.id` 중복 방지, `REGISTER_MEMBER` 락 내부 중복 검사, `isRsvpOpenForSchedule()` 1시간 전 마감 강제, `BindingModal` 중복 안내 경로에서도 1인 1기기 잠금 유지
+- [ ] **Task 76**: 공개 Apps Script API 서버 인증 및 개인정보 최소 공개 (정식 운영 전 필수)
+  - 현재 프로토타입의 링크 공개는 소유자가 위험을 인지하고 허용한 상태로 유지한다.
+  - 정식 운영 전에는 회원 조회와 출석/RSVP/관리자 변경 요청을 서버에서 사용자 역할에 따라 확인한다.
+  - 공개 조회 응답에서 관리자 PIN, 전체 전화번호, 기기 식별자 등 불필요한 민감 정보를 제거하고 역할별 필요한 데이터만 반환한다.
+  - 권한 없는 요청의 조회/수정/삭제가 거부되는 통합 검증을 통과해야 정식 운영 가능으로 표시한다.
+  - 구현 방식(로그인/세션/권한 보관 위치)은 별도 설계 및 소유자 승인 후 확정한다.
+
 ---
 
 ## Detailed Task Specifications
@@ -238,9 +255,22 @@
   - `src/components/AdminDashboard.tsx`
   - `google-apps-script.js`
 - **Acceptance Criteria**:
-  - 관리자 진입 시 세션 유효시간(예: 30분) 만료 검증 및 안전한 비밀번호 검증.
+  - 관리자 진입 시 세션 유효시간(예: 30분) 만료 검증 및 안전한 인증을 수행하며, 권한은 브라우저가 아니라 서버에서도 확인한다.
   - 관리자의 모든 데이터 생성/수정/삭제 작업을 구글 시트 `AdminAuditLog` 탭에 Append-only로 기록.
   - 단원이 사파리/크롬/카카오 인앱 브라우저 전환 등으로 기기 바인딩이 풀렸을 때, [이름 + 전화번호 뒤 4자리] 입력만으로 기존 멤버 세션 즉시 복구.
+  - 현재 공개 링크 허용은 프로토타입 범위에 한정하며, 정식 운영 보안 관문은 Task 76에서 별도 통과.
+
+### Task 76: 공개 Apps Script API 서버 인증 및 개인정보 최소 공개
+- **Goal**: 프로토타입의 공개 링크 사용을 정식 운영에 안전한 서버 권한 검사와 최소 데이터 공개로 전환.
+- **Current Decision**: 현재 프로토타입은 공개 링크 접근을 소유자가 위험을 인지하고 허용한다. 이 결정은 정식 운영 승인으로 간주하지 않는다.
+- **Touched Files**: `google-apps-script.js`, `src/services/sheets.ts`, `src/services/auth.ts`, 관리자/회원 인증 흐름, 관련 통합 테스트 및 보안 문서.
+- **Acceptance Criteria**:
+  - 회원/운영진 조회와 쓰기 권한을 Apps Script 서버에서 확인하며, 브라우저의 관리자 PIN 판정만으로 권한을 부여하지 않는다.
+  - 공개 응답에는 요청 역할에 필요한 필드만 포함하며 `adminPin`, 불필요한 전체 전화번호, 기기 식별자를 공개하지 않는다.
+  - 인증되지 않은 사용자는 제한된 공개 데이터 외의 회원/출석 조회와 모든 관리자 변경 요청을 수행할 수 없다.
+  - 권한 거부, 정상 회원 출석/RSVP, 운영진의 허용된 작업을 실제 배포 환경에서 검증한다.
+  - 운영 배포 승인 전 Task 76의 보안 테스트와 접근 검토가 완료되어야 한다.
+- **Verification**: 인증/권한 통합 테스트, `npm run typecheck`, `npm run lint`, `npm test`, 실제 GAS 배포 권한 검토.
 
 ---
 

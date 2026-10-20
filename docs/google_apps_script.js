@@ -173,11 +173,27 @@ function doPost(e) {
     const { action, data } = payload;
 
     if (action === 'RECORD_ATTENDANCE' || action === 'SUBMIT_CHECKIN') {
-      // 출석 체크 로그 Append Only (헤더 키 기반 동적 매핑)
+      // 출석 체크 로그 Append Only (헤더 키 기반 동적 매핑 + log.id 멱등성 중복 방지)
       const sheet = ss.getSheetByName(SHEET_NAMES.LOGS);
-      const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+      const rows = sheet.getDataRange().getValues();
+      const headers = rows[0] || sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+      const idCol = headers.indexOf('id');
+      const incomingId = data.id ? String(data.id).trim() : '';
+
+      if (incomingId && idCol >= 0) {
+        for (let i = 1; i < rows.length; i++) {
+          if (String(rows[i][idCol]).trim() === incomingId) {
+            return jsonResponse({
+              success: true,
+              deduplicated: true,
+              message: '출석 로그 저장 완료 (중복 요청 방지)',
+            });
+          }
+        }
+      }
+
       const newRow = headers.map(function (h) {
-        if (h === 'id') return data.id || ('log_' + new Date().getTime());
+        if (h === 'id') return incomingId || ('log_' + new Date().getTime());
         if (h === 'timestamp') return toKSTString(data.timestamp);
         if (h === 'scheduleId') return data.scheduleId || '';
         if (h === 'memberId') return data.memberId || '';
@@ -324,7 +340,43 @@ function doPost(e) {
 
     if (action === 'REGISTER_MEMBER') {
       const sheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
-      const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+      const rows = sheet.getDataRange().getValues();
+      const headers = rows[0] || sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+      const idCol = headers.indexOf('id');
+      const nameCol = headers.indexOf('name');
+      const phoneCol = headers.indexOf('phone');
+      const statusCol = headers.indexOf('status');
+
+      const incomingId = data.id ? String(data.id).trim() : '';
+      const incomingName = data.name ? String(data.name).trim() : '';
+      const incomingPhoneDigits = data.phone ? String(data.phone).replace(/\D/g, '') : '';
+
+      // 락(LockService) 내부 원자적 중복 검사: 동일 ID 또는 동일 이름+전체 전화번호 존재 시 중복 생성 차단
+      for (let i = 1; i < rows.length; i++) {
+        const rowId = idCol >= 0 ? String(rows[i][idCol]).trim() : '';
+        const rowStatus = statusCol >= 0 ? String(rows[i][statusCol]).trim() : 'ACTIVE';
+        if (incomingId && rowId === incomingId) {
+          return jsonResponse({
+            success: true,
+            deduplicated: true,
+            existingMemberId: rowId,
+            message: '단원 등록 완료 (동일 ID 확인)',
+          });
+        }
+        if (rowStatus === 'ACTIVE' && incomingName && incomingPhoneDigits.length >= 10 && nameCol >= 0 && phoneCol >= 0) {
+          const rowName = String(rows[i][nameCol]).trim();
+          const rowPhoneDigits = String(rows[i][phoneCol] || '').replace(/\D/g, '');
+          if (rowName === incomingName && rowPhoneDigits === incomingPhoneDigits) {
+            return jsonResponse({
+              success: true,
+              deduplicated: true,
+              existingMemberId: rowId,
+              message: '이미 동일한 이름과 연락처로 등록된 단원이 있습니다.',
+            });
+          }
+        }
+      }
+
       const newRow = headers.map(function (h) {
         if (h === 'id') return data.id;
         if (h === 'name') return data.name;
@@ -515,9 +567,22 @@ function doPost(e) {
       const mHeaders = mRows[0] || [];
       const idCol = mHeaders.indexOf('id');
       const statusCol = mHeaders.indexOf('status');
+      const mergedIntoCol = mHeaders.indexOf('mergedIntoId');
+
+      // 다른 병합 계정이 참조 중인 대표 계정이거나 이미 MERGED 상태인 계정은 물리 삭제 차단
+      for (let r = 1; r < mRows.length; r++) {
+        if (mergedIntoCol >= 0 && String(mRows[r][mergedIntoCol]).trim() === memberId) {
+          hasActivity = true;
+          break;
+        }
+      }
 
       for (let i = 1; i < mRows.length; i++) {
         if (String(mRows[i][idCol >= 0 ? idCol : 0]).trim() === memberId) {
+          const currentStatus = statusCol >= 0 ? String(mRows[i][statusCol]).trim() : '';
+          if (currentStatus === 'MERGED') {
+            return jsonResponse({ success: true, message: '병합 연결 보존을 위해 MERGED 행을 유지합니다.' });
+          }
           if (hasActivity && statusCol >= 0) {
             // 과거 출결 통계 보호를 위한 소프트 삭제 (status='DELETED')
             mSheet.getRange(i + 1, statusCol + 1).setValue('DELETED');
@@ -536,42 +601,36 @@ function doPost(e) {
       const canonicalId = data.canonicalId;
       const secondaryId = data.secondaryId;
 
-      // 1. Update Logs memberId to canonicalId
-      const logSheet = ss.getSheetByName(SHEET_NAMES.LOGS);
-      if (logSheet) {
-        const logData = logSheet.getDataRange().getValues();
-        const logHeaders = logData[0];
-        const mIdCol = logHeaders.indexOf('memberId');
-        const noteCol = logHeaders.indexOf('adminNote');
-        if (mIdCol >= 0) {
-          for (let i = 1; i < logData.length; i++) {
-            if (logData[i][mIdCol] === secondaryId) {
-              logSheet.getRange(i + 1, mIdCol + 1).setValue(canonicalId);
-              if (noteCol >= 0) {
-                const currentNote = logData[i][noteCol] || '';
-                logSheet.getRange(i + 1, noteCol + 1).setValue((currentNote ? currentNote + ' ' : '') + '[통합:' + secondaryId + ']');
+      // 1. 출석 원천 로그(LOGS)의 memberId는 변경하지 않고 원본 그대로 보존 (Append-Only Event Sourcing 불변식)
+      // 2. 사전투표(RSVP)는 현재 응답만 유지하므로 secondaryId의 투표를 canonicalId로 이관 (중복 시 canonical 유지)
+      const rsvpSheet = ss.getSheetByName(SHEET_NAMES.RSVP);
+      if (rsvpSheet) {
+        const rsvpData = rsvpSheet.getDataRange().getValues();
+        const rsvpHeaders = rsvpData[0];
+        const rSIdCol = rsvpHeaders.indexOf('scheduleId');
+        const rMIdCol = rsvpHeaders.indexOf('memberId');
+        if (rMIdCol >= 0 && rSIdCol >= 0) {
+          const canonicalSchedules = {};
+          for (let i = 1; i < rsvpData.length; i++) {
+            if (String(rsvpData[i][rMIdCol]).trim() === String(canonicalId).trim()) {
+              canonicalSchedules[String(rsvpData[i][rSIdCol]).trim()] = true;
+            }
+          }
+          for (let i = rsvpData.length - 1; i >= 1; i--) {
+            if (String(rsvpData[i][rMIdCol]).trim() === String(secondaryId).trim()) {
+              const sId = String(rsvpData[i][rSIdCol]).trim();
+              if (canonicalSchedules[sId]) {
+                rsvpSheet.deleteRow(i + 1);
+              } else {
+                rsvpSheet.getRange(i + 1, rMIdCol + 1).setValue(canonicalId);
+                canonicalSchedules[sId] = true;
               }
             }
           }
         }
       }
 
-      // 2. Update RSVP memberId to canonicalId
-      const rsvpSheet = ss.getSheetByName(SHEET_NAMES.RSVP);
-      if (rsvpSheet) {
-        const rsvpData = rsvpSheet.getDataRange().getValues();
-        const rsvpHeaders = rsvpData[0];
-        const rMIdCol = rsvpHeaders.indexOf('memberId');
-        if (rMIdCol >= 0) {
-          for (let i = 1; i < rsvpData.length; i++) {
-            if (rsvpData[i][rMIdCol] === secondaryId) {
-              rsvpSheet.getRange(i + 1, rMIdCol + 1).setValue(canonicalId);
-            }
-          }
-        }
-      }
-
-      // 3. Mark secondary member as MERGED in MEMBERS sheet
+      // 3. Mark secondary member as MERGED in MEMBERS sheet with mergedIntoId link
       const memberSheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
       if (memberSheet) {
         const mData = memberSheet.getDataRange().getValues();
@@ -587,7 +646,7 @@ function doPost(e) {
         }
       }
 
-      return jsonResponse({ success: true, message: '단원 식별자 안전 통합 완료' });
+      return jsonResponse({ success: true, message: '단원 식별자 안전 통합 완료 (원천 로그 보존)' });
     }
 
     if (action === 'CREATE_SCHEDULE' || action === 'REGISTER_SCHEDULE') {
@@ -1040,7 +1099,7 @@ function ensureSheetStructure(ss) {
   });
 }
 
-// 헬퍼: 초기 기본 설정 및 샘플 데이터
+// 헬퍼: 초기 환경설정 기본값 (운영 데이터는 가짜 샘플을 주입하지 않고 시트 원본만 유지)
 function seedInitialData(ss) {
   const configSheet = ss.getSheetByName(SHEET_NAMES.CONFIG);
   if (configSheet && configSheet.getLastRow() <= 1) {
@@ -1062,100 +1121,6 @@ function seedInitialData(ss) {
       ['qrPrintNotice', 'GPS 오차가 발생할 경우 화면의 [키패드로 출석]을 이용하세요', '출석 인쇄물 안내문'],
     ];
     configSheet.getRange(2, 1, defaultConfigs.length, defaultConfigs[0].length).setValues(defaultConfigs);
-  }
-
-  const memberSheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
-  if (memberSheet && memberSheet.getLastRow() <= 1) {
-    const defaultMembers = [
-      ['mem_s01', '김하은', '소프라노', '1234', 'MEMBER', 'ACTIVE', '2025-01-10', '정단원', '악보장 담당'],
-      ['mem_s02', '박서연', '소프라노', '5678', 'MEMBER', 'ACTIVE', '2025-02-15', '정단원', ''],
-      ['mem_s03', '이지민', '소프라노', '2345', 'MEMBER', 'ACTIVE', '2025-03-01', '준단원', '신입'],
-      ['mem_s04', '최유진', '소프라노', '6789', 'MEMBER', 'ACTIVE', '2024-09-01', '정단원', ''],
-      ['mem_s05', '강다은', '소프라노', '3456', 'MEMBER', 'ACTIVE', '2024-11-10', '정단원', '총무 담당'],
-      ['mem_s06', '조수빈', '소프라노', '7890', 'MEMBER', 'ACTIVE', '2025-04-01', '준단원', ''],
-      ['mem_a01', '정유나', '알토', '4567', 'MEMBER', 'ACTIVE', '2024-08-20', '정단원', '알토 파트장'],
-      ['mem_a02', '한소희', '알토', '8901', 'MEMBER', 'ACTIVE', '2024-10-05', '정단원', ''],
-      ['mem_a03', '오채원', '알토', '1357', 'MEMBER', 'ACTIVE', '2025-01-15', '정단원', ''],
-      ['mem_a04', '신예은', '알토', '2468', 'MEMBER', 'ACTIVE', '2025-02-20', '준단원', ''],
-      ['mem_a05', '배수현', '알토', '3579', 'MEMBER', 'ACTIVE', '2024-12-01', '정단원', ''],
-      ['mem_a06', '문지영', '알토', '4680', 'MEMBER', 'ACTIVE', '2025-05-10', '준단원', ''],
-      ['mem_t01', '윤도현', '테너', '9012', 'MEMBER', 'ACTIVE', '2024-07-01', '정단원', '테너 파트장'],
-      ['mem_t02', '송민준', '테너', '0123', 'MEMBER', 'ACTIVE', '2024-11-15', '정단원', ''],
-      ['mem_t03', '임시완', '테너', '5791', 'MEMBER', 'ACTIVE', '2025-02-01', '정단원', ''],
-      ['mem_t04', '장기하', '테너', '6802', 'MEMBER', 'ACTIVE', '2025-03-15', '준단원', ''],
-      ['mem_t05', '권혁수', '테너', '7913', 'MEMBER', 'ACTIVE', '2024-09-20', '정단원', '회계 담당'],
-      ['mem_t06', '남궁민', '테너', '8024', 'MEMBER', 'ACTIVE', '2025-04-20', '준단원', ''],
-      ['mem_b01', '최지우', '베이스', '3456', 'MEMBER', 'ACTIVE', '2024-06-10', '정단원', '단장'],
-      ['mem_b02', '황정민', '베이스', '7891', 'MEMBER', 'ACTIVE', '2024-08-15', '정단원', '베이스 파트장'],
-      ['mem_b03', '안성기', '베이스', '9135', 'MEMBER', 'ACTIVE', '2024-05-01', '정단원', '최고참 단원'],
-      ['mem_b04', '유해진', '베이스', '0246', 'MEMBER', 'ACTIVE', '2025-01-20', '준단원', ''],
-      ['mem_b05', '류승룡', '베이스', '1358', 'MEMBER', 'ACTIVE', '2024-10-10', '정단원', ''],
-      ['mem_b06', '박해일', '베이스', '2469', 'MEMBER', 'ACTIVE', '2025-03-05', '준단원', '']
-    ];
-    memberSheet.getRange(2, 1, defaultMembers.length, defaultMembers[0].length).setValues(defaultMembers);
-  }
-
-  const schSheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
-  if (schSheet && schSheet.getLastRow() <= 1) {
-    const defaultSchedules = [
-      ['sch_20261001', '10월 1주차 정기연습', '2026-10-01', '19:30', '21:30', '문콰이어 제1연습실 (명동)', '정기연습', '1001', '정기 합창 연습'],
-      ['sch_20261008', '10월 2주차 정기연습', '2026-10-08', '19:30', '21:30', '문콰이어 제1연습실 (명동)', '정기연습', '1008', '정기 합창 연습'],
-      ['sch_20261015', '10월 3주차 정기연습', '2026-10-15', '19:30', '22:00', '문콰이어 제1연습실 (명동)', '정기연습', '1015', '정기 집중 연습'],
-      ['sch_20261022', '10월 4주차 정기연습', '2026-10-22', '19:30', '21:30', '문콰이어 제1연습실 (명동)', '정기연습', '1022', '정기 합창 연습'],
-      ['sch_20261025', '가을 정기 연주회 리허설', '2026-10-25', '14:00', '18:00', '세종문화회관 체임버홀 대기실', '연주', '1025', '무대 리허설'],
-      ['sch_20261029', '10월 5주차 정기연습', '2026-10-29', '19:30', '21:30', '문콰이어 제1연습실 (명동)', '정기연습', '1029', '정기 합창 연습']
-    ];
-    schSheet.getRange(2, 1, defaultSchedules.length, defaultSchedules[0].length).setValues(defaultSchedules);
-  }
-
-  const locSheet = ss.getSheetByName(SHEET_NAMES.LOCATIONS);
-  if (locSheet && locSheet.getLastRow() <= 1) {
-    const defaultLocations = [
-      ['loc_main', '문콰이어 제1연습실 (명동)', '서울 중구 명동길 73', '가톨릭회관 3층 연습실', '정문 엘리베이터 이용 3층 302호', 37.5632, 126.9871, 200, 'TRUE'],
-      ['loc_sub', '세종문화회관 체임버홀 대기실', '서울 종로구 세종대로 175', '세종예술아카데미 리허설룸', '출연자 출입증 지참 후 지하 1층 대기실', 37.5724, 126.9756, 300, 'FALSE']
-    ];
-    locSheet.getRange(2, 1, defaultLocations.length, defaultLocations[0].length).setValues(defaultLocations);
-  }
-
-  const cardSheet = ss.getSheetByName(SHEET_NAMES.PROGRAM_CARDS);
-  if (cardSheet && cardSheet.getLastRow() <= 1) {
-    const defaultCards = [
-      {
-        id: 'card_fall_2026',
-        title: '2026 하반기 정기연습',
-        description: '가을 정기연습 16주 과정 및 제12회 정기연주회 대비',
-        category: '정기연습',
-        defaultLocationId: 'loc_main',
-        defaultStartTime: '19:30',
-        defaultEndTime: '21:30',
-        isArchived: 'FALSE',
-        createdAt: toKSTString('2026-08-01 00:00:00'),
-        targetAudienceType: 'ALL',
-        targetParts: '',
-        targetMemberIds: '',
-      },
-      {
-        id: 'card_special_2026',
-        title: '연주회 집중 리허설',
-        description: '정기연주회 전 파트 집중 점검 및 총 리허설',
-        category: '연주',
-        defaultLocationId: 'loc_main',
-        defaultStartTime: '14:00',
-        defaultEndTime: '18:00',
-        isArchived: 'FALSE',
-        createdAt: toKSTString('2026-09-01 00:00:00'),
-        targetAudienceType: 'ALL',
-        targetParts: '',
-        targetMemberIds: '',
-      }
-    ];
-    const headers = cardSheet.getRange(1, 1, 1, Math.max(cardSheet.getLastColumn(), 1)).getValues()[0];
-    defaultCards.forEach(function (cardObj) {
-      const row = headers.map(function (h) {
-        return cardObj[h] !== undefined ? cardObj[h] : '';
-      });
-      cardSheet.appendRow(row);
-    });
   }
 }
 

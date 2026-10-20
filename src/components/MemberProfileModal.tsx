@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type { Member, Schedule, RawAttendanceLog, PartType, MemberStatus, RoleType, MemberStatusHistory } from '../types/rollbook';
 import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString, addDaysKST } from '../utils/date';
+import { calculateCumulativeAttendanceWithLifecycle } from '../utils/attendanceStats';
 import { sheetsService } from '../services/sheets';
 import { RoundDatePicker } from './RoundDatePicker';
 
@@ -228,38 +229,27 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     }
   };
 
-  // 단원의 출결 통계 계산 (중앙 엔진 reconcileMemberAttendance 기반 SSOT)
+  // 단원의 출결 통계 계산 (단일 통합 엔진 calculateCumulativeAttendanceWithLifecycle 기반 SSOT)
   const { attendedCount, attendanceRate, totalPastSessions } = useMemo(() => {
-    let attended = 0;
-    let late = 0;
-    let requiredSessions = 0;
-    const todayStr = getKSTDateString();
-
-    schedules.forEach((s) => {
-      const rec = sheetsService.reconcileMemberAttendance(formData.id, s.id);
-      const isPastOrToday = s.date <= todayStr;
-      const isExempt = rec?.finalStatus === '미참' || rec?.finalStatus === '모수제외' || Boolean(formData.joinedAt && s.date < formData.joinedAt);
-      const hasCheckedIn = rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정' || rec?.finalStatus === '지각';
-
-      // 과거 또는 오늘 일정, 또는 실제 출결 로그가 있는 일정만 모수에 포함 (미래 일정 모수 왜곡 원천 차단)
-      if (!isExempt && (isPastOrToday || hasCheckedIn)) {
-        requiredSessions++;
-        if (rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정') {
-          attended += 1;
-        } else if (rec?.finalStatus === '지각') {
-          late += 1;
-        }
-      } else if (isExempt && hasCheckedIn) {
-        requiredSessions++;
-        attended += 1;
-      }
-    });
-
-    // 지각도 1.0 인정 (별도 감점 없이 출석률 산출)
-    const effectiveAttended = attended + late;
-    const rate = requiredSessions > 0 ? Math.round((effectiveAttended / requiredSessions) * 100) : 100;
-    return { attendedCount: effectiveAttended, attendanceRate: rate, totalPastSessions: requiredSessions };
-  }, [schedules, formData.id, formData.joinedAt]);
+    const summaries = calculateCumulativeAttendanceWithLifecycle(
+      [formData],
+      schedules,
+      sheetsService.getLogs(),
+      getKSTDateString(),
+      sheetsService.getRSVPVotes(),
+      sheetsService.getConfig().lateGraceMinutes ?? 10,
+      sheetsService.getMembers(true, true)
+    );
+    const summary = summaries[0];
+    if (!summary) {
+      return { attendedCount: 0, attendanceRate: 100, totalPastSessions: 0 };
+    }
+    return {
+      attendedCount: summary.attended + summary.late,
+      attendanceRate: summary.attendanceRate,
+      totalPastSessions: summary.totalSessions,
+    };
+  }, [schedules, formData]);
 
   // 최신순 일정 정렬
   const sortedSchedules = useMemo(() => {

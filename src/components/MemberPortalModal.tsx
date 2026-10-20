@@ -58,10 +58,21 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
   const schedules = sheetsService.getSchedules();
   const allLogs = sheetsService.getLogs();
+  const allRsvpVotes = sheetsService.getRSVPVotes();
+  const allMembersWithMerged = sheetsService.getMembers(true, true);
+  const lateGraceMinutes = sheetsService.getConfig().lateGraceMinutes ?? 10;
 
-  // 2. 단원 생애주기 & 입단일 반영 누적 통계 산출
+  // 2. 단원 생애주기, 입단일, 사전투표(사유결석), 유예시간을 반영한 단일 통합 통계 산출
   const memberSummary = useMemo(() => {
-    const summaries = calculateCumulativeAttendanceWithLifecycle([currentMember], schedules, allLogs);
+    const summaries = calculateCumulativeAttendanceWithLifecycle(
+      [currentMember],
+      schedules,
+      allLogs,
+      todayStr,
+      allRsvpVotes,
+      lateGraceMinutes,
+      allMembersWithMerged
+    );
     return (
       summaries[0] || {
         attendanceRate: 100,
@@ -74,7 +85,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         guestAttended: 0,
       }
     );
-  }, [currentMember, schedules, allLogs]);
+  }, [currentMember, schedules, allLogs, todayStr, allRsvpVotes, lateGraceMinutes, allMembersWithMerged]);
 
   // 게이미피케이션 레벨 계산 (최신 시트 파트명 반영)
   const gamifiedLevel = useMemo(() => {

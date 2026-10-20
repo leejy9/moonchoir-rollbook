@@ -412,24 +412,33 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(votesAfter2[0].reason).toBe('갑작스러운 야근');
   });
 
-  it('rescues orphan schedule logs matching by scheduleId prefix or date', async () => {
-    // Add a schedule with randomized suffix
-    const schedule = await service.addSchedule({
-      id: 'sch_20261112_rand',
-      title: '11월 특별연습',
-      date: '2026-11-12',
-      startTime: '19:30',
-      endTime: '21:30',
+  it('strictly isolates schedule logs by scheduleId without conflating same-date schedules', async () => {
+    const scheduleA = await service.addSchedule({
+      id: 'sch_20261010_morning',
+      title: '10월 오전 연습',
+      date: '2026-10-10',
+      startTime: '10:00',
+      endTime: '12:00',
       locationName: '제1연습실',
       category: '정기연습',
       checkInPin: '1112',
     });
 
-    // Add log with base scheduleId (sch_20261112)
+    const scheduleB = await service.addSchedule({
+      id: 'sch_20261010_evening',
+      title: '10월 저녁 연습',
+      date: '2026-10-10',
+      startTime: '19:30',
+      endTime: '21:30',
+      locationName: '제1연습실',
+      category: '정기연습',
+      checkInPin: '2222',
+    });
+
     await service.addCheckInLog({
-      id: 'log_orphan_test',
-      scheduleId: 'sch_20261112',
-      timestamp: '2026-11-12T19:25:00',
+      id: 'log_morning_test',
+      scheduleId: scheduleA.id,
+      timestamp: '2026-10-10T09:55:00',
       memberId: 'mem_s01',
       memberName: '김하은',
       part: '소프라노',
@@ -437,35 +446,33 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       isVerifiedLocation: true,
     });
 
-    // getLogs for the suffixed schedule should rescue and return this log
-    const logs = service.getLogs('sch_20261112_rand');
-    expect(logs.length).toBe(1);
-    expect(logs[0].id).toBe('log_orphan_test');
+    expect(service.getLogs(scheduleA.id).length).toBe(1);
+    expect(service.getLogs(scheduleB.id).length).toBe(0);
 
-    // reconcileAttendance should also accurately reflect this attendance
-    const rec = service.reconcileMemberAttendance('mem_s01', schedule.id);
-    expect(rec?.finalStatus).toBe('출석');
-    expect(rec?.authMethod).toBe('QR_WEB_CAM');
+    const recA = service.reconcileMemberAttendance('mem_s01', scheduleA.id);
+    expect(recA?.finalStatus).toBe('출석');
+
+    const recB = service.reconcileMemberAttendance('mem_s01', scheduleB.id);
+    expect(recB?.finalStatus).toBe('결석');
   });
 
-  it('canonicalizes fragmented member IDs across rsvpVotes and logs by matching memberName', async () => {
+  it('preserves raw memberId on remote fetch without guessing by memberName', async () => {
     const originalFetch = globalThis.fetch;
     const mockApiResponse = {
       success: true,
       data: {
         members: [
-          { id: 'mem_primary_100', name: '이재연', part: '테너', phoneLast4: '4240', role: 'MEMBER', createdAt: '2026-10-01', status: 'ACTIVE' }
+          { id: 'mem_primary_100', name: '이재연', part: '테너', phoneLast4: '4240', role: 'MEMBER', createdAt: '2026-10-01', status: 'ACTIVE' },
+          { id: 'mem_other_200', name: '이재연', part: '베이스', phoneLast4: '9999', role: 'MEMBER', createdAt: '2026-10-02', status: 'ACTIVE' }
         ],
         schedules: [
-          { id: 'sch_test_canon', title: '테스트일정', date: '2026-11-20', startTime: '19:30', endTime: '21:30', locationName: '연습실', category: '정기연습' }
+          { id: 'sch_test_canon', title: '테스트일정', date: '2026-10-10', startTime: '19:30', endTime: '21:30', locationName: '연습실', category: '정기연습' }
         ],
-        // RSVP with an old/fragmented ID 'mem_old_999' but same name '이재연'
         rsvpVotes: [
-          { id: 'v_old_1', scheduleId: 'sch_test_canon', memberId: 'mem_old_999', memberName: '이재연', part: '테너', status: 'ATTEND', timestamp: '2026-10-17T03:00:00Z' }
+          { id: 'v_other_1', scheduleId: 'sch_test_canon', memberId: 'mem_other_200', memberName: '이재연', part: '베이스', status: 'ATTEND', timestamp: '2026-10-09T03:00:00Z' }
         ],
-        // Log with another fragmented ID 'mem_old_888' but same name '이재연'
         recentLogs: [
-          { id: 'l_old_1', scheduleId: 'sch_test_canon', memberId: 'mem_old_888', memberName: '이재연', part: '테너', timestamp: '2026-11-20T19:20:00', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true }
+          { id: 'l_other_1', scheduleId: 'sch_test_canon', memberId: 'mem_other_200', memberName: '이재연', part: '베이스', timestamp: '2026-10-10T19:20:00', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true }
         ],
         config: {}
       }
@@ -479,20 +486,20 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     try {
       await service.fetchRemoteData('https://script.google.com/macros/s/TEST/exec');
 
-      // The RSVP should now be associated with the primary member ID 'mem_primary_100'
       const votes = service.getRSVPVotes('sch_test_canon');
       expect(votes.length).toBe(1);
-      expect(votes[0].memberId).toBe('mem_primary_100');
+      expect(votes[0].memberId).toBe('mem_other_200');
 
-      // The log should also be associated with 'mem_primary_100'
       const logs = service.getLogs('sch_test_canon');
       expect(logs.length).toBe(1);
-      expect(logs[0].memberId).toBe('mem_primary_100');
+      expect(logs[0].memberId).toBe('mem_other_200');
 
-      // Reconciliation should succeed seamlessly
-      const rec = service.reconcileMemberAttendance('mem_primary_100', 'sch_test_canon');
-      expect(rec?.finalStatus).toBe('출석');
-      expect(rec?.rsvpStatus).toBe('ATTEND');
+      // Same-name member mem_primary_100 does not steal mem_other_200's attendance
+      const recPrimary = service.reconcileMemberAttendance('mem_primary_100', 'sch_test_canon');
+      expect(recPrimary?.finalStatus).toBe('결석');
+
+      const recOther = service.reconcileMemberAttendance('mem_other_200', 'sch_test_canon');
+      expect(recOther?.finalStatus).toBe('출석');
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -608,17 +615,20 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     const updatedA = allMembers.find((m) => m.id === memberA.id);
     expect(updatedA?.boundDeviceId).toBe('device_uuid_9999');
 
-    // Attendance logs for sch_oct_01 now reference canonical ID
+    // Raw attendance logs for sch_oct_01 remain immutable (preserve original memberB.id)
     const octLogs = service.getLogs('sch_oct_01');
-    expect(octLogs[0].memberId).toBe(memberA.id);
-    expect(octLogs[0].adminNote).toContain(`[ID통합: ${memberB.id} -> ${memberA.id}]`);
+    expect(octLogs[0].memberId).toBe(memberB.id);
 
-    // Projection view reflects both attendances under memberA
+    // Projection view reflects both attendances under canonical memberA via mergedIntoId resolution
     const recSept = service.reconcileAttendance('sch_sept_01').find((r) => r.memberId === memberA.id);
     expect(recSept?.finalStatus).toBe('출석');
 
     const recOct = service.reconcileAttendance('sch_oct_01').find((r) => r.memberId === memberA.id);
     expect(recOct?.finalStatus).toBe('출석');
+
+    const cumStats = service.calculateCumulativeAttendance();
+    const memberASummary = cumStats.memberSummaries.find((s) => s.memberId === memberA.id);
+    expect(memberASummary?.attended).toBe(2);
   });
 
   it('prioritizes dynamic preset coordinates and radius over outdated schedule snapshots', async () => {
@@ -771,13 +781,13 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(isMemberRequiredForSchedule(member3, sch.date, sch)).toBe(true);
   });
 
-  it('원격 시트에 phone 정보가 빈 문자열이어도 기존 로컬 연락처를 유실하지 않고 fallback 보존한다', async () => {
+  it('원격 시트 동기화 시 로컬 전용 잔류 데이터를 부활시키지 않고 시트 원본(SSOT)을 100% 그대로 반영한다', async () => {
     service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
-    const testMemberId = 'mem_preserve_phone';
 
+    // 로컬에만 있던 임시 데이터 추가
     await service.addMember({
-      id: testMemberId,
-      name: '이재연',
+      id: 'mem_local_zombie',
+      name: '로컬잔류단원',
       part: '베이스',
       phone: '010-1234-5678',
       phoneLast4: '5678',
@@ -789,7 +799,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       note: '',
     });
 
-    // Mock remote returning empty phone string for this member
+    // 원격 시트에는 '이재연' 1명만 존재하고 로컬 잔류 단원이나 가짜 데이터가 없는 상태
     vi.spyOn(globalThis, 'fetch').mockImplementationOnce(() =>
       Promise.resolve({
         ok: true,
@@ -799,11 +809,11 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
             data: {
               members: [
                 {
-                  id: testMemberId,
+                  id: 'mem_sheet_real',
                   name: '이재연',
                   part: '베이스',
-                  phone: '', // empty in remote sheet!
-                  phoneLast4: '5678',
+                  phone: '010-9999-8888',
+                  phoneLast4: '8888',
                   role: 'MEMBER',
                   status: 'ACTIVE',
                   joinedAt: '2026-01-01',
@@ -823,10 +833,13 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
 
     await service.fetchRemoteData();
 
-    const preserved = service.getMembers().find((m) => m.id === testMemberId);
-    expect(preserved).toBeDefined();
-    expect(preserved?.phone).toBe('010-1234-5678');
-    expect(preserved?.phoneLast4).toBe('5678');
+    const members = service.getMembers();
+    expect(members).toHaveLength(1);
+    expect(members[0].id).toBe('mem_sheet_real');
+    expect(members[0].phone).toBe('010-9999-8888');
+    expect(service.getSchedules()).toEqual([]);
+    expect(service.getLocationPresets()).toEqual([]);
+    expect(service.getProgramCards()).toEqual([]);
   });
 
   it('출석 로그와 사전투표의 기본 타임스탬프가 한국 표준시(KST: YYYY-MM-DD HH:mm:ss) 형식으로 기록된다', async () => {

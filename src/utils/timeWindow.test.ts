@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Schedule } from '../types/rollbook';
-import { getCheckInWindowState } from './timeWindow';
+import { getCheckInWindowState, isRsvpOpenForSchedule } from './timeWindow';
 
 describe('CheckInWindowState - 1 Hour Service Window Logic & Realtime Protocols', () => {
   const mockSchedule: Schedule = {
@@ -132,5 +132,14 @@ describe('CheckInWindowState - 1 Hour Service Window Logic & Realtime Protocols'
     const closedState = getCheckInWindowState(midnightSchedule, pastMidnight);
     expect(closedState.isOpen).toBe(false);
     expect(closedState.status).toBe('WINDOW_CLOSED');
+  });
+
+  it('enforces RSVP cutoff strictly at 1 hour before rehearsal start', () => {
+    // 18:29:59 (1 second before cutoff for 19:30 rehearsal) -> open
+    expect(isRsvpOpenForSchedule(mockSchedule, new Date('2026-10-15T18:29:59'))).toBe(true);
+    // 18:30:00 (exact 1 hour before 19:30 rehearsal) -> closed
+    expect(isRsvpOpenForSchedule(mockSchedule, new Date('2026-10-15T18:30:00'))).toBe(false);
+    // 19:00:00 (30m before rehearsal) -> closed
+    expect(isRsvpOpenForSchedule(mockSchedule, new Date('2026-10-15T19:00:00'))).toBe(false);
   });
 });

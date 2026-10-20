@@ -2,11 +2,14 @@ import type {
   Member,
   Schedule,
   RawAttendanceLog,
+  RSVPVote,
+  AttendanceReconciliation,
   CumulativeMemberAttendance,
   AttendanceStatus,
   MemberStatus,
   PartType,
 } from '../types/rollbook';
+import { getKSTDateString, parseKSTDate } from './date';
 
 /**
  * 특정 일자(date) 시점에 단원의 유효한 상태(Status)와 파트(Part)를 판정합니다.
@@ -161,20 +164,167 @@ export function getGamifiedAttendanceLevel(attendedCount: number, part: string =
 }
 
 /**
- * 단원 생애주기 이력과 입단일을 반영하여 단원별 누적 출결 통계를 산출합니다.
- * 도메인 불변식: 미래 일정(schedule.date > referenceDate)은 결석 및 모수에서 완전 제외합니다.
+ * 명시적 병합 관계(mergedIntoId)를 따라 대표 단원(canonicalMemberId)에 연결된
+ * 모든 단원 ID 집합(본인 ID + 병합된 과거 ID들)을 반환합니다.
+ * 이름이나 전화번호 뒷자리 추측에 의존하지 않습니다.
+ */
+export function resolveMergedMemberIds(
+  canonicalMemberId: string,
+  allMembers: Member[]
+): Set<string> {
+  const result = new Set<string>([canonicalMemberId]);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const m of allMembers) {
+      if (m.mergedIntoId && result.has(m.mergedIntoId) && !result.has(m.id)) {
+        result.add(m.id);
+        added = true;
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * 단일 단원 + 단일 일정에 대한 출결 상태를 결정론적으로 계산하는 순수 투영 함수(SSOT).
+ * - 취소된 연습(isCancelled) -> '미참'
+ * - 최신 원천 로그(Recency Resolution) 우선 반영 (관리자 출결 취소 포함)
+ * - 로그가 없으면: 비필참 대상자는 '미참', 사전 불참(사유 작성)은 '사유결석', 그 외 필참 대상자는 '결석'
+ */
+export function reconcileSingleMemberAttendance(
+  member: Member,
+  schedule: Schedule,
+  memberLogs: RawAttendanceLog[],
+  memberRsvp?: RSVPVote,
+  lateGraceMinutes: number = 10
+): AttendanceReconciliation {
+  if (schedule.isCancelled) {
+    return {
+      memberId: member.id,
+      memberName: member.name,
+      part: member.part,
+      rsvpStatus: 'UNVOTED',
+      finalStatus: '미참',
+      isManualOverride: false,
+      adminNote: '취소된 연습',
+    };
+  }
+
+  const [startHour, startMin] = schedule.startTime.split(':').map(Number);
+  const startMinutes = (startHour || 0) * 60 + (startMin || 0);
+  const lateThresholdMinutes = startMinutes + lateGraceMinutes;
+
+  // 동일 단원의 다중 로그 중 가장 최신 액션 우선 채택
+  const sortedLogs = [...memberLogs].sort((a, b) => {
+    const timeA = parseKSTDate(a.timestamp || '').getTime();
+    const timeB = parseKSTDate(b.timestamp || '').getTime();
+    return timeA - timeB;
+  });
+  const log = sortedLogs.length > 0 ? sortedLogs[sortedLogs.length - 1] : undefined;
+
+  let finalStatus: AttendanceStatus = '결석';
+  let checkInTime: string | undefined;
+
+  const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
+  const isExempt = !isRequired;
+
+  // 1) 출결 취소(초기화) 로그인지 판별
+  const isCancelledLog = Boolean(
+    log &&
+      (log.adminNote?.includes('취소') || log.adminNote === '관리자 출결 취소 (초기화)')
+  );
+
+  // 2) 관리자가 명시적으로 수동 결석 오버라이드한 경우 (취소 로그 제외)
+  const isManualAbsentOverride = Boolean(
+    log &&
+      !isCancelledLog &&
+      log.authMethod === 'MANUAL_BY_ADMIN' &&
+      (log.adminNote?.includes('결석') ||
+        log.adminNote?.includes('노쇼') ||
+        (log as unknown as { status?: string }).status === '결석')
+  );
+
+  let isManualOverride = false;
+  let effectiveAdminNote: string | undefined;
+
+  if (log && !isCancelledLog) {
+    checkInTime = log.timestamp;
+    isManualOverride = log.authMethod === 'MANUAL_BY_ADMIN';
+    effectiveAdminNote = log.adminNote;
+
+    if (isManualAbsentOverride) {
+      finalStatus = '결석';
+    } else {
+      let logMinutes = 0;
+      if (log.timestamp.includes('T')) {
+        const timePart = log.timestamp.split('T')[1].slice(0, 5);
+        const [h, m] = timePart.split(':').map(Number);
+        logMinutes = (h || 0) * 60 + (m || 0);
+      } else {
+        const logDate = parseKSTDate(log.timestamp);
+        if (!isNaN(logDate.getTime()) && log.timestamp.includes(':')) {
+          logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
+        }
+      }
+
+      if (log.adminNote?.includes('지각') || logMinutes > lateThresholdMinutes) {
+        finalStatus = '지각';
+      } else {
+        finalStatus = '출석';
+      }
+    }
+  } else {
+    if (isExempt) {
+      finalStatus = '미참';
+    } else if (memberRsvp && memberRsvp.status === 'ABSENT' && memberRsvp.reason) {
+      finalStatus = '사유결석';
+    } else {
+      finalStatus = '결석';
+    }
+    isManualOverride = false;
+    effectiveAdminNote = undefined;
+  }
+
+  return {
+    memberId: member.id,
+    memberName: member.name,
+    part: member.part,
+    rsvpStatus: memberRsvp ? memberRsvp.status : 'UNVOTED',
+    rsvpReason: memberRsvp?.reason,
+    checkInTime,
+    authMethod: isCancelledLog ? undefined : log?.authMethod,
+    distanceMeters: log?.distanceMeters,
+    isVerifiedLocation: log?.isVerifiedLocation,
+    finalStatus,
+    isManualOverride,
+    adminNote: effectiveAdminNote,
+  };
+}
+
+/**
+ * 단원 생애주기 이력, 입단일, 대상자 분류, 사전투표(사유결석), 출석원천로그를 모두 반영하여
+ * 단원별 누적 출결 통계를 산출하는 단일 통합 엔진(SSOT).
+ * - 미래 일정(schedule.date > referenceDate) 및 취소/보관 일정은 결석 및 모수에서 제외합니다.
+ * - 사유결석은 모수(분모)에 포함하되 사유결석 횟수(excused)로 집계합니다.
+ * - 지각은 출석률 계산 시 100% 출석으로 인정하되 지각 횟수(late)로 분리 기록합니다.
  */
 export function calculateCumulativeAttendanceWithLifecycle(
   members: Member[],
   schedules: Schedule[],
   rawLogs: RawAttendanceLog[],
-  referenceDate?: string
+  referenceDate?: string,
+  rsvpVotes: RSVPVote[] = [],
+  lateGraceMinutes: number = 10,
+  allMembersForMergeResolution?: Member[]
 ): CumulativeMemberAttendance[] {
-  // 기준 날짜 (기본: 오늘 YYYY-MM-DD)
-  const todayStr = referenceDate || new Date().toLocaleDateString('sv-SE');
+  const todayStr = referenceDate || getKSTDateString();
+  const rosterForMerge = allMembersForMergeResolution || members;
 
-  // 숨김 처리되지 않은 활성 일정만 필터
-  const activeSchedules = schedules.filter((s) => !s.isArchived);
+  // 숨김(아카이브) 또는 취소되지 않은 일정만 모수 후보로 정렬
+  const activeSchedules = schedules
+    .filter((s) => !s.isArchived && !s.isCancelled)
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   return members.map((member) => {
     let totalSessions = 0;
@@ -185,95 +335,77 @@ export function calculateCumulativeAttendanceWithLifecycle(
     let guestAttended = 0;
     const recentStatusList: AttendanceStatus[] = [];
 
-    // 날짜 오름차순으로 일정 정렬
-    const sortedSchedules = [...activeSchedules].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
+    const aliasIds = resolveMergedMemberIds(member.id, rosterForMerge);
 
-    for (const schedule of sortedSchedules) {
+    for (const schedule of activeSchedules) {
       const isPastOrToday = schedule.date <= todayStr;
       const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
 
-      // 해당 일정에 단원의 출석 원천로그가 존재하는지 조회 (날짜 일치 Fallback 구출)
-      const memberLogs = rawLogs.filter((log) => {
-        if (log.memberId !== member.id) return false;
-        if (log.scheduleId === schedule.id) return true;
-        if (log.timestamp && log.timestamp.slice(0, 10) === schedule.date) return true;
-        return false;
-      });
+      const memberLogs = rawLogs.filter(
+        (log) => aliasIds.has(log.memberId) && log.scheduleId === schedule.id
+      );
+      const memberRsvp = rsvpVotes.find(
+        (v) => aliasIds.has(v.memberId) && v.scheduleId === schedule.id
+      );
 
-      const hasCheckedIn = memberLogs.length > 0;
-      const lastLog = memberLogs[memberLogs.length - 1]; // 최신 액션 우선 채택
+      const rec = reconcileSingleMemberAttendance(
+        member,
+        schedule,
+        memberLogs,
+        memberRsvp,
+        lateGraceMinutes
+      );
+
+      const hasCheckedIn =
+        rec.finalStatus === '출석' ||
+        rec.finalStatus === '수동인정' ||
+        rec.finalStatus === '지각';
 
       if (isRequired) {
-        // 정규 필참 일정인 경우: 오직 과거 또는 오늘 일정만 모수 및 결석에 반영!
-        if (isPastOrToday) {
-          totalSessions++;
-          if (hasCheckedIn) {
-            let isLate = Boolean(lastLog?.adminNote && lastLog.adminNote.includes('지각'));
-            if (!isLate && lastLog?.timestamp && schedule.startTime) {
-              const [sh, sm] = schedule.startTime.split(':').map(Number);
-              const scheduleStartMinutes = (sh || 0) * 60 + (sm || 0);
-              let logMinutes = 0;
-              if (lastLog.timestamp.includes('T')) {
-                const timePart = lastLog.timestamp.split('T')[1].slice(0, 5);
-                const [h, m] = timePart.split(':').map(Number);
-                logMinutes = (h || 0) * 60 + (m || 0);
-              } else if (lastLog.timestamp.includes(':')) {
-                const parts = lastLog.timestamp.split(':');
-                const h = parseInt(parts[0].slice(-2), 10);
-                const m = parseInt(parts[1].slice(0, 2), 10);
-                logMinutes = (h || 0) * 60 + (m || 0);
-              }
-              // 기본 10분 유예시간 초과 시 지각 판정
-              if (logMinutes > scheduleStartMinutes + 10) {
-                isLate = true;
-              }
-            }
+        if (isPastOrToday || hasCheckedIn) {
+          totalSessions += 1;
+          recentStatusList.push(rec.finalStatus);
 
-            if (isLate) {
-              late++;
-              recentStatusList.push('지각');
-            } else if (lastLog?.authMethod === 'MANUAL_BY_ADMIN') {
-              attended++;
-              recentStatusList.push('수동인정');
-            } else {
-              attended++;
-              recentStatusList.push('출석');
-            }
+          if (rec.finalStatus === '출석' || rec.finalStatus === '수동인정') {
+            attended += 1;
+          } else if (rec.finalStatus === '지각') {
+            late += 1;
+          } else if (rec.finalStatus === '사유결석') {
+            excused += 1;
           } else {
-            absent++;
-            recentStatusList.push('결석');
+            absent += 1;
           }
         }
       } else {
-        // 필참 일정이 아닌 경우 (입단 전, 휴단/퇴단/객원 기간)
+        // 비필참 일정(입단 전, 휴단/객원, 타 파트/미지정 소그룹): 자발적 출석 시에만 모수+1 및 출석 인정
         if (hasCheckedIn) {
-          // 자발적 옵트인(게스트/임시) 출석: 출석한 날만 모수+1, 출석+1 가산
-          totalSessions++;
-          attended++;
-          guestAttended++;
-          recentStatusList.push('출석');
+          totalSessions += 1;
+          if (rec.finalStatus === '지각') {
+            late += 1;
+          } else {
+            attended += 1;
+          }
+          guestAttended += 1;
+          recentStatusList.push(rec.finalStatus);
         }
-        // 출석하지 않았으면 아무 것도 카운트하지 않음 (결석 처리 절대 안 함)
       }
     }
 
-    // 출석률(%) 계산: 지각도 1.0 인정 (별도 감점 없이 출석률 100% 반영)
     const effectiveAttended = attended + late;
     const attendanceRate =
-      totalSessions === 0 ? 100 : Math.round((effectiveAttended / totalSessions) * 100);
+      totalSessions === 0
+        ? 100
+        : Math.min(100, Math.round((effectiveAttended / totalSessions) * 100));
 
-    // 뱃지 부여
     const badges: string[] = [];
     if (totalSessions >= 3 && attendanceRate === 100) {
       badges.push('개근');
-    } else if (attendanceRate >= 80) {
+    } else if (attendanceRate >= 80 && totalSessions > 0) {
       badges.push('우수');
-    } else if (attendanceRate < 60 && totalSessions > 0) {
+    }
+    if (absent >= 3 || (totalSessions > 0 && attendanceRate < 60)) {
       badges.push('주의');
     }
-
     if (guestAttended > 0) {
       badges.push(`게스트 ${guestAttended}회`);
     }
@@ -291,7 +423,7 @@ export function calculateCumulativeAttendanceWithLifecycle(
       excused,
       absent,
       attendanceRate,
-      recentStatusList,
+      recentStatusList: recentStatusList.slice(-5),
       badges,
       guestAttended,
       isSpecialGuest: guestAttended > 0,

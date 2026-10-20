@@ -113,3 +113,27 @@ export function getCheckInWindowState(
     };
   }
 }
+
+/**
+ * 단원 사전 참석/불참 투표(RSVP) 변경 가능 여부를 판별합니다.
+ * 규칙: 연습 시작 시각의 1시간(60분) 전까지만 변경/취소 가능하며,
+ * 마감 시각과 같거나 그 이후(now >= scheduleStart - 60m)에는 단원 변경이 차단됩니다.
+ */
+export function isRsvpOpenForSchedule(
+  schedule: Schedule,
+  currentDate: Date = new Date(),
+  closeBeforeMinutes: number = 60
+): boolean {
+  if (schedule.isCancelled || schedule.isArchived) return false;
+  try {
+    const [startH, startM] = schedule.startTime.split(':').map(Number);
+    const scheduleStart = new Date(
+      `${schedule.date}T${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}:00`
+    );
+    const cutoffTime = scheduleStart.getTime() - closeBeforeMinutes * 60 * 1000;
+    return currentDate.getTime() < cutoffTime;
+  } catch {
+    return true;
+  }
+}
+
