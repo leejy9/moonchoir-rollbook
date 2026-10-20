@@ -6,6 +6,7 @@ const AUTH_KEYS = {
   DEVICE_PROFILE: 'moonchoir_bound_device_v1',
   ADMIN_SESSION: 'moonchoir_admin_session_v1',
 };
+const ADMIN_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 
 class MemoryStorage {
   private store: Record<string, string> = {};
@@ -118,16 +119,45 @@ export function validateAdminPin(inputPin: string): boolean {
 export function isAdminLoggedIn(): boolean {
   const storage = getStorage();
   if (!storage) return false;
-  return storage.getItem(AUTH_KEYS.ADMIN_SESSION) === 'true';
+  const raw = storage.getItem(AUTH_KEYS.ADMIN_SESSION);
+  if (!raw) return false;
+
+  try {
+    const session = JSON.parse(raw) as { lastActivityAt?: number };
+    if (
+      typeof session.lastActivityAt !== 'number' ||
+      Date.now() - session.lastActivityAt >= ADMIN_IDLE_TIMEOUT_MS
+    ) {
+      storage.removeItem(AUTH_KEYS.ADMIN_SESSION);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Auth] Invalid admin session; requiring sign-in:', err);
+    storage.removeItem(AUTH_KEYS.ADMIN_SESSION);
+    return false;
+  }
 }
 
 export function setAdminLoggedIn(loggedIn: boolean): void {
   const storage = getStorage();
   if (storage) {
     if (loggedIn) {
-      storage.setItem(AUTH_KEYS.ADMIN_SESSION, 'true');
+      storage.setItem(
+        AUTH_KEYS.ADMIN_SESSION,
+        JSON.stringify({ lastActivityAt: Date.now() })
+      );
     } else {
       storage.removeItem(AUTH_KEYS.ADMIN_SESSION);
     }
   }
+}
+
+export function touchAdminSession(): void {
+  if (!isAdminLoggedIn()) return;
+  const storage = getStorage();
+  storage.setItem(
+    AUTH_KEYS.ADMIN_SESSION,
+    JSON.stringify({ lastActivityAt: Date.now() })
+  );
 }

@@ -50,6 +50,7 @@ describe('Calendar Utility', () => {
       endTime: '21:30',
       locationName: '제1연습실',
       category: '정기연습' as const,
+      checkInPin: '8899',
     };
 
     const expanded = expandRecurringSchedules(base, {
@@ -70,6 +71,7 @@ describe('Calendar Utility', () => {
     expect(expanded[0].seriesIndex).toBe(1);
     expect(expanded[0].seriesTotal).toBe(4);
     expect(expanded[3].seriesIndex).toBe(4);
+    expect(expanded.every((schedule) => schedule.checkInPin === undefined)).toBe(true);
   });
 
   it('duplicates an existing schedule series with new start date and unique IDs', () => {
@@ -86,7 +88,7 @@ describe('Calendar Utility', () => {
       frequency: 'WEEKLY',
       byDays: ['THU'],
       count: 3,
-    });
+    }).map((schedule) => ({ ...schedule, checkInPin: '8899' }));
 
     const targetSeriesId = originalSeries[0].seriesId!;
     const duplicated = duplicateScheduleSeries(originalSeries, targetSeriesId, '2027-03-04');
@@ -100,6 +102,7 @@ describe('Calendar Utility', () => {
     expect(duplicated[0].seriesId).toBeDefined();
     expect(duplicated[0].seriesId).not.toBe(targetSeriesId);
     expect(duplicated[0].seriesId).toBe(duplicated[1].seriesId);
+    expect(duplicated.every((schedule) => schedule.checkInPin === undefined)).toBe(true);
 
     // Each duplicated item has a unique scheduleId
     expect(duplicated[0].id).not.toBe(originalSeries[0].id);
@@ -234,4 +237,3 @@ describe('Calendar Utility', () => {
     });
   });
 });
-

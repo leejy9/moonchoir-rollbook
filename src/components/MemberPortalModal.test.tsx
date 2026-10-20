@@ -18,6 +18,10 @@ describe('MemberPortalModal Component (2-Tab Streamlined Scorecard)', () => {
         profile={mockProfile}
         onClose={() => {}}
         onChangeBinding={() => {}}
+        displayMode="AUTO"
+        isDarkMode={false}
+        onChangeDisplayMode={() => {}}
+        onChangeDarkMode={() => {}}
       />
     );
 
@@ -40,4 +44,3 @@ describe('MemberPortalModal Component (2-Tab Streamlined Scorecard)', () => {
     expect(html).toContain('새싹 소프라노');
   });
 });
-

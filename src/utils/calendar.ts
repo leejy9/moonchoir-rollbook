@@ -118,6 +118,7 @@ export function expandRecurringSchedules(
     return [
       {
         ...baseSchedule,
+        checkInPin: undefined,
         id: 'sch_' + Math.random().toString(36).slice(2, 9),
       },
     ];
@@ -179,6 +180,7 @@ export function expandRecurringSchedules(
     ...baseSchedule,
     id: `sch_${occ.date.replace(/-/g, '')}_${Math.random().toString(36).slice(2, 6)}`,
     date: occ.date,
+    checkInPin: undefined,
     seriesId,
     seriesIndex: idx + 1,
     seriesTotal: totalCount,
@@ -187,7 +189,7 @@ export function expandRecurringSchedules(
 
 /**
  * Duplicates an existing schedule series to a new semester/period starting on newStartDate.
- * Generates fresh unique schedule IDs, a new seriesId, and random check-in PINs.
+ * Generates fresh unique schedule IDs and a new seriesId.
  * Ensures complete foreign-key isolation so past attendance and RSVP logs remain untouched.
  */
 export function duplicateScheduleSeries(
@@ -221,8 +223,6 @@ export function duplicateScheduleSeries(
     const d = String(newDateObj.getDate()).padStart(2, '0');
     const newDateStr = `${y}-${m}-${d}`;
 
-    const randomPin = Math.floor(1000 + Math.random() * 9000).toString();
-
     return {
       ...item,
       id: `sch_${newDateStr.replace(/-/g, '')}_${Math.random().toString(36).slice(2, 6)}`,
@@ -230,7 +230,7 @@ export function duplicateScheduleSeries(
       seriesId: newSeriesId,
       seriesIndex: idx + 1,
       seriesTotal: totalCount,
-      checkInPin: randomPin,
+      checkInPin: undefined,
       isArchived: false,
     };
   });
@@ -419,20 +419,14 @@ export function createSchedulesMultiMode(
   const seriesTotal = targetDates.length;
 
   return targetDates.map((dateStr, idx) => {
-    const pin =
-      baseSchedule.checkInPin ||
-      Math.floor(1000 + Math.random() * 9000).toString();
-
     return {
       ...baseSchedule,
       id: `sch_${dateStr.replace(/-/g, '')}_${Math.random().toString(36).slice(2, 6)}`,
       date: dateStr,
-      checkInPin: pin,
+      checkInPin: undefined,
       seriesId,
       seriesIndex: seriesId ? idx + 1 : undefined,
       seriesTotal: seriesId ? seriesTotal : undefined,
     };
   });
 }
-
-

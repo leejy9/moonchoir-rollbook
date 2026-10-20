@@ -182,6 +182,11 @@ export class SheetsService {
   }
 
   public async saveProgramCard(card: ProgramCard): Promise<ProgramCard> {
+    const result = await this.sendToGoogleSheet('SAVE_PROGRAM_CARD', card);
+    if (!result.success) {
+      throw new Error(result.message || '일정 카드 저장이 확인되지 않았습니다.');
+    }
+
     const idx = this.programCards.findIndex((c) => c.id === card.id);
     if (idx >= 0) {
       this.programCards[idx] = { ...card };
@@ -189,28 +194,37 @@ export class SheetsService {
       this.programCards.push({ ...card });
     }
     saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
-
-    if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('SAVE_PROGRAM_CARD', card).catch((err) => {
-        console.error('[Sheets API] SAVE_PROGRAM_CARD background sync failed:', err);
-      });
-    }
     return card;
   }
 
   public async deleteProgramCard(cardId: string): Promise<void> {
+    const result = await this.sendToGoogleSheet('DELETE_PROGRAM_CARD', { id: cardId });
+    if (!result.success) {
+      throw new Error(result.message || '일정 카드 삭제가 확인되지 않았습니다.');
+    }
+
     this.programCards = this.programCards.filter((c) => c.id !== cardId);
     saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
-
-    if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('DELETE_PROGRAM_CARD', { id: cardId }).catch((err) => {
-        console.error('[Sheets API] DELETE_PROGRAM_CARD background sync failed:', err);
-      });
-    }
   }
 
   // --- Append-Only Write Operations (Idempotent by log.id) ---
-  public async addCheckInLog(log: RawAttendanceLog): Promise<RawAttendanceLog> {
+  public async addCheckInLog(
+    log: RawAttendanceLog,
+    checkInPin?: string
+  ): Promise<RawAttendanceLog> {
+    if (log.authMethod === 'MANUAL_PIN') {
+      if (!checkInPin) {
+        throw new Error('현장 PIN이 누락되어 출석을 확인할 수 없습니다.');
+      }
+      const result = await this.sendToGoogleSheet('RECORD_ATTENDANCE', {
+        ...log,
+        checkInPin,
+      });
+      if (!result.success) {
+        throw new Error(result.message || '현장 PIN 출석이 시트에서 확인되지 않았습니다.');
+      }
+    }
+
     if (log.memberId && !this.members.some((m) => m.id === log.memberId)) {
       this.members.push({
         id: log.memberId,
@@ -232,7 +246,7 @@ export class SheetsService {
       saveToStorage(STORAGE_KEYS.LOGS, this.logs);
     }
 
-    if (this.config.sheetsWebAppUrl) {
+    if (log.authMethod !== 'MANUAL_PIN' && this.config.sheetsWebAppUrl) {
       this.sendToGoogleSheet('RECORD_ATTENDANCE', log).catch((err) => {
         console.error('[Sheets API] Background sync failed, preserved in local log:', err);
       });
@@ -476,30 +490,38 @@ export class SheetsService {
         '이미 다른 기기(스마트폰)에 연동되어 있는 계정입니다.\n기존 기기에서 [연동 해제]를 먼저 진행하시거나, 기기 분실/변경 시 관리자에게 초기화를 요청하세요.'
       );
     }
-    const updated = await this.updateMember(memberId, {
+
+    const result = await this.sendToGoogleSheet('BIND_DEVICE', { memberId, deviceId });
+    if (!result.success) {
+      throw new Error(result.message || '기기 연동이 구글 시트에서 확인되지 않았습니다.');
+    }
+
+    const updated = {
+      ...member,
       boundDeviceId: deviceId,
       boundDeviceAt: getKSTTimestampString(),
-    });
-    if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('BIND_DEVICE', { memberId, deviceId }).catch((err) => {
-        console.error('[Sheets API] BIND_DEVICE sync failed:', err);
-      });
-    }
+    };
+    this.members[this.members.findIndex((m) => m.id === memberId)] = updated;
+    saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
     return updated;
   }
 
   public async unbindMemberDevice(memberId: string): Promise<Member> {
     const member = this.members.find((m) => m.id === memberId);
     if (!member) throw new Error('단원을 찾을 수 없습니다.');
-    const updated = await this.updateMember(memberId, {
+
+    const result = await this.sendToGoogleSheet('UNBIND_DEVICE', { memberId });
+    if (!result.success) {
+      throw new Error(result.message || '기기 연동 해제가 구글 시트에서 확인되지 않았습니다.');
+    }
+
+    const updated = {
+      ...member,
       boundDeviceId: undefined,
       boundDeviceAt: undefined,
-    });
-    if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('UNBIND_DEVICE', { memberId }).catch((err) => {
-        console.error('[Sheets API] UNBIND_DEVICE sync failed:', err);
-      });
-    }
+    };
+    this.members[this.members.findIndex((m) => m.id === memberId)] = updated;
+    saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
     return updated;
   }
 
@@ -840,6 +862,44 @@ export class SheetsService {
     return { ...this.config };
   }
 
+  public async saveConfigConfirmed(newConfig: Partial<AppConfig>): Promise<AppConfig> {
+    const nextEndpoint =
+      newConfig.sheetsWebAppUrl !== undefined
+        ? newConfig.sheetsWebAppUrl.trim()
+        : this.config.sheetsWebAppUrl;
+    const endpoint = this.config.sheetsWebAppUrl || nextEndpoint;
+    if (!endpoint || !nextEndpoint) {
+      throw new Error('구글 시트 Web App URL이 설정되지 않았습니다.');
+    }
+
+    const result = await this.sendToGoogleSheet(
+      'SAVE_CONFIG',
+      { config: newConfig },
+      endpoint
+    );
+    if (!result.success) {
+      throw new Error(result.message || '설정 저장이 구글 시트에서 확인되지 않았습니다.');
+    }
+
+    this.config = { ...this.config, ...newConfig, sheetsWebAppUrl: nextEndpoint };
+    saveToStorage(STORAGE_KEYS.CONFIG, this.config);
+    return { ...this.config };
+  }
+
+  public async verifyOnSitePin(pin: string): Promise<void> {
+    const result = await this.sendToGoogleSheet('VERIFY_ON_SITE_PIN', { pin });
+    if (!result.success) {
+      throw new Error(result.message || '현장 PIN을 시트에서 확인할 수 없습니다.');
+    }
+  }
+
+  public async verifyAdminPin(pin: string): Promise<void> {
+    const result = await this.sendToGoogleSheet('VERIFY_ADMIN_PIN', { pin });
+    if (!result.success) {
+      throw new Error(result.message || '관리자 PIN이 일치하지 않거나 확인되지 않았습니다.');
+    }
+  }
+
   // --- Taxonomy & Categories Dynamic Management ---
   public getParts(): string[] {
     return this.config.customParts && this.config.customParts.length > 0
@@ -917,19 +977,12 @@ export class SheetsService {
   }
 
   public getActiveOnSitePin(): string {
-    const todayStr = getKSTTimestampString().slice(0, 10);
-    const todaySch = this.schedules.find((s) => s.date === todayStr);
-    return this.config.activeOnSitePin || todaySch?.checkInPin || '5027';
+    return this.config.activeOnSitePin || '5027';
   }
 
-  public refreshActiveOnSitePin(): string {
+  public async refreshActiveOnSitePin(): Promise<string> {
     const newPin = String(Math.floor(1000 + Math.random() * 9000));
-    this.updateConfig({ activeOnSitePin: newPin });
-    const todayStr = getKSTTimestampString().slice(0, 10);
-    const todaySch = this.schedules.find((s) => s.date === todayStr);
-    if (todaySch) {
-      this.updateSchedule(todaySch.id, { checkInPin: newPin }).catch(() => {});
-    }
+    await this.saveConfigConfirmed({ activeOnSitePin: newPin });
     return newPin;
   }
 
@@ -1124,13 +1177,18 @@ export class SheetsService {
     };
   }
 
-  public async sendToGoogleSheet(action: string, payload: unknown): Promise<{ success: boolean; message?: string }> {
-    if (!this.config.sheetsWebAppUrl) {
+  public async sendToGoogleSheet(
+    action: string,
+    payload: unknown,
+    endpointUrl?: string
+  ): Promise<{ success: boolean; message?: string }> {
+    const targetUrl = endpointUrl || this.config.sheetsWebAppUrl;
+    if (!targetUrl) {
       return { success: false, message: '시트 Web App URL이 설정되지 않았습니다.' };
     }
 
     try {
-      const res = await fetch(this.config.sheetsWebAppUrl, {
+      const res = await fetch(targetUrl, {
         method: 'POST',
         redirect: 'follow',
         headers: {
@@ -1143,15 +1201,11 @@ export class SheetsService {
         return { success: false, message: `구글 시트 통신 오류 (HTTP ${res.status})` };
       }
 
-      try {
-        const json = (await res.json()) as { success?: boolean; message?: string; error?: string };
-        return {
-          success: json.success !== false,
-          message: json.message || json.error || '저장 완료',
-        };
-      } catch {
-        return { success: true, message: '저장 완료' };
-      }
+      const json = (await res.json()) as { success?: boolean; message?: string; error?: string };
+      return {
+        success: json.success === true,
+        message: json.message || json.error || (json.success === true ? '저장 완료' : '시트 저장이 확인되지 않았습니다.'),
+      };
     } catch (err) {
       console.error('[Sheets API] POST failed:', err);
       return { success: false, message: '시트 전송 실패' };
@@ -1160,4 +1214,3 @@ export class SheetsService {
 }
 
 export const sheetsService = new SheetsService();
-

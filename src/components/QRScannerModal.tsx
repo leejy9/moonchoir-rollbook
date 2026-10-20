@@ -3,7 +3,7 @@ import jsQR from 'jsqr';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, RawAttendanceLog, Schedule } from '../types/rollbook';
 import { calculateDistanceMeters, isWithinRadius } from '../utils/geo';
-import { findActiveScheduleForMasterQR, parseQRPayload, playScanSuccessSound, verifySchedulePin } from '../utils/qr';
+import { findActiveScheduleForMasterQR, parseQRPayload, playScanSuccessSound } from '../utils/qr';
 import { getKSTTimestampString } from '../utils/date';
 import { IconKeypad, IconQrScan } from './Icons';
 
@@ -44,7 +44,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   // Common check-in execution
   const executeCheckIn = async (
     targetSchedule: Schedule,
-    authMethod: 'QR_WEB_CAM' | 'MANUAL_PIN'
+    authMethod: 'QR_WEB_CAM' | 'MANUAL_PIN',
+    checkInPin?: string
   ) => {
     setIsProcessing(true);
 
@@ -137,7 +138,20 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       // Haptic vibrate might be restricted
     }
 
-    await sheetsService.addCheckInLog(log);
+    try {
+      await sheetsService.addCheckInLog(log, checkInPin);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '구글 시트에서 출석 저장을 확인하지 못했습니다.';
+      setIsProcessing(false);
+      setPinError(message);
+      setScanResult({
+        success: false,
+        distance: distanceMeters,
+        isVerified: true,
+        msg: message,
+      });
+      return;
+    }
     playScanSuccessSound();
 
     const timeLabel = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
@@ -268,6 +282,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isProcessing) return;
     setPinError('');
 
     if (inputPin.trim().length < 4) {
@@ -275,13 +290,20 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       return;
     }
 
-    const activeMasterPin = sheetsService.getActiveOnSitePin();
-    if (!verifySchedulePin(schedule, inputPin, activeMasterPin)) {
-      setPinError('입력하신 PIN 번호가 일치하지 않습니다. 관리자에게 문의하세요.');
+    setIsProcessing(true);
+    try {
+      await sheetsService.verifyOnSitePin(inputPin);
+    } catch (err: unknown) {
+      setIsProcessing(false);
+      setPinError(
+        err instanceof Error
+          ? err.message
+          : '현장 PIN 확인에 실패했습니다. 인터넷 연결을 확인해주세요.'
+      );
       return;
     }
 
-    await executeCheckIn(schedule, 'MANUAL_PIN');
+    await executeCheckIn(schedule, 'MANUAL_PIN', inputPin);
   };
 
   const handleFinishSuccess = () => {

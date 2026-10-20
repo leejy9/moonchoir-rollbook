@@ -499,19 +499,6 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
                           {sch.seriesIndex}/{sch.seriesTotal}회차
                         </span>
                       )}
-                      {sch.checkInPin && (
-                        <span
-                          style={{
-                            fontSize: '11px',
-                            color: '#64748B',
-                            background: '#E2E8F0',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                          }}
-                        >
-                          PIN {sch.checkInPin}
-                        </span>
-                      )}
                     </div>
 
                     {sch.description && (

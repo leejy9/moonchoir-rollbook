@@ -516,21 +516,6 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                       {currentSchedule.date} ({currentSchedule.startTime}~{currentSchedule.endTime}) · {currentSchedule.locationName}
                     </p>
                   </div>
-                  {currentSchedule.checkInPin && (
-                    <div
-                      style={{
-                        backgroundColor: '#f2f4f6',
-                        padding: '6px 12px',
-                        borderRadius: '8px',
-                        textAlign: 'center',
-                      }}
-                    >
-                      <span style={{ fontSize: '11px', color: '#8b95a1', display: 'block' }}>PIN</span>
-                      <span style={{ fontSize: '16px', fontWeight: 700, color: '#191f28', letterSpacing: '2px' }}>
-                        {currentSchedule.checkInPin}
-                      </span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Part Rate Bars */}
@@ -679,13 +664,19 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                       borderRadius: '8px',
                     }}
                   >
-                    {sheetsService.getActiveOnSitePin() || currentSchedule?.checkInPin || '5027'}
+                    {sheetsService.getActiveOnSitePin()}
                   </span>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {pinRegenMsg && (
-                    <span style={{ fontSize: '11.5px', color: '#059669', fontWeight: 600 }}>
+                    <span
+                      style={{
+                        fontSize: '11.5px',
+                        color: pinRegenMsg.startsWith('현장 PIN 재발급 실패') ? '#DC2626' : '#059669',
+                        fontWeight: 600,
+                      }}
+                    >
                       {pinRegenMsg}
                     </span>
                   )}

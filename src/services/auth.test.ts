@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   bindDeviceProfile,
   clearDeviceProfile,
   getBoundDeviceProfile,
   isAdminLoggedIn,
   setAdminLoggedIn,
+  touchAdminSession,
   validateAdminPin,
 } from './auth';
 
@@ -12,6 +13,10 @@ describe('Device Binding & Authentication Service', () => {
   beforeEach(() => {
     clearDeviceProfile();
     setAdminLoggedIn(false);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('correctly binds and retrieves device profile', () => {
@@ -39,5 +44,28 @@ describe('Device Binding & Authentication Service', () => {
     expect(isAdminLoggedIn()).toBe(true);
     setAdminLoggedIn(false);
     expect(isAdminLoggedIn()).toBe(false);
+  });
+
+  it('expires the admin session after 15 minutes without activity', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-20T12:00:00'));
+    setAdminLoggedIn(true);
+
+    vi.advanceTimersByTime(15 * 60 * 1000 - 1);
+    expect(isAdminLoggedIn()).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(isAdminLoggedIn()).toBe(false);
+  });
+
+  it('extends the admin session when activity is recorded', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-20T12:00:00'));
+    setAdminLoggedIn(true);
+
+    vi.advanceTimersByTime(14 * 60 * 1000);
+    touchAdminSession();
+    vi.advanceTimersByTime(14 * 60 * 1000);
+
+    expect(isAdminLoggedIn()).toBe(true);
   });
 });

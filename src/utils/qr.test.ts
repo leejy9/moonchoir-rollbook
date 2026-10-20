@@ -42,7 +42,7 @@ describe('QR and PIN utilities', () => {
     expect(match?.id).toBe('sch_today');
   });
 
-  it('verifies PIN correctly for schedule', () => {
+  it('accepts only the current choir-wide PIN, not stale schedule PINs or defaults', () => {
     const schedule: Schedule = {
       id: 'sch_pinned',
       title: '외부 연습',
@@ -54,7 +54,8 @@ describe('QR and PIN utilities', () => {
       checkInPin: '8899',
     };
 
-    expect(verifySchedulePin(schedule, '8899')).toBe(true);
-    expect(verifySchedulePin(schedule, '1111')).toBe(false);
+    expect(verifySchedulePin(schedule, '5027', '5027')).toBe(true);
+    expect(verifySchedulePin(schedule, '8899', '5027')).toBe(false);
+    expect(verifySchedulePin(schedule, '1234')).toBe(false);
   });
 });

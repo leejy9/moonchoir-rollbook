@@ -213,7 +213,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
     e.preventDefault();
     setIsSyncing(true);
     try {
-      await sheetsService.updateConfig({
+      await sheetsService.saveConfigConfirmed({
         sheetsWebAppUrl: sheetsUrl.trim(),
         lateGraceMinutes: Number(lateGrace),
         adminPin: adminPinInput.trim(),

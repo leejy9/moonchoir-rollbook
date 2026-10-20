@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, Schedule } from '../types/rollbook';
+import type { DisplayMode } from '../services/displayMode';
 import {
   calculateCumulativeAttendanceWithLifecycle,
   getGamifiedAttendanceLevel,
@@ -11,10 +12,14 @@ interface MemberPortalModalProps {
   profile: BoundDeviceProfile;
   onClose: () => void;
   onChangeBinding: () => void;
-  onLogout?: () => void;
+  onLogout?: () => Promise<void>;
   onRefreshData?: () => void;
   onOpenRSVP?: (schedule: Schedule) => void;
   onOpenQRScanner?: (schedule: Schedule) => void;
+  displayMode: DisplayMode;
+  isDarkMode: boolean;
+  onChangeDisplayMode: (mode: DisplayMode) => void;
+  onChangeDarkMode: (enabled: boolean) => void;
 }
 
 const getTodayDateString = () => getKSTDateString();
@@ -27,9 +32,14 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   onRefreshData,
   onOpenRSVP,
   onOpenQRScanner,
+  displayMode,
+  isDarkMode,
+  onChangeDisplayMode,
+  onChangeDarkMode,
 }) => {
   const [activeTab, setActiveTab] = useState<'RECORDS' | 'DASHBOARD'>('RECORDS');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isUnbinding, setIsUnbinding] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [todayStr] = useState(getTodayDateString);
 
@@ -161,6 +171,23 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       setSyncFeedback(err instanceof Error ? `⚠️ ${err.message}` : '⚠️ 동기화 중 오류가 발생했습니다.');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!onLogout || isUnbinding) return;
+    setIsUnbinding(true);
+    setSyncFeedback(null);
+    try {
+      await onLogout();
+    } catch (err: unknown) {
+      setSyncFeedback(
+        err instanceof Error
+          ? `기기 연동 해제 실패: ${err.message}`
+          : '기기 연동 해제 중 오류가 발생했습니다.'
+      );
+    } finally {
+      setIsUnbinding(false);
     }
   };
 
@@ -535,8 +562,57 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
           {/* TAB 2: 개인 대시보드 (자연어 브리핑 & 계정 관리) */}
           {activeTab === 'DASHBOARD' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <section className="personal-display-settings">
+                <div>
+                  <h3>화면 설정</h3>
+                  <p>이 기기에서 사용할 테마와 화면 크기를 선택합니다.</p>
+                </div>
+
+                <div className="personal-setting-row">
+                  <div>
+                    <strong>다크모드</strong>
+                    <span>어두운 화면 테마 사용</span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`setting-switch ${isDarkMode ? 'enabled' : ''}`}
+                    role="switch"
+                    aria-checked={isDarkMode}
+                    aria-label="다크모드"
+                    onClick={() => onChangeDarkMode(!isDarkMode)}
+                  >
+                    <span />
+                  </button>
+                </div>
+
+                <div className="personal-setting-row">
+                  <div>
+                    <strong>화면 보기</strong>
+                    <span>모바일 또는 PC 레이아웃 선택</span>
+                  </div>
+                  <div className="display-mode-options" role="group" aria-label="화면 보기">
+                    {([
+                      ['AUTO', '자동'],
+                      ['MOBILE', '모바일'],
+                      ['DESKTOP', 'PC'],
+                    ] as const).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        aria-pressed={displayMode === mode}
+                        className={displayMode === mode ? 'selected' : ''}
+                        onClick={() => onChangeDisplayMode(mode)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
               {/* 기본 소속 프로필 정보 */}
               <div
+                className="personal-info-card"
                 style={{
                   background: '#f8fafc',
                   border: '1px solid #e2e8f0',
@@ -574,6 +650,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
               {/* 기기 연동 및 계정 관리 */}
               <div
+                className="personal-account-card"
                 style={{
                   background: '#f8fafc',
                   border: '1px solid #e2e8f0',
@@ -633,7 +710,8 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                     {onLogout && (
                       <button
                         type="button"
-                        onClick={onLogout}
+                        onClick={handleLogout}
+                        disabled={isUnbinding}
                         style={{
                           flex: 1,
                           background: '#fff1f2',
@@ -646,7 +724,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                           cursor: 'pointer',
                         }}
                       >
-                        🔓 기기 연동 해제
+                        {isUnbinding ? '연동 해제 중...' : '🔓 기기 연동 해제'}
                       </button>
                     )}
                   </div>

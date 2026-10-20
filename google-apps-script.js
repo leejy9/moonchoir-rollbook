@@ -172,6 +172,26 @@ function doPost(e) {
     const payload = JSON.parse(e.postData.contents);
     const { action, data } = payload;
 
+    if (action === 'VERIFY_ADMIN_PIN') {
+      const config = readConfigData(ss.getSheetByName(SHEET_NAMES.CONFIG));
+      const expectedPin = String(config.adminPin || '1234').trim();
+      const inputPin = String(data.pin || '').trim();
+      if (inputPin !== expectedPin) {
+        return jsonResponse({ success: false, message: '관리자 PIN 번호가 일치하지 않습니다.' });
+      }
+      return jsonResponse({ success: true, message: '관리자 PIN 확인 완료' });
+    }
+
+    if (action === 'VERIFY_ON_SITE_PIN') {
+      const config = readConfigData(ss.getSheetByName(SHEET_NAMES.CONFIG));
+      const expectedPin = String(config.activeOnSitePin || '5027').trim();
+      const inputPin = String(data.pin || '').trim();
+      if (inputPin !== expectedPin) {
+        return jsonResponse({ success: false, message: '현장 PIN 번호가 일치하지 않습니다.' });
+      }
+      return jsonResponse({ success: true, message: '현장 PIN 확인 완료' });
+    }
+
     if (action === 'RECORD_ATTENDANCE' || action === 'SUBMIT_CHECKIN') {
       // 출석 체크 로그 Append Only (헤더 키 기반 동적 매핑 + log.id 멱등성 중복 방지)
       const sheet = ss.getSheetByName(SHEET_NAMES.LOGS);
@@ -189,6 +209,15 @@ function doPost(e) {
               message: '출석 로그 저장 완료 (중복 요청 방지)',
             });
           }
+        }
+      }
+
+      if (String(data.authMethod || '') === 'MANUAL_PIN') {
+        const config = readConfigData(ss.getSheetByName(SHEET_NAMES.CONFIG));
+        const expectedPin = String(config.activeOnSitePin || '5027').trim();
+        const inputPin = String(data.checkInPin || '').trim();
+        if (inputPin !== expectedPin) {
+          return jsonResponse({ success: false, message: '현장 PIN이 변경되었거나 일치하지 않습니다.' });
         }
       }
 
@@ -312,6 +341,14 @@ function doPost(e) {
 
       for (let i = 1; i < rows.length; i++) {
         if (String(rows[i][idCol >= 0 ? idCol : 0]) === String(data.memberId)) {
+          const existingDeviceId = devCol >= 0 ? String(rows[i][devCol] || '').trim() : '';
+          const requestedDeviceId = String(data.deviceId || '').trim();
+          if (existingDeviceId && existingDeviceId !== requestedDeviceId) {
+            return jsonResponse({
+              success: false,
+              message: '이미 다른 기기에 연동된 계정입니다. 기존 기기 연동을 먼저 해제해주세요.',
+            });
+          }
           if (devCol >= 0) sheet.getRange(i + 1, devCol + 1).setValue(data.deviceId || '');
           if (timeCol >= 0) sheet.getRange(i + 1, timeCol + 1).setValue(toKSTString(new Date()));
           return jsonResponse({ success: true, message: '기기 바인딩 완료' });
@@ -439,8 +476,8 @@ function doPost(e) {
           if (h === 'joinedAt') return data.joinedAt || (existingRow[colIdx] || '');
           if (h === 'memberStatus') return data.memberStatus || (existingRow[colIdx] || '정단원');
           if (h === 'note') return data.note !== undefined ? data.note : (existingRow[colIdx] || '');
-          if (h === 'boundDeviceId') return data.boundDeviceId !== undefined ? data.boundDeviceId : (existingRow[colIdx] || '');
-          if (h === 'boundDeviceAt') return data.boundDeviceAt !== undefined ? (data.boundDeviceAt ? toKSTString(data.boundDeviceAt) : '') : (boundDeviceAtIdx >= 0 ? existingRow[boundDeviceAtIdx] : '');
+          if (h === 'boundDeviceId') return existingRow[colIdx] || '';
+          if (h === 'boundDeviceAt') return boundDeviceAtIdx >= 0 ? existingRow[boundDeviceAtIdx] : '';
           return data[h] !== undefined ? data[h] : (existingRow[colIdx] !== undefined ? existingRow[colIdx] : '');
         });
         sheet.getRange(rowIndex, 1, 1, updateRow.length).setValues([updateRow]);
@@ -930,7 +967,7 @@ function doPost(e) {
           return jsonResponse({ success: true, message: '일정카드 삭제 완료' });
         }
       }
-      return jsonResponse({ success: false, message: '해당 일정카드를 찾을 수 없습니다.' });
+      return jsonResponse({ success: true, message: '일정카드가 이미 삭제되었습니다.' });
     }
 
     if (action === 'SAVE_CONFIG') {

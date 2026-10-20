@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { HomeView } from './HomeView';
 import { sheetsService, resetStorage } from '../services/sheets';
@@ -26,8 +26,14 @@ describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () 
   };
 
   beforeEach(async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(`${todayStr}T18:00:00+09:00`));
     resetStorage();
     await cleanupTestSchedules();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders single schedule normally when only one schedule exists for today', async () => {
@@ -233,4 +239,3 @@ describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () 
     expect(html).toContain('연습 일정이 없습니다');
   });
 });
-

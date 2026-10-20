@@ -59,6 +59,7 @@ describe('AdminScheduleListView Component', () => {
     expect(html).toContain('10.18');
     expect(html).toContain('19:00');
     expect(html).toContain('선택');
+    expect(html).not.toContain('1234');
   });
 
   it('선택된 일정이 있을 때 일괄 작업 바(수정, 복제, 보관, 삭제 버튼)를 렌더링한다', () => {

@@ -11,9 +11,17 @@ import {
   clearDeviceProfile,
   getBoundDeviceProfile,
   isAdminLoggedIn,
+  touchAdminSession,
   updateBoundDeviceProfile,
 } from './services/auth';
 import { sheetsService } from './services/sheets';
+import {
+  getDarkModePreference,
+  getDisplayModePreference,
+  saveDarkModePreference,
+  saveDisplayModePreference,
+  type DisplayMode,
+} from './services/displayMode';
 import type { BoundDeviceProfile, Schedule } from './types/rollbook';
 import { getKSTDateString } from './utils/date';
 
@@ -25,6 +33,8 @@ export function App() {
 
   // View state: 'HOME' | 'CALENDAR' | 'ADMIN'
   const [currentView, setCurrentView] = useState<'HOME' | 'CALENDAR' | 'ADMIN'>('HOME');
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(getDisplayModePreference);
+  const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference);
 
   // Modal states
   const [showQRScanner, setShowQRScanner] = useState(false);
@@ -66,11 +76,65 @@ export function App() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (currentView !== 'ADMIN') return;
+
+    let lastPersistedActivity = Date.now();
+    const returnHomeIfExpired = () => {
+      if (!isAdminLoggedIn()) {
+        setCurrentView('HOME');
+        triggerRefresh();
+        return true;
+      }
+      return false;
+    };
+    const handleActivity = () => {
+      if (returnHomeIfExpired()) return;
+      if (Date.now() - lastPersistedActivity >= 30_000) {
+        touchAdminSession();
+        lastPersistedActivity = Date.now();
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') returnHomeIfExpired();
+    };
+
+    const activityEvents: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'touchstart', 'scroll'];
+    activityEvents.forEach((eventName) =>
+      window.addEventListener(eventName, handleActivity, { passive: true })
+    );
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', returnHomeIfExpired);
+    const timer = window.setInterval(returnHomeIfExpired, 30_000);
+
+    return () => {
+      activityEvents.forEach((eventName) =>
+        window.removeEventListener(eventName, handleActivity)
+      );
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', returnHomeIfExpired);
+      window.clearInterval(timer);
+    };
+  }, [currentView]);
+
   // Synchronize bound profile with remote/local member data if part or name changed in Sheets
   useEffect(() => {
     if (!profile) return;
     const members = sheetsService.getMembers();
     const current = members.find((m) => m.id === profile.memberId);
+    if (
+      current &&
+      current.status !== 'MERGED' &&
+      current.boundDeviceId !== profile.deviceId
+    ) {
+      clearDeviceProfile();
+      queueMicrotask(() => {
+        setShowMemberPortalModal(false);
+        setCurrentView('HOME');
+        setProfile(null);
+      });
+      return;
+    }
     if (current && (current.part !== profile.part || current.name !== profile.name)) {
       const updated = updateBoundDeviceProfile({
         name: current.name,
@@ -106,8 +170,22 @@ export function App() {
     }
   };
 
+  const handleDisplayModeChange = (mode: DisplayMode) => {
+    saveDisplayModePreference(mode);
+    setDisplayMode(mode);
+  };
+
+  const handleDarkModeChange = (enabled: boolean) => {
+    saveDarkModePreference(enabled);
+    setIsDarkMode(enabled);
+  };
+
   return (
-    <div className={`app-shell ${currentView === 'ADMIN' ? 'admin-mode' : ''}`}>
+    <div
+      className={`app-shell ${currentView === 'ADMIN' ? 'admin-mode' : ''}`}
+      data-display-mode={displayMode}
+      data-theme={isDarkMode ? 'dark' : 'light'}
+    >
       {/* If not bound, force initial binding modal */}
       {!isBound && (
         <BindingModal onSuccess={handleDeviceBound} />
@@ -174,9 +252,13 @@ export function App() {
             if (sch) setQrTargetSchedule(sch);
             setShowQRScanner(true);
           }}
+          displayMode={displayMode}
+          isDarkMode={isDarkMode}
+          onChangeDisplayMode={handleDisplayModeChange}
+          onChangeDarkMode={handleDarkModeChange}
           onLogout={async () => {
             if (profile) {
-              await sheetsService.unbindMemberDevice(profile.memberId).catch(console.error);
+              await sheetsService.unbindMemberDevice(profile.memberId);
             }
             clearDeviceProfile();
             setProfile(null);

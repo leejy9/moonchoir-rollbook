@@ -101,7 +101,7 @@ describe('AdminCalendarView Component', () => {
     expect(html).toContain('19');
   });
 
-  it('선택된 날짜의 일정 목록과 상세 정보(시간, 장소, PIN, 버튼)를 올바르게 렌더링한다', () => {
+  it('선택된 날짜의 일정 목록과 상세 정보(시간, 장소, 버튼)를 올바르게 렌더링한다', () => {
     const html = renderToString(
       <AdminCalendarView
         adminCalYear={2026}
@@ -127,8 +127,7 @@ describe('AdminCalendarView Component', () => {
     expect(html).toContain('언더스탠드에비뉴');
     expect(html).toContain('19:00');
     expect(html).toContain('21:00');
-    expect(html).toContain('PIN:');
-    expect(html).toContain('1234');
+    expect(html).not.toContain('1234');
     expect(html).toContain('+ 일정 추가');
     expect(html).toContain('복제');
     expect(html).toContain('삭제');

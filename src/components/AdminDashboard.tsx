@@ -192,13 +192,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Regenerate Session PIN
   const handleRegenSessionPin = async () => {
-    const newPin = sheetsService.refreshActiveOnSitePin();
-    if (currentSchedule) {
-      await sheetsService.updateSchedule(currentSchedule.id, { checkInPin: newPin });
+    try {
+      const newPin = await sheetsService.refreshActiveOnSitePin();
+      onDataChanged();
+      setPinRegenMsg(`당일 현장 PIN이 [${newPin}]으로 재발급되었습니다. 이전 PIN은 더 이상 사용할 수 없습니다.`);
+      setTimeout(() => setPinRegenMsg(''), 4000);
+    } catch (err: unknown) {
+      setPinRegenMsg(
+        `현장 PIN 재발급 실패: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
-    onDataChanged();
-    setPinRegenMsg(`당일 현장 PIN이 [${newPin}]으로 재발급되었습니다.`);
-    setTimeout(() => setPinRegenMsg(''), 3000);
   };
 
   // Unified Master Wall QR payload
@@ -289,7 +292,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* Global Feedback Banner */}
       {memberActionMsg && <div className="success-banner">{memberActionMsg}</div>}
-      {pinRegenMsg && <div className="success-banner">{pinRegenMsg}</div>}
+      {pinRegenMsg && (
+        <div className={pinRegenMsg.startsWith('현장 PIN 재발급 실패') ? 'error-banner' : 'success-banner'}>
+          {pinRegenMsg}
+        </div>
+      )}
 
       {/* ============================================================== */}
       {/* TAB 1: [인적사항 & 출결] MATRIX GRID & MEMBER PROFILE MODAL     */}

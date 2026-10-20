@@ -57,6 +57,172 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(choi?.finalStatus).toBe('미참');
   });
 
+  it('confirms program-card saves with Sheets before updating local storage', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    const originalCard = TEST_MOCK_PROGRAM_CARDS[0];
+    const updatedCard = { ...originalCard, title: '수정된 정기연습 카드' };
+    const sendSpy = vi
+      .spyOn(service, 'sendToGoogleSheet')
+      .mockResolvedValue({ success: true, message: '일정카드 저장 완료' });
+
+    await service.saveProgramCard(updatedCard);
+
+    expect(sendSpy).toHaveBeenCalledWith('SAVE_PROGRAM_CARD', updatedCard);
+    expect(service.getProgramCards()).toContainEqual(updatedCard);
+  });
+
+  it('preserves the local program card when Sheets does not confirm a save or delete', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    const originalCard = TEST_MOCK_PROGRAM_CARDS[0];
+    const updatedCard = { ...originalCard, title: '수정된 정기연습 카드' };
+    vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '시트 저장이 확인되지 않았습니다.',
+    });
+
+    await expect(service.saveProgramCard(updatedCard)).rejects.toThrow(
+      '시트 저장이 확인되지 않았습니다.'
+    );
+    expect(service.getProgramCards()).toContainEqual(originalCard);
+    expect(service.getProgramCards()).not.toContainEqual(updatedCard);
+
+    await expect(service.deleteProgramCard(originalCard.id)).rejects.toThrow(
+      '시트 저장이 확인되지 않았습니다.'
+    );
+    expect(service.getProgramCards()).toContainEqual(originalCard);
+  });
+
+  it('does not report success when the Sheets response is not valid JSON', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('invalid JSON', { status: 200 }));
+
+    await expect(
+      service.sendToGoogleSheet('SAVE_PROGRAM_CARD', TEST_MOCK_PROGRAM_CARDS[0])
+    ).resolves.toMatchObject({ success: false });
+  });
+
+  it('checks administrator PIN against the server without downloading sheet data', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ success: true, message: '관리자 PIN 확인 완료' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    await service.verifyAdminPin('8642');
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://script.google.com/test',
+      expect.objectContaining({
+        body: JSON.stringify({
+          action: 'VERIFY_ADMIN_PIN',
+          data: { pin: '8642' },
+          payload: { pin: '8642' },
+        }),
+      })
+    );
+  });
+
+  it('persists config locally only after Sheets confirms the update', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: true,
+      message: '환경설정 저장 완료',
+    });
+
+    await service.saveConfigConfirmed({ adminPin: '8642' });
+
+    expect(sendSpy).toHaveBeenCalledWith(
+      'SAVE_CONFIG',
+      { config: { adminPin: '8642' } },
+      'https://script.google.com/test'
+    );
+    expect(service.getConfig().adminPin).toBe('8642');
+  });
+
+  it('saves a changed Web App URL through the currently configured endpoint', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/old' });
+    const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: true,
+      message: '환경설정 저장 완료',
+    });
+
+    await service.saveConfigConfirmed({
+      sheetsWebAppUrl: 'https://script.google.com/new',
+    });
+
+    expect(sendSpy).toHaveBeenCalledWith(
+      'SAVE_CONFIG',
+      { config: { sheetsWebAppUrl: 'https://script.google.com/new' } },
+      'https://script.google.com/old'
+    );
+    expect(service.getConfig().sheetsWebAppUrl).toBe('https://script.google.com/new');
+  });
+
+  it('does not change the local config when Sheets rejects a setting update', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '환경설정 저장 실패',
+    });
+    const previousPin = service.getConfig().adminPin;
+
+    await expect(service.saveConfigConfirmed({ adminPin: '8642' })).rejects.toThrow(
+      '환경설정 저장 실패'
+    );
+    expect(service.getConfig().adminPin).toBe(previousPin);
+  });
+
+  it('saves manual-PIN attendance only after the current server PIN is confirmed', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: true,
+      message: '출석 로그 저장 완료',
+    });
+    const log: RawAttendanceLog = {
+      id: 'log_manual_pin_confirmed',
+      scheduleId: 'sch_20261015',
+      memberId: 'mem_s01',
+      memberName: '김하은',
+      part: '소프라노',
+      timestamp: '2026-10-20T19:30:00+09:00',
+      authMethod: 'MANUAL_PIN',
+      isVerifiedLocation: true,
+    };
+
+    await service.addCheckInLog(log, '5027');
+
+    expect(sendSpy).toHaveBeenCalledWith('RECORD_ATTENDANCE', {
+      ...log,
+      checkInPin: '5027',
+    });
+    expect(service.getLogs('sch_20261015')).toContainEqual(log);
+  });
+
+  it('does not keep manual-PIN attendance locally if the server rejects the PIN', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '현장 PIN이 변경되었거나 일치하지 않습니다.',
+    });
+    const log: RawAttendanceLog = {
+      id: 'log_manual_pin_rejected',
+      scheduleId: 'sch_20261015',
+      memberId: 'mem_s01',
+      memberName: '김하은',
+      part: '소프라노',
+      timestamp: '2026-10-20T19:30:00+09:00',
+      authMethod: 'MANUAL_PIN',
+      isVerifiedLocation: true,
+    };
+
+    await expect(service.addCheckInLog(log, '1111')).rejects.toThrow(
+      '현장 PIN이 변경되었거나 일치하지 않습니다.'
+    );
+    expect(service.getLogs('sch_20261015')).not.toContainEqual(log);
+  });
+
   it('supports admin manual absent override and clearAttendanceLog', async () => {
     // 1. 관리자가 수동으로 출석 인정
     await service.addCheckInLog({
@@ -346,6 +512,10 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     const memberId = 'mem_s01'; // 김하은
     const device1 = 'device_uuid_phone_1';
     const device2 = 'device_uuid_phone_2';
+    vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: true,
+      message: '기기 바인딩 완료',
+    });
 
     // 1st device binding succeeds
     const bound = await service.bindMemberDevice(memberId, device1);
@@ -368,6 +538,26 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
 
     const device2Bound = await service.bindMemberDevice(memberId, device2);
     expect(device2Bound.boundDeviceId).toBe(device2);
+  });
+
+  it('does not update local device binding when the server rejects another device', async () => {
+    const memberId = 'mem_s01';
+    const member = service.getMembers().find((m) => m.id === memberId)!;
+    const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '이미 다른 기기에 연동된 계정입니다.',
+    });
+
+    await expect(service.bindMemberDevice(memberId, 'device_second')).rejects.toThrow(
+      '이미 다른 기기에 연동된 계정입니다.'
+    );
+    expect(sendSpy).toHaveBeenCalledWith('BIND_DEVICE', {
+      memberId,
+      deviceId: 'device_second',
+    });
+    expect(service.getMembers().find((m) => m.id === memberId)?.boundDeviceId).toBe(
+      member.boundDeviceId
+    );
   });
 
   it('guarantees 1-person 1-vote for RSVP without duplicating records', async () => {
@@ -672,15 +862,32 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(resolvedAfterUpdate.radiusMeters).toBe(200);
   });
 
-  it('handles universal activeOnSitePin retrieval and regeneration', () => {
+  it('handles universal activeOnSitePin retrieval and confirmed regeneration', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: true,
+      message: '환경설정 저장 완료',
+    });
     const pin1 = service.getActiveOnSitePin();
     expect(pin1).toBeDefined();
     expect(pin1.length).toBe(4);
 
-    const pin2 = service.refreshActiveOnSitePin();
+    const pin2 = await service.refreshActiveOnSitePin();
     expect(pin2).toBeDefined();
     expect(pin2.length).toBe(4);
     expect(service.getActiveOnSitePin()).toBe(pin2);
+  });
+
+  it('does not activate a new on-site PIN unless the config sheet confirms it', async () => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '환경설정 저장 실패',
+    });
+    const currentPin = service.getActiveOnSitePin();
+
+    await expect(service.refreshActiveOnSitePin()).rejects.toThrow('환경설정 저장 실패');
+    expect(service.getActiveOnSitePin()).toBe(currentPin);
   });
 
   it('purges ghost rsvpVotes and attendance logs when members are removed or not present in members list', async () => {
@@ -936,6 +1143,3 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(schedule).toBeUndefined();
   });
 });
-
-
-

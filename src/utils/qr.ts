@@ -58,24 +58,14 @@ export function findActiveScheduleForMasterQR(
 }
 
 /**
- * Verifies on-site temporary 4-digit PIN for a schedule
+ * Verifies the current choir-wide on-site PIN. Per-schedule and legacy defaults are not accepted.
  */
 export function verifySchedulePin(
-  schedule: import('../types/rollbook').Schedule,
+  _schedule: import('../types/rollbook').Schedule,
   inputPin: string,
   activeMasterPin?: string
 ): boolean {
-  const trimmed = inputPin.trim();
-  if (schedule.checkInPin && schedule.checkInPin.trim() === trimmed) {
-    return true;
-  }
-  if (activeMasterPin && activeMasterPin.trim() === trimmed) {
-    return true;
-  }
-  if (!schedule.checkInPin && trimmed === '1234') {
-    return true;
-  }
-  return false;
+  return Boolean(activeMasterPin && activeMasterPin.trim() === inputPin.trim());
 }
 
 /**

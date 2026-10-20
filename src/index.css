@@ -151,6 +151,248 @@ a {
   background-color: #fafafa;
 }
 
+.app-shell[data-display-mode='MOBILE'] {
+  max-width: 480px;
+}
+
+.app-shell[data-display-mode='DESKTOP'] {
+  max-width: 1440px;
+}
+
+.app-shell.admin-mode[data-display-mode='MOBILE'] {
+  max-width: 480px;
+}
+
+@media (min-width: 900px) {
+  .app-shell:not([data-display-mode='MOBILE']) {
+    max-width: 1440px;
+  }
+
+  .app-shell:not([data-display-mode='MOBILE']) .home-container {
+    width: min(100%, 1320px);
+    margin: 0 auto;
+    padding: 24px 28px 56px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+    align-content: start;
+    gap: 20px;
+    box-sizing: border-box;
+  }
+
+  .app-shell:not([data-display-mode='MOBILE']) .home-header,
+  .app-shell:not([data-display-mode='MOBILE']) .home-container > :nth-child(2),
+  .app-shell:not([data-display-mode='MOBILE']) .month-overview-card {
+    grid-column: 1 / -1;
+  }
+
+  .app-shell:not([data-display-mode='MOBILE']) .integrated-calendar-card,
+  .app-shell:not([data-display-mode='MOBILE']) .active-schedule-card,
+  .app-shell:not([data-display-mode='MOBILE']) .no-schedule-box {
+    align-self: start;
+    min-width: 0;
+  }
+
+  .app-shell:not([data-display-mode='MOBILE']) .integrated-calendar-card,
+  .app-shell:not([data-display-mode='MOBILE']) .active-schedule-card {
+    margin-bottom: 0 !important;
+  }
+}
+
+.app-shell[data-display-mode='MOBILE'] .admin-header {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.app-shell[data-display-mode='MOBILE'] .admin-primary-tabs {
+  flex-wrap: wrap;
+}
+
+.app-shell[data-display-mode='MOBILE'] .admin-primary-tabs .subtab-btn {
+  flex: 1 0 calc(50% - 4px);
+}
+
+.app-shell[data-display-mode='MOBILE'] .admin-schedules-split-grid,
+.app-shell[data-display-mode='MOBILE'] .kpi-grid,
+.app-shell[data-display-mode='MOBILE'] .toss-part-grid,
+.app-shell[data-display-mode='MOBILE'] .form-responsive-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-app: #101319;
+  --bg-card: #1a1f28;
+  --bg-subtle: #222833;
+  --bg-input: #222833;
+  --bg-hover: #2c3440;
+  --text-main: #f1f5f9;
+  --text-sub: #c5ced8;
+  --text-muted: #9ba7b4;
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-default: rgba(255, 255, 255, 0.16);
+  background-color: var(--bg-app);
+  color: var(--text-main);
+}
+
+.app-shell.admin-mode[data-theme='dark'] {
+  background-color: var(--bg-app);
+}
+
+.app-shell[data-theme='dark'] :is(.home-container, .calendar-page-container, .admin-container) {
+  color: var(--text-main);
+}
+
+.app-shell[data-theme='dark'] :is(
+  .integrated-calendar-card,
+  .active-schedule-card,
+  .month-overview-card,
+  .calendar-month-controller,
+  .calendar-grid-cells,
+  .admin-subtabs,
+  .schedule-selector-row,
+  .toss-section-card,
+  .member-portal-container-modern,
+  .personal-display-settings,
+  .personal-info-card,
+  .personal-account-card
+) {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-subtle) !important;
+  color: var(--text-main);
+}
+
+.app-shell[data-theme='dark'] :is(
+  .brand-title,
+  .section-title,
+  .section-subtitle,
+  .schedule-card-title,
+  .current-month-heading,
+  .calendar-cell,
+  .page-nav-title,
+  .admin-title,
+  .member-portal-container-modern h3,
+  .member-portal-container-modern strong
+) {
+  color: var(--text-main) !important;
+}
+
+.app-shell[data-theme='dark'] :is(input, select, textarea) {
+  background-color: var(--bg-input);
+  color: var(--text-main);
+  border-color: var(--border-default);
+}
+
+.app-shell[data-theme='dark'] .calendar-cell.selected {
+  color: #ffffff !important;
+}
+
+.app-shell[data-theme='dark'] .member-portal-container-modern > div:last-child {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+.app-shell[data-theme='dark'] .personal-display-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+}
+
+.personal-display-settings h3 {
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.personal-display-settings p,
+.personal-setting-row span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.personal-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.personal-setting-row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.personal-setting-row strong {
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.setting-switch {
+  width: 52px;
+  min-width: 52px;
+  height: 44px;
+  padding: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: #94a3b8;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.setting-switch span {
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin: 6px 0;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.18s ease;
+}
+
+.setting-switch.enabled {
+  background: #4f46e5;
+}
+
+.setting-switch.enabled span {
+  transform: translateX(20px);
+}
+
+.display-mode-options {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+
+.display-mode-options button {
+  min-width: 48px;
+  min-height: 44px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.display-mode-options button.selected {
+  background: var(--bg-card);
+  color: var(--text-main);
+  box-shadow: var(--shadow-sm);
+}
+
+.app-shell[data-theme='dark'] .display-mode-options button.selected {
+  background: #353e4b;
+}
+
 /* ==========================================================================
    Home Screen & Header
    ========================================================================== */

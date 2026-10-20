@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { setAdminLoggedIn, validateAdminPin } from '../services/auth';
+import { setAdminLoggedIn } from '../services/auth';
+import { sheetsService } from '../services/sheets';
 
 interface AdminPinModalProps {
   onSuccess: () => void;
@@ -9,16 +10,25 @@ interface AdminPinModalProps {
 export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onSuccess, onClose }) => {
   const [pin, setPin] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isChecking, setIsChecking] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (validateAdminPin(pin)) {
+    setIsChecking(true);
+    try {
+      await sheetsService.verifyAdminPin(pin);
       setAdminLoggedIn(true);
       onSuccess();
-    } else {
-      setErrorMsg('관리자 PIN 번호가 일치하지 않습니다. (기본: 1234)');
+    } catch (err: unknown) {
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : '관리자 PIN을 확인할 수 없습니다. 연결 상태를 확인해주세요.'
+      );
+    } finally {
+      setIsChecking(false);
     }
   };
 
@@ -48,14 +58,15 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onSuccess, onClose
             placeholder="기본 비밀번호: 1234"
             value={pin}
             onChange={(e) => setPin(e.target.value)}
+            disabled={isChecking}
             autoFocus
           />
 
           <div className="modal-button-group">
-            <button type="submit" className="btn-primary-large">
-              관리자 모드 진입
+            <button type="submit" className="btn-primary-large" disabled={isChecking}>
+              {isChecking ? '최신 설정 확인 중...' : '관리자 모드 진입'}
             </button>
-            <button type="button" className="btn-secondary-cancel" onClick={onClose}>
+            <button type="button" className="btn-secondary-cancel" onClick={onClose} disabled={isChecking}>
               취소
             </button>
           </div>

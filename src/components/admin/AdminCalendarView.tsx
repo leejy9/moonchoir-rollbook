@@ -221,19 +221,6 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                       >
                         {sch.title}
                       </strong>
-                      {sch.checkInPin && (
-                        <span
-                          style={{
-                            fontSize: '11px',
-                            color: '#64748B',
-                            background: '#F1F5F9',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                          }}
-                        >
-                          PIN: {sch.checkInPin}
-                        </span>
-                      )}
                     </div>
                     <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7684' }}>
                       {sch.startTime} ~ {sch.endTime} · {sch.locationName}
