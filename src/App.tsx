@@ -276,9 +276,6 @@ export function App() {
           onChangeDisplayMode={handleDisplayModeChange}
           onChangeDarkMode={handleDarkModeChange}
           onLogout={async () => {
-            if (profile) {
-              await sheetsService.unbindMemberDevice(profile.memberId);
-            }
             clearDeviceProfile();
             setProfile(null);
             setShowMemberPortalModal(false);

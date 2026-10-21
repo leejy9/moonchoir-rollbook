@@ -221,7 +221,7 @@ export const MemberMergeModal: React.FC<MemberMergeModalProps> = ({
                         )}
                       </div>
                       <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748B' }}>
-                        가입일: {m.joinedAt || m.createdAt.slice(0, 10)} · 기기연동: {m.boundDeviceId ? '📱 등록됨' : '미등록'}
+                        가입일: {m.joinedAt || m.createdAt.slice(0, 10)} · 이전 기기 정보: {m.boundDeviceId ? '있음' : '없음'}
                       </p>
                     </div>
                   </div>

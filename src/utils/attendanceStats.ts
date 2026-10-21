@@ -249,7 +249,7 @@ export function reconcileSingleMemberAttendance(
     effectiveAdminNote = log.adminNote;
 
     if (isManualAbsentOverride) {
-      finalStatus = '결석';
+      finalStatus = isExempt ? '미참' : '결석';
     } else {
       const logClock = getKSTClock(log.timestamp);
       const [logH, logM] = logClock ? logClock.split(':').map(Number) : [0, 0];
@@ -418,4 +418,3 @@ export function calculateCumulativeAttendanceWithLifecycle(
     };
   });
 }
-

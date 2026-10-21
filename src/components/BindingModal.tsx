@@ -107,7 +107,7 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
       );
       onSuccess(profile);
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : '기기 연동 처리 중 오류가 발생했습니다.');
+      setErrorMsg(err instanceof Error ? err.message : '회원 확인 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -225,18 +225,18 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
   const derivedLast4 = registerPhoneDigits.length >= 4 ? registerPhoneDigits.slice(-4) : '';
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-card">
+    <div className="modal-overlay binding-modal-overlay">
+      <div className="modal-card binding-modal-card">
         <div className="modal-header">
           <img
             src={moonchoirLogo}
             alt="Moonchoir"
             style={{ width: 52, height: 52, borderRadius: '50%', margin: '0 auto 12px', display: 'block', objectFit: 'cover', boxShadow: '0 4px 12px rgba(91, 62, 150, 0.2)' }}
           />
-          <div className="modal-badge">1회 본인 확인</div>
-          <h2 className="modal-title">본인 확인 & 기기 연결</h2>
+          <div className="modal-badge">브라우저별 본인 확인</div>
+          <h2 className="modal-title">기존 회원 확인 또는 신규 등록</h2>
           <p className="modal-desc">
-            한 번만 본인 확인을 해 두면, 앞으로 연습실 상설 QR을 비출 때마다 1초 만에 바로 출석됩니다!
+            카카오톡, Safari 등 각 브라우저에서 연락처를 확인해 기존 회원 계정을 사용할 수 있습니다.
           </p>
         </div>
 
@@ -387,7 +387,7 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
                 <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#78350F', lineHeight: 1.5 }}>
                   <strong>[{duplicatePromptMember.name}]</strong> 단원님 ({duplicatePromptMember.part}, 뒷자리 {duplicatePromptMember.phoneLast4 || derivedLast4}) 계정이 이미 명부에 존재합니다.
                   <span style={{ display: 'block', marginTop: '6px' }}>
-                    * 새로운 중복 계정을 생성하지 않고, 기존 계정에 이 브라우저를 연결합니다. (전체 연락처가 일치해야 연결됩니다.)
+                    * 새 중복 계정을 만들지 않고, 입력한 연락처를 확인한 뒤 기존 회원 계정을 이 브라우저에서 사용합니다.
                   </span>
                 </p>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -508,7 +508,7 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
               className="btn-primary-large"
               disabled={isSubmitting}
             >
-              {isSubmitting ? '구글 시트 저장 및 기기 연결 중...' : '신규 등록하고 내 폰으로 바인딩'}
+              {isSubmitting ? '구글 시트에 회원 정보를 저장하는 중...' : '신규 등록하고 폰 인증하기'}
             </button>
           </form>
         )}

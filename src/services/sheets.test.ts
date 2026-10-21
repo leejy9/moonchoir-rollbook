@@ -637,7 +637,15 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
   });
 
   it('does not commit an existing member binding when the atomic server request fails', async () => {
-    const member = service.getMembers().find((candidate) => candidate.id === 'mem_s01')!;
+    const memberId = 'mem_s01';
+    service.seedTestData({
+      members: service.getMembers().map((candidate) =>
+        candidate.id === memberId
+          ? { ...candidate, boundDeviceId: 'device_previous_browser' }
+          : candidate
+      ),
+    });
+    const member = service.getMembers().find((candidate) => candidate.id === memberId)!;
     service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
     const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
       success: false,
@@ -654,6 +662,37 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       phoneLast4: '5678',
     });
     expect(service.getMembers().find((candidate) => candidate.id === member.id)).toEqual(member);
+  });
+
+  it('reuses an existing member ID when another browser confirms the account', async () => {
+    const memberId = 'mem_s01';
+    service.seedTestData({
+      members: service.getMembers().map((candidate) =>
+        candidate.id === memberId
+          ? { ...candidate, boundDeviceId: 'device_previous_browser' }
+          : candidate
+      ),
+    });
+    const member = service.getMembers().find((candidate) => candidate.id === memberId)!;
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+
+    const rebound = await service.bindExistingMember(
+      member.id,
+      'device_kakao_browser',
+      '010-1234-5678',
+      '5678'
+    );
+
+    expect(sendSpy).toHaveBeenCalledWith('BIND_EXISTING_MEMBER', {
+      memberId: member.id,
+      deviceId: 'device_kakao_browser',
+      phone: '010-1234-5678',
+      phoneLast4: '5678',
+    });
+    expect(rebound.id).toBe(member.id);
+    // 새 브라우저가 확인돼도 시트의 첫 연동 기기 값은 그대로 유지된다
+    expect(rebound.boundDeviceId).toBe('device_previous_browser');
   });
 
   it('guarantees 1-person 1-vote for RSVP without duplicating records', async () => {
