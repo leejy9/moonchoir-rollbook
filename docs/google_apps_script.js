@@ -33,7 +33,7 @@ const SHEET_NAMES = {
 
 // 전화번호(phone, phoneLast4) 칸을 '일반 텍스트' 서식으로 지정한다.
 // 반드시 값을 쓰기 전에 호출해야 한다: 서식이 일반일 때 '0357'을 쓰면 시트가 숫자 357로 바꿔 저장한다.
-// (새 행은 appendRow 전에 getLastRow() + 1 행에 먼저 지정한다.)
+// 새 행은 appendRow가 아니라 appendMemberRow로 추가한다.
 function setMemberPhoneCellsAsText(sheet, rowIndex, headers) {
   ['phone', 'phoneLast4'].forEach(function (header) {
     const columnIndex = headers.indexOf(header);
@@ -41,6 +41,19 @@ function setMemberPhoneCellsAsText(sheet, rowIndex, headers) {
       sheet.getRange(rowIndex, columnIndex + 1).setNumberFormat('@');
     }
   });
+}
+
+// 새 단원 행을 추가한다. appendRow는 칸을 텍스트 서식으로 먼저 지정해도 '0357'을 숫자 357로 저장하므로
+// (소유자 시트의 진단 메뉴로 확인), 다음 빈 행의 전화번호 칸을 텍스트로 지정한 뒤 setValues로 쓴다.
+// doPost의 스크립트 락 안에서만 호출하므로 getLastRow() + 1 계산이 동시에 겹치지 않는다.
+function appendMemberRow(sheet, headers, rowValues) {
+  const rowIndex = sheet.getLastRow() + 1;
+  if (rowIndex > sheet.getMaxRows()) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), 1);
+  }
+  setMemberPhoneCellsAsText(sheet, rowIndex, headers);
+  sheet.getRange(rowIndex, 1, 1, rowValues.length).setValues([rowValues]);
+  return rowIndex;
 }
 
 // 헬퍼: 한국 표준시(KST, Asia/Seoul) YYYY-MM-DD HH:mm:ss 포맷팅
@@ -437,8 +450,7 @@ function doPost(e) {
         if (h === 'boundDeviceAt') return boundAt;
         return member[h] !== undefined ? member[h] : '';
       });
-      setMemberPhoneCellsAsText(sheet, sheet.getLastRow() + 1, headers);
-      sheet.appendRow(newRow);
+      appendMemberRow(sheet, headers, newRow);
       SpreadsheetApp.flush();
       return jsonResponse({ success: true, message: '단원 등록 및 기기 연결 완료' });
     }
@@ -638,8 +650,7 @@ function doPost(e) {
         if (h === 'boundDeviceAt') return data.boundDeviceAt ? toKSTString(data.boundDeviceAt) : '';
         return data[h] !== undefined ? data[h] : '';
       });
-      setMemberPhoneCellsAsText(sheet, sheet.getLastRow() + 1, headers);
-      sheet.appendRow(newRow);
+      appendMemberRow(sheet, headers, newRow);
       return jsonResponse({ success: true, message: '단원 등록 완료' });
     }
 
@@ -1256,23 +1267,21 @@ function diagnosePhoneTextFormat() {
     const headers = ['phone', 'phoneLast4'];
     tempSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
-    // 새 행: 서식을 먼저 지정하고 appendRow
-    const appendRowIndex = tempSheet.getLastRow() + 1;
-    setMemberPhoneCellsAsText(tempSheet, appendRowIndex, headers);
-    tempSheet.appendRow(['010-4366-0357', '0357']);
-    // 기존 행 갱신: 아직 내용이 없는 다음 행에 서식을 먼저 지정하고 setValues
-    // (내용이 없는 빈 행은 appendRow로 만들 수 없으므로 다음 행 번호를 직접 계산한다)
-    const updateRowIndex = tempSheet.getLastRow() + 1;
+    // 새 단원 추가와 같은 방식(appendMemberRow)
+    const addedRowIndex = appendMemberRow(tempSheet, headers, ['010-4366-0357', '0357']);
+    // 일반 서식으로 이미 만들어진 기존 행을 갱신하는 방식(서식 지정 후 setValues)
+    tempSheet.getRange(addedRowIndex + 1, 1, 1, headers.length).setValues([['x', 'y']]);
+    const updateRowIndex = addedRowIndex + 1;
     setMemberPhoneCellsAsText(tempSheet, updateRowIndex, headers);
     tempSheet.getRange(updateRowIndex, 1, 1, headers.length).setValues([['010-4471-0813', '0813']]);
 
-    const values = tempSheet.getRange(appendRowIndex, 1, 2, headers.length).getValues();
+    const values = tempSheet.getRange(addedRowIndex, 1, 2, headers.length).getValues();
     const rowsLanded = values[0][0] === '010-4366-0357' && values[1][0] === '010-4471-0813';
     const appendOk = rowsLanded && values[0][1] === '0357';
     const updateOk = rowsLanded && values[1][1] === '0813';
     message =
-      '새 행(appendRow) 0357 → ' + String(values[0][1]) + ' (' + typeof values[0][1] + ')' + (appendOk ? '  ✅ 보존' : '  ❌ 0이 사라짐') + '\n' +
-      '행 갱신(setValues) 0813 → ' + String(values[1][1]) + ' (' + typeof values[1][1] + ')' + (updateOk ? '  ✅ 보존' : '  ❌ 0이 사라짐') +
+      '새 단원 추가 0357 → ' + String(values[0][1]) + ' (' + typeof values[0][1] + ')' + (appendOk ? '  ✅ 보존' : '  ❌ 0이 사라짐') + '\n' +
+      '기존 행 갱신 0813 → ' + String(values[1][1]) + ' (' + typeof values[1][1] + ')' + (updateOk ? '  ✅ 보존' : '  ❌ 0이 사라짐') +
       (rowsLanded ? '' : '\n※ 진단용 행이 예상 위치에 기록되지 않았습니다.');
   } catch (err) {
     message = '진단 중 오류: ' + err;
