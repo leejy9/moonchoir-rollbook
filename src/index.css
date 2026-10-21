@@ -6161,3 +6161,69 @@ a {
 .period-modal-apply-btn:hover {
   background: #4338ca;
 }
+/* 앱 설치(홈 화면 추가) 카드 */
+.install-app-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background-color: var(--bg-card);
+}
+
+.install-app-card.compact {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.install-app-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.install-app-text strong {
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.install-app-text span {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.install-app-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 10px;
+  background: #282c48;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.install-app-note,
+.install-app-steps {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.install-app-steps {
+  padding-left: 18px;
+}

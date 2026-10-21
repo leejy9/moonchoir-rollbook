@@ -136,6 +136,10 @@
   - 차단·자동 로그아웃 제거, 시트의 첫 연동 기기 값은 유지(새 브라우저는 시트 쓰기 없음), 시트에 전체 번호가 있으면 전체 번호 일치 시에만 연동
   - `출석원천로그`에 `deviceId` 열 추가(append-only, 과거 행 빈 값). 상세는 [구조 복구 기록](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/ARCHITECTURE_RECOVERY.md) 2026-10-21 결정
   - **복원 예정**: 웹앱을 단원 폰에 설치하는 시점에 1인 1기기 락 부활 + 앱 접속자 재바인딩 (별도 Task로 등록 필요, 소유자 결정 대기)
+- [x] **Task 78**: 앱 설치(홈 화면 추가) 버튼 — PWA 매니페스트·최소 서비스 워커·`InstallAppCard` (2026-10-21)
+  - `public/manifest.webmanifest`, 아이콘 192/512/apple-touch(180), 캐시 없는 `public/sw.js`, 설치 카드는 연동 모달 상단과 마이페이지 대시보드 탭에 표시
+  - Android/데스크톱 Chrome은 원터치 설치, iOS는 공유→홈 화면에 추가 안내, 카카오톡 인앱은 기본 브라우저로 열기 유도
+  - 주의: iOS 홈 화면 앱은 Safari와 저장소가 분리되어 설치 후 앱에서 한 번 더 본인 확인이 필요 (Task 77 락 복원 시점의 재바인딩 절차와 같은 흐름). 현재 로고가 160px라 512 아이콘은 확대본 — 고해상도 로고 확보 시 교체
 
 ---
 

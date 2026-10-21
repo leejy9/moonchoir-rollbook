@@ -3,6 +3,7 @@ import { bindDeviceProfile, getOrCreateDeviceId } from '../services/auth';
 import { ExistingMemberConflictError, sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, PartType } from '../types/rollbook';
 import { buildNewMember } from '../utils/newMember';
+import { InstallAppCard } from './InstallAppCard';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface BindingModalProps {
@@ -238,6 +239,8 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
             한 번만 본인 확인을 해 두면, 앞으로 연습실 상설 QR을 비출 때마다 1초 만에 바로 출석됩니다!
           </p>
         </div>
+
+        <InstallAppCard compact />
 
         <div className="tab-pill-group" style={{ marginBottom: '14px' }}>
           <button

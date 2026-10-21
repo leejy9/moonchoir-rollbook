@@ -888,3 +888,9 @@
 ### 3. 센서 검증
 - 임시 GAS 하네스(가상 시트)로 12개 시나리오 확인: 정상 번호 통과, 뒷 4자리만 같은 경우 거부, 번호 없는 과거 행 허용, 숫자로 저장된 번호 허용, 기존 로그 시트에 `deviceId` 열 자동 추가 및 기존 헤더 보존.
 - Green Bar: `typecheck` 0 errors, `lint` 0 warnings/errors, `npm test` 33 files / 165 tests pass, `build` 성공(청크 크기 경고만 기존과 동일).
+
+### 4. 앱 설치 버튼 (Task 78)
+- 매니페스트/아이콘/무캐시 서비스 워커를 추가하고 `InstallAppCard`를 연동 모달과 마이페이지에 배치. 환경 판별(`src/utils/pwaInstall.ts`)은 단위 테스트 4건.
+- 헤드리스 Chromium으로 매니페스트 로드, 서비스 워커 등록, Android/iOS/카카오톡 UA별 카드 문구와 44px 버튼 확인. 실제 설치 팝업(Android)과 iOS 공유 시트는 실기기에서만 확인 가능.
+- Green Bar: `typecheck`, `lint` 0 errors, `npm test` 34 files / 169 tests pass, `build` 성공.
+

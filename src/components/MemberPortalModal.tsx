@@ -7,6 +7,7 @@ import {
   getGamifiedAttendanceLevel,
 } from '../utils/attendanceStats';
 import { getKSTDateString } from '../utils/date';
+import { InstallAppCard } from './InstallAppCard';
 
 interface MemberPortalModalProps {
   profile: BoundDeviceProfile;
@@ -562,6 +563,8 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
           {/* TAB 2: 개인 대시보드 (자연어 브리핑 & 계정 관리) */}
           {activeTab === 'DASHBOARD' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <InstallAppCard />
+
               <section className="personal-display-settings">
                 <div>
                   <h3>화면 설정</h3>
