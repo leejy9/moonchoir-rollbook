@@ -1257,20 +1257,23 @@ function diagnosePhoneTextFormat() {
     tempSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
     // 새 행: 서식을 먼저 지정하고 appendRow
-    setMemberPhoneCellsAsText(tempSheet, tempSheet.getLastRow() + 1, headers);
+    const appendRowIndex = tempSheet.getLastRow() + 1;
+    setMemberPhoneCellsAsText(tempSheet, appendRowIndex, headers);
     tempSheet.appendRow(['010-4366-0357', '0357']);
-    // 기존 행 갱신: 서식을 먼저 지정하고 setValues
-    tempSheet.appendRow(['', '']);
-    const updateRow = tempSheet.getLastRow();
-    setMemberPhoneCellsAsText(tempSheet, updateRow, headers);
-    tempSheet.getRange(updateRow, 1, 1, headers.length).setValues([['010-4471-0813', '0813']]);
+    // 기존 행 갱신: 아직 내용이 없는 다음 행에 서식을 먼저 지정하고 setValues
+    // (내용이 없는 빈 행은 appendRow로 만들 수 없으므로 다음 행 번호를 직접 계산한다)
+    const updateRowIndex = tempSheet.getLastRow() + 1;
+    setMemberPhoneCellsAsText(tempSheet, updateRowIndex, headers);
+    tempSheet.getRange(updateRowIndex, 1, 1, headers.length).setValues([['010-4471-0813', '0813']]);
 
-    const values = tempSheet.getRange(2, 1, 2, headers.length).getValues();
-    const appendOk = String(values[0][1]) === '0357' && typeof values[0][1] === 'string';
-    const updateOk = String(values[1][1]) === '0813' && typeof values[1][1] === 'string';
+    const values = tempSheet.getRange(appendRowIndex, 1, 2, headers.length).getValues();
+    const rowsLanded = values[0][0] === '010-4366-0357' && values[1][0] === '010-4471-0813';
+    const appendOk = rowsLanded && values[0][1] === '0357';
+    const updateOk = rowsLanded && values[1][1] === '0813';
     message =
-      '새 행(appendRow) 0357 → ' + String(values[0][1]) + (appendOk ? '  ✅ 보존' : '  ❌ 0이 사라짐') + '\n' +
-      '행 갱신(setValues) 0813 → ' + String(values[1][1]) + (updateOk ? '  ✅ 보존' : '  ❌ 0이 사라짐');
+      '새 행(appendRow) 0357 → ' + String(values[0][1]) + ' (' + typeof values[0][1] + ')' + (appendOk ? '  ✅ 보존' : '  ❌ 0이 사라짐') + '\n' +
+      '행 갱신(setValues) 0813 → ' + String(values[1][1]) + ' (' + typeof values[1][1] + ')' + (updateOk ? '  ✅ 보존' : '  ❌ 0이 사라짐') +
+      (rowsLanded ? '' : '\n※ 진단용 행이 예상 위치에 기록되지 않았습니다.');
   } catch (err) {
     message = '진단 중 오류: ' + err;
   } finally {
