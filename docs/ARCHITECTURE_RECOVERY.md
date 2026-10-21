@@ -160,7 +160,7 @@ IDs are stored as strings. Sheets do not enforce foreign-key rules, so reference
 | Schedule edit | Admin form → `useScheduleAdmin` → local Schedule update/storage → background GAS request → refresh signal. A failed remote write can leave the current screen showing the local edit until a later fetch. |
 | Member change | Admin/Binding → local Member update/add → background or partially awaited GAS request → manual refresh. Registration server handler appends without a final duplicate check. |
 | Check-in | QR/GPS validation → local log append → background GAS append → UI success. The UI can announce success before spreadsheet confirmation. |
-| Attendance correction/clear | Admin action appends local logs; merge can rewrite old log IDs. Clear creates separate local and server timestamps. |
+| Attendance correction/clear | Admin action appends local logs and the server appends spreadsheet rows. Attendance timestamps can refer to a scheduled check-in time, so the projection uses append order—not timestamp order—to determine the latest action. |
 | RSVP | Local current answer is replaced or removed → GAS overwrites or deletes the current row → dialog refreshes. History is not kept, as now agreed. |
 
 ### 4. 현재 Source of Truth 분석
@@ -169,7 +169,7 @@ IDs are stored as strings. Sheets do not enforce foreign-key rules, so reference
 | --- | --- | --- |
 | Member | Google Spreadsheet | Local cache/defaults are visible first; remote roster later replaces them while preserving a special pending-member set. Reads can also restore/register a member. |
 | Schedule | Google Spreadsheet | Local array is updated first; a remote fetch later replaces the schedule array. |
-| Attendance | Google Spreadsheet append-only log | Local log is appended first; remote sync is not awaited by the QR success path. Fetch filters/re-maps some IDs. Merge rewrites rows despite the append-only intent. |
+| Attendance | Google Spreadsheet append-only log | Local and remote log arrays preserve append order, which determines the latest action in the projection. QR check-in remote sync is still not awaited by the success path; fetch filters some IDs. |
 | RSVP | Google Spreadsheet current response | Local upsert/delete occurs first; the sheet is then upserted/deleted. |
 | Location / ProgramCard | Google Spreadsheet | Remote values and local-only values are combined; empty remote arrays do not consistently clear local values. |
 | Config | Google Spreadsheet | Local defaults and remote partial config are merged; endpoint/config can also be browser-local. |

@@ -189,7 +189,7 @@ export function resolveMergedMemberIds(
 /**
  * 단일 단원 + 단일 일정에 대한 출결 상태를 결정론적으로 계산하는 순수 투영 함수(SSOT).
  * - 취소된 연습(isCancelled) -> '미참'
- * - 최신 원천 로그(Recency Resolution) 우선 반영 (관리자 출결 취소 포함)
+ * - 마지막으로 추가된 원천 로그 우선 반영 (관리자 출결 취소 포함)
  * - 로그가 없으면: 비필참 대상자는 '미참', 사전 불참(사유 작성)은 '사유결석', 그 외 필참 대상자는 '결석'
  */
 export function reconcileSingleMemberAttendance(
@@ -215,13 +215,8 @@ export function reconcileSingleMemberAttendance(
   const startMinutes = (startHour || 0) * 60 + (startMin || 0);
   const lateThresholdMinutes = startMinutes + lateGraceMinutes;
 
-  // 동일 단원의 다중 로그 중 가장 최신 액션 우선 채택
-  const sortedLogs = [...memberLogs].sort((a, b) => {
-    const timeA = parseKSTDate(a.timestamp || '').getTime();
-    const timeB = parseKSTDate(b.timestamp || '').getTime();
-    return timeA - timeB;
-  });
-  const log = sortedLogs.length > 0 ? sortedLogs[sortedLogs.length - 1] : undefined;
+  // Logs retain append order from the source sheet; timestamp is the attendance time, not action order.
+  const log = memberLogs[memberLogs.length - 1];
 
   let finalStatus: AttendanceStatus = '결석';
   let checkInTime: string | undefined;

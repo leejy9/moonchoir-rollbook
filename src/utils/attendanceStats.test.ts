@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   isMemberRequiredForSchedule,
   calculateCumulativeAttendanceWithLifecycle,
+  reconcileSingleMemberAttendance,
   getGamifiedAttendanceLevel,
 } from './attendanceStats';
 import type { Member, Schedule, RawAttendanceLog } from '../types/rollbook';
@@ -82,6 +83,61 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
     expect(stats[0].attended).toBe(1);
     expect(stats[0].absent).toBe(1);
     expect(stats[0].attendanceRate).toBe(50);
+  });
+  it('미래 일정의 출석 로그보다 나중에 추가된 초기화 로그를 우선한다', () => {
+    const member: Member = {
+      id: 'm_regular',
+      name: '정단원',
+      part: '테너',
+      phoneLast4: '1234',
+      role: 'MEMBER',
+      createdAt: '2026-01-01T00:00:00Z',
+      status: 'ACTIVE',
+      joinedAt: '2026-01-01',
+      memberStatus: '정단원',
+    };
+    const schedule: Schedule = {
+      id: 's_oct_22',
+      title: '정기 연습',
+      date: '2026-10-22',
+      startTime: '19:30',
+      endTime: '22:00',
+      locationName: '제1연습실',
+      category: '정기연습',
+    };
+    const attendanceLog: RawAttendanceLog = {
+      id: 'log_manual_future_attendance',
+      scheduleId: schedule.id,
+      memberId: member.id,
+      memberName: member.name,
+      part: member.part,
+      timestamp: '2026-10-22T19:30:00',
+      authMethod: 'MANUAL_BY_ADMIN',
+      isVerifiedLocation: true,
+      adminNote: '관리자 수동 출석 인정',
+    };
+    const resetLog: RawAttendanceLog = {
+      id: 'log_cancel_later_action',
+      scheduleId: schedule.id,
+      memberId: member.id,
+      memberName: member.name,
+      part: member.part,
+      timestamp: '2026-10-21T11:09:38',
+      authMethod: 'MANUAL_BY_ADMIN',
+      isVerifiedLocation: false,
+      adminNote: '관리자 출결 취소 (초기화)',
+    };
+
+    const resetResult = reconcileSingleMemberAttendance(member, schedule, [attendanceLog, resetLog]);
+    expect(resetResult.finalStatus).toBe('결석');
+
+    const laterAttendanceLog = { ...attendanceLog, id: 'log_manual_reapplied' };
+    const reappliedResult = reconcileSingleMemberAttendance(member, schedule, [
+      attendanceLog,
+      resetLog,
+      laterAttendanceLog,
+    ]);
+    expect(reappliedResult.finalStatus).toBe('출석');
   });
 
   it('미래 일정(오늘 이후)은 모수 및 결석에서 완전 제외되어야 한다 (출석률 왜곡 방지)', () => {
