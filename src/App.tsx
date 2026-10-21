@@ -28,6 +28,7 @@ import { getKSTDateString } from './utils/date';
 export function App() {
   // Device binding state
   const [profile, setProfile] = useState<BoundDeviceProfile | null>(() => getBoundDeviceProfile());
+  const [hasConfirmedRosterSync, setHasConfirmedRosterSync] = useState(false);
   const [showBindingModal, setShowBindingModal] = useState(false);
   const [showMemberPortalModal, setShowMemberPortalModal] = useState(false);
 
@@ -53,6 +54,7 @@ export function App() {
       .fetchRemoteData()
       .then(() => {
         if (!isCancelled) {
+          setHasConfirmedRosterSync(true);
           triggerRefresh();
         }
       })
@@ -119,11 +121,19 @@ export function App() {
 
   // Synchronize bound profile with remote/local member data if part or name changed in Sheets
   useEffect(() => {
-    if (!profile) return;
-    const members = sheetsService.getMembers();
+    if (!profile || !hasConfirmedRosterSync) return;
+    const members = sheetsService.getMembers(true);
     const current = members.find((m) => m.id === profile.memberId);
+    if (!current) {
+      clearDeviceProfile();
+      queueMicrotask(() => {
+        setShowMemberPortalModal(false);
+        setCurrentView('HOME');
+        setProfile(null);
+      });
+      return;
+    }
     if (
-      current &&
       current.status !== 'MERGED' &&
       current.boundDeviceId !== profile.deviceId
     ) {
@@ -135,7 +145,7 @@ export function App() {
       });
       return;
     }
-    if (current && (current.part !== profile.part || current.name !== profile.name)) {
+    if (current.part !== profile.part || current.name !== profile.name) {
       const updated = updateBoundDeviceProfile({
         name: current.name,
         part: current.part,
@@ -146,7 +156,7 @@ export function App() {
         });
       }
     }
-  }, [profile, refreshKey]);
+  }, [hasConfirmedRosterSync, profile, refreshKey]);
 
   const currentSchedule =
     qrTargetSchedule ||
