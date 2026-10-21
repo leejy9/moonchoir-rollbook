@@ -130,6 +130,7 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
 
     const resetResult = reconcileSingleMemberAttendance(member, schedule, [attendanceLog, resetLog]);
     expect(resetResult.finalStatus).toBe('결석');
+    expect(resetResult.isAttendanceCleared).toBe(true);
 
     const laterAttendanceLog = { ...attendanceLog, id: 'log_manual_reapplied' };
     const reappliedResult = reconcileSingleMemberAttendance(member, schedule, [
@@ -138,6 +139,45 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
       laterAttendanceLog,
     ]);
     expect(reappliedResult.finalStatus).toBe('출석');
+    expect(reappliedResult.isAttendanceCleared).toBe(false);
+  });
+
+  it('ADMIN의 제공된 10/22 단원·일정 데이터는 필참 대상으로 판정한다', () => {
+    const member: Member = {
+      id: 'mem_new_1792508291001',
+      name: 'ADMIN',
+      part: '베이스',
+      phoneLast4: '0000',
+      role: 'MEMBER',
+      createdAt: '2026-10-21T00:00:00Z',
+      status: 'ACTIVE',
+      joinedAt: '2026-10-21',
+      memberStatus: '준단원',
+      statusHistory: [
+        {
+          id: 'hist_temporary_base_member',
+          memberId: 'mem_new_1792508291001',
+          status: '준단원',
+          part: '베이스',
+          startDate: '2026-10-21',
+          endDate: '2026-11-21',
+          createdAt: '2026-10-21 11:49:16',
+        },
+      ],
+    };
+    const schedule: Schedule = {
+      id: 'sch_20261022_prm7',
+      title: '문콰이어 정기연습',
+      date: '2026-10-22',
+      startTime: '19:30',
+      endTime: '22:00',
+      locationName: '문콰이어 정기연습실 (예든)',
+      category: '정기연습',
+      targetAudienceType: 'PARTS',
+      targetParts: ['소프라노', '알토', '테너', '베이스'],
+    };
+
+    expect(isMemberRequiredForSchedule(member, schedule.date, schedule)).toBe(true);
   });
 
   it('미래 일정(오늘 이후)은 모수 및 결석에서 완전 제외되어야 한다 (출석률 왜곡 방지)', () => {

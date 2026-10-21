@@ -213,6 +213,7 @@ export interface AttendanceReconciliation {
   finalStatus: AttendanceStatus;
   isManualOverride: boolean;
   adminNote?: string;
+  isAttendanceCleared?: boolean;
 }
 
 /**

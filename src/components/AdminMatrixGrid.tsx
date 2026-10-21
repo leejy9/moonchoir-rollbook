@@ -406,6 +406,9 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                     if (s.isCancelled) {
                       badgeClass = 'cell-cancelled';
                       statusLabel = '취소';
+                    } else if (isFuture && item?.isAttendanceCleared) {
+                      badgeClass = 'cell-upcoming';
+                      statusLabel = '-';
                     } else if (status === '출석' || status === '수동인정') {
                       badgeClass = 'cell-attend';
                       statusLabel = '출석';

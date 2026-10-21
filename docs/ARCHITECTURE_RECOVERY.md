@@ -279,3 +279,8 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 - Admin PIN changes and on-site PIN rotations are confirmed by the Apps Script before the browser cache changes. Admin PIN checks read only the PIN from the server rather than downloading the full roster.
 - Manual-PIN check-ins validate the current choir-wide PIN on the server before appending the attendance event. Schedule-specific and default fallback PINs are no longer accepted; legacy schedule PIN values remain preserved in existing rows but are ignored and no longer shown in the admin schedule views. New and duplicated schedules no longer generate per-schedule PINs.
 - Admin browser sessions expire after 15 minutes without activity. This is a client-side session timeout, not a substitute for server-side authorization; Task 76 remains a production gate.
+
+### 2026-10-21 Follow-up: Future Attendance Reset and Eligibility Investigation
+
+- An attendance-reset log remains append-only and is projected as a cleared attendance correction, not a new attendance or absence event. For a future schedule, the admin matrix displays the cleared cell as `-`; after a later attendance action, the new action becomes the projection.
+- A targeted read of the current Sheets response confirmed the tested member/schedule data satisfies the existing eligibility rule: the member's joined date precedes the rehearsal, the effective status is `준단원`, the effective part is `베이스`, and the schedule is `PARTS` with `베이스` included. The remaining home-screen discrepancy cannot be attributed to those rows alone; the active device profile's member ID and selected schedule ID still need to be compared with the values the home view actually uses.

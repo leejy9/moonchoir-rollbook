@@ -294,6 +294,7 @@ export function reconcileSingleMemberAttendance(
     finalStatus,
     isManualOverride,
     adminNote: effectiveAdminNote,
+    isAttendanceCleared: isCancelledLog,
   };
 }
 

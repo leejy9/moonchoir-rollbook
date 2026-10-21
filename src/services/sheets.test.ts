@@ -260,6 +260,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     await service.clearAttendanceLog('sch_20261022', 'mem_s01');
     rec = service.reconcileAttendance('sch_20261022').find((r) => r.memberName === '김하은');
     expect(rec?.finalStatus).toBe('결석'); // 의무 대상자이므로 기본 결석으로 복귀
+    expect(rec?.isAttendanceCleared).toBe(true);
 
     // 4. 출결 취소 시 원천 로그가 물리 삭제되지 않고, 취소 로그가 적재되며 최종 판정이 원래 결석으로 투영되는지 검증
     await service.addCheckInLog({
@@ -287,6 +288,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     // 투영 뷰: 최종 상태는 원래의 '결석'으로 안전하게 복귀됨
     rec = service.reconcileAttendance('sch_20261022').find((r) => r.memberName === '김하은');
     expect(rec?.finalStatus).toBe('결석');
+    expect(rec?.isAttendanceCleared).toBe(true);
   });
 
   it('guarantees append-only behavior for check-in logs', async () => {

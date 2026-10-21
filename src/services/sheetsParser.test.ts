@@ -24,4 +24,21 @@ describe('parseRemoteSchedules', () => {
 
     expect(parsed.map((schedule) => schedule.isArchived)).toEqual([false, true, false, true]);
   });
+
+  it('parses the rehearsal PARTS list from the Google Sheets CSV value', () => {
+    const sheetRows = JSON.parse(
+      JSON.stringify([
+        {
+          ...baseSchedule,
+          id: 'sch_20261022_prm7',
+          date: '2026-10-22',
+          targetAudienceType: 'PARTS',
+          targetParts: '소프라노,알토,테너,베이스',
+        },
+      ])
+    );
+    const [schedule] = parseRemoteSchedules(sheetRows);
+
+    expect(schedule.targetParts).toEqual(['소프라노', '알토', '테너', '베이스']);
+  });
 });

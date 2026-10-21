@@ -63,6 +63,8 @@ describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () 
     );
 
     expect(html).toContain('단일 정기연습');
+    expect(html).toContain('data-testid="attendance-target-diagnostic"');
+    expect(html).toContain(mockProfile.memberId);
     // Carousel navigation bar should NOT be rendered when count <= 1
     expect(html).not.toContain('이전 일정 보기');
     expect(html).not.toContain('다음 일정 보기');
