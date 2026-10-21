@@ -75,8 +75,6 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
   }));
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isUnbinding, setIsUnbinding] = useState(false);
-  const [deviceSuccessMsg, setDeviceSuccessMsg] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -175,29 +173,6 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     setIsCustomPeriod(true);
     setModalError('');
     setShowPeriodModal(false);
-  };
-
-  // 기기 연동 초기화 핸들러 (1인 1기기 락 해제)
-  const handleUnbindDevice = async () => {
-    if (!window.confirm(`${formData.name} 단원의 기기 연동을 초기화하시겠습니까?\n초기화 후 새 스마트폰에서 다시 본인인증 바인딩이 가능합니다.`)) {
-      return;
-    }
-    try {
-      setIsUnbinding(true);
-      setErrorMessage('');
-      await sheetsService.unbindMemberDevice(formData.id);
-      setFormData((prev) => ({
-        ...prev,
-        boundDeviceId: undefined,
-        boundDeviceAt: undefined,
-      }));
-      setDeviceSuccessMsg('기기 연동이 성공적으로 초기화되었습니다.');
-      setTimeout(() => setDeviceSuccessMsg(''), 4000);
-    } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : '기기 연동 해제 중 오류가 발생했습니다.');
-    } finally {
-      setIsUnbinding(false);
-    }
   };
 
   // 변경 사항(isDirty) 감지 (모든 필드 안전 문자열 변환 후 trim)
@@ -440,45 +415,6 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
               <span className="stat-label-modern">총 연습 회차</span>
               <strong className="stat-value-modern">{totalPastSessions}회</strong>
             </div>
-          </div>
-
-          {deviceSuccessMsg && (
-            <div className="profile-alert-success" style={{ marginTop: '12px' }}>
-              ✅ {deviceSuccessMsg}
-            </div>
-          )}
-
-          {/* 1인 1기기 락 & 바인딩 상태 */}
-          <div className="profile-device-lock-bar" style={{ marginTop: '14px' }}>
-            <div className="device-lock-info">
-              <span className="device-lock-icon">{formData.boundDeviceId ? '📱' : '📲'}</span>
-              <div>
-                <div className="device-lock-status">
-                  {formData.boundDeviceId ? (
-                    <>
-                      <span className="device-badge-bound">1인 1기기 연동됨</span>
-                      <span className="device-bind-date">({formData.boundDeviceAt ? formData.boundDeviceAt.slice(0, 10) : '등록됨'})</span>
-                    </>
-                  ) : (
-                    <span className="device-badge-unbound">기기 미연동 (최초 1회 로그인 시 자동 연동)</span>
-                  )}
-                </div>
-                <div className="device-lock-id">
-                  {formData.boundDeviceId ? `기기 고유키: ...${formData.boundDeviceId.slice(-8)}` : '단원이 스마트폰에서 본인인증 시 자동 등록됩니다.'}
-                </div>
-              </div>
-            </div>
-            {formData.boundDeviceId && (
-              <button
-                type="button"
-                className="btn-unbind-device"
-                onClick={handleUnbindDevice}
-                disabled={isUnbinding}
-                title="기기 분실 또는 스마트폰 변경 시 연동을 초기화합니다."
-              >
-                {isUnbinding ? '해제 중...' : '🔓 기기 연동 초기화'}
-              </button>
-            )}
           </div>
 
           <form id="member-profile-form" onSubmit={handleSubmit} className="modern-form-wrapper">

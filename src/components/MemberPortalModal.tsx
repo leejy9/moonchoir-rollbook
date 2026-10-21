@@ -40,7 +40,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'RECORDS' | 'DASHBOARD'>('RECORDS');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isUnbinding, setIsUnbinding] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [todayStr] = useState(getTodayDateString);
 
@@ -161,19 +161,19 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   };
 
   const handleLogout = async () => {
-    if (!onLogout || isUnbinding) return;
-    setIsUnbinding(true);
+    if (!onLogout || isLoggingOut) return;
+    setIsLoggingOut(true);
     setSyncFeedback(null);
     try {
       await onLogout();
     } catch (err: unknown) {
       setSyncFeedback(
         err instanceof Error
-          ? `기기 연동 해제 실패: ${err.message}`
-          : '기기 연동 해제 중 오류가 발생했습니다.'
+          ? `이 브라우저에서 로그아웃하지 못했습니다: ${err.message}`
+          : '이 브라우저에서 로그아웃하지 못했습니다.'
       );
     } finally {
-      setIsUnbinding(false);
+      setIsLoggingOut(false);
     }
   };
 
@@ -636,7 +636,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                 )}
               </div>
 
-              {/* 기기 연동 및 계정 관리 */}
+              {/* 브라우저별 계정 및 개인 설정 */}
               <div
                 className="personal-account-card"
                 style={{
@@ -647,10 +647,10 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                 }}
               >
                 <h3 style={{ margin: '0 0 8px', fontSize: '13.5px', color: '#475569', fontWeight: 700 }}>
-                  기기 연동 및 계정 관리
+                  계정 및 개인 설정
                 </h3>
                 <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#64748b' }}>
-                  현재 사용 중인 스마트폰 기기가 본인 계정에 1인 1기기 락(Lock)으로 등록되어 있습니다.
+                  같은 회원 계정을 여러 브라우저에서 사용할 수 있습니다. 로그아웃은 현재 브라우저에만 적용됩니다.
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -699,7 +699,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       <button
                         type="button"
                         onClick={handleLogout}
-                        disabled={isUnbinding}
+                      disabled={isLoggingOut}
                         style={{
                           flex: 1,
                           background: '#fff1f2',
@@ -712,7 +712,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                           cursor: 'pointer',
                         }}
                       >
-                        {isUnbinding ? '연동 해제 중...' : '🔓 기기 연동 해제'}
+                        {isLoggingOut ? '로그아웃 중...' : '이 브라우저에서 로그아웃'}
                       </button>
                     )}
                   </div>

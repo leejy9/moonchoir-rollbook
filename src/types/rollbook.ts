@@ -80,8 +80,8 @@ export interface Member {
   memberStatus?: MemberStatus; // 정단원, 준단원, 휴단원, 퇴단원, 선생님, 객원
   note?: string; // 비고 / 특이사항
   statusHistory?: MemberStatusHistory[]; // 기간제 상태 및 파트 변경 이력
-  boundDeviceId?: string; // 1인 1기기 락 고유 식별자 (Device UUID)
-  boundDeviceAt?: string; // 기기 바인딩 일시
+  boundDeviceId?: string; // Legacy metadata; not used to restrict account access
+  boundDeviceAt?: string; // Legacy last-device metadata
 }
 
 export type TargetAudienceType = 'ALL' | 'ALL_WITH_GUESTS' | 'PARTS' | 'CUSTOM_MEMBERS';
