@@ -3,6 +3,7 @@
 > **Spec Reference**: [docs/PRD.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/PRD.md)  
 > **Master Dev Log**: [docs/DEV_LOG.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/DEV_LOG.md)  
 > **Dedicated Plans**: [docs/plans/](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/plans/)  
+> **Deployment Runbook**: [docs/DEPLOYMENT.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/docs/DEPLOYMENT.md)  
 > **Harness Constitution**: [AGENTS.md](file:///Users/grasshop/Desktop/Antigravity/Moonchoir_rollbook/AGENTS.md)  
 > **Workflow Rule**: 1 Task = 1 Commit / Verification (Green Bar: `typecheck`, `lint`, `test`)
 
@@ -141,6 +142,7 @@
   - `public/manifest.webmanifest`, 아이콘 192/512/apple-touch(180), 캐시 없는 `public/sw.js`, 설치 카드는 연동 모달 상단과 마이페이지 대시보드 탭에 표시
   - Android/데스크톱 Chrome은 원터치 설치, iOS는 공유→홈 화면에 추가 안내, 카카오톡 인앱은 기본 브라우저로 열기 유도
   - 주의: iOS 홈 화면 앱은 Safari와 저장소가 분리되어 설치 후 앱에서 한 번 더 본인 확인이 필요 (Task 77 락 복원 시점의 재바인딩 절차와 같은 흐름). 현재 로고가 160px라 512 아이콘은 확대본 — 고해상도 로고 확보 시 교체
+  - 소유자 확인(2026-10-22): 라이브에서 설치 카드 노출 확인(마이페이지 → `개인 대시보드` 탭 최상단). 홈 배너로 옮기지 않고 현재 위치를 유지하며 단원 안내는 소유자가 직접 함. 실기기(Android 설치 팝업·iOS 공유 시트·카톡 `기본 브라우저로 열기`) 동작은 미확인
 - [x] **Task 79**: 관리자 매트릭스 투표 상태 표기 — 참석 투표자가 결석으로 보이던 오표기 수정 (2026-10-21, 소유자 승인)
   - `src/utils/matrixCell.ts`(표시 전용): 연습 종료 전에는 `참석/사유/불참/미투표`, 종료 후 결석에는 `참석투표/불참투표` 보조 표기, `-` 제거. 통계 엔진·원천 로그는 변경 없음
   - 소유자 확인: 당일 연습도 종료 전까지 `미투표/참석` 등 투표 상태로 보이는 것이 의도이며, 기존 "초기화된 미래 칸은 `-`" 합의는 이 결정으로 대체. 마이페이지의 지난 연습 `결석 (-)` 표기는 현행 유지(미참여 일정은 결석)
@@ -149,6 +151,7 @@
   - QR/PIN 출석은 시트 확정 후에만 완료 화면(실패 시 오류 표시, 로컬에 남기지 않음). 관리자 수동 입력·투표·일정 등은 먼저 반영하되 저장 실패 시 알림을 띄우고 시트 상태로 되돌림 (기존에는 `.catch`가 실패 응답을 잡지 못해 실패가 조용히 묻힘)
   - 화면 구석에 `방금 동기화됨`/`동기화 실패 · 눌러서 다시 시도` 알약(44px)
   - 나중에: 응답이 느려지면 GAS에 "마지막 변경 번호"만 묻는 가벼운 요청 추가, GAS 요청마다 도는 `ensureSheetStructure`를 배포 버전당 1회로 축소 (소유자 미승인, 측정 후 결정)
+  - 소유자 확인(2026-10-22): 라이브에서 `방금 동기화됨` 알약 노출 확인(프런트 배포 완료). 연습 직전 다수 접속 시의 응답 속도는 현장에서 관찰 필요
 - [x] **Task 83**: 도로명주소 좌표 변환(카카오 지도) 로더 안정화 (2026-10-21)
   - `src/utils/kakaoMaps.ts`: 팝업을 닫았다 다시 열면 `services`가 초기화되지 않아 '연결 확인 중'에서 멈출 수 있던 구조 수정, 주소 선택 시 재시도, 10초 타임아웃, 원인별 안내(스크립트 차단 vs 인증 실패)
   - 미확정: 인증 실패가 원인이라면 카카오 개발자 콘솔의 웹 도메인 등록·[카카오맵] 사용 설정 확인 필요(이 환경에서는 카카오 서버에 접속 불가)
@@ -163,6 +166,20 @@
   - `normalizeToKSTTimestamp` / `getKSTClock`(`src/utils/date.ts`): `Z`·`+hh:mm` 표기는 KST로 변환, 표기 없으면 KST로 간주, `HH:mm`만 있으면 그대로
   - 적용: 지각 판정(`attendanceStats.ts`), 홈 인증 시각, 마이페이지 출결 시간, 관리자 체크인 시각, 매트릭스 칸. 기존에는 `YYYY-MM-DD HH:mm:ss`가 `2026-`으로 잘려 보이거나 UTC 시각이 그대로 노출될 수 있었음
   - 테스트 데이터의 `...Z` 체크인 시각을 운영 형식(`YYYY-MM-DD HH:mm:ss`)으로 정리(시각 값은 동일)
+
+- [ ] **Task 85 (미정)**: 앱 설치 시점에 1인 1기기 락 복원 + 설치 앱 재바인딩 — 소유자 계획(2026-10-22): 웹앱을 단원 폰에 설치하는 날 락을 부활시키고 앱으로 접속한 단원이 재바인딩. 복원 시 근거 데이터는 `출석원천로그.deviceId`(삭제하지 않음). iOS 설치 앱은 Safari와 저장소가 분리되어 재본인확인 필요. 락 제거 코드는 git 이력(PR #1, #2)에 있음
+
+### 확인·정리 대기 (소유자 정리 예정, 2026-10-22 기준)
+- [ ] 도로명주소 검색에서 핀이 잡히는지 라이브 확인(Task 83). 안 되면 화면에 뜨는 안내 문구로 원인 구분: 스크립트 차단 / 카카오 인증(웹 도메인 등록, `카카오맵` 사용 설정) / 로컬 `.env`의 `VITE_KAKAO_MAP_API_KEY` 값
+- [ ] 실기기 확인: Android 설치 팝업, iOS 공유 → 홈 화면에 추가, 카톡 `기본 브라우저로 열기`
+- [ ] 연습 시작 직전 20~30명 동시 접속 시 시트 응답 속도 관찰 → 느리면 GAS에 변경 번호 확인 요청 추가, `ensureSheetStructure` 호출 축소(Task 82 후속)
+- [ ] Task 81: 누적 통계 엔진의 당일 일정 처리 기준 결정
+- [ ] 시트 메뉴 `기존 기록 날짜/시간을 KST로 변환`을 유지할지 삭제할지 결정(출석 로그를 제자리에서 덮어써 append-only 원칙과 어긋남, 표시용으로는 불필요)
+- [ ] 앱 아이콘이 160px 원본의 확대본이므로 512px 이상 로고 확보 시 `public/icon-*.png` 교체
+- [ ] 실서비스 전 필수: Task 76(Apps Script 서버 인증·개인정보 최소 공개), Task 18(관리자 세션·감사 로그·세션 복구). 현재는 테스트베드로 링크 공개를 허용 중
+- [ ] 문서 정리: Task 45 상태 표기 불일치, Task 51~53 `Planned` 표기, Task 73~75 번호 중복(Phase 4.9 / Phase 5)
+- [ ] 로컬 브랜치 `local-work-1022`는 내용이 모두 `main`에 합쳐졌으므로 정리 가능
+- [ ] 기획 백로그: Task 38~40(단원 음악 역량 평가·코칭), 장기적으로 실시간 DB 전환(소유자 의견: 인원이 적고 어렵지 않아 나중에 전환 가능)
 
 ---
 
