@@ -3,13 +3,21 @@
  * Moonchoir Rollbook — Google Apps Script (GAS) Web App
  * 대상 스프레드시트: https://docs.google.com/spreadsheets/d/1VYT0HgsrR82ORbd4bxq8doVXvyBvwobgIv3kjE3flX8/edit
  *
- * [배포 방법]
+ * [최초 배포]
  * 1. 위 구글 시트에서 [확장 프로그램] > [Apps Script] 클릭
  * 2. 이 파일의 전체 코드를 복사하여 붙여넣기
  * 3. [배포] > [새 배포] 클릭
  * 4. 유형: [웹 앱] 선택
  * 5. 실행 대상: [나], 액세스 권한: [모든 사용자(Anyone)] 선택 후 [배포]
  * 6. 발급된 "웹 앱 URL"을 문콰이어 앱 [관리자 센터] > [환경설정]에 입력
+ *
+ * [코드 업데이트 시] (웹 앱 URL을 유지해야 하므로 [새 배포]를 만들지 않는다)
+ * 1. 편집기의 기존 코드를 이 파일 전체로 교체하고 저장
+ * 2. [배포] > [배포 관리] > 연필(편집) > 버전: [새 버전] > [배포]
+ * 3. 이 스크립트를 바꾼 뒤에는 앱(프런트엔드)을 나중에 배포한다
+ *
+ * [시트 확인용 메뉴] 시트를 열면 상단에 [🎵 문콰이어 출석부] 메뉴가 생긴다.
+ * - 전화번호 텍스트 서식 동작 확인: 임시 탭을 만들어 앞자리 0 보존 여부를 확인하고 그 탭만 삭제한다
  */
 
 const SHEET_NAMES = {
@@ -23,6 +31,9 @@ const SHEET_NAMES = {
   CONFIG: '환경설정',
 };
 
+// 전화번호(phone, phoneLast4) 칸을 '일반 텍스트' 서식으로 지정한다.
+// 반드시 값을 쓰기 전에 호출해야 한다: 서식이 일반일 때 '0357'을 쓰면 시트가 숫자 357로 바꿔 저장한다.
+// (새 행은 appendRow 전에 getLastRow() + 1 행에 먼저 지정한다.)
 function setMemberPhoneCellsAsText(sheet, rowIndex, headers) {
   ['phone', 'phoneLast4'].forEach(function (header) {
     const columnIndex = headers.indexOf(header);
@@ -381,8 +392,8 @@ function doPost(e) {
             const updatedRow = rows[i].slice();
             updatedRow[deviceCol] = requestedDeviceId;
             updatedRow[boundAtCol] = toKSTString(new Date());
-            sheet.getRange(i + 1, 1, 1, updatedRow.length).setValues([updatedRow]);
             setMemberPhoneCellsAsText(sheet, i + 1, headers);
+            sheet.getRange(i + 1, 1, 1, updatedRow.length).setValues([updatedRow]);
             SpreadsheetApp.flush();
           }
           return jsonResponse({
@@ -426,8 +437,8 @@ function doPost(e) {
         if (h === 'boundDeviceAt') return boundAt;
         return member[h] !== undefined ? member[h] : '';
       });
+      setMemberPhoneCellsAsText(sheet, sheet.getLastRow() + 1, headers);
       sheet.appendRow(newRow);
-      setMemberPhoneCellsAsText(sheet, sheet.getLastRow(), headers);
       SpreadsheetApp.flush();
       return jsonResponse({ success: true, message: '단원 등록 및 기기 연결 완료' });
     }
@@ -497,8 +508,8 @@ function doPost(e) {
             updatedRow[deviceCol] = requestedDeviceId;
             updatedRow[boundAtCol] = toKSTString(new Date());
           }
-          sheet.getRange(i + 1, 1, 1, updatedRow.length).setValues([updatedRow]);
           setMemberPhoneCellsAsText(sheet, i + 1, headers);
+          sheet.getRange(i + 1, 1, 1, updatedRow.length).setValues([updatedRow]);
           SpreadsheetApp.flush();
           return jsonResponse({
             success: true,
@@ -627,8 +638,8 @@ function doPost(e) {
         if (h === 'boundDeviceAt') return data.boundDeviceAt ? toKSTString(data.boundDeviceAt) : '';
         return data[h] !== undefined ? data[h] : '';
       });
+      setMemberPhoneCellsAsText(sheet, sheet.getLastRow() + 1, headers);
       sheet.appendRow(newRow);
-      setMemberPhoneCellsAsText(sheet, sheet.getLastRow(), headers);
       return jsonResponse({ success: true, message: '단원 등록 완료' });
     }
 
@@ -679,8 +690,8 @@ function doPost(e) {
           if (h === 'boundDeviceAt') return boundDeviceAtIdx >= 0 ? existingRow[boundDeviceAtIdx] : '';
           return data[h] !== undefined ? data[h] : (existingRow[colIdx] !== undefined ? existingRow[colIdx] : '');
         });
-        sheet.getRange(rowIndex, 1, 1, updateRow.length).setValues([updateRow]);
         setMemberPhoneCellsAsText(sheet, rowIndex, headers);
+        sheet.getRange(rowIndex, 1, 1, updateRow.length).setValues([updateRow]);
 
         // 단원 변경 이력 기록 및 시트 상 이전 오픈 이력 자동 마감
         const isStatusOrPartChanged =
@@ -1217,6 +1228,7 @@ function onOpen() {
     .addItem('시트 8대 탭 및 기본 데이터 생성', 'manualInitialize')
     .addItem('누락된 컬럼(phone, locationId 등) 헤더 자동 동기화', 'syncMissingHeaders')
     .addItem('기존 기록 날짜/시간을 한국 표준시(KST)로 변환', 'convertExistingTimestampsToKST')
+    .addItem('전화번호 텍스트 서식 동작 확인(임시 탭 생성 후 삭제)', 'diagnosePhoneTextFormat')
     .addToUi();
 }
 
@@ -1232,6 +1244,39 @@ function syncMissingHeaders() {
   ensureSheetStructure(ss);
   seedInitialData(ss);
   SpreadsheetApp.getUi().alert('컬럼 및 기본 데이터 동기화 완료!\n누락되었던 locationId, distanceMeters, 환경설정 등의 탭과 컬럼이 안전하게 보강되었습니다.');
+}
+
+// 진단: 전화번호 앞자리 0이 실제로 보존되는지 확인한다.
+// 기존 탭은 건드리지 않고, 이 함수가 새로 만든 임시 탭에서만 쓰고 실행이 끝나면 그 탭만 삭제한다.
+function diagnosePhoneTextFormat() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const tempSheet = ss.insertSheet('_전화서식확인_' + new Date().getTime());
+  let message;
+  try {
+    const headers = ['phone', 'phoneLast4'];
+    tempSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+    // 새 행: 서식을 먼저 지정하고 appendRow
+    setMemberPhoneCellsAsText(tempSheet, tempSheet.getLastRow() + 1, headers);
+    tempSheet.appendRow(['010-4366-0357', '0357']);
+    // 기존 행 갱신: 서식을 먼저 지정하고 setValues
+    tempSheet.appendRow(['', '']);
+    const updateRow = tempSheet.getLastRow();
+    setMemberPhoneCellsAsText(tempSheet, updateRow, headers);
+    tempSheet.getRange(updateRow, 1, 1, headers.length).setValues([['010-4471-0813', '0813']]);
+
+    const values = tempSheet.getRange(2, 1, 2, headers.length).getValues();
+    const appendOk = String(values[0][1]) === '0357' && typeof values[0][1] === 'string';
+    const updateOk = String(values[1][1]) === '0813' && typeof values[1][1] === 'string';
+    message =
+      '새 행(appendRow) 0357 → ' + String(values[0][1]) + (appendOk ? '  ✅ 보존' : '  ❌ 0이 사라짐') + '\n' +
+      '행 갱신(setValues) 0813 → ' + String(values[1][1]) + (updateOk ? '  ✅ 보존' : '  ❌ 0이 사라짐');
+  } catch (err) {
+    message = '진단 중 오류: ' + err;
+  } finally {
+    ss.deleteSheet(tempSheet);
+  }
+  SpreadsheetApp.getUi().alert('전화번호 텍스트 서식 확인\n\n' + message + '\n\n(임시 탭은 삭제되었습니다. 기존 탭은 변경하지 않았습니다.)');
 }
 
 function convertExistingTimestampsToKST() {
