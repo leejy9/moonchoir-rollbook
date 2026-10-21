@@ -249,7 +249,7 @@ export function reconcileSingleMemberAttendance(
     effectiveAdminNote = log.adminNote;
 
     if (isManualAbsentOverride) {
-      finalStatus = '결석';
+      finalStatus = isExempt ? '미참' : '결석';
     } else {
       let logMinutes = 0;
       if (log.timestamp.includes('T')) {
@@ -426,4 +426,3 @@ export function calculateCumulativeAttendanceWithLifecycle(
     };
   });
 }
-

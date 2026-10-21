@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   isMemberRequiredForSchedule,
-  calculateCumulativeAttendanceWithLifecycle,
   reconcileSingleMemberAttendance,
+  calculateCumulativeAttendanceWithLifecycle,
   getGamifiedAttendanceLevel,
 } from './attendanceStats';
 import type { Member, Schedule, RawAttendanceLog } from '../types/rollbook';
@@ -84,6 +84,37 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
     expect(stats[0].absent).toBe(1);
     expect(stats[0].attendanceRate).toBe(50);
   });
+
+  it('입단 전 일정에 수동 결석 로그가 있어도 미참으로 처리한다', () => {
+    const member: Member = {
+      id: 'm_joined_later',
+      name: '신입단원',
+      part: '소프라노',
+      phoneLast4: '1234',
+      role: 'MEMBER',
+      createdAt: '2026-10-16T00:00:00Z',
+      status: 'ACTIVE',
+      joinedAt: '2026-10-16',
+      memberStatus: '정단원',
+    };
+    const schedule = sampleSchedules[0];
+    const manualAbsentLog: RawAttendanceLog = {
+      id: 'manual-absent-before-joining',
+      scheduleId: schedule.id,
+      memberId: member.id,
+      memberName: member.name,
+      part: member.part,
+      timestamp: '2026-10-10T19:30:00Z',
+      authMethod: 'MANUAL_BY_ADMIN',
+      isVerifiedLocation: false,
+      adminNote: '관리자 결석 처리 (노쇼)',
+    };
+
+    const result = reconcileSingleMemberAttendance(member, schedule, [manualAbsentLog]);
+
+    expect(result.finalStatus).toBe('미참');
+  });
+
   it('미래 일정의 출석 로그보다 나중에 추가된 초기화 로그를 우선한다', () => {
     const member: Member = {
       id: 'm_regular',
@@ -742,4 +773,3 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
     });
   });
 });
-

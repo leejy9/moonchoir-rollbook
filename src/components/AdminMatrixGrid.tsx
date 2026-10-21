@@ -43,11 +43,15 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
   // Pre-calculate reconciliations for all visible schedules
   const reconciliationsBySchedule = React.useMemo(() => {
     const map = new Map<string, ReturnType<typeof sheetsService.reconcileAttendance>>();
+    const memberIds = new Set(members.map((member) => member.id));
     schedules.forEach((s) => {
-      map.set(s.id, sheetsService.reconcileAttendance(s.id));
+      map.set(
+        s.id,
+        sheetsService.reconcileAttendance(s.id).filter((record) => memberIds.has(record.memberId))
+      );
     });
     return map;
-  }, [schedules]);
+  }, [members, schedules]);
 
   // Calculate cumulative stats for each member across filtered schedules
   const memberStats = React.useMemo(() => {

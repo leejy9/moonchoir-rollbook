@@ -558,11 +558,6 @@ export class SheetsService {
   public async bindMemberDevice(memberId: string, deviceId: string): Promise<Member> {
     const member = this.members.find((m) => m.id === memberId);
     if (!member) throw new Error('단원을 찾을 수 없습니다.');
-    if (member.boundDeviceId && member.boundDeviceId !== deviceId) {
-      throw new Error(
-        '이미 다른 기기(스마트폰)에 연동되어 있는 계정입니다.\n기존 기기에서 [연동 해제]를 먼저 진행하시거나, 기기 분실/변경 시 관리자에게 초기화를 요청하세요.'
-      );
-    }
 
     const result = await this.sendToGoogleSheet('BIND_DEVICE', { memberId, deviceId });
     if (!result.success) {

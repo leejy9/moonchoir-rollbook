@@ -516,7 +516,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(service.getSchedules().some((s) => s.id === 'sch_batch_2')).toBe(false);
   });
 
-  it('enforces 1-person 1-device lock and prevents unauthorized multi-device binding', async () => {
+  it('allows the same member account to be used from multiple browsers', async () => {
     const memberId = 'mem_s01'; // 김하은
     const device1 = 'device_uuid_phone_1';
     const device2 = 'device_uuid_phone_2';
@@ -534,31 +534,20 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     const reBound = await service.bindMemberDevice(memberId, device1);
     expect(reBound.boundDeviceId).toBe(device1);
 
-    // 2nd different device binding MUST be rejected
-    await expect(service.bindMemberDevice(memberId, device2)).rejects.toThrow(
-      '이미 다른 기기(스마트폰)에 연동되어 있는 계정입니다'
-    );
-
-    // Unbinding allows device 2 to bind
-    await service.unbindMemberDevice(memberId);
-    const unBoundMember = service.getMembers().find((m) => m.id === memberId);
-    expect(unBoundMember?.boundDeviceId).toBeUndefined();
-
     const device2Bound = await service.bindMemberDevice(memberId, device2);
     expect(device2Bound.boundDeviceId).toBe(device2);
+    expect(service.getMembers().find((m) => m.id === memberId)?.boundDeviceId).toBe(device2);
   });
 
-  it('does not update local device binding when the server rejects another device', async () => {
+  it('does not update local device metadata when the server rejects a binding request', async () => {
     const memberId = 'mem_s01';
     const member = service.getMembers().find((m) => m.id === memberId)!;
     const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
       success: false,
-      message: '이미 다른 기기에 연동된 계정입니다.',
+      message: '시트 통신 실패',
     });
 
-    await expect(service.bindMemberDevice(memberId, 'device_second')).rejects.toThrow(
-      '이미 다른 기기에 연동된 계정입니다.'
-    );
+    await expect(service.bindMemberDevice(memberId, 'device_second')).rejects.toThrow('시트 통신 실패');
     expect(sendSpy).toHaveBeenCalledWith('BIND_DEVICE', {
       memberId,
       deviceId: 'device_second',
@@ -622,16 +611,24 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
   });
 
   it('does not commit an existing member binding when the atomic server request fails', async () => {
-    const member = service.getMembers().find((candidate) => candidate.id === 'mem_s01')!;
+    const memberId = 'mem_s01';
+    service.seedTestData({
+      members: service.getMembers().map((candidate) =>
+        candidate.id === memberId
+          ? { ...candidate, boundDeviceId: 'device_previous_browser' }
+          : candidate
+      ),
+    });
+    const member = service.getMembers().find((candidate) => candidate.id === memberId)!;
     service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
     const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
       success: false,
-      message: '이미 다른 기기에 연동된 계정입니다.',
+      message: '시트 통신 실패',
     });
 
     await expect(
       service.bindExistingMember(member.id, 'device_new', '010-1234-5678', '5678')
-    ).rejects.toThrow('이미 다른 기기에 연동된 계정입니다.');
+    ).rejects.toThrow('시트 통신 실패');
     expect(sendSpy).toHaveBeenCalledWith('BIND_EXISTING_MEMBER', {
       memberId: member.id,
       deviceId: 'device_new',
@@ -639,6 +636,36 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       phoneLast4: '5678',
     });
     expect(service.getMembers().find((candidate) => candidate.id === member.id)).toEqual(member);
+  });
+
+  it('reuses an existing member ID when another browser confirms the account', async () => {
+    const memberId = 'mem_s01';
+    service.seedTestData({
+      members: service.getMembers().map((candidate) =>
+        candidate.id === memberId
+          ? { ...candidate, boundDeviceId: 'device_previous_browser' }
+          : candidate
+      ),
+    });
+    const member = service.getMembers().find((candidate) => candidate.id === memberId)!;
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+
+    const rebound = await service.bindExistingMember(
+      member.id,
+      'device_kakao_browser',
+      '010-1234-5678',
+      '5678'
+    );
+
+    expect(sendSpy).toHaveBeenCalledWith('BIND_EXISTING_MEMBER', {
+      memberId: member.id,
+      deviceId: 'device_kakao_browser',
+      phone: '010-1234-5678',
+      phoneLast4: '5678',
+    });
+    expect(rebound.id).toBe(member.id);
+    expect(rebound.boundDeviceId).toBe('device_kakao_browser');
   });
 
   it('guarantees 1-person 1-vote for RSVP without duplicating records', async () => {
