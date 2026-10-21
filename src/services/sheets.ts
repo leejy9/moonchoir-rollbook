@@ -437,12 +437,20 @@ export class SheetsService {
       throw new Error(result.message || '단원 정보와 기기 연결이 확인되지 않았습니다.');
     }
 
+    // 처음 연동된 기기 값은 시트가 유지한다. 서버가 돌려준 값을 캐시에 그대로 반영한다.
+    const sheetDeviceId =
+      typeof result.boundDeviceId === 'string' && result.boundDeviceId
+        ? result.boundDeviceId
+        : member.boundDeviceId || deviceId;
     const updatedMember: Member = {
       ...member,
       phone,
       phoneLast4,
-      boundDeviceId: deviceId,
-      boundDeviceAt: getKSTTimestampString(),
+      boundDeviceId: sheetDeviceId,
+      boundDeviceAt:
+        sheetDeviceId === member.boundDeviceId
+          ? member.boundDeviceAt
+          : getKSTTimestampString(),
     };
     this.commitMember(updatedMember);
     return updatedMember;
@@ -558,21 +566,24 @@ export class SheetsService {
   public async bindMemberDevice(memberId: string, deviceId: string): Promise<Member> {
     const member = this.members.find((m) => m.id === memberId);
     if (!member) throw new Error('단원을 찾을 수 없습니다.');
-    if (member.boundDeviceId && member.boundDeviceId !== deviceId) {
-      throw new Error(
-        '이미 다른 기기(스마트폰)에 연동되어 있는 계정입니다.\n기존 기기에서 [연동 해제]를 먼저 진행하시거나, 기기 분실/변경 시 관리자에게 초기화를 요청하세요.'
-      );
-    }
 
     const result = await this.sendToGoogleSheet('BIND_DEVICE', { memberId, deviceId });
     if (!result.success) {
       throw new Error(result.message || '기기 연동이 구글 시트에서 확인되지 않았습니다.');
     }
 
+    // 여러 브라우저 허용(임시): 시트에 이미 연동 기기가 있으면 그 값을 유지한다.
+    const sheetDeviceId =
+      typeof result.boundDeviceId === 'string' && result.boundDeviceId
+        ? result.boundDeviceId
+        : member.boundDeviceId || deviceId;
     const updated = {
       ...member,
-      boundDeviceId: deviceId,
-      boundDeviceAt: getKSTTimestampString(),
+      boundDeviceId: sheetDeviceId,
+      boundDeviceAt:
+        sheetDeviceId === member.boundDeviceId
+          ? member.boundDeviceAt
+          : getKSTTimestampString(),
     };
     this.members[this.members.findIndex((m) => m.id === memberId)] = updated;
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
@@ -1254,7 +1265,7 @@ export class SheetsService {
     action: string,
     payload: unknown,
     endpointUrl?: string
-  ): Promise<{ success: boolean; message?: string; existingMemberId?: string }> {
+  ): Promise<{ success: boolean; message?: string; existingMemberId?: string; boundDeviceId?: string }> {
     const targetUrl = endpointUrl || this.config.sheetsWebAppUrl;
     if (!targetUrl) {
       return { success: false, message: '시트 Web App URL이 설정되지 않았습니다.' };
@@ -1279,11 +1290,13 @@ export class SheetsService {
         message?: string;
         error?: string;
         existingMemberId?: string;
+        boundDeviceId?: string;
       };
       return {
         success: json.success === true,
         message: json.message || json.error || (json.success === true ? '저장 완료' : '시트 저장이 확인되지 않았습니다.'),
         existingMemberId: json.existingMemberId,
+        boundDeviceId: json.boundDeviceId,
       };
     } catch (err) {
       console.error('[Sheets API] POST failed:', err);

@@ -86,12 +86,6 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
     }
 
     const currentDeviceId = getOrCreateDeviceId();
-    if (selectedMember.boundDeviceId && selectedMember.boundDeviceId !== currentDeviceId) {
-      setErrorMsg(
-        `이미 다른 기기(스마트폰)에 연동되어 있는 계정입니다.\n기존 기기에서 [연동 해제]를 먼저 진행하셨거나 기기 교체 시 관리자에게 초기화를 요청하세요.`
-      );
-      return;
-    }
 
     try {
       setIsSubmitting(true);
@@ -201,15 +195,6 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
     const finalPhone = formatPhoneNumber(digits);
     const finalLast4 = digits.length >= 4 ? digits.slice(-4) : (targetMember.phoneLast4 || '0000');
 
-    // Enforce 1-person 1-device lock consistently even from duplicate registration prompt
-    if (targetMember.boundDeviceId && targetMember.boundDeviceId !== currentDeviceId) {
-      setDuplicatePromptMember(null);
-      setErrorMsg(
-        '이미 다른 기기(스마트폰)에 연동되어 있는 계정입니다.\n기존 기기에서 [연동 해제]를 먼저 진행하셨거나 기기 교체 시 관리자에게 초기화를 요청하세요.'
-      );
-      return;
-    }
-
     try {
       setIsSubmitting(true);
       setErrorMsg('');
@@ -247,10 +232,10 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
             alt="Moonchoir"
             style={{ width: 52, height: 52, borderRadius: '50%', margin: '0 auto 12px', display: 'block', objectFit: 'cover', boxShadow: '0 4px 12px rgba(91, 62, 150, 0.2)' }}
           />
-          <div className="modal-badge">1회 본인 기기 등록</div>
+          <div className="modal-badge">1회 본인 확인</div>
           <h2 className="modal-title">본인 확인 & 기기 연결</h2>
           <p className="modal-desc">
-            한 번만 등록해 두면, 앞으로 연습실 상설 QR을 비출 때마다 대리 출석 걱정 없이 1초 만에 바로 출석됩니다!
+            한 번만 본인 확인을 해 두면, 앞으로 연습실 상설 QR을 비출 때마다 1초 만에 바로 출석됩니다!
           </p>
         </div>
 
@@ -398,15 +383,9 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
                 </h4>
                 <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#78350F', lineHeight: 1.5 }}>
                   <strong>[{duplicatePromptMember.name}]</strong> 단원님 ({duplicatePromptMember.part}, 뒷자리 {duplicatePromptMember.phoneLast4 || derivedLast4}) 계정이 이미 명부에 존재합니다.
-                  {duplicatePromptMember.boundDeviceId && duplicatePromptMember.boundDeviceId !== getOrCreateDeviceId() ? (
-                    <span style={{ display: 'block', marginTop: '6px', color: '#DC2626', fontWeight: 600 }}>
-                      * 이전에 다른 브라우저/기기에 연동된 이력이 있습니다. 현재 사용 중인 이 기기로 연동을 이전(재인증)하시겠습니까?
-                    </span>
-                  ) : (
-                    <span style={{ display: 'block', marginTop: '6px' }}>
-                      * 새로운 중복 계정을 생성하지 않고, 기존 계정에 내 기기를 안전하게 연결합니다.
-                    </span>
-                  )}
+                  <span style={{ display: 'block', marginTop: '6px' }}>
+                    * 새로운 중복 계정을 생성하지 않고, 기존 계정에 이 브라우저를 연결합니다. (전체 연락처가 일치해야 연결됩니다.)
+                  </span>
                 </p>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button

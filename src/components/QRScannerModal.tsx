@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
+import { getOrCreateDeviceId } from '../services/auth';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, RawAttendanceLog, Schedule } from '../types/rollbook';
 import { calculateDistanceMeters, isWithinRadius } from '../utils/geo';
@@ -128,6 +129,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       longitude: lon,
       distanceMeters,
       isVerifiedLocation: true,
+      deviceId: getOrCreateDeviceId(),
     };
 
     try {

@@ -871,3 +871,20 @@
 
 
 
+
+---
+
+## 2026-10-21: 카카오톡 인앱 브라우저 대응 — 1인 1기기 락 임시 중단 (Task 77)
+
+### 1. 배경
+- 주소를 카카오톡으로 공유하자 단원이 인앱 브라우저에서 연동한 뒤, 일반 브라우저로 열면 "다른 기기에 연동된 계정"으로 거부됨. 두 브라우저의 `localStorage`가 분리되어 UUID가 달라지는 것이 원인이며 웹에서는 동일 기기로 판별할 수 없음.
+- 소유자 결정: 웹앱을 폰에 설치하는 시점까지 락을 중단하고, 그때 락을 복원한 뒤 앱 접속자에게 재바인딩을 안내.
+
+### 2. 변경
+- GAS `BIND_EXISTING_MEMBER` / `BIND_DEVICE` / `REGISTER_AND_BIND_MEMBER`: 기기 불일치 거부 제거. 첫 연동 값 유지, 새 브라우저는 시트 쓰기 없음. 본인 확인은 시트에 전체 번호가 있으면 전체 번호 일치(앞자리 0 무시), 없는 과거 행만 뒷 4자리.
+- `App.tsx`: `boundDeviceId` 불일치 시 프로필 삭제·홈 이동 제거(명부에 없는 ID 정리는 유지). `BindingModal.tsx`, `sheets.ts`: 차단 분기·안내 문구 제거, 서버가 돌려준 `boundDeviceId`를 캐시에 반영.
+- `출석원천로그.deviceId` 열 신설(`ensureSheetStructure`가 헤더 끝에 자동 추가), `QRScannerModal`이 체크인 시 기록.
+
+### 3. 센서 검증
+- 임시 GAS 하네스(가상 시트)로 12개 시나리오 확인: 정상 번호 통과, 뒷 4자리만 같은 경우 거부, 번호 없는 과거 행 허용, 숫자로 저장된 번호 허용, 기존 로그 시트에 `deviceId` 열 자동 추가 및 기존 헤더 보존.
+- Green Bar: `typecheck` 0 errors, `lint` 0 warnings/errors, `npm test` 33 files / 165 tests pass, `build` 성공(청크 크기 경고만 기존과 동일).

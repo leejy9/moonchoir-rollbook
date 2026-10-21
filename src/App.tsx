@@ -133,18 +133,6 @@ export function App() {
       });
       return;
     }
-    if (
-      current.status !== 'MERGED' &&
-      current.boundDeviceId !== profile.deviceId
-    ) {
-      clearDeviceProfile();
-      queueMicrotask(() => {
-        setShowMemberPortalModal(false);
-        setCurrentView('HOME');
-        setProfile(null);
-      });
-      return;
-    }
     if (current.part !== profile.part || current.name !== profile.name) {
       const updated = updateBoundDeviceProfile({
         name: current.name,
