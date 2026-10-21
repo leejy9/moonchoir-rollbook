@@ -317,3 +317,13 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 - **Implemented:** `normalizeToKSTTimestamp` / `getKSTClock` convert any `Z` / offset value to KST and treat zone-less values as already KST; the call sites above use them. Stored data was not changed, so old `Z` rows are read correctly without rewriting the append-only log.
 - **Not changed:** The Apps Script menu item `기존 기록 날짜/시간을 한국 표준시(KST)로 변환` (Task 58) rewrites timestamp cells in place, including raw log rows (same instant, different notation). It is no longer needed for correct display and conflicts with the append-only rule in spirit; whether to keep it is an owner decision. `sheetsParser.ts` still has a legacy time-of-day conversion for ISO-style `startTime` values that the script no longer returns.
 
+### 2026-10-21 Decision: Refresh on navigation and confirmed writes
+
+- **Confirmed fact (owner report + code):** The app downloaded sheet data only at start-up (and on manual sync buttons). Other members' check-ins, votes and edits therefore never appeared on a device until it reloaded. Background writes also lost their failures: `sendToGoogleSheet` returns `{ success: false }` instead of throwing, so the `.catch` handlers never ran and a failed save was silent.
+- **Owner decisions:** Refresh from the sheet when the user changes screens / returns to the app; do not refresh on every button. Minimum 20 seconds between refreshes on one device (reads only; writes are never throttled). Member check-ins (QR and PIN) complete only after the sheet confirms; a write failure must show a notice.
+- **Implemented behavior (`SheetsService.refreshRemoteData`, `src/components/SyncStatus.tsx`):**
+  - Triggers: screen change, opening the member portal / RSVP / QR scanner, tab becomes visible, network back online, and shortly (1.5 s, coalesced) after any confirmed write. Concurrent requests share one read.
+  - A refresh waits for in-flight writes, and a read that overlapped a newly started write is discarded and repeated, so the local-first optimistic state is not overwritten by older sheet data. A failed refresh keeps the existing data and shows an error state.
+  - Admin manual attendance, votes, schedule and other edits still show immediately and save in the background; if the save fails the user gets a notice and the screen is re-read from the sheet, which removes the unsaved change. This follows the rule that unsaved writes are not queued on the device.
+- **Open items:** Many members refreshing at the start of rehearsal sends many full-sheet reads to the Apps Script; measure before adding the lightweight change-number check or reducing `ensureSheetStructure` calls.
+

@@ -133,14 +133,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     };
 
     try {
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        navigator.vibrate([100, 50, 100]);
-      }
-    } catch {
-      // Haptic vibrate might be restricted
-    }
-
-    try {
       await sheetsService.addCheckInLog(log, checkInPin);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '구글 시트에서 출석 저장을 확인하지 못했습니다.';
@@ -153,6 +145,13 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         msg: message,
       });
       return;
+    }
+    try {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([100, 50, 100]);
+      }
+    } catch {
+      // Haptic vibrate might be restricted
     }
     playScanSuccessSound();
 

@@ -50,6 +50,59 @@ export class ExistingMemberConflictError extends Error {
   }
 }
 
+export type SyncStatus = 'IDLE' | 'SYNCING' | 'ERROR';
+
+export interface SyncState {
+  status: SyncStatus;
+  /** 마지막으로 시트 데이터를 성공적으로 받아온 시각(ms). 한 번도 없으면 0 */
+  lastSyncedAt: number;
+  error?: string;
+}
+
+export interface SheetsNotice {
+  id: number;
+  kind: 'error';
+  message: string;
+}
+
+interface RemoteSnapshot {
+  members?: Member[];
+  schedules?: Schedule[];
+  rsvpVotes?: RSVPVote[];
+  logs?: RawAttendanceLog[];
+  recentLogs?: RawAttendanceLog[];
+  locations?: LocationPreset[];
+  memberHistory?: MemberStatusHistory[];
+  programCards?: ProgramCard[];
+  config?: Partial<AppConfig>;
+}
+
+/** 같은 요청이 이 간격 안에 다시 오면 새로 받아오지 않는다(각 기기 안에서만 적용). */
+export const MIN_REFRESH_INTERVAL_MS = 20_000;
+const REFRESH_AFTER_WRITE_DELAY_MS = 1_500;
+const NOTICE_DEDUPE_MS = 4_000;
+
+const WRITE_LABELS: Record<string, string> = {
+  RECORD_ATTENDANCE: '출석',
+  SUBMIT_RSVP: '사전 투표',
+  CANCEL_RSVP: '투표 취소',
+  CLEAR_ATTENDANCE: '출결 초기화',
+  UPDATE_MEMBER: '단원 정보',
+  DELETE_MEMBER: '단원 삭제',
+  MERGE_MEMBERS: '단원 병합',
+  CREATE_SCHEDULE: '일정 등록',
+  UPDATE_SCHEDULE: '일정 수정',
+  DELETE_SCHEDULE: '일정 삭제',
+  BATCH_DELETE_SCHEDULES: '일정 일괄 삭제',
+  BATCH_UPDATE_SCHEDULES: '일정 일괄 수정',
+  SAVE_LOCATION: '장소 저장',
+  DELETE_LOCATION: '장소 삭제',
+  SAVE_CONFIG: '설정 저장',
+};
+
+/** 서버에서 읽기만 하는 요청: 성공해도 데이터가 바뀌지 않으므로 새로고침을 예약하지 않는다. */
+const NON_MUTATING_ACTIONS = new Set(['VERIFY_ADMIN_PIN', 'VERIFY_ON_SITE_PIN']);
+
 export class SheetsService {
   private config: AppConfig;
   private members: Member[];
@@ -58,6 +111,17 @@ export class SheetsService {
   private logs: RawAttendanceLog[];
   private locations: LocationPreset[];
   private programCards: ProgramCard[];
+
+  // --- Sync state (refresh-on-navigation, write tracking, failure notices) ---
+  private inFlightWrites = new Set<Promise<unknown>>();
+  private writeEpoch = 0;
+  private refreshPromise: Promise<boolean> | null = null;
+  private refreshAfterWriteTimer: ReturnType<typeof setTimeout> | null = null;
+  private syncState: SyncState = { status: 'IDLE', lastSyncedAt: 0 };
+  private syncListeners = new Set<() => void>();
+  private noticeListeners = new Set<(notice: SheetsNotice) => void>();
+  private noticeSeq = 0;
+  private lastNoticeAt = new Map<string, number>();
 
   constructor() {
     this.config = loadFromStorage(STORAGE_KEYS.CONFIG, { ...INITIAL_CONFIG, locationPresets: [] });
@@ -222,16 +286,27 @@ export class SheetsService {
     log: RawAttendanceLog,
     checkInPin?: string
   ): Promise<RawAttendanceLog> {
-    if (log.authMethod === 'MANUAL_PIN') {
-      if (!checkInPin) {
-        throw new Error('현장 PIN이 누락되어 출석을 확인할 수 없습니다.');
-      }
-      const result = await this.sendToGoogleSheet('RECORD_ATTENDANCE', {
-        ...log,
-        checkInPin,
-      });
+    if (log.authMethod === 'MANUAL_PIN' && !checkInPin) {
+      throw new Error('현장 PIN이 누락되어 출석을 확인할 수 없습니다.');
+    }
+
+    // 단원 본인의 출석(QR/PIN)은 시트가 확정해야 완료로 본다. 관리자 수동 입력만 먼저 반영하고 뒤에서 저장한다.
+    const requiresSheetConfirmation = log.authMethod !== 'MANUAL_BY_ADMIN';
+    if (
+      requiresSheetConfirmation &&
+      (log.authMethod === 'MANUAL_PIN' || this.config.sheetsWebAppUrl)
+    ) {
+      const result = await this.sendToGoogleSheet(
+        'RECORD_ATTENDANCE',
+        checkInPin ? { ...log, checkInPin } : log
+      );
       if (!result.success) {
-        throw new Error(result.message || '현장 PIN 출석이 시트에서 확인되지 않았습니다.');
+        throw new Error(
+          result.message ||
+            (log.authMethod === 'MANUAL_PIN'
+              ? '현장 PIN 출석이 시트에서 확인되지 않았습니다.'
+              : '출석이 시트에서 확인되지 않았습니다. 네트워크를 확인하고 다시 시도해 주세요.')
+        );
       }
     }
 
@@ -256,10 +331,8 @@ export class SheetsService {
       saveToStorage(STORAGE_KEYS.LOGS, this.logs);
     }
 
-    if (log.authMethod !== 'MANUAL_PIN' && this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('RECORD_ATTENDANCE', log).catch((err) => {
-        console.error('[Sheets API] Background sync failed, preserved in local log:', err);
-      });
+    if (!requiresSheetConfirmation && this.config.sheetsWebAppUrl) {
+      this.syncInBackground('RECORD_ATTENDANCE', log);
     }
 
     return log;
@@ -294,9 +367,7 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('SUBMIT_RSVP', vote).catch((err) => {
-        console.error('[Sheets API] RSVP sync failed:', err);
-      });
+      this.syncInBackground('SUBMIT_RSVP', vote);
     }
 
     return vote;
@@ -341,15 +412,13 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.LOGS, this.logs);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('CLEAR_ATTENDANCE', {
+      this.syncInBackground('CLEAR_ATTENDANCE', {
         scheduleId,
         memberId,
         memberName: targetMember?.name,
         part: targetMember?.part,
         adminNote: '관리자 출결 취소 (초기화)',
         scheduleDate: targetSchedule?.date,
-      }).catch((err) => {
-        console.error('[Sheets API] Clear attendance cancel-log sync failed:', err);
       });
     }
   }
@@ -364,9 +433,7 @@ export class SheetsService {
       saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
 
       if (this.config.sheetsWebAppUrl) {
-        this.sendToGoogleSheet('CANCEL_RSVP', { scheduleId, memberId, removedVoteId: removed.id }).catch((err) => {
-          console.error('[Sheets API] RSVP cancel sync failed:', err);
-        });
+        this.syncInBackground('CANCEL_RSVP', { scheduleId, memberId, removedVoteId: removed.id });
       }
       return true;
     }
@@ -519,11 +586,9 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('UPDATE_MEMBER', {
+      this.syncInBackground('UPDATE_MEMBER', {
         ...this.members[idx],
         historyItem: effectiveHistoryItem,
-      }).catch((err) => {
-        console.error('[Sheets API] Member update sync failed:', err);
       });
     }
 
@@ -547,18 +612,14 @@ export class SheetsService {
       // 과거 출결 통계 보호를 위한 소프트 삭제 (status='DELETED')
       await this.updateMember(memberId, { status: 'DELETED' });
       if (this.config.sheetsWebAppUrl) {
-        this.sendToGoogleSheet('DELETE_MEMBER', { id: memberId }).catch((err) => {
-          console.error('[Sheets API] Member delete sync failed:', err);
-        });
+        this.syncInBackground('DELETE_MEMBER', { id: memberId });
       }
     } else {
       this.members = this.members.filter((m) => m.id !== memberId);
       saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
 
       if (this.config.sheetsWebAppUrl) {
-        this.sendToGoogleSheet('DELETE_MEMBER', { id: memberId }).catch((err) => {
-          console.error('[Sheets API] Member delete sync failed:', err);
-        });
+        this.syncInBackground('DELETE_MEMBER', { id: memberId });
       }
     }
   }
@@ -705,11 +766,9 @@ export class SheetsService {
 
     // 4. Sync with Google Sheets backend
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('MERGE_MEMBERS', {
+      this.syncInBackground('MERGE_MEMBERS', {
         canonicalId,
         secondaryId,
-      }).catch((err) => {
-        console.error('[Sheets API] Member merge sync failed:', err);
       });
     }
 
@@ -721,9 +780,7 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('CREATE_SCHEDULE', serializeScheduleForSheet(schedule)).catch((err) => {
-        console.error('[Sheets API] Schedule create sync failed:', err);
-      });
+      this.syncInBackground('CREATE_SCHEDULE', serializeScheduleForSheet(schedule));
     }
 
     return schedule;
@@ -735,9 +792,7 @@ export class SheetsService {
 
     if (this.config.sheetsWebAppUrl) {
       for (const sch of schedules) {
-        this.sendToGoogleSheet('CREATE_SCHEDULE', serializeScheduleForSheet(sch)).catch((err) => {
-          console.error('[Sheets API] Batch schedule sync error:', err);
-        });
+        this.syncInBackground('CREATE_SCHEDULE', serializeScheduleForSheet(sch));
       }
     }
 
@@ -751,9 +806,7 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('UPDATE_SCHEDULE', serializeScheduleForSheet(this.schedules[idx])).catch((err) => {
-        console.error('[Sheets API] Schedule update sync failed:', err);
-      });
+      this.syncInBackground('UPDATE_SCHEDULE', serializeScheduleForSheet(this.schedules[idx]));
     }
 
     return this.schedules[idx];
@@ -772,9 +825,7 @@ export class SheetsService {
       // 출석로그나 투표가 있는 경우 물리 삭제하지 않고 [연습 취소]로 보존
       await this.updateSchedule(scheduleId, { isCancelled: true });
       if (this.config.sheetsWebAppUrl) {
-        this.sendToGoogleSheet('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: false }).catch((err) => {
-          console.error('[Sheets API] Schedule cancel sync failed:', err);
-        });
+        this.syncInBackground('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: false });
       }
     } else {
       // 활동이 없거나, 관리자가 명시적으로 완전 영구 삭제를 요청한 경우
@@ -782,9 +833,7 @@ export class SheetsService {
       saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
       if (this.config.sheetsWebAppUrl) {
-        this.sendToGoogleSheet('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: true }).catch((err) => {
-          console.error('[Sheets API] Schedule delete sync failed:', err);
-        });
+        this.syncInBackground('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: true });
       }
     }
   }
@@ -797,9 +846,7 @@ export class SheetsService {
       saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
       if (this.config.sheetsWebAppUrl) {
-        this.sendToGoogleSheet('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: true }).catch((err) => {
-          console.error('[Sheets API] Batch schedule hard delete sync failed:', err);
-        });
+        this.syncInBackground('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: true });
       }
       return;
     }
@@ -825,9 +872,7 @@ export class SheetsService {
     }
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: false }).catch((err) => {
-        console.error('[Sheets API] Batch schedule delete/cancel sync failed:', err);
-      });
+      this.syncInBackground('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: false });
     }
   }
 
@@ -856,9 +901,7 @@ export class SheetsService {
           ? { targetMemberIds: Array.isArray(updates.targetMemberIds) ? updates.targetMemberIds.join(',') : (updates.targetMemberIds || '') }
           : {}),
       };
-      this.sendToGoogleSheet('BATCH_UPDATE_SCHEDULES', { ids: scheduleIds, updates: serializedUpdates }).catch((err) => {
-        console.error('[Sheets API] Batch schedule update sync failed:', err);
-      });
+      this.syncInBackground('BATCH_UPDATE_SCHEDULES', { ids: scheduleIds, updates: serializedUpdates });
     }
 
     return updatedSchedules;
@@ -873,9 +916,7 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('SAVE_LOCATION', preset).catch((err) => {
-        console.error('[Sheets API] Location preset save sync failed:', err);
-      });
+      this.syncInBackground('SAVE_LOCATION', preset);
     }
 
     return preset;
@@ -910,9 +951,7 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('SAVE_LOCATION', this.locations[idx]).catch((err) => {
-        console.error('[Sheets API] Location preset update sync failed:', err);
-      });
+      this.syncInBackground('SAVE_LOCATION', this.locations[idx]);
     }
 
     return this.locations[idx];
@@ -927,9 +966,7 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('DELETE_LOCATION', { id }).catch((err) => {
-        console.error('[Sheets API] Location preset delete sync failed:', err);
-      });
+      this.syncInBackground('DELETE_LOCATION', { id });
     }
   }
 
@@ -938,9 +975,7 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.CONFIG, this.config);
 
     if (this.config.sheetsWebAppUrl) {
-      this.sendToGoogleSheet('SAVE_CONFIG', { config: newConfig }).catch((err) => {
-        console.error('[Sheets API] Config sync failed:', err);
-      });
+      this.syncInBackground('SAVE_CONFIG', { config: newConfig });
     }
 
     return { ...this.config };
@@ -1181,6 +1216,14 @@ export class SheetsService {
       throw new Error('구글 시트 Web App URL이 설정되지 않았습니다.');
     }
 
+    const data = await this.loadSnapshotAfterPendingWrites(targetUrl);
+    if (!data) {
+      throw new Error('저장 중인 변경이 있어 동기화를 잠시 미뤘습니다. 잠시 후 다시 시도해 주세요.');
+    }
+    return this.applyRemoteSnapshot(data, targetUrl);
+  }
+
+  private async requestRemoteSnapshot(targetUrl: string): Promise<RemoteSnapshot> {
     const fetchUrl = targetUrl.includes('?')
       ? `${targetUrl}&action=GET_INITIAL_DATA`
       : `${targetUrl}?action=GET_INITIAL_DATA`;
@@ -1194,23 +1237,33 @@ export class SheetsService {
       throw new Error(`구글 시트 통신 오류 (HTTP ${res.status})`);
     }
 
-    const json = (await res.json()) as { success: boolean; error?: string; data?: {
-      members?: Member[];
-      schedules?: Schedule[];
-      rsvpVotes?: RSVPVote[];
-      logs?: RawAttendanceLog[];
-      recentLogs?: RawAttendanceLog[];
-      locations?: LocationPreset[];
-      memberHistory?: MemberStatusHistory[];
-      programCards?: ProgramCard[];
-      config?: Partial<AppConfig>;
-    } };
+    const json = (await res.json()) as { success: boolean; error?: string; data?: RemoteSnapshot };
 
     if (!json.success || !json.data) {
       throw new Error(json.error || '구글 시트 응답 형식이 올바르지 않습니다.');
     }
+    return json.data;
+  }
 
-    const data = json.data;
+  /**
+   * 전송 중인 쓰기가 모두 끝난 뒤에 시트를 읽는다. 읽는 동안 새 쓰기가 시작되면 그 응답은 쓰기보다
+   * 오래된 데이터일 수 있어 버리고 다시 읽는다. 계속 실패하면 null(반영하지 않음).
+   */
+  private async loadSnapshotAfterPendingWrites(targetUrl: string): Promise<RemoteSnapshot | null> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      while (this.inFlightWrites.size > 0) {
+        await Promise.allSettled([...this.inFlightWrites]);
+      }
+      const epoch = this.writeEpoch;
+      const snapshot = await this.requestRemoteSnapshot(targetUrl);
+      if (epoch === this.writeEpoch && this.inFlightWrites.size === 0) {
+        return snapshot;
+      }
+    }
+    return null;
+  }
+
+  private applyRemoteSnapshot(data: RemoteSnapshot, targetUrl: string): { success: boolean; message: string; count?: { members: number; schedules: number; logs: number; locations?: number; programCards?: number } } {
     if (Array.isArray(data.members)) {
       this.members = parseRemoteMembers(data.members, data.memberHistory);
       saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
@@ -1248,6 +1301,8 @@ export class SheetsService {
       saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
     }
 
+    this.setSyncState({ status: 'IDLE', lastSyncedAt: Date.now(), error: undefined });
+
     return {
       success: true,
       message: '구글 스프레드시트와 성공적으로 동기화되었습니다.',
@@ -1261,7 +1316,122 @@ export class SheetsService {
     };
   }
 
-  public async sendToGoogleSheet(
+  // --- Refresh / sync state -------------------------------------------------
+
+  public getSyncState(): SyncState {
+    return this.syncState;
+  }
+
+  public subscribeSync(listener: () => void): () => void {
+    this.syncListeners.add(listener);
+    return () => {
+      this.syncListeners.delete(listener);
+    };
+  }
+
+  public subscribeNotices(listener: (notice: SheetsNotice) => void): () => void {
+    this.noticeListeners.add(listener);
+    return () => {
+      this.noticeListeners.delete(listener);
+    };
+  }
+
+  private setSyncState(next: SyncState): void {
+    this.syncState = next;
+    this.syncListeners.forEach((listener) => listener());
+  }
+
+  private emitNotice(dedupeKey: string, message: string): void {
+    const now = Date.now();
+    const last = this.lastNoticeAt.get(dedupeKey) ?? 0;
+    if (now - last < NOTICE_DEDUPE_MS) return;
+    this.lastNoticeAt.set(dedupeKey, now);
+    const notice: SheetsNotice = { id: ++this.noticeSeq, kind: 'error', message };
+    this.noticeListeners.forEach((listener) => listener(notice));
+  }
+
+  /**
+   * 화면 전환·앱 복귀 등에서 시트의 최신 데이터를 받아온다.
+   * - 이 기기에서 `MIN_REFRESH_INTERVAL_MS` 안에 이미 받아왔으면 건너뛴다(force 제외).
+   * - 진행 중인 새로고침이 있으면 그 결과를 함께 쓴다.
+   * - 전송 중인 저장이 있으면 끝날 때까지 기다린 뒤 읽는다.
+   * 반환값: 새 데이터를 반영했으면 true, 건너뜀/실패는 false(실패 시 기존 데이터 유지).
+   */
+  public refreshRemoteData(options: { force?: boolean } = {}): Promise<boolean> {
+    if (!this.config.sheetsWebAppUrl) return Promise.resolve(false);
+    if (this.refreshPromise) return this.refreshPromise;
+    if (!options.force && Date.now() - this.syncState.lastSyncedAt < MIN_REFRESH_INTERVAL_MS) {
+      return Promise.resolve(false);
+    }
+
+    this.setSyncState({ ...this.syncState, status: 'SYNCING' });
+    this.refreshPromise = this.fetchRemoteData()
+      .then(() => true)
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : '동기화에 실패했습니다.';
+        this.setSyncState({ ...this.syncState, status: 'ERROR', error: message });
+        return false;
+      })
+      .finally(() => {
+        this.refreshPromise = null;
+      });
+    return this.refreshPromise;
+  }
+
+  /** 저장이 확정된 직후 잠깐 모아서 한 번만 최신 데이터를 받아온다. */
+  private scheduleRefreshAfterWrite(): void {
+    if (!this.config.sheetsWebAppUrl) return;
+    if (this.refreshAfterWriteTimer) clearTimeout(this.refreshAfterWriteTimer);
+    this.refreshAfterWriteTimer = setTimeout(() => {
+      this.refreshAfterWriteTimer = null;
+      void this.refreshRemoteData({ force: true });
+    }, REFRESH_AFTER_WRITE_DELAY_MS);
+  }
+
+  /**
+   * 화면에 먼저 반영한 변경을 뒤에서 시트에 저장한다. 실패하면 알림을 띄우고,
+   * 시트에 저장된 상태로 화면을 되돌리기 위해 즉시 다시 읽어 온다.
+   */
+  private syncInBackground(action: string, payload: unknown): void {
+    void this.sendToGoogleSheet(action, payload).then((result) => {
+      if (result.success) return;
+      const label = WRITE_LABELS[action] ?? '변경 사항';
+      this.emitNotice(
+        `write:${action}`,
+        `[${label}] 저장하지 못했어요. 네트워크를 확인하고 다시 시도해 주세요. 화면은 시트에 저장된 상태로 되돌립니다.`
+      );
+      void this.refreshRemoteData({ force: true });
+    });
+  }
+
+  /**
+   * 시트로 보내는 모든 요청의 단일 통로. 전송 중인 요청을 추적해 새로고침이 저장보다 먼저
+   * 도착한 옛 데이터로 화면을 덮어쓰지 않게 하고, 저장이 확정되면 최신 데이터 반영을 예약한다.
+   */
+  public sendToGoogleSheet(
+    action: string,
+    payload: unknown,
+    endpointUrl?: string
+  ): Promise<{ success: boolean; message?: string; existingMemberId?: string; boundDeviceId?: string }> {
+    this.writeEpoch += 1;
+    const request = this.postToGoogleSheet(action, payload, endpointUrl);
+    const track = request.then(
+      () => undefined,
+      () => undefined
+    );
+    this.inFlightWrites.add(track);
+    void track.then(() => {
+      this.inFlightWrites.delete(track);
+    });
+    return request.then((result) => {
+      if (result.success && !endpointUrl && !NON_MUTATING_ACTIONS.has(action)) {
+        this.scheduleRefreshAfterWrite();
+      }
+      return result;
+    });
+  }
+
+  private async postToGoogleSheet(
     action: string,
     payload: unknown,
     endpointUrl?: string

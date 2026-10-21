@@ -904,3 +904,9 @@
 - 수정: `normalizeToKSTTimestamp`/`getKSTClock` 도입 후 호출부 교체, 회귀 테스트(UTC 10:25Z = KST 19:25 출석 / 10:45Z = 지각) 및 date 단위 테스트 추가. 테스트 목데이터의 `Z` 시각은 운영 형식으로 정리.
 - Green Bar: `typecheck`, `lint` 0 errors, `npm test` 35 files / 185 tests pass(UTC·KST 모두), `build` 통과.
 
+### 7. 화면 전환 시 최신 데이터 반영, 쓰기 확정·실패 안내 (Task 82) 및 주소 검색 로더 (Task 83)
+- 원인: 시트 데이터를 앱 시작 때 한 번만 받아 다른 사람의 변경이 보이지 않았고, 백그라운드 저장의 실패 응답(`success:false`)은 `.catch`에 잡히지 않아 조용히 사라짐.
+- 수정: `refreshRemoteData`(20초 최소 간격, 동시 요청 합치기, 전송 중 저장 대기/겹친 읽기 폐기), QR 출석 시트 확정 후 완료, 저장 실패 알림 + 시트 기준 되돌리기, `SyncStatus` 알약/알림. 테스트 9건(안전장치를 꺼서 실패하는 것도 확인).
+- 주소 검색: 카카오 SDK 로더를 공용 모듈로 교체(재사용 시 services 초기화 누락·무한 '확인 중' 수정, 원인 안내). 카카오 인증/도메인 설정 문제는 이 환경에서 확인 불가.
+- Green Bar: `typecheck`, `lint` 0 errors, `npm test` 37 files / 197 tests pass(UTC·KST 모두), `build` 성공. 헤드리스 브라우저에서 알약 정상/실패 상태와 44px 높이 확인.
+
