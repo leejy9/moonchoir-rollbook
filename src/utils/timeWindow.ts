@@ -63,15 +63,13 @@ export function getCheckInWindowState(
     const windowStartTimeStr = `${openTimeHour}:${openTimeMin}`;
 
     const nowTime = currentDate.getTime();
-    const hoursLabel = openBeforeMinutes === 60 ? '1시간' : `${Math.round(openBeforeMinutes / 60)}시간`;
-
     if (nowTime < windowStart.getTime()) {
       const todayYMD = getKSTDateString(currentDate);
       if (todayYMD < schedule.date) {
         return {
           isOpen: false,
           status: 'UPCOMING_DATE',
-          message: `${schedule.date} 연습 시작 ${hoursLabel} 전(${windowStartTimeStr})에 오픈됩니다.`,
+          message: `${windowStartTimeStr}부터`,
           badgeLabel: `연습 당일 ${windowStartTimeStr} 오픈`,
           windowStartTimeStr,
         };
@@ -79,7 +77,7 @@ export function getCheckInWindowState(
       return {
         isOpen: false,
         status: 'TODAY_BEFORE_WINDOW',
-        message: `오늘 ${windowStartTimeStr} (연습 시작 ${hoursLabel} 전)부터 QR 출석이 가능합니다.`,
+        message: `${windowStartTimeStr}부터`,
         badgeLabel: `오늘 ${windowStartTimeStr} 오픈 예정`,
         windowStartTimeStr,
       };
@@ -136,4 +134,3 @@ export function isRsvpOpenForSchedule(
     return true;
   }
 }
-

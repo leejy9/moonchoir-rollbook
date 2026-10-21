@@ -250,9 +250,9 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
         >
           <span style={{ fontSize: '16px' }}>🌿</span>
           <div>
-            <strong>공식 필참 일정이 아닙니다.</strong>
+            <strong>필참 일정이 아닙니다.</strong>
             <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: '#15803D' }}>
-              참관이나 개인 연습으로 자유롭게 참여하실 수 있습니다.
+              참관·개인 연습으로 참여할 수 있어요.
             </p>
           </div>
         </div>
@@ -333,13 +333,8 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
                   {isActuallyAttended
                     ? '다시 출석 체크하기'
                     : !isTargetMember
-                    ? '개인 연습으로 출석 체크'
+                    ? '개인 연습 출석 체크'
                     : 'QR 출석 체크'}
-                </span>
-                <span className="btn-sub-label">
-                  {!isTargetMember
-                    ? '자유 연습/참관으로 출석 기록을 남깁니다'
-                    : '연습실 종이 QR 코드를 스캔하세요'}
                 </span>
               </div>
             </button>
@@ -348,13 +343,11 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
               <div className="qr-locked-info">
                 <span className="qr-lock-icon">🔒</span>
                 <div>
-                  <div className="qr-locked-title">사전 참석 투표 마감 (연습 1시간 전 마감)</div>
+                  <div className="qr-locked-title">사전 투표 마감</div>
                   <div className="qr-locked-desc">
                     {myVote
-                      ? `사전 투표 응답: ${
-                          myVote.status === 'ATTEND' ? '참석 예정' : `불참 (${myVote.reason || '사유 미기재'})`
-                        }`
-                      : '현재는 현장 QR/PIN 출석 체크 시간입니다.'}
+                      ? `현재: ${myVote.status === 'ATTEND' ? '참석' : '불참'}`
+                      : '현장 QR/PIN 출석 가능'}
                   </div>
                 </div>
               </div>
@@ -400,19 +393,17 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
                 <span className="btn-main-label">
                   {!isTargetMember
                     ? myVote
-                      ? '개인 연습 참여 여부 수정'
-                      : '개인 연습으로 참여 투표'
+                      ? '투표 수정'
+                      : '투표하기'
                     : myVote
-                    ? '사전 참석/불참 투표 수정'
-                    : '사전 참석/불참 투표하기'}
+                      ? '투표 수정'
+                      : '투표하기'}
                 </span>
-                <span className="btn-sub-label">
-                  {myVote
-                    ? `현재 선택: ${myVote.status === 'ATTEND' ? '참석 예정' : '불참'}`
-                    : !isTargetMember
-                    ? '자유 연습/참관 참여 여부를 알려주세요'
-                    : '연습 참석 여부를 미리 알려주세요'}
-                </span>
+                {myVote && (
+                  <span className="btn-sub-label">
+                    현재: {myVote.status === 'ATTEND' ? '참석' : '불참'}
+                  </span>
+                )}
               </div>
             </button>
 
@@ -421,7 +412,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
               <div className="qr-locked-info">
                 <span className="qr-lock-icon">🔒</span>
                 <div>
-                  <div className="qr-locked-title">현장 QR 출석 ({windowState?.badgeLabel})</div>
+                  <div className="qr-locked-title">현장 QR 출석</div>
                   <div className="qr-locked-desc">{windowState?.message}</div>
                 </div>
               </div>

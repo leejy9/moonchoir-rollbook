@@ -71,7 +71,7 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
     <div className="modal-overlay">
       <div className="modal-card">
         <div className="modal-header">
-          <div className="modal-badge">사전 참석 투표 (RSVP)</div>
+          <div className="modal-badge">사전 참석 투표</div>
           <h2 className="modal-title">{schedule.title}</h2>
           <p className="modal-desc">
             일시: {schedule.date} ({schedule.startTime}~{schedule.endTime})<br />
@@ -93,7 +93,6 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
             >
               <span className="rsvp-icon">🟢</span>
               <span className="rsvp-title">참석합니다</span>
-              <span className="rsvp-subtitle">연습에 참여해요</span>
             </button>
 
             <button
@@ -103,15 +102,12 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
             >
               <span className="rsvp-icon">🔴</span>
               <span className="rsvp-title">불참합니다</span>
-              <span className="rsvp-subtitle">사유를 남겨주세요</span>
             </button>
           </div>
 
           {status === 'ABSENT' && (
             <div className="absent-reason-block">
-              <label className="form-label" htmlFor="rsvp-reason">
-                불참 사유 (대시보드에 사유결석으로 자동 반영됩니다)
-              </label>
+              <label className="form-label" htmlFor="rsvp-reason">불참 사유</label>
 
               <div className="reason-chips-row">
                 {COMMON_REASONS.map((r) => (
@@ -130,7 +126,7 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
                 id="rsvp-reason"
                 type="text"
                 className="input-text"
-                placeholder="상세 사유 직접 입력 (예: 갑작스러운 야근)"
+                placeholder="사유 직접 입력"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 required
@@ -155,7 +151,7 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
                 style={{ flex: 2, minHeight: '44px', fontSize: '14px', borderRadius: '10px' }}
                 disabled={isSubmitting}
               >
-                {isSubmitting ? '저장 중...' : '투표 제출하기'}
+                {isSubmitting ? '저장 중...' : '투표 제출'}
               </button>
             </div>
 
@@ -179,7 +175,7 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
                 onClick={handleCancelVote}
                 disabled={isSubmitting}
               >
-                투표 취소 (보류/미정으로 변경)
+                투표 취소
               </button>
             )}
           </div>

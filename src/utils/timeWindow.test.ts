@@ -22,7 +22,7 @@ describe('CheckInWindowState - 1 Hour Service Window Logic & Realtime Protocols'
     expect(state.isOpen).toBe(false);
     expect(state.status).toBe('UPCOMING_DATE');
     expect(state.windowStartTimeStr).toBe('18:30');
-    expect(state.message).toContain('1시간 전(18:30)');
+    expect(state.message).toBe('18:30부터');
   });
 
   it('reports TODAY_BEFORE_WINDOW when current time is on rehearsal day but earlier than 1 hour before start', () => {
@@ -32,8 +32,7 @@ describe('CheckInWindowState - 1 Hour Service Window Logic & Realtime Protocols'
     expect(state.isOpen).toBe(false);
     expect(state.status).toBe('TODAY_BEFORE_WINDOW');
     expect(state.windowStartTimeStr).toBe('18:30');
-    expect(state.message).toContain('18:30');
-    expect(state.message).toContain('1시간 전');
+    expect(state.message).toBe('18:30부터');
   });
 
   it('reports WINDOW_OPEN when current time is within 1 hour before start and until endTime', () => {
@@ -72,6 +71,7 @@ describe('CheckInWindowState - 1 Hour Service Window Logic & Realtime Protocols'
     expect(state30m.isOpen).toBe(false);
     expect(state30m.status).toBe('TODAY_BEFORE_WINDOW');
     expect(state30m.windowStartTimeStr).toBe('19:00');
+    expect(state30m.message).toBe('19:00부터');
 
     // Test bypass mode
     const bypassed = getCheckInWindowState(mockSchedule, new Date('2026-10-01T10:00:00'), true);
