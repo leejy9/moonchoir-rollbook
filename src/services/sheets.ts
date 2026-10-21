@@ -40,6 +40,16 @@ import {
 
 export { resetStorage };
 
+export class ExistingMemberConflictError extends Error {
+  public readonly existingMemberId: string;
+
+  constructor(existingMemberId: string) {
+    super('이미 같은 이름과 연락처로 등록된 단원이 있습니다. 기존 명부에서 확인해 연결해 주세요.');
+    this.name = 'ExistingMemberConflictError';
+    this.existingMemberId = existingMemberId;
+  }
+}
+
 export class SheetsService {
   private config: AppConfig;
   private members: Member[];
@@ -371,18 +381,81 @@ export class SheetsService {
       memberStatus: member.memberStatus || '정단원',
       note: member.note || '',
     };
-    this.members.push(newMember);
-    saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
-
-    if (this.config.sheetsWebAppUrl) {
-      try {
-        await this.sendToGoogleSheet('REGISTER_MEMBER', newMember);
-      } catch (err) {
-        console.error('[Sheets API] Member register sync failed:', err);
-      }
+    const result = await this.sendToGoogleSheet('REGISTER_MEMBER', newMember);
+    if (result.existingMemberId && result.existingMemberId !== newMember.id) {
+      throw new ExistingMemberConflictError(result.existingMemberId);
+    }
+    if (!result.success) {
+      throw new Error(result.message || '단원 등록이 Google Sheets에서 확인되지 않았습니다.');
     }
 
+    this.commitMember(newMember);
     return newMember;
+  }
+
+  public async registerAndBindMember(member: Member, deviceId: string): Promise<Member> {
+    const boundMember: Member = {
+      ...member,
+      boundDeviceId: deviceId,
+      boundDeviceAt: member.boundDeviceAt || getKSTTimestampString(),
+      joinedAt: member.joinedAt || member.createdAt.slice(0, 10),
+      memberStatus: member.memberStatus || '정단원',
+      note: member.note || '',
+    };
+    const result = await this.sendToGoogleSheet('REGISTER_AND_BIND_MEMBER', {
+      member: boundMember,
+      deviceId,
+    });
+
+    if (result.existingMemberId && result.existingMemberId !== boundMember.id) {
+      throw new ExistingMemberConflictError(result.existingMemberId);
+    }
+    if (!result.success) {
+      throw new Error(result.message || '단원 등록과 기기 연결이 확인되지 않았습니다.');
+    }
+
+    this.commitMember(boundMember);
+    return boundMember;
+  }
+
+  public async bindExistingMember(
+    memberId: string,
+    deviceId: string,
+    phone: string,
+    phoneLast4: string
+  ): Promise<Member> {
+    const member = this.members.find((candidate) => candidate.id === memberId);
+    if (!member) throw new Error('단원을 찾을 수 없습니다.');
+
+    const result = await this.sendToGoogleSheet('BIND_EXISTING_MEMBER', {
+      memberId,
+      deviceId,
+      phone,
+      phoneLast4,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '단원 정보와 기기 연결이 확인되지 않았습니다.');
+    }
+
+    const updatedMember: Member = {
+      ...member,
+      phone,
+      phoneLast4,
+      boundDeviceId: deviceId,
+      boundDeviceAt: getKSTTimestampString(),
+    };
+    this.commitMember(updatedMember);
+    return updatedMember;
+  }
+
+  private commitMember(member: Member): void {
+    const existingIndex = this.members.findIndex((candidate) => candidate.id === member.id);
+    if (existingIndex >= 0) {
+      this.members[existingIndex] = member;
+    } else {
+      this.members.push(member);
+    }
+    saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
   }
 
   public async updateMember(
@@ -1181,7 +1254,7 @@ export class SheetsService {
     action: string,
     payload: unknown,
     endpointUrl?: string
-  ): Promise<{ success: boolean; message?: string }> {
+  ): Promise<{ success: boolean; message?: string; existingMemberId?: string }> {
     const targetUrl = endpointUrl || this.config.sheetsWebAppUrl;
     if (!targetUrl) {
       return { success: false, message: '시트 Web App URL이 설정되지 않았습니다.' };
@@ -1201,10 +1274,16 @@ export class SheetsService {
         return { success: false, message: `구글 시트 통신 오류 (HTTP ${res.status})` };
       }
 
-      const json = (await res.json()) as { success?: boolean; message?: string; error?: string };
+      const json = (await res.json()) as {
+        success?: boolean;
+        message?: string;
+        error?: string;
+        existingMemberId?: string;
+      };
       return {
         success: json.success === true,
         message: json.message || json.error || (json.success === true ? '저장 완료' : '시트 저장이 확인되지 않았습니다.'),
+        existingMemberId: json.existingMemberId,
       };
     } catch (err) {
       console.error('[Sheets API] POST failed:', err);

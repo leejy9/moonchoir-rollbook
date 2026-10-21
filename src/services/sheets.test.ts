@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RawAttendanceLog, RSVPVote } from '../types/rollbook';
+import type { Member, RawAttendanceLog, RSVPVote } from '../types/rollbook';
 import { SheetsService, resetStorage } from './sheets';
 import {
   TEST_MOCK_SCHEDULES,
@@ -22,6 +22,12 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       programCards: TEST_MOCK_PROGRAM_CARDS,
     });
   });
+
+  const addMemberConfirmed = async (member: Member): Promise<Member> => {
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+    return service.addMember(member);
+  };
 
   it('correctly reconciles on-time attendance, late, excused absence, and unexcused absence', () => {
     const scheduleId = 'sch_20261015'; // 19:30 rehearsal, 10 min late grace
@@ -562,6 +568,79 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     );
   });
 
+  it('does not add a member locally unless Sheets confirms registration', async () => {
+    const member: Member = {
+      id: 'mem_registration_failure',
+      name: '등록실패단원',
+      part: '알토',
+      phone: '010-1234-5678',
+      phoneLast4: '5678',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      joinedAt: '2026-01-01',
+      createdAt: '2026-01-01T00:00:00Z',
+      memberStatus: '정단원',
+    };
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '시트 통신 실패',
+    });
+
+    await expect(service.addMember(member)).rejects.toThrow('시트 통신 실패');
+    expect(service.getMembers().some((candidate) => candidate.id === member.id)).toBe(false);
+  });
+
+  it('registers a new member and binds its device through one confirmed request', async () => {
+    const member: Member = {
+      id: 'mem_register_and_bind',
+      name: '등록연동단원',
+      part: '테너',
+      phone: '010-1234-5678',
+      phoneLast4: '5678',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      joinedAt: '2026-01-01',
+      createdAt: '2026-01-01T00:00:00Z',
+      memberStatus: '정단원',
+    };
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+
+    const registered = await service.registerAndBindMember(member, 'device_registration');
+
+    expect(sendSpy).toHaveBeenCalledWith('REGISTER_AND_BIND_MEMBER', {
+      member: expect.objectContaining({
+        id: member.id,
+        boundDeviceId: 'device_registration',
+      }),
+      deviceId: 'device_registration',
+    });
+    expect(registered.boundDeviceId).toBe('device_registration');
+    expect(service.getMembers().find((candidate) => candidate.id === member.id)?.boundDeviceId)
+      .toBe('device_registration');
+  });
+
+  it('does not commit an existing member binding when the atomic server request fails', async () => {
+    const member = service.getMembers().find((candidate) => candidate.id === 'mem_s01')!;
+    service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+    const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '이미 다른 기기에 연동된 계정입니다.',
+    });
+
+    await expect(
+      service.bindExistingMember(member.id, 'device_new', '010-1234-5678', '5678')
+    ).rejects.toThrow('이미 다른 기기에 연동된 계정입니다.');
+    expect(sendSpy).toHaveBeenCalledWith('BIND_EXISTING_MEMBER', {
+      memberId: member.id,
+      deviceId: 'device_new',
+      phone: '010-1234-5678',
+      phoneLast4: '5678',
+    });
+    expect(service.getMembers().find((candidate) => candidate.id === member.id)).toEqual(member);
+  });
+
   it('guarantees 1-person 1-vote for RSVP without duplicating records', async () => {
     const scheduleId = 'sch_20261015';
     const memberId = 'mem_s01';
@@ -699,7 +778,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
 
   it('detects duplicate member groups and performs safe consolidation without log deletion', async () => {
     // 1. Add duplicate member with same name and phone
-    const memberA = await service.addMember({
+    const memberA = await addMemberConfirmed({
       id: 'mem_jaeyeon_old',
       name: '이재연',
       part: '베이스',
@@ -712,7 +791,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       memberStatus: '정단원',
     });
 
-    const memberB = await service.addMember({
+    const memberB = await addMemberConfirmed({
       id: 'mem_jaeyeon_new',
       name: '이재연',
       part: '베이스',
@@ -911,7 +990,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(votesBefore.some((v) => v.memberName === '유령단원')).toBe(false);
 
     // After member is properly registered via addMember, vote becomes visible
-    await service.addMember({
+    await addMemberConfirmed({
       id: 'mem_ghost_9999',
       name: '유령단원',
       part: '소프라노',
@@ -934,7 +1013,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     const scheduleId = 'sch_20261029';
 
     // 1. Register active member as 정단원
-    await service.addMember({
+    await addMemberConfirmed({
       id: memberId,
       name: '상태변화단원',
       part: '테너',
@@ -994,7 +1073,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     service.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
 
     // 로컬에만 있던 임시 데이터 추가
-    await service.addMember({
+    await addMemberConfirmed({
       id: 'mem_local_zombie',
       name: '로컬잔류단원',
       part: '베이스',
@@ -1073,7 +1152,7 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
 
   it('단원 삭제 시 활동 로그가 있으면 status=DELETED 로 소프트 삭제하고, 일반 getMembers 목록에서 제외하되 역대 로그는 보존한다', async () => {
     const testMemberId = 'mem_soft_del_test';
-    await service.addMember({
+    await addMemberConfirmed({
       id: testMemberId,
       name: '소프트삭제단원',
       part: '테너',

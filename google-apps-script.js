@@ -331,6 +331,160 @@ function doPost(e) {
       return jsonResponse({ success: true, message: '출결 취소 로그 등록 완료 (원천 보존)' });
     }
 
+    if (action === 'REGISTER_AND_BIND_MEMBER') {
+      const sheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
+      if (!sheet) return jsonResponse({ success: false, message: '단원명부 탭이 없습니다.' });
+
+      const member = data.member || {};
+      const requestedId = String(member.id || '').trim();
+      const requestedName = String(member.name || '').trim();
+      const requestedPhone = String(member.phone || '').replace(/\D/g, '');
+      const requestedDeviceId = String(data.deviceId || '').trim();
+      if (!requestedId || !requestedName || requestedPhone.length < 10 || !requestedDeviceId) {
+        return jsonResponse({ success: false, message: '단원 정보 또는 기기 정보가 올바르지 않습니다.' });
+      }
+
+      const rows = sheet.getDataRange().getValues();
+      const headers = rows[0] || [];
+      const idCol = headers.indexOf('id');
+      const nameCol = headers.indexOf('name');
+      const phoneCol = headers.indexOf('phone');
+      const statusCol = headers.indexOf('status');
+      const deviceCol = headers.indexOf('boundDeviceId');
+      const boundAtCol = headers.indexOf('boundDeviceAt');
+
+      if (idCol < 0 || nameCol < 0 || phoneCol < 0 || deviceCol < 0 || boundAtCol < 0) {
+        return jsonResponse({ success: false, message: '단원명부에 등록/기기연결 필수 헤더가 없습니다.' });
+      }
+
+      for (let i = 1; i < rows.length; i++) {
+        const rowId = String(rows[i][idCol] || '').trim();
+        const rowName = String(rows[i][nameCol] || '').trim();
+        const rowPhone = String(rows[i][phoneCol] || '').replace(/\D/g, '');
+        const rowStatus = statusCol >= 0 ? String(rows[i][statusCol] || '').trim() : 'ACTIVE';
+        const rowDeviceId = String(rows[i][deviceCol] || '').trim();
+
+        if (rowId === requestedId) {
+          if (rowName !== requestedName || rowPhone !== requestedPhone) {
+            return jsonResponse({ success: false, message: '생성한 단원 ID가 다른 회원 정보와 충돌합니다.' });
+          }
+          if (rowDeviceId && rowDeviceId !== requestedDeviceId) {
+            return jsonResponse({
+              success: false,
+              message: '이미 다른 기기에 연동된 계정입니다. 기존 기기 연동을 먼저 해제해주세요.',
+            });
+          }
+          if (!rowDeviceId) {
+            const updatedRow = rows[i].slice();
+            updatedRow[deviceCol] = requestedDeviceId;
+            updatedRow[boundAtCol] = toKSTString(new Date());
+            sheet.getRange(i + 1, 1, 1, updatedRow.length).setValues([updatedRow]);
+            SpreadsheetApp.flush();
+          }
+          return jsonResponse({
+            success: true,
+            deduplicated: true,
+            existingMemberId: requestedId,
+            message: '단원 등록 및 기기 연결 완료 (동일 요청 확인)',
+          });
+        }
+
+        if (rowStatus === 'ACTIVE' && rowName.toLowerCase() === requestedName.toLowerCase()) {
+          if (rowPhone && rowPhone === requestedPhone) {
+            return jsonResponse({
+              success: false,
+              existingMemberId: rowId,
+              message: '이미 동일한 이름과 연락처로 등록된 단원이 있습니다.',
+            });
+          }
+          if (rowPhone.length < 10 || rowPhone.slice(-4) === requestedPhone.slice(-4)) {
+            return jsonResponse({
+              success: false,
+              message: '동일 이름 또는 연락처가 일부 일치하는 명부가 있어 관리자 확인이 필요합니다.',
+            });
+          }
+        }
+      }
+
+      const boundAt = toKSTString(new Date());
+      const newRow = headers.map(function (h) {
+        if (h === 'id') return member.id;
+        if (h === 'name') return member.name;
+        if (h === 'part') return member.part;
+        if (h === 'phone') return member.phone || '';
+        if (h === 'phoneLast4') return member.phoneLast4 || requestedPhone.slice(-4);
+        if (h === 'role') return member.role || 'MEMBER';
+        if (h === 'status') return member.status || 'ACTIVE';
+        if (h === 'joinedAt') return member.joinedAt || boundAt.slice(0, 10);
+        if (h === 'memberStatus') return member.memberStatus || '정단원';
+        if (h === 'note') return member.note || '';
+        if (h === 'boundDeviceId') return requestedDeviceId;
+        if (h === 'boundDeviceAt') return boundAt;
+        return member[h] !== undefined ? member[h] : '';
+      });
+      sheet.appendRow(newRow);
+      SpreadsheetApp.flush();
+      return jsonResponse({ success: true, message: '단원 등록 및 기기 연결 완료' });
+    }
+
+    if (action === 'BIND_EXISTING_MEMBER') {
+      const sheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
+      if (!sheet) return jsonResponse({ success: false, message: '단원명부 탭이 없습니다.' });
+
+      const rows = sheet.getDataRange().getValues();
+      const headers = rows[0] || [];
+      const idCol = headers.indexOf('id');
+      const phoneCol = headers.indexOf('phone');
+      const phoneLast4Col = headers.indexOf('phoneLast4');
+      const deviceCol = headers.indexOf('boundDeviceId');
+      const boundAtCol = headers.indexOf('boundDeviceAt');
+      const requestedMemberId = String(data.memberId || '').trim();
+      const requestedDeviceId = String(data.deviceId || '').trim();
+      const requestedPhone = String(data.phone || '').trim();
+      const requestedPhoneDigits = requestedPhone.replace(/\D/g, '');
+      const requestedLast4 = String(data.phoneLast4 || '').trim();
+
+      if (
+        idCol < 0 ||
+        phoneCol < 0 ||
+        phoneLast4Col < 0 ||
+        deviceCol < 0 ||
+        boundAtCol < 0 ||
+        !requestedMemberId ||
+        !requestedDeviceId ||
+        requestedPhoneDigits.length < 10 ||
+        requestedLast4 !== requestedPhoneDigits.slice(-4)
+      ) {
+        return jsonResponse({ success: false, message: '단원 연락처 또는 기기 정보가 올바르지 않습니다.' });
+      }
+
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][idCol] || '').trim() !== requestedMemberId) continue;
+
+        const existingDeviceId = String(rows[i][deviceCol] || '').trim();
+        if (existingDeviceId && existingDeviceId !== requestedDeviceId) {
+          return jsonResponse({
+            success: false,
+            message: '이미 다른 기기에 연동된 계정입니다. 기존 기기 연동을 먼저 해제해주세요.',
+          });
+        }
+        const existingLast4 = String(rows[i][phoneLast4Col] || '').trim();
+        if (existingLast4 && existingLast4 !== '0000' && existingLast4 !== '----' && existingLast4 !== requestedLast4) {
+          return jsonResponse({ success: false, message: '입력하신 연락처가 단원 명부와 일치하지 않습니다.' });
+        }
+
+        const updatedRow = rows[i].slice();
+        updatedRow[phoneCol] = requestedPhone;
+        updatedRow[phoneLast4Col] = requestedLast4;
+        updatedRow[deviceCol] = requestedDeviceId;
+        updatedRow[boundAtCol] = toKSTString(new Date());
+        sheet.getRange(i + 1, 1, 1, updatedRow.length).setValues([updatedRow]);
+        SpreadsheetApp.flush();
+        return jsonResponse({ success: true, message: '단원 정보와 기기 연결 완료' });
+      }
+      return jsonResponse({ success: false, message: '단원을 찾을 수 없습니다.' });
+    }
+
     if (action === 'BIND_DEVICE') {
       const sheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
       const rows = sheet.getDataRange().getValues();
@@ -393,6 +547,14 @@ function doPost(e) {
         const rowId = idCol >= 0 ? String(rows[i][idCol]).trim() : '';
         const rowStatus = statusCol >= 0 ? String(rows[i][statusCol]).trim() : 'ACTIVE';
         if (incomingId && rowId === incomingId) {
+          const existingName = nameCol >= 0 ? String(rows[i][nameCol] || '').trim() : '';
+          const existingPhoneDigits = phoneCol >= 0 ? String(rows[i][phoneCol] || '').replace(/\D/g, '') : '';
+          if (existingName !== incomingName || existingPhoneDigits !== incomingPhoneDigits) {
+            return jsonResponse({
+              success: false,
+              message: '생성한 단원 ID가 다른 회원 정보와 충돌합니다.',
+            });
+          }
           return jsonResponse({
             success: true,
             deduplicated: true,
@@ -405,10 +567,18 @@ function doPost(e) {
           const rowPhoneDigits = String(rows[i][phoneCol] || '').replace(/\D/g, '');
           if (rowName === incomingName && rowPhoneDigits === incomingPhoneDigits) {
             return jsonResponse({
-              success: true,
-              deduplicated: true,
+              success: false,
               existingMemberId: rowId,
               message: '이미 동일한 이름과 연락처로 등록된 단원이 있습니다.',
+            });
+          }
+          if (rowName === incomingName && (
+            rowPhoneDigits.length < 10 ||
+            rowPhoneDigits.slice(-4) === incomingPhoneDigits.slice(-4)
+          )) {
+            return jsonResponse({
+              success: false,
+              message: '동일 이름 또는 연락처가 일부 일치하는 명부가 있어 관리자 확인이 필요합니다.',
             });
           }
         }

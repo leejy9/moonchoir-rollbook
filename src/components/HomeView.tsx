@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, RSVPVote, Schedule } from '../types/rollbook';
 import {
-  getEffectiveMemberStatus,
   isMemberRequiredForSchedule,
   resolveMergedMemberIds,
 } from '../utils/attendanceStats';
@@ -399,77 +398,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
     return isMemberRequiredForSchedule(currentMember, activeSchedule.date, activeSchedule);
   }, [currentMember, activeSchedule, _refreshTrigger]);
 
-  const attendanceDiagnostic = useMemo(() => {
-    const isDiagnosticEnabled =
-      import.meta.env.DEV ||
-      (typeof window !== 'undefined' &&
-        new URLSearchParams(window.location.search).get('attendanceDebug') === '1');
-    if (!isDiagnosticEnabled) return null;
-
-    const diagnosticDate = '2026-10-22';
-    const directMember = allMembers.find((member) => member.id === profile.memberId);
-    const effective = getEffectiveMemberStatus(currentMember, diagnosticDate);
-
-    return {
-      profileMemberId: profile.memberId,
-      directMember: directMember
-        ? {
-            id: directMember.id,
-            status: directMember.status,
-            mergedIntoId: directMember.mergedIntoId ?? null,
-          }
-        : null,
-      resolvedMember: {
-        id: currentMember.id,
-        status: currentMember.status,
-        joinedAt: currentMember.joinedAt ?? null,
-        memberStatus: currentMember.memberStatus ?? null,
-        part: currentMember.part,
-        usedProfileFallback:
-          currentMember.id === profile.memberId && directMember?.status !== 'ACTIVE',
-      },
-      effectiveOnDate: effective,
-      matchingStatusHistory: (currentMember.statusHistory ?? [])
-        .filter(
-          (history) =>
-            history.startDate <= diagnosticDate &&
-            diagnosticDate <= history.endDate
-        )
-        .map(({ startDate, endDate, status, part, createdAt }) => ({
-          startDate,
-          endDate,
-          status,
-          part,
-          createdAt,
-        })),
-      activeSchedule: activeSchedule
-        ? {
-            id: activeSchedule.id,
-            date: activeSchedule.date,
-            title: activeSchedule.title,
-          }
-        : null,
-      schedulesOnDate: schedules
-        .filter((schedule) => schedule.date === diagnosticDate)
-        .map((schedule) => ({
-          id: schedule.id,
-          title: schedule.title,
-          isActiveSchedule: activeSchedule?.id === schedule.id,
-          isCancelled: Boolean(schedule.isCancelled),
-          isArchived: Boolean(schedule.isArchived),
-          targetAudienceType: schedule.targetAudienceType ?? 'ALL',
-          targetParts: schedule.targetParts ?? [],
-          currentMemberIsExplicitlyTargeted:
-            schedule.targetMemberIds?.includes(currentMember.id) ?? false,
-          memberRequired: isMemberRequiredForSchedule(
-            currentMember,
-            schedule.date,
-            schedule
-          ),
-        })),
-    };
-  }, [activeSchedule, allMembers, currentMember, profile.memberId, schedules]);
-
   // Denominator is strictly targetMembers.length (no artificial Math.max inflating)
   const totalTargetCount = targetMembers.length;
   const attendRate =
@@ -540,36 +468,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </button>
         </div>
       </header>
-
-      {attendanceDiagnostic && (
-        <details
-          open
-          style={{
-            margin: '0 0 16px',
-            padding: '12px',
-            border: '1px solid #f59e0b',
-            borderRadius: '10px',
-            background: '#fffbeb',
-            color: '#78350f',
-          }}
-        >
-          <summary style={{ minHeight: '44px', display: 'flex', alignItems: 'center', fontWeight: 700 }}>
-            개발 진단: 2026-10-22 출석대상 판정
-          </summary>
-          <pre
-            data-testid="attendance-target-diagnostic"
-            style={{
-              margin: '8px 0 0',
-              overflowX: 'auto',
-              whiteSpace: 'pre-wrap',
-              overflowWrap: 'anywhere',
-              fontSize: '0.75rem',
-            }}
-          >
-            {JSON.stringify(attendanceDiagnostic, null, 2)}
-          </pre>
-        </details>
-      )}
 
       {/* View Switcher Tabs: 캘린더 일체형 뷰 vs 리스트 뷰 */}
       <div

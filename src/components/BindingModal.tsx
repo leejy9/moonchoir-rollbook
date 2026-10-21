@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { bindDeviceProfile, getOrCreateDeviceId } from '../services/auth';
-import { sheetsService } from '../services/sheets';
+import { ExistingMemberConflictError, sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, PartType } from '../types/rollbook';
 import { buildNewMember } from '../utils/newMember';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
@@ -28,6 +28,7 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [duplicatePromptMember, setDuplicatePromptMember] = useState<Member | null>(null);
+  const [pendingNewMember, setPendingNewMember] = useState<Member | null>(null);
 
   // Register mode state
   const [newName, setNewName] = useState('');
@@ -96,12 +97,12 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
       setIsSubmitting(true);
       // Always store full formatted phone number and last4
       const fullPhoneFormatted = formatPhoneNumber(inputDigits);
-      await sheetsService.updateMember(selectedMember.id, {
-        phone: fullPhoneFormatted,
-        phoneLast4: inputLast4,
-      }).catch(console.warn);
-
-      await sheetsService.bindMemberDevice(selectedMember.id, currentDeviceId);
+      await sheetsService.bindExistingMember(
+        selectedMember.id,
+        currentDeviceId,
+        fullPhoneFormatted,
+        inputLast4
+      );
       const profile = bindDeviceProfile(
         selectedMember.id,
         selectedMember.name,
@@ -149,17 +150,18 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
       return;
     }
 
-    const newMember: Member = buildNewMember(
-      trimmedName,
-      finalPart,
-      newPhone.trim(),
-      finalLast4,
-      currentDeviceId
-    );
+    const newMember =
+      pendingNewMember &&
+      pendingNewMember.name === trimmedName &&
+      pendingNewMember.part === finalPart &&
+      pendingNewMember.phone === formatPhoneNumber(digits)
+        ? pendingNewMember
+        : buildNewMember(trimmedName, finalPart, formatPhoneNumber(digits), finalLast4, currentDeviceId);
 
     try {
       setIsSubmitting(true);
-      await sheetsService.addMember(newMember);
+      setPendingNewMember(newMember);
+      await sheetsService.registerAndBindMember(newMember, currentDeviceId);
 
       const profile = bindDeviceProfile(
         newMember.id,
@@ -169,8 +171,24 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
         currentDeviceId
       );
 
+      setPendingNewMember(null);
       onSuccess(profile);
     } catch (err: unknown) {
+      if (err instanceof ExistingMemberConflictError) {
+        try {
+          await sheetsService.fetchRemoteData();
+          const existing = sheetsService.getMembers().find((member) => member.id === err.existingMemberId);
+          if (existing) {
+            setDuplicatePromptMember(existing);
+            return;
+          }
+        } catch (refreshError) {
+          const refreshMessage =
+            refreshError instanceof Error ? refreshError.message : '명부 동기화에 실패했습니다.';
+          setErrorMsg(`${err.message} 최신 명부 확인도 실패했습니다: ${refreshMessage}`);
+          return;
+        }
+      }
       setErrorMsg(err instanceof Error ? err.message : '등록 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
@@ -196,12 +214,12 @@ export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }
       setIsSubmitting(true);
       setErrorMsg('');
 
-      const updated: Partial<Member> = {
-        phoneLast4: finalLast4,
-        phone: finalPhone || targetMember.phone,
-      };
-      await sheetsService.updateMember(targetMember.id, updated).catch(console.warn);
-      await sheetsService.bindMemberDevice(targetMember.id, currentDeviceId);
+      await sheetsService.bindExistingMember(
+        targetMember.id,
+        currentDeviceId,
+        finalPhone || targetMember.phone || '',
+        finalLast4
+      );
       const profile = bindDeviceProfile(
         targetMember.id,
         targetMember.name,
