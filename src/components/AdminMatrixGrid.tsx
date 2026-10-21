@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
 import { sheetsService } from '../services/sheets';
-import type {
-  AttendanceStatus,
-  Member,
-  Schedule,
-} from '../types/rollbook';
+import type { Member, Schedule } from '../types/rollbook';
 import { LiquidGauge } from './LiquidGauge';
 import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString } from '../utils/date';
 import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
+import { getMatrixCellDisplay } from '../utils/matrixCell';
 
 interface AdminMatrixGridProps {
   members: Member[];
@@ -20,7 +17,7 @@ interface AdminMatrixGridProps {
 interface CellPopoverTarget {
   member: Member;
   schedule: Schedule;
-  currentStatus: AttendanceStatus;
+  currentStatus: string;
   checkInTime?: string;
   rsvpReason?: string;
   x: number;
@@ -144,10 +141,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
     const item = recList.find((r) => r.memberId === member.id);
     const rect = e.currentTarget.getBoundingClientRect();
     const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
-    const todayStr = getKSTDateString();
-    const isFuture = schedule.date > todayStr;
-    const isRecorded = Boolean(item?.checkInTime || item?.isManualOverride || (item?.rsvpStatus && item.rsvpStatus !== 'UNVOTED'));
-    const defaultStatus = !isRecorded && isFuture ? '미진행' : (item?.finalStatus || (isRequired ? '결석' : '미참'));
+    const defaultStatus = getMatrixCellDisplay({ schedule, item, isRequired }).statusText;
 
     setPopoverTarget({
       member,
@@ -394,55 +388,22 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                     const recList = reconciliationsBySchedule.get(s.id) || [];
                     const item = recList.find((r) => r.memberId === m.id);
                     const isRequired = isMemberRequiredForSchedule(m, s.date, s);
-                    const todayStr = getKSTDateString();
-                    const isFuture = s.date > todayStr;
-                    const isRecorded = Boolean(item?.checkInTime || item?.isManualOverride || (item?.rsvpStatus && item.rsvpStatus !== 'UNVOTED'));
-                    const status = item?.finalStatus || (isRequired ? '결석' : '미참');
-
-                    let badgeClass = 'cell-absent';
-                    let statusLabel = '결석';
-                    let timeSub = '';
-
-                    if (s.isCancelled) {
-                      badgeClass = 'cell-cancelled';
-                      statusLabel = '취소';
-                    } else if (isFuture && item?.isAttendanceCleared) {
-                      badgeClass = 'cell-upcoming';
-                      statusLabel = '-';
-                    } else if (status === '출석' || status === '수동인정') {
-                      badgeClass = 'cell-attend';
-                      statusLabel = '출석';
-                      timeSub = item?.checkInTime ? item.checkInTime.slice(11, 16) : '';
-                    } else if (status === '지각') {
-                      badgeClass = 'cell-late';
-                      statusLabel = '지각';
-                      timeSub = item?.checkInTime ? item.checkInTime.slice(11, 16) : '';
-                    } else if (status === '사유결석') {
-                      badgeClass = 'cell-excused';
-                      statusLabel = '사유';
-                    } else if (status === '미참' || status === '모수제외') {
-                      badgeClass = 'cell-exempt';
-                      statusLabel = '미참';
-                    } else if (isFuture && !isRecorded) {
-                      // 미래 미진행 일정: 아직 연습 전이므로 결석이 아닌 미체크(-)로 표기
-                      badgeClass = 'cell-upcoming';
-                      statusLabel = '-';
-                    }
+                    const display = getMatrixCellDisplay({ schedule: s, item, isRequired });
 
                     return (
                       <td
                         key={s.id}
-                        className={`matrix-cell ${badgeClass}`}
+                        className={`matrix-cell ${display.badgeClass}`}
                         onClick={(e) => handleCellClick(e, m, s)}
                         title={
                           s.isCancelled
                             ? `${m.name} · ${s.date}: 취소된 연습 (모수 제외)`
-                            : `${m.name} · ${s.date}: ${status}${item?.rsvpReason ? ` (${item.rsvpReason})` : ''} - 클릭하여 수정`
+                            : `${m.name} · ${s.date}: ${display.statusText}${item?.rsvpReason ? ` · 사유: ${item.rsvpReason}` : ''} - 클릭하여 수정`
                         }
                       >
                         <div className="matrix-cell-content">
-                          <span className="cell-status-tag">{statusLabel}</span>
-                          {timeSub && <span className="cell-time-sub">{timeSub}</span>}
+                          <span className="cell-status-tag">{display.label}</span>
+                          {display.sub && <span className="cell-time-sub">{display.sub}</span>}
                         </div>
                       </td>
                     );

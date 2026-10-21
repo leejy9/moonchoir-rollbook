@@ -894,3 +894,8 @@
 - 헤드리스 Chromium으로 매니페스트 로드, 서비스 워커 등록, Android/iOS/카카오톡 UA별 카드 문구와 44px 버튼 확인. 실제 설치 팝업(Android)과 iOS 공유 시트는 실기기에서만 확인 가능.
 - Green Bar: `typecheck`, `lint` 0 errors, `npm test` 34 files / 169 tests pass, `build` 성공.
 
+### 5. 관리자 매트릭스 투표 상태 표기 (Task 79)
+- 증상: 미래 연습에 참석 투표한 단원이 매트릭스에서 `결석`, 무응답은 `-`로 표시. 원인은 투표가 있으면 `-` 분기를 건너뛰어 기본값 `결석`이 나오던 셀 로직.
+- 수정: `getMatrixCellDisplay`로 규칙을 분리(연습 종료 전 투표 상태, 종료 후 결석 + 투표 보조 표기). 기존 "초기화된 미래 칸은 `-`" 테스트는 `미투표` 기대값으로 갱신. 단위 테스트 10건 추가.
+- Green Bar: `typecheck`, `lint` 0 errors, `npm test` 35 files / 179 tests pass(UTC·KST 모두), `build`는 커밋 전 재확인.
+

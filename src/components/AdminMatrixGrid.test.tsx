@@ -10,7 +10,7 @@ describe('AdminMatrixGrid attendance reset display', () => {
     resetStorage();
   });
 
-  it('shows a cleared future attendance correction as "-" instead of absence', () => {
+  it('shows a cleared future attendance correction as an unvoted cell instead of absence', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-21T12:00:00+09:00'));
 
@@ -67,7 +67,8 @@ describe('AdminMatrixGrid attendance reset display', () => {
     );
 
     expect(html).toContain('cell-upcoming');
-    expect(html).toContain('>-</span>');
+    expect(html).toContain('>미투표</span>');
     expect(html).not.toContain('>결석</span>');
+    expect(html).not.toContain('>-</span>');
   });
 });

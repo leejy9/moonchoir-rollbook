@@ -6227,3 +6227,14 @@ a {
 .install-app-steps {
   padding-left: 18px;
 }
+
+/* 관리자 매트릭스: 연습 전 투표 상태 */
+.matrix-cell.cell-vote-attend .cell-status-tag {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.matrix-cell.cell-vote-absent .cell-status-tag {
+  background: #ffedd5;
+  color: #c2410c;
+}

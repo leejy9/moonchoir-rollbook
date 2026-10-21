@@ -283,7 +283,7 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 
 ### 2026-10-21 Follow-up: Future Attendance Reset and Eligibility Investigation
 
-- An attendance-reset log remains append-only and is projected as a cleared attendance correction, not a new attendance or absence event. For a future schedule, the admin matrix displays the cleared cell as `-`; after a later attendance action, the new action becomes the projection.
+- An attendance-reset log remains append-only and is projected as a cleared attendance correction, not a new attendance or absence event. For a future schedule, the admin matrix displayed the cleared cell as `-` (superseded on 2026-10-21: it now shows the vote state, e.g. `미투표`, see below); after a later attendance action, the new action becomes the projection.
 - A targeted read of the current Sheets response confirmed the tested member/schedule data satisfies the existing eligibility rule: the member's joined date precedes the rehearsal, the effective status is `준단원`, the effective part is `베이스`, and the schedule is `PARTS` with `베이스` included.
 - The shared device diagnostic then showed that the browser profile ID (`mem_new_1792510319942`) is absent from the current roster, while the intended `ADMIN` member is `mem_new_1792508291001`. `HomeView` had fallen back to a synthetic member using the stale profile's `ADMIN` part, which is not in the target parts; that caused the voluntary-attendance display. After a confirmed remote roster sync, `App.tsx` now clears a profile whose member ID no longer exists and prompts for an explicit rebind. No member is guessed or auto-merged, and no spreadsheet data is changed.
 
@@ -298,3 +298,15 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
   - `출석원천로그` gained a `deviceId` column (owner approved). It is appended to the end of the header row by `ensureSheetStructure` on the next Apps Script call; existing rows stay blank and existing headers are untouched. Check-ins from the member's browser record `deviceId`; admin-entered logs leave it blank. Multi-device or shared-device detection is therefore a later projection over the append-only log; no admin flag UI exists yet.
 - **Known residual risk:** While the lock is suspended, the permanent QR photo plus GPS radius, the on-site PIN and full-number verification are the only defenses against proxy check-in. Task 76 (server-side authorization) is unchanged and still a production gate.
 - **Restoration note:** The removed rejection branches are in git history (`google-apps-script.js` `BIND_EXISTING_MEMBER` / `BIND_DEVICE` / `REGISTER_AND_BIND_MEMBER`, `sheets.ts` `bindMemberDevice`, `BindingModal.tsx`, `App.tsx` profile-sync effect). The `deviceId` column in the append-only log is to be kept even after the lock returns.
+
+### 2026-10-21 Decision: Admin matrix shows vote state until the rehearsal ends
+
+- **Confirmed fact (owner screenshot):** Members who voted `참석` for a not-yet-held rehearsal appeared as `결석` in the admin matrix, and unvoted/cleared future cells appeared as `-`. Cause: the cell logic only used the `-` branch for future schedules with no attendance log, no manual override and no vote; a vote made `isRecorded` true, so the cell fell through to the default `결석`.
+- **Owner decision:** Replace `-` with vote state — `참석 · 투표`, `사유 · 투표`, `불참 · 투표`, `미투표` — and show vote information in the matrix.
+- **Implemented rule (`src/utils/matrixCell.ts`, display only; the projection engine, statistics and raw logs are unchanged):**
+  - Actual check-ins (`출석`/`지각`/manual recognition) always win.
+  - Until the schedule's end time (same-day rehearsals included, via `getCheckInWindowState`), absence is not finalized: the cell shows the vote state. An explicit admin absence override still shows `결석`.
+  - After the end time, `결석` is shown with a small `참석투표` / `불참투표` note when the member had voted, so no-shows after an attend vote are visible. Unvoted absences stay plain `결석`.
+  - Non-target members show `미참`; a voluntary attend vote before the rehearsal shows `참석 · 자율`.
+- **Not changed (needs a separate decision):** The member my-page still prints `결석 (-)` in the check-in time column for past absences, and the cumulative statistics engine still treats today's schedule as past for its own rules.
+
