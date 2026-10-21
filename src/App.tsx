@@ -7,6 +7,7 @@ import { HomeView } from './components/HomeView';
 import { MemberPortalModal } from './components/MemberPortalModal';
 import { QRScannerModal } from './components/QRScannerModal';
 import { RSVPModal } from './components/RSVPModal';
+import { SyncStatus } from './components/SyncStatus';
 import {
   clearDeviceProfile,
   getBoundDeviceProfile,
@@ -50,22 +51,40 @@ export function App() {
   // Automatic remote sync on initial load
   useEffect(() => {
     let isCancelled = false;
-    sheetsService
-      .fetchRemoteData()
-      .then(() => {
-        if (!isCancelled) {
-          setHasConfirmedRosterSync(true);
-          triggerRefresh();
-        }
-      })
-      .catch((err) => {
-        console.warn('[App] Initial sheet sync fallback:', err);
-      });
+    sheetsService.refreshRemoteData({ force: true }).then((synced) => {
+      if (synced && !isCancelled) {
+        setHasConfirmedRosterSync(true);
+        triggerRefresh();
+      }
+    });
 
     return () => {
       isCancelled = true;
     };
   }, []);
+
+  // 시트에서 새 데이터를 받아오면(또는 상태가 바뀌면) 화면을 다시 그린다
+  useEffect(() => sheetsService.subscribeSync(() => setRefreshKey((k) => k + 1)), []);
+
+  // 다른 사람이 바꾼 내용을 보려면: 앱으로 돌아오거나 네트워크가 복구될 때 새로 받아온다(20초 이내 재요청은 건너뜀)
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void sheetsService.refreshRemoteData();
+    };
+    const refreshWhenOnline = () => void sheetsService.refreshRemoteData({ force: true });
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('online', refreshWhenOnline);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('online', refreshWhenOnline);
+    };
+  }, []);
+
+  // 화면 전환·주요 창을 열 때 최신 데이터를 받아온다
+  const isRsvpOpen = rsvpSchedule !== null;
+  useEffect(() => {
+    void sheetsService.refreshRemoteData();
+  }, [currentView, showMemberPortalModal, showQRScanner, isRsvpOpen]);
 
   const activeSchedules = sheetsService.getSchedules();
   const [todayStr, setTodayStr] = useState(() => getKSTDateString());
@@ -125,18 +144,6 @@ export function App() {
     const members = sheetsService.getMembers(true);
     const current = members.find((m) => m.id === profile.memberId);
     if (!current) {
-      clearDeviceProfile();
-      queueMicrotask(() => {
-        setShowMemberPortalModal(false);
-        setCurrentView('HOME');
-        setProfile(null);
-      });
-      return;
-    }
-    if (
-      current.status !== 'MERGED' &&
-      current.boundDeviceId !== profile.deviceId
-    ) {
       clearDeviceProfile();
       queueMicrotask(() => {
         setShowMemberPortalModal(false);
@@ -236,6 +243,8 @@ export function App() {
           refreshTrigger={refreshKey}
         />
       )}
+
+      <SyncStatus />
 
       {/* Overlay Modals */}
       {showBindingModal && isBound && (

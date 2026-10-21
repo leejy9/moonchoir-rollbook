@@ -232,6 +232,7 @@ function doPost(e) {
         if (h === 'isVerifiedLocation') return data.isVerifiedLocation ? 'TRUE' : 'FALSE';
         if (h === 'adminNote') return data.adminNote || '';
         if (h === 'distanceMeters') return data.distanceMeters !== undefined && data.distanceMeters !== null ? data.distanceMeters : '';
+        if (h === 'deviceId') return data.deviceId || '';
         return data[h] !== undefined ? data[h] : '';
       });
       sheet.appendRow(newRow);
@@ -368,12 +369,7 @@ function doPost(e) {
           if (rowName !== requestedName || rowPhone !== requestedPhone) {
             return jsonResponse({ success: false, message: '생성한 단원 ID가 다른 회원 정보와 충돌합니다.' });
           }
-          if (rowDeviceId && rowDeviceId !== requestedDeviceId) {
-            return jsonResponse({
-              success: false,
-              message: '이미 다른 기기에 연동된 계정입니다. 기존 기기 연동을 먼저 해제해주세요.',
-            });
-          }
+          // 여러 브라우저 허용(임시): 기존 연동 기기가 있으면 그대로 두고, 비어 있을 때만 채운다.
           if (!rowDeviceId) {
             const updatedRow = rows[i].slice();
             updatedRow[deviceCol] = requestedDeviceId;
@@ -461,26 +457,49 @@ function doPost(e) {
       for (let i = 1; i < rows.length; i++) {
         if (String(rows[i][idCol] || '').trim() !== requestedMemberId) continue;
 
-        const existingDeviceId = String(rows[i][deviceCol] || '').trim();
-        if (existingDeviceId && existingDeviceId !== requestedDeviceId) {
-          return jsonResponse({
-            success: false,
-            message: '이미 다른 기기에 연동된 계정입니다. 기존 기기 연동을 먼저 해제해주세요.',
-          });
-        }
-        const existingLast4 = String(rows[i][phoneLast4Col] || '').trim();
-        if (existingLast4 && existingLast4 !== '0000' && existingLast4 !== '----' && existingLast4 !== requestedLast4) {
-          return jsonResponse({ success: false, message: '입력하신 연락처가 단원 명부와 일치하지 않습니다.' });
+        // 본인 확인: 시트에 전체 번호가 있으면 전체 번호가 일치해야 한다.
+        // 전체 번호가 없는 과거 행만 뒷 4자리로 확인한다(하위 호환).
+        const existingPhoneDigits = String(rows[i][phoneCol] || '').replace(/\D/g, '');
+        if (existingPhoneDigits.length >= 9) {
+          // 시트가 번호를 숫자로 저장해 앞자리 0이 빠진 경우도 같은 번호로 본다.
+          if (existingPhoneDigits.replace(/^0+/, '') !== requestedPhoneDigits.replace(/^0+/, '')) {
+            return jsonResponse({ success: false, message: '입력하신 연락처가 단원 명부와 일치하지 않습니다.' });
+          }
+        } else {
+          const existingLast4 = String(rows[i][phoneLast4Col] || '').trim();
+          if (existingLast4 && existingLast4 !== '0000' && existingLast4 !== '----' && existingLast4 !== requestedLast4) {
+            return jsonResponse({ success: false, message: '입력하신 연락처가 단원 명부와 일치하지 않습니다.' });
+          }
         }
 
-        const updatedRow = rows[i].slice();
-        updatedRow[phoneCol] = requestedPhone;
-        updatedRow[phoneLast4Col] = requestedLast4;
-        updatedRow[deviceCol] = requestedDeviceId;
-        updatedRow[boundAtCol] = toKSTString(new Date());
-        sheet.getRange(i + 1, 1, 1, updatedRow.length).setValues([updatedRow]);
-        SpreadsheetApp.flush();
-        return jsonResponse({ success: true, message: '단원 정보와 기기 연결 완료' });
+        // 여러 브라우저 허용(임시): 처음 연동된 기기 값은 덮어쓰지 않는다.
+        // 새 브라우저가 연동돼도 시트는 바뀌지 않으며, 기기 구분은 출석원천로그의 deviceId로 남는다.
+        const existingDeviceId = String(rows[i][deviceCol] || '').trim();
+        const needsPhoneFill = existingPhoneDigits.length < 9;
+        const needsDeviceFill = !existingDeviceId;
+        if (needsPhoneFill || needsDeviceFill) {
+          const updatedRow = rows[i].slice();
+          if (needsPhoneFill) {
+            updatedRow[phoneCol] = requestedPhone;
+            updatedRow[phoneLast4Col] = requestedLast4;
+          }
+          if (needsDeviceFill) {
+            updatedRow[deviceCol] = requestedDeviceId;
+            updatedRow[boundAtCol] = toKSTString(new Date());
+          }
+          sheet.getRange(i + 1, 1, 1, updatedRow.length).setValues([updatedRow]);
+          SpreadsheetApp.flush();
+          return jsonResponse({
+            success: true,
+            boundDeviceId: String(updatedRow[deviceCol] || '').trim(),
+            message: '단원 본인 확인 완료',
+          });
+        }
+        return jsonResponse({
+          success: true,
+          boundDeviceId: existingDeviceId,
+          message: '단원 본인 확인 완료',
+        });
       }
       return jsonResponse({ success: false, message: '단원을 찾을 수 없습니다.' });
     }
@@ -497,15 +516,13 @@ function doPost(e) {
         if (String(rows[i][idCol >= 0 ? idCol : 0]) === String(data.memberId)) {
           const existingDeviceId = devCol >= 0 ? String(rows[i][devCol] || '').trim() : '';
           const requestedDeviceId = String(data.deviceId || '').trim();
-          if (existingDeviceId && existingDeviceId !== requestedDeviceId) {
-            return jsonResponse({
-              success: false,
-              message: '이미 다른 기기에 연동된 계정입니다. 기존 기기 연동을 먼저 해제해주세요.',
-            });
+          // 여러 브라우저 허용(임시): 기존 값이 있으면 덮어쓰지 않고 그대로 성공 처리한다.
+          if (existingDeviceId) {
+            return jsonResponse({ success: true, boundDeviceId: existingDeviceId, message: '기기 바인딩 완료' });
           }
-          if (devCol >= 0) sheet.getRange(i + 1, devCol + 1).setValue(data.deviceId || '');
+          if (devCol >= 0) sheet.getRange(i + 1, devCol + 1).setValue(requestedDeviceId);
           if (timeCol >= 0) sheet.getRange(i + 1, timeCol + 1).setValue(toKSTString(new Date()));
-          return jsonResponse({ success: true, message: '기기 바인딩 완료' });
+          return jsonResponse({ success: true, boundDeviceId: requestedDeviceId, message: '기기 바인딩 완료' });
         }
       }
       return jsonResponse({ success: false, message: '단원을 찾을 수 없습니다.' });
@@ -1263,7 +1280,7 @@ function ensureSheetStructure(ss) {
     },
     {
       name: SHEET_NAMES.LOGS,
-      headers: ['id', 'timestamp', 'scheduleId', 'memberId', 'memberName', 'part', 'authMethod', 'isVerifiedLocation', 'adminNote', 'distanceMeters'],
+      headers: ['id', 'timestamp', 'scheduleId', 'memberId', 'memberName', 'part', 'authMethod', 'isVerifiedLocation', 'adminNote', 'distanceMeters', 'deviceId'],
     },
     {
       name: SHEET_NAMES.LOCATIONS,

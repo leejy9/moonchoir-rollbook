@@ -192,6 +192,7 @@ export interface RawAttendanceLog {
   distanceMeters?: number;
   isVerifiedLocation: boolean;
   adminNote?: string;
+  deviceId?: string; // 체크인한 브라우저/기기 UUID (과거 행에는 없음)
 }
 
 /**

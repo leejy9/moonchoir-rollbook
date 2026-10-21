@@ -25,7 +25,7 @@ The complete phased plan, owner decision gates, and acceptance checks are in [Ar
 - **On-site PIN rotation decision confirmed (2026-10-20):** Only the current choir-wide `activeOnSitePin` is valid after rotation. Schedule-specific and legacy default PINs are invalidated. The server must validate the current PIN when recording a manual-PIN check-in.
 - **MVP Simplification & Core Rules Confirmed (2026-10-20):**
   1. **No Legacy Production Data to Preserve:** Because the project is in MVP build stage with no live historical data to migrate, all legacy guessing/fallback adapters (`v2` storage migration, `getMembers()` read-time member fabrication, `memberName` / `scheduleId prefix` / `date` heuristics) were completely removed rather than maintained via compatibility layers.
-  2. **1-Person 1-Device Lock Retained (`boundDeviceId`):** Kept as a deliberate core product feature on mobile (`이미 다른 기기에 연동되어 있는 계정입니다`), enforced consistently across both `[기존 명부에서 찾기]` and `[신규 단원 등록]` duplicate prompts.
+  2. **1-Person 1-Device Lock Retained (`boundDeviceId`):** Kept as a deliberate core product feature on mobile (`이미 다른 기기에 연동되어 있는 계정입니다`), enforced consistently across both `[기존 명부에서 찾기]` and `[신규 단원 등록]` duplicate prompts. **Superseded temporarily on 2026-10-21 — see "Temporary multi-browser decision" below; the lock is to be restored when members install the app.**
   3. **ProgramCard ➔ Schedule Target Inheritance:** Updating a parent `ProgramCard`'s target audience (`targetAudienceType`, `targetParts`, `targetMemberIds`) prompts to batch-update child `Schedule`s while still allowing per-schedule individual edits.
   4. **Non-Target Member Schedule Visibility (`[🌿 자율 참여 연습]`):** All schedules remain visible on calendar/home views; non-target members see `[🌿 자율 참여 연습]`, are excluded from the denominator (`미참`) if they do not attend, and receive `+1` denominator & `+1` attendance (`guestAttended`) if they voluntarily check in.
   5. **Attendance Rate Formula SSOT (`src/utils/attendanceStats.ts`):**
@@ -283,6 +283,47 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 
 ### 2026-10-21 Follow-up: Future Attendance Reset and Eligibility Investigation
 
-- An attendance-reset log remains append-only and is projected as a cleared attendance correction, not a new attendance or absence event. For a future schedule, the admin matrix displays the cleared cell as `-`; after a later attendance action, the new action becomes the projection.
+- An attendance-reset log remains append-only and is projected as a cleared attendance correction, not a new attendance or absence event. For a future schedule, the admin matrix displayed the cleared cell as `-` (superseded on 2026-10-21: it now shows the vote state, e.g. `미투표`, see below); after a later attendance action, the new action becomes the projection.
 - A targeted read of the current Sheets response confirmed the tested member/schedule data satisfies the existing eligibility rule: the member's joined date precedes the rehearsal, the effective status is `준단원`, the effective part is `베이스`, and the schedule is `PARTS` with `베이스` included.
 - The shared device diagnostic then showed that the browser profile ID (`mem_new_1792510319942`) is absent from the current roster, while the intended `ADMIN` member is `mem_new_1792508291001`. `HomeView` had fallen back to a synthetic member using the stale profile's `ADMIN` part, which is not in the target parts; that caused the voluntary-attendance display. After a confirmed remote roster sync, `App.tsx` now clears a profile whose member ID no longer exists and prompts for an explicit rebind. No member is guessed or auto-merged, and no spreadsheet data is changed.
+
+### 2026-10-21 Decision: Temporary multi-browser access (device lock suspended)
+
+- **Confirmed fact (owner report):** The web link is shared through KakaoTalk, so members bind inside KakaoTalk's in-app browser. That browser's `localStorage` is separate from Safari/Chrome on the same phone, so the same person gets a different device UUID and is rejected as "another device" when opening the link in their normal browser. A web app cannot treat the two as one device.
+- **Owner decision:** Suspend the 1-person 1-device lock until the web app is installed on members' phones. At that point the lock is to be restored and installed-app users re-bind from the app. This supersedes item 2 of the 2026-10-20 "MVP Simplification & Core Rules".
+- **Implemented behavior:**
+  - No `boundDeviceId` comparison blocks binding or logs a member out. `App.tsx` still clears a profile whose member ID is missing from the roster.
+  - `BIND_EXISTING_MEMBER` identity check: if the roster row has a full phone number it must match the entered full number (leading zeros ignored, because Sheets may store the number as numeric); only legacy rows without a full number fall back to the last four digits.
+  - The first bound device stays in `단원명부.boundDeviceId`; later browsers do not overwrite it and cause no sheet write. The column is now a reference value only. The admin `[기기 연동 초기화]` action is unchanged.
+  - `출석원천로그` gained a `deviceId` column (owner approved). It is appended to the end of the header row by `ensureSheetStructure` on the next Apps Script call; existing rows stay blank and existing headers are untouched. Check-ins from the member's browser record `deviceId`; admin-entered logs leave it blank. Multi-device or shared-device detection is therefore a later projection over the append-only log; no admin flag UI exists yet.
+- **Known residual risk:** While the lock is suspended, the permanent QR photo plus GPS radius, the on-site PIN and full-number verification are the only defenses against proxy check-in. Task 76 (server-side authorization) is unchanged and still a production gate.
+- **Restoration note:** The removed rejection branches are in git history (`google-apps-script.js` `BIND_EXISTING_MEMBER` / `BIND_DEVICE` / `REGISTER_AND_BIND_MEMBER`, `sheets.ts` `bindMemberDevice`, `BindingModal.tsx`, `App.tsx` profile-sync effect). The `deviceId` column in the append-only log is to be kept even after the lock returns.
+
+### 2026-10-21 Decision: Admin matrix shows vote state until the rehearsal ends
+
+- **Confirmed fact (owner screenshot):** Members who voted `참석` for a not-yet-held rehearsal appeared as `결석` in the admin matrix, and unvoted/cleared future cells appeared as `-`. Cause: the cell logic only used the `-` branch for future schedules with no attendance log, no manual override and no vote; a vote made `isRecorded` true, so the cell fell through to the default `결석`.
+- **Owner decision:** Replace `-` with vote state — `참석 · 투표`, `사유 · 투표`, `불참 · 투표`, `미투표` — and show vote information in the matrix.
+- **Implemented rule (`src/utils/matrixCell.ts`, display only; the projection engine, statistics and raw logs are unchanged):**
+  - Actual check-ins (`출석`/`지각`/manual recognition) always win.
+  - Until the schedule's end time (same-day rehearsals included, via `getCheckInWindowState`), absence is not finalized: the cell shows the vote state. An explicit admin absence override still shows `결석`.
+  - After the end time, `결석` is shown with a small `참석투표` / `불참투표` note when the member had voted, so no-shows after an attend vote are visible. Unvoted absences stay plain `결석`.
+  - Non-target members show `미참`; a voluntary attend vote before the rehearsal shows `참석 · 자율`.
+- **Not changed (needs a separate decision):** The member my-page still prints `결석 (-)` in the check-in time column for past absences, and the cumulative statistics engine still treats today's schedule as past for its own rules.
+- **Owner confirmation (2026-10-21):** Showing `미투표` / vote state for same-day rehearsals until they end is the intended behavior. The statistics-engine treatment of same-day schedules is deferred (Task 81).
+
+### 2026-10-21 Decision: All displayed times are KST
+
+- **Confirmed fact (code survey):** Every timestamp the app and the Apps Script write is already KST (`YYYY-MM-DD HH:mm:ss`, `Asia/Seoul`). UTC remained only in (a) older sheet rows written before Task 58 as `...Z`, and (b) read-side code that cut the clock out of the string literally: late judgement in `attendanceStats.ts` and several time labels read the UTC hour of a `Z` value as if it were KST, and `slice(0, 5)` turned a space-separated `YYYY-MM-DD HH:mm:ss` into `2026-`.
+- **Implemented:** `normalizeToKSTTimestamp` / `getKSTClock` convert any `Z` / offset value to KST and treat zone-less values as already KST; the call sites above use them. Stored data was not changed, so old `Z` rows are read correctly without rewriting the append-only log.
+- **Not changed:** The Apps Script menu item `기존 기록 날짜/시간을 한국 표준시(KST)로 변환` (Task 58) rewrites timestamp cells in place, including raw log rows (same instant, different notation). It is no longer needed for correct display and conflicts with the append-only rule in spirit; whether to keep it is an owner decision. `sheetsParser.ts` still has a legacy time-of-day conversion for ISO-style `startTime` values that the script no longer returns.
+
+### 2026-10-21 Decision: Refresh on navigation and confirmed writes
+
+- **Confirmed fact (owner report + code):** The app downloaded sheet data only at start-up (and on manual sync buttons). Other members' check-ins, votes and edits therefore never appeared on a device until it reloaded. Background writes also lost their failures: `sendToGoogleSheet` returns `{ success: false }` instead of throwing, so the `.catch` handlers never ran and a failed save was silent.
+- **Owner decisions:** Refresh from the sheet when the user changes screens / returns to the app; do not refresh on every button. Minimum 20 seconds between refreshes on one device (reads only; writes are never throttled). Member check-ins (QR and PIN) complete only after the sheet confirms; a write failure must show a notice.
+- **Implemented behavior (`SheetsService.refreshRemoteData`, `src/components/SyncStatus.tsx`):**
+  - Triggers: screen change, opening the member portal / RSVP / QR scanner, tab becomes visible, network back online, and shortly (1.5 s, coalesced) after any confirmed write. Concurrent requests share one read.
+  - A refresh waits for in-flight writes, and a read that overlapped a newly started write is discarded and repeated, so the local-first optimistic state is not overwritten by older sheet data. A failed refresh keeps the existing data and shows an error state.
+  - Admin manual attendance, votes, schedule and other edits still show immediately and save in the background; if the save fails the user gets a notice and the screen is re-read from the sheet, which removes the unsaved change. This follows the rule that unsaved writes are not queued on the device.
+- **Open items:** Many members refreshing at the start of rehearsal sends many full-sheet reads to the Apps Script; measure before adding the lightweight change-number check or reducing `ensureSheetStructure` calls.
+

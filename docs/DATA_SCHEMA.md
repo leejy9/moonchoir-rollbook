@@ -80,6 +80,7 @@ erDiagram
         boolean isVerifiedLocation "GPS 반경 통과여부"
         number distanceMeters "실측 거리 오차"
         string adminNote "수동 비고 / 취소 로그 식별자"
+        string deviceId "체크인한 브라우저/기기 UUID (선택, 과거 행은 빈 값)"
     }
 
     RSVP_VOTE {
@@ -223,6 +224,7 @@ erDiagram
 | `isVerifiedLocation`| `isVerifiedLocation`| GPS 100m 반경 검증 통과 여부 (`true`/`false`) | `boolean` (필수) | 위치 어뷰징 방지 감사 | • GPS 미인증 상태로 출석된 건은 관리자 대시보드에서 별도 식별 가능. |
 | `distanceMeters` | `distanceMeters`| 연습실 중심점과의 실측 오차 거리 (예: `24.5`) | `number` (선택) | GPS 정밀도 분석 | • 장소 반경 튜닝에 참고. |
 | `adminNote` | `adminNote` | 관리자 수동 출석 인정 사유 (예: "교통 체증으로 수동 인정") | `string` (선택) | 감사 메모 | • 관리자 수동 개입 시 근거 기록. |
+| `deviceId` | `deviceId` | 체크인한 브라우저/기기 UUID (예: `dev_mvgsx2zb_cxjb3rv`) | `string` (선택) | 사후 다중 기기·기기 공유 감지용 | • 2026-10-21 추가. 본인 체크인에만 기록하고 관리자 수동 로그는 빈 값. 과거 행은 빈 값으로 안전하게 로드. 기기 락 복원 후에도 유지. |
 
 ---
 

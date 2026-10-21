@@ -368,53 +368,53 @@ export const TEST_MOCK_SCHEDULES: Schedule[] = [
 ];
 
 export const TEST_MOCK_RSVP_VOTES: RSVPVote[] = [
-  { id: 'v_01', scheduleId: 'sch_20261015', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', status: 'ATTEND', timestamp: '2026-10-14T10:00:00Z' },
-  { id: 'v_02', scheduleId: 'sch_20261015', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', status: 'ATTEND', timestamp: '2026-10-14T11:20:00Z' },
-  { id: 'v_03', scheduleId: 'sch_20261015', memberId: 'mem_s03', memberName: '박서연', part: '소프라노', status: 'ABSENT', reason: '회사 야근', timestamp: '2026-10-14T12:00:00Z' },
-  { id: 'v_04', scheduleId: 'sch_20261015', memberId: 'mem_a01', memberName: '정유나', part: '알토', status: 'ATTEND', timestamp: '2026-10-14T13:10:00Z' },
-  { id: 'v_05', scheduleId: 'sch_20261015', memberId: 'mem_a02', memberName: '강민경', part: '알토', status: 'ABSENT', reason: '지방 출장', timestamp: '2026-10-14T15:00:00Z' },
-  { id: 'v_06', scheduleId: 'sch_20261015', memberId: 'mem_t01', memberName: '윤도현', part: '테너', status: 'ATTEND', timestamp: '2026-10-14T16:30:00Z' },
-  { id: 'v_07', scheduleId: 'sch_20261015', memberId: 'mem_t02', memberName: '한승우', part: '테너', status: 'ATTEND', timestamp: '2026-10-14T17:00:00Z' },
-  { id: 'v_08', scheduleId: 'sch_20261015', memberId: 'mem_b01', memberName: '장기하', part: '베이스', status: 'ATTEND', timestamp: '2026-10-14T18:00:00Z' },
-  { id: 'v_09', scheduleId: 'sch_20261015', memberId: 'mem_b02', memberName: '임재범', part: '베이스', status: 'ABSENT', reason: '독감 격리', timestamp: '2026-10-14T19:00:00Z' },
-  { id: 'v_10', scheduleId: 'sch_20261015', memberId: 'mem_l01', memberName: '문마에', part: '선생님', status: 'ATTEND', timestamp: '2026-10-14T09:00:00Z' },
+  { id: 'v_01', scheduleId: 'sch_20261015', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', status: 'ATTEND', timestamp: '2026-10-14 10:00:00' },
+  { id: 'v_02', scheduleId: 'sch_20261015', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', status: 'ATTEND', timestamp: '2026-10-14 11:20:00' },
+  { id: 'v_03', scheduleId: 'sch_20261015', memberId: 'mem_s03', memberName: '박서연', part: '소프라노', status: 'ABSENT', reason: '회사 야근', timestamp: '2026-10-14 12:00:00' },
+  { id: 'v_04', scheduleId: 'sch_20261015', memberId: 'mem_a01', memberName: '정유나', part: '알토', status: 'ATTEND', timestamp: '2026-10-14 13:10:00' },
+  { id: 'v_05', scheduleId: 'sch_20261015', memberId: 'mem_a02', memberName: '강민경', part: '알토', status: 'ABSENT', reason: '지방 출장', timestamp: '2026-10-14 15:00:00' },
+  { id: 'v_06', scheduleId: 'sch_20261015', memberId: 'mem_t01', memberName: '윤도현', part: '테너', status: 'ATTEND', timestamp: '2026-10-14 16:30:00' },
+  { id: 'v_07', scheduleId: 'sch_20261015', memberId: 'mem_t02', memberName: '한승우', part: '테너', status: 'ATTEND', timestamp: '2026-10-14 17:00:00' },
+  { id: 'v_08', scheduleId: 'sch_20261015', memberId: 'mem_b01', memberName: '장기하', part: '베이스', status: 'ATTEND', timestamp: '2026-10-14 18:00:00' },
+  { id: 'v_09', scheduleId: 'sch_20261015', memberId: 'mem_b02', memberName: '임재범', part: '베이스', status: 'ABSENT', reason: '독감 격리', timestamp: '2026-10-14 19:00:00' },
+  { id: 'v_10', scheduleId: 'sch_20261015', memberId: 'mem_l01', memberName: '문마에', part: '선생님', status: 'ATTEND', timestamp: '2026-10-14 09:00:00' },
 ];
 
 export const TEST_MOCK_LOGS: RawAttendanceLog[] = [
   // 9/17 출석 로그 샘플
-  { id: 'log_917_01', scheduleId: 'sch_20260917', timestamp: '2026-09-17T19:20:00Z', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_917_02', scheduleId: 'sch_20260917', timestamp: '2026-09-17T19:25:00Z', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_917_03', scheduleId: 'sch_20260917', timestamp: '2026-09-17T19:22:00Z', memberId: 'mem_a01', memberName: '정유나', part: '알토', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_917_04', scheduleId: 'sch_20260917', timestamp: '2026-09-17T19:28:00Z', memberId: 'mem_t01', memberName: '윤도현', part: '테너', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_917_05', scheduleId: 'sch_20260917', timestamp: '2026-09-17T19:29:00Z', memberId: 'mem_b01', memberName: '장기하', part: '베이스', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_917_01', scheduleId: 'sch_20260917', timestamp: '2026-09-17 19:20:00', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_917_02', scheduleId: 'sch_20260917', timestamp: '2026-09-17 19:25:00', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_917_03', scheduleId: 'sch_20260917', timestamp: '2026-09-17 19:22:00', memberId: 'mem_a01', memberName: '정유나', part: '알토', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_917_04', scheduleId: 'sch_20260917', timestamp: '2026-09-17 19:28:00', memberId: 'mem_t01', memberName: '윤도현', part: '테너', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_917_05', scheduleId: 'sch_20260917', timestamp: '2026-09-17 19:29:00', memberId: 'mem_b01', memberName: '장기하', part: '베이스', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
 
   // 9/24 출석 로그 샘플
-  { id: 'log_924_01', scheduleId: 'sch_20260924', timestamp: '2026-09-24T19:15:00Z', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_924_02', scheduleId: 'sch_20260924', timestamp: '2026-09-24T19:23:00Z', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_924_03', scheduleId: 'sch_20260924', timestamp: '2026-09-24T19:42:00Z', memberId: 'mem_s03', memberName: '박서연', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_924_04', scheduleId: 'sch_20260924', timestamp: '2026-09-24T19:21:00Z', memberId: 'mem_a01', memberName: '정유나', part: '알토', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_924_05', scheduleId: 'sch_20260924', timestamp: '2026-09-24T19:25:00Z', memberId: 'mem_t01', memberName: '윤도현', part: '테너', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_924_06', scheduleId: 'sch_20260924', timestamp: '2026-09-24T19:30:00Z', memberId: 'mem_b01', memberName: '장기하', part: '베이스', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_924_01', scheduleId: 'sch_20260924', timestamp: '2026-09-24 19:15:00', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_924_02', scheduleId: 'sch_20260924', timestamp: '2026-09-24 19:23:00', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_924_03', scheduleId: 'sch_20260924', timestamp: '2026-09-24 19:42:00', memberId: 'mem_s03', memberName: '박서연', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_924_04', scheduleId: 'sch_20260924', timestamp: '2026-09-24 19:21:00', memberId: 'mem_a01', memberName: '정유나', part: '알토', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_924_05', scheduleId: 'sch_20260924', timestamp: '2026-09-24 19:25:00', memberId: 'mem_t01', memberName: '윤도현', part: '테너', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_924_06', scheduleId: 'sch_20260924', timestamp: '2026-09-24 19:30:00', memberId: 'mem_b01', memberName: '장기하', part: '베이스', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
 
   // 10/01 출석 로그 샘플
-  { id: 'log_1001_01', scheduleId: 'sch_20261001', timestamp: '2026-10-01T19:22:00Z', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_1001_02', scheduleId: 'sch_20261001', timestamp: '2026-10-01T19:24:00Z', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_1001_03', scheduleId: 'sch_20261001', timestamp: '2026-10-01T19:20:00Z', memberId: 'mem_a01', memberName: '정유나', part: '알토', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_1001_04', scheduleId: 'sch_20261001', timestamp: '2026-10-01T19:21:00Z', memberId: 'mem_t01', memberName: '윤도현', part: '테너', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_1001_05', scheduleId: 'sch_20261001', timestamp: '2026-10-01T19:45:00Z', memberId: 'mem_b01', memberName: '장기하', part: '베이스', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_1001_01', scheduleId: 'sch_20261001', timestamp: '2026-10-01 19:22:00', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_1001_02', scheduleId: 'sch_20261001', timestamp: '2026-10-01 19:24:00', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_1001_03', scheduleId: 'sch_20261001', timestamp: '2026-10-01 19:20:00', memberId: 'mem_a01', memberName: '정유나', part: '알토', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_1001_04', scheduleId: 'sch_20261001', timestamp: '2026-10-01 19:21:00', memberId: 'mem_t01', memberName: '윤도현', part: '테너', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_1001_05', scheduleId: 'sch_20261001', timestamp: '2026-10-01 19:45:00', memberId: 'mem_b01', memberName: '장기하', part: '베이스', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
 
   // 10/08 출석 로그 샘플
-  { id: 'log_1008_01', scheduleId: 'sch_20261008', timestamp: '2026-10-08T19:18:00Z', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_1008_02', scheduleId: 'sch_20261008', timestamp: '2026-10-08T19:25:00Z', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_1008_03', scheduleId: 'sch_20261008', timestamp: '2026-10-08T19:22:00Z', memberId: 'mem_a01', memberName: '정유나', part: '알토', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_1008_04', scheduleId: 'sch_20261008', timestamp: '2026-10-08T19:27:00Z', memberId: 'mem_t01', memberName: '윤도현', part: '테너', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
-  { id: 'log_1008_05', scheduleId: 'sch_20261008', timestamp: '2026-10-08T19:20:00Z', memberId: 'mem_b01', memberName: '장기하', part: '베이스', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_1008_01', scheduleId: 'sch_20261008', timestamp: '2026-10-08 19:18:00', memberId: 'mem_s01', memberName: '김하은', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_1008_02', scheduleId: 'sch_20261008', timestamp: '2026-10-08 19:25:00', memberId: 'mem_s02', memberName: '이수진', part: '소프라노', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_1008_03', scheduleId: 'sch_20261008', timestamp: '2026-10-08 19:22:00', memberId: 'mem_a01', memberName: '정유나', part: '알토', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_1008_04', scheduleId: 'sch_20261008', timestamp: '2026-10-08 19:27:00', memberId: 'mem_t01', memberName: '윤도현', part: '테너', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
+  { id: 'log_1008_05', scheduleId: 'sch_20261008', timestamp: '2026-10-08 19:20:00', memberId: 'mem_b01', memberName: '장기하', part: '베이스', authMethod: 'QR_WEB_CAM', isVerifiedLocation: true },
 
   // 10/15 연습 실제 출석 로그 샘플
   {
     id: 'log_01',
     scheduleId: 'sch_20261015',
-    timestamp: '2026-10-15T19:22:15Z',
+    timestamp: '2026-10-15 19:22:15',
     memberId: 'mem_s01',
     memberName: '김하은',
     part: '소프라노',
@@ -427,7 +427,7 @@ export const TEST_MOCK_LOGS: RawAttendanceLog[] = [
   {
     id: 'log_02',
     scheduleId: 'sch_20261015',
-    timestamp: '2026-10-15T19:28:40Z',
+    timestamp: '2026-10-15 19:28:40',
     memberId: 'mem_s02',
     memberName: '이수진',
     part: '소프라노',
@@ -440,7 +440,7 @@ export const TEST_MOCK_LOGS: RawAttendanceLog[] = [
   {
     id: 'log_03',
     scheduleId: 'sch_20261015',
-    timestamp: '2026-10-15T19:42:10Z',
+    timestamp: '2026-10-15 19:42:10',
     memberId: 'mem_t01',
     memberName: '윤도현',
     part: '테너',
@@ -453,7 +453,7 @@ export const TEST_MOCK_LOGS: RawAttendanceLog[] = [
   {
     id: 'log_04',
     scheduleId: 'sch_20261015',
-    timestamp: '2026-10-15T19:35:00Z',
+    timestamp: '2026-10-15 19:35:00',
     memberId: 'mem_b01',
     memberName: '장기하',
     part: '베이스',

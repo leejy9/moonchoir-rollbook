@@ -64,6 +64,35 @@ export function getKSTTimestampString(date: Date = new Date()): string {
 }
 
 /**
+ * 시각 문자열을 KST 'YYYY-MM-DD HH:mm:ss'로 정규화합니다.
+ * - 'Z' 또는 '+09:00' 같은 시간대 표기가 있으면 그 순간을 KST로 변환합니다(과거 UTC로 저장된 행 대응).
+ * - 시간대 표기가 없으면 이미 KST로 기록된 값으로 보고 시각을 그대로 사용합니다.
+ * - 해석할 수 없으면 빈 문자열을 반환합니다.
+ */
+export function normalizeToKSTTimestamp(value: string | undefined | null): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+
+  if (raw.includes('T') && /(Z|[+-]\d{2}:?\d{2})$/.test(raw)) {
+    const instant = new Date(raw);
+    return isNaN(instant.getTime()) ? '' : getKSTTimestampString(instant);
+  }
+
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (match) return `${match[1]} ${match[2]}:${match[3]}:${match[4] ?? '00'}`;
+  return '';
+}
+
+/** 시각 문자열의 KST 시:분('HH:mm')을 반환합니다. 'HH:mm'만 있는 값은 그대로 사용합니다. */
+export function getKSTClock(value: string | undefined | null): string {
+  const raw = String(value ?? '').trim();
+  const clockOnly = raw.match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+  if (clockOnly) return `${clockOnly[1]}:${clockOnly[2]}`;
+  const normalized = normalizeToKSTTimestamp(raw);
+  return normalized ? normalized.slice(11, 16) : '';
+}
+
+/**
  * 한국 표준시(Asia/Seoul) 기준 'YYYY-MM-DD' 날짜 문자열을 반환합니다.
  * UTC 오프셋으로 인한 날짜 왜곡(예: 새벽 0~9시 사이 전날로 인식되는 문제)을 완벽히 방지합니다.
  */

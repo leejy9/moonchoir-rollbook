@@ -9,7 +9,7 @@ import type {
   MemberStatus,
   PartType,
 } from '../types/rollbook';
-import { getKSTDateString, parseKSTDate } from './date';
+import { getKSTClock, getKSTDateString } from './date';
 
 /**
  * 특정 일자(date) 시점에 단원의 유효한 상태(Status)와 파트(Part)를 판정합니다.
@@ -251,17 +251,9 @@ export function reconcileSingleMemberAttendance(
     if (isManualAbsentOverride) {
       finalStatus = '결석';
     } else {
-      let logMinutes = 0;
-      if (log.timestamp.includes('T')) {
-        const timePart = log.timestamp.split('T')[1].slice(0, 5);
-        const [h, m] = timePart.split(':').map(Number);
-        logMinutes = (h || 0) * 60 + (m || 0);
-      } else {
-        const logDate = parseKSTDate(log.timestamp);
-        if (!isNaN(logDate.getTime()) && log.timestamp.includes(':')) {
-          logMinutes = logDate.getHours() * 60 + logDate.getMinutes();
-        }
-      }
+      const logClock = getKSTClock(log.timestamp);
+      const [logH, logM] = logClock ? logClock.split(':').map(Number) : [0, 0];
+      const logMinutes = (logH || 0) * 60 + (logM || 0);
 
       if (log.adminNote?.includes('지각') || logMinutes > lateThresholdMinutes) {
         finalStatus = '지각';

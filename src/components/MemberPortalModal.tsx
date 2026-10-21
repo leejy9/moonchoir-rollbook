@@ -6,7 +6,8 @@ import {
   calculateCumulativeAttendanceWithLifecycle,
   getGamifiedAttendanceLevel,
 } from '../utils/attendanceStats';
-import { getKSTDateString } from '../utils/date';
+import { getKSTClock, getKSTDateString } from '../utils/date';
+import { InstallAppCard } from './InstallAppCard';
 
 interface MemberPortalModalProps {
   profile: BoundDeviceProfile;
@@ -120,22 +121,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       const isAttended = rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정' || rec?.finalStatus === '지각';
 
       if (rec?.checkInTime) {
-        try {
-          const d = new Date(rec.checkInTime);
-          if (!isNaN(d.getTime())) {
-            checkInTime = d.toLocaleTimeString('ko-KR', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false,
-            });
-          } else if (rec.checkInTime.includes(':')) {
-            checkInTime = rec.checkInTime.slice(0, 5);
-          } else {
-            checkInTime = rec.checkInTime;
-          }
-        } catch {
-          checkInTime = rec.checkInTime;
-        }
+        checkInTime = getKSTClock(rec.checkInTime) || rec.checkInTime;
       } else if (rec?.finalStatus === '수동인정') {
         checkInTime = '수동인정';
       }
@@ -562,6 +548,8 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
           {/* TAB 2: 개인 대시보드 (자연어 브리핑 & 계정 관리) */}
           {activeTab === 'DASHBOARD' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <InstallAppCard />
+
               <section className="personal-display-settings">
                 <div>
                   <h3>화면 설정</h3>

@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "문콰이어 출석부",
+  "short_name": "문콰이어",
+  "description": "문콰이어 합창단 스마트 출석부 및 캘린더",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#282C48",
+  "theme_color": "#282C48",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

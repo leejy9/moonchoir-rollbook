@@ -871,3 +871,42 @@
 
 
 
+
+---
+
+## 2026-10-21: 카카오톡 인앱 브라우저 대응 — 1인 1기기 락 임시 중단 (Task 77)
+
+### 1. 배경
+- 주소를 카카오톡으로 공유하자 단원이 인앱 브라우저에서 연동한 뒤, 일반 브라우저로 열면 "다른 기기에 연동된 계정"으로 거부됨. 두 브라우저의 `localStorage`가 분리되어 UUID가 달라지는 것이 원인이며 웹에서는 동일 기기로 판별할 수 없음.
+- 소유자 결정: 웹앱을 폰에 설치하는 시점까지 락을 중단하고, 그때 락을 복원한 뒤 앱 접속자에게 재바인딩을 안내.
+
+### 2. 변경
+- GAS `BIND_EXISTING_MEMBER` / `BIND_DEVICE` / `REGISTER_AND_BIND_MEMBER`: 기기 불일치 거부 제거. 첫 연동 값 유지, 새 브라우저는 시트 쓰기 없음. 본인 확인은 시트에 전체 번호가 있으면 전체 번호 일치(앞자리 0 무시), 없는 과거 행만 뒷 4자리.
+- `App.tsx`: `boundDeviceId` 불일치 시 프로필 삭제·홈 이동 제거(명부에 없는 ID 정리는 유지). `BindingModal.tsx`, `sheets.ts`: 차단 분기·안내 문구 제거, 서버가 돌려준 `boundDeviceId`를 캐시에 반영.
+- `출석원천로그.deviceId` 열 신설(`ensureSheetStructure`가 헤더 끝에 자동 추가), `QRScannerModal`이 체크인 시 기록.
+
+### 3. 센서 검증
+- 임시 GAS 하네스(가상 시트)로 12개 시나리오 확인: 정상 번호 통과, 뒷 4자리만 같은 경우 거부, 번호 없는 과거 행 허용, 숫자로 저장된 번호 허용, 기존 로그 시트에 `deviceId` 열 자동 추가 및 기존 헤더 보존.
+- Green Bar: `typecheck` 0 errors, `lint` 0 warnings/errors, `npm test` 33 files / 165 tests pass, `build` 성공(청크 크기 경고만 기존과 동일).
+
+### 4. 앱 설치 버튼 (Task 78)
+- 매니페스트/아이콘/무캐시 서비스 워커를 추가하고 `InstallAppCard`를 연동 모달과 마이페이지에 배치. 환경 판별(`src/utils/pwaInstall.ts`)은 단위 테스트 4건.
+- 헤드리스 Chromium으로 매니페스트 로드, 서비스 워커 등록, Android/iOS/카카오톡 UA별 카드 문구와 44px 버튼 확인. 실제 설치 팝업(Android)과 iOS 공유 시트는 실기기에서만 확인 가능.
+- Green Bar: `typecheck`, `lint` 0 errors, `npm test` 34 files / 169 tests pass, `build` 성공.
+
+### 5. 관리자 매트릭스 투표 상태 표기 (Task 79)
+- 증상: 미래 연습에 참석 투표한 단원이 매트릭스에서 `결석`, 무응답은 `-`로 표시. 원인은 투표가 있으면 `-` 분기를 건너뛰어 기본값 `결석`이 나오던 셀 로직.
+- 수정: `getMatrixCellDisplay`로 규칙을 분리(연습 종료 전 투표 상태, 종료 후 결석 + 투표 보조 표기). 기존 "초기화된 미래 칸은 `-`" 테스트는 `미투표` 기대값으로 갱신. 단위 테스트 10건 추가.
+- Green Bar: `typecheck`, `lint` 0 errors, `npm test` 35 files / 179 tests pass(UTC·KST 모두), `build`는 커밋 전 재확인.
+
+### 6. 모든 시각 KST 통일 (Task 80)
+- 조사: 쓰기 경로(클라이언트·GAS)는 이미 전부 KST. 남은 곳은 과거 `Z` 행과, 문자열에서 시각을 그대로 잘라 쓰던 읽기 코드(지각 판정, 홈 인증 시각 등).
+- 수정: `normalizeToKSTTimestamp`/`getKSTClock` 도입 후 호출부 교체, 회귀 테스트(UTC 10:25Z = KST 19:25 출석 / 10:45Z = 지각) 및 date 단위 테스트 추가. 테스트 목데이터의 `Z` 시각은 운영 형식으로 정리.
+- Green Bar: `typecheck`, `lint` 0 errors, `npm test` 35 files / 185 tests pass(UTC·KST 모두), `build` 통과.
+
+### 7. 화면 전환 시 최신 데이터 반영, 쓰기 확정·실패 안내 (Task 82) 및 주소 검색 로더 (Task 83)
+- 원인: 시트 데이터를 앱 시작 때 한 번만 받아 다른 사람의 변경이 보이지 않았고, 백그라운드 저장의 실패 응답(`success:false`)은 `.catch`에 잡히지 않아 조용히 사라짐.
+- 수정: `refreshRemoteData`(20초 최소 간격, 동시 요청 합치기, 전송 중 저장 대기/겹친 읽기 폐기), QR 출석 시트 확정 후 완료, 저장 실패 알림 + 시트 기준 되돌리기, `SyncStatus` 알약/알림. 테스트 9건(안전장치를 꺼서 실패하는 것도 확인).
+- 주소 검색: 카카오 SDK 로더를 공용 모듈로 교체(재사용 시 services 초기화 누락·무한 '확인 중' 수정, 원인 안내). 카카오 인증/도메인 설정 문제는 이 환경에서 확인 불가.
+- Green Bar: `typecheck`, `lint` 0 errors, `npm test` 37 files / 197 tests pass(UTC·KST 모두), `build` 성공. 헤드리스 브라우저에서 알약 정상/실패 상태와 44px 높이 확인.
+

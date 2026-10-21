@@ -14,7 +14,7 @@ import type {
   TargetAudienceType,
 } from '../../types/rollbook';
 import { getCalendarGrid } from '../../utils/calendar';
-import { getKSTDateString } from '../../utils/date';
+import { getKSTClock, getKSTDateString } from '../../utils/date';
 import { IconRefresh } from '../Icons';
 import { AdminCalendarView } from './AdminCalendarView';
 import { AdminScheduleListView } from './AdminScheduleListView';
@@ -576,7 +576,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                         <div className="toss-member-meta">
                           {row.checkInTime ? (
                             <span className="meta-text text-checked">
-                              체크인 {row.checkInTime.slice(11, 16)} ({row.authMethod?.startsWith('QR') ? 'QR' : 'PIN'})
+                              체크인 {getKSTClock(row.checkInTime)} ({row.authMethod?.startsWith('QR') ? 'QR' : 'PIN'})
                               {row.distanceMeters !== undefined && ` · ${row.distanceMeters}m`}
                             </span>
                           ) : row.rsvpStatus ? (

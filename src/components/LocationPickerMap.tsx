@@ -5,6 +5,7 @@ import {
   resolveRoadAddressCoordinates,
   type KakaoGeocoderResult,
 } from '../utils/kakaoAddress';
+import { describeKakaoLoadError, loadKakaoServices } from '../utils/kakaoMaps';
 
 export interface LocationPickerMapProps {
   lat: number;
@@ -19,8 +20,6 @@ export interface LocationPickerMapProps {
   onChangeEntranceNote?: (note: string) => void;
   onChangeRadius: (radius: number) => void;
 }
-
-const KAKAO_APP_KEY = import.meta.env.VITE_KAKAO_MAP_API_KEY || 'b561a814596382d5c23cd278a3539f46';
 
 // Custom modern SVG marker for Leaflet
 const createCustomMarker = () => {
@@ -70,43 +69,20 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
   const [kakaoLoaded, setKakaoLoaded] = useState(false);
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
   const [postcodeLoadError, setPostcodeLoadError] = useState('');
+  const [kakaoLoadError, setKakaoLoadError] = useState('');
 
-  // 1. Dynamically Load Kakao Maps Services SDK
+  // 1. Load Kakao Maps Services SDK (shared, retry-safe loader)
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).kakao && (window as any).kakao.maps && (window as any).kakao.maps.services) {
-      setKakaoLoaded(true);
-      return;
-    }
-
-    const scriptId = 'kakao-maps-sdk-script';
-    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
-    if (!script) {
-      script = document.createElement('script');
-      script.id = scriptId;
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_APP_KEY}&libraries=services&autoload=false`;
-    }
-
-    const handleLoad = () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const kakao = (window as any).kakao;
-      if (kakao && kakao.maps) {
-        kakao.maps.load(() => {
-          setKakaoLoaded(true);
-        });
-      }
-    };
-
-    const handleError = () => {
-      setSearchFeedback('⚠️ 주소 좌표 검색 연결에 실패했습니다. 지도에서 건물 입구를 직접 지정해주세요.');
-    };
-
-    script.addEventListener('load', handleLoad);
-    script.addEventListener('error', handleError);
-    if (!script.isConnected) document.head.appendChild(script);
+    let cancelled = false;
+    loadKakaoServices()
+      .then(() => {
+        if (!cancelled) setKakaoLoaded(true);
+      })
+      .catch((error) => {
+        if (!cancelled) setKakaoLoadError(describeKakaoLoadError(error));
+      });
     return () => {
-      script?.removeEventListener('load', handleLoad);
-      script?.removeEventListener('error', handleError);
+      cancelled = true;
     };
   }, []);
 
@@ -226,29 +202,34 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
             setPostcodeLoadError('');
             setSearchFeedback('주소 좌표를 확인하고 있습니다...');
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const kakao = (window as any).kakao;
-            if (kakao && kakao.maps && kakao.maps.services) {
-              const geocoder = new kakao.maps.services.Geocoder();
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              geocoder.addressSearch(roadAddr, (result: KakaoGeocoderResult[], status: string) => {
-                if (status === kakao.maps.services.Status.OK && result && result.length > 0) {
-                  const coordinates = resolveRoadAddressCoordinates(result[0]);
-                  if (!coordinates) {
-                    setSearchFeedback('⚠️ 주소는 찾았지만 좌표가 유효하지 않습니다. 아래 지도에서 건물 입구를 직접 선택해주세요.');
-                    return;
+            loadKakaoServices()
+              .then(() => {
+                setKakaoLoaded(true);
+                setKakaoLoadError('');
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const kakao = (window as any).kakao;
+                const geocoder = new kakao.maps.services.Geocoder();
+                geocoder.addressSearch(roadAddr, (result: KakaoGeocoderResult[], status: string) => {
+                  if (status === kakao.maps.services.Status.OK && result && result.length > 0) {
+                    const coordinates = resolveRoadAddressCoordinates(result[0]);
+                    if (!coordinates) {
+                      setSearchFeedback('⚠️ 주소는 찾았지만 좌표가 유효하지 않습니다. 아래 지도에서 건물 입구를 직접 선택해주세요.');
+                      return;
+                    }
+                    updateSelectedAddress(roadAddr, coordinates.latitude, coordinates.longitude);
+                    setSearchFeedback(
+                      `✓ 도로명주소 좌표를 설정했습니다. 건물 입구와 핀이 다르면 지도를 눌러 조정해주세요. (${coordinates.latitude}, ${coordinates.longitude})`
+                    );
+                  } else {
+                    setSearchFeedback('⚠️ 주소는 입력했지만 좌표 변환에 실패했습니다. 아래 지도에서 건물 입구를 직접 선택해주세요.');
                   }
-                  updateSelectedAddress(roadAddr, coordinates.latitude, coordinates.longitude);
-                  setSearchFeedback(
-                    `✓ 도로명주소 좌표를 설정했습니다. 건물 입구와 핀이 다르면 지도를 눌러 조정해주세요. (${coordinates.latitude}, ${coordinates.longitude})`
-                  );
-                } else {
-                  setSearchFeedback('⚠️ 주소는 입력했지만 좌표 변환에 실패했습니다. 아래 지도에서 건물 입구를 직접 선택해주세요.');
-                }
-              }, { analyze_type: 'EXACT' });
-            } else {
-              setSearchFeedback('⚠️ 지도 좌표 검색 서비스가 연결되지 않았습니다. 아래 지도에서 건물 입구를 직접 선택해주세요.');
-            }
+                }, { analyze_type: 'EXACT' });
+              })
+              .catch((error) => {
+                const reason = describeKakaoLoadError(error);
+                setKakaoLoadError(reason);
+                setSearchFeedback(`⚠️ ${reason} 지금은 아래 지도에서 건물 입구를 직접 선택해주세요.`);
+              });
           },
         }).open();
       } else {
@@ -314,8 +295,16 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
         <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568', margin: 0 }}>
           주소 *
         </label>
-        <span style={{ fontSize: '11px', color: kakaoLoaded ? '#059669' : '#64748B', fontWeight: 600 }}>
-          {kakaoLoaded ? '도로명주소 좌표 변환 연결됨' : '도로명주소 좌표 서비스 연결 확인 중'}
+        <span
+          style={{
+            fontSize: '11px',
+            color: kakaoLoaded ? '#059669' : kakaoLoadError ? '#DC2626' : '#64748B',
+            fontWeight: 600,
+          }}
+        >
+          {kakaoLoaded
+            ? '도로명주소 좌표 변환 연결됨'
+            : kakaoLoadError || '도로명주소 좌표 서비스 연결 확인 중'}
         </span>
 
         <div style={{ display: 'flex', gap: '6px' }}>
