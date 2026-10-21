@@ -899,3 +899,8 @@
 - 수정: `getMatrixCellDisplay`로 규칙을 분리(연습 종료 전 투표 상태, 종료 후 결석 + 투표 보조 표기). 기존 "초기화된 미래 칸은 `-`" 테스트는 `미투표` 기대값으로 갱신. 단위 테스트 10건 추가.
 - Green Bar: `typecheck`, `lint` 0 errors, `npm test` 35 files / 179 tests pass(UTC·KST 모두), `build`는 커밋 전 재확인.
 
+### 6. 모든 시각 KST 통일 (Task 80)
+- 조사: 쓰기 경로(클라이언트·GAS)는 이미 전부 KST. 남은 곳은 과거 `Z` 행과, 문자열에서 시각을 그대로 잘라 쓰던 읽기 코드(지각 판정, 홈 인증 시각 등).
+- 수정: `normalizeToKSTTimestamp`/`getKSTClock` 도입 후 호출부 교체, 회귀 테스트(UTC 10:25Z = KST 19:25 출석 / 10:45Z = 지각) 및 date 단위 테스트 추가. 테스트 목데이터의 `Z` 시각은 운영 형식으로 정리.
+- Green Bar: `typecheck`, `lint` 0 errors, `npm test` 35 files / 185 tests pass(UTC·KST 모두), `build` 통과.
+

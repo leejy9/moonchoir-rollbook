@@ -6,6 +6,7 @@ import type {
   RawAttendanceLog,
   Schedule,
 } from '../../types/rollbook';
+import { getKSTClock } from '../../utils/date';
 import type { CheckInWindowState } from '../../utils/timeWindow';
 import { IconClock, IconLocation, IconQrScan, IconVote } from '../Icons';
 import { LiquidGauge } from '../LiquidGauge';
@@ -268,15 +269,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
             </strong>
             <p className="banner-subtext">
               인증 시각:{' '}
-              {myReconciliation?.checkInTime
-                ? myReconciliation.checkInTime.includes('T')
-                  ? myReconciliation.checkInTime.slice(11, 16)
-                  : myReconciliation.checkInTime.slice(0, 5)
-                : myLog
-                ? myLog.timestamp.includes('T')
-                  ? myLog.timestamp.slice(11, 16)
-                  : myLog.timestamp.slice(0, 5)
-                : ''}{' '}
+              {getKSTClock(myReconciliation?.checkInTime || myLog?.timestamp)}{' '}
               ·{' '}
               {myReconciliation?.authMethod === 'MANUAL_BY_ADMIN'
                 ? myReconciliation.adminNote || '관리자 수동 인정'
@@ -362,11 +355,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
                 <div className="qr-locked-title">출석 마감 ({activeSchedule.date} 일정 종료)</div>
                 <div className="qr-locked-desc">
                   {isActuallyAttended && myReconciliation?.checkInTime
-                    ? `출석 완료 (${
-                        myReconciliation.checkInTime.includes('T')
-                          ? myReconciliation.checkInTime.slice(11, 16)
-                          : myReconciliation.checkInTime.slice(0, 5)
-                      }) · 정상 반영되었습니다.`
+                    ? `출석 완료 (${getKSTClock(myReconciliation.checkInTime)}) · 정상 반영되었습니다.`
                     : isManuallyAbsent
                     ? `관리자에 의해 결석 처리되었습니다 (${myReconciliation?.adminNote || '관리자 결석'}).`
                     : myReconciliation?.finalStatus === '사유결석'

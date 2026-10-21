@@ -309,4 +309,11 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
   - After the end time, `결석` is shown with a small `참석투표` / `불참투표` note when the member had voted, so no-shows after an attend vote are visible. Unvoted absences stay plain `결석`.
   - Non-target members show `미참`; a voluntary attend vote before the rehearsal shows `참석 · 자율`.
 - **Not changed (needs a separate decision):** The member my-page still prints `결석 (-)` in the check-in time column for past absences, and the cumulative statistics engine still treats today's schedule as past for its own rules.
+- **Owner confirmation (2026-10-21):** Showing `미투표` / vote state for same-day rehearsals until they end is the intended behavior. The statistics-engine treatment of same-day schedules is deferred (Task 81).
+
+### 2026-10-21 Decision: All displayed times are KST
+
+- **Confirmed fact (code survey):** Every timestamp the app and the Apps Script write is already KST (`YYYY-MM-DD HH:mm:ss`, `Asia/Seoul`). UTC remained only in (a) older sheet rows written before Task 58 as `...Z`, and (b) read-side code that cut the clock out of the string literally: late judgement in `attendanceStats.ts` and several time labels read the UTC hour of a `Z` value as if it were KST, and `slice(0, 5)` turned a space-separated `YYYY-MM-DD HH:mm:ss` into `2026-`.
+- **Implemented:** `normalizeToKSTTimestamp` / `getKSTClock` convert any `Z` / offset value to KST and treat zone-less values as already KST; the call sites above use them. Stored data was not changed, so old `Z` rows are read correctly without rewriting the append-only log.
+- **Not changed:** The Apps Script menu item `기존 기록 날짜/시간을 한국 표준시(KST)로 변환` (Task 58) rewrites timestamp cells in place, including raw log rows (same instant, different notation). It is no longer needed for correct display and conflicts with the append-only rule in spirit; whether to keep it is an owner decision. `sheetsParser.ts` still has a legacy time-of-day conversion for ISO-style `startTime` values that the script no longer returns.
 

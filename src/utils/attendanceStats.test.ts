@@ -64,7 +64,7 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
         memberId: 'm_new',
         memberName: '신입단원',
         part: '소프라노',
-        timestamp: '2026-10-20T19:30:00Z',
+        timestamp: '2026-10-20 19:30:00',
         authMethod: 'QR_WEB_CAM',
         isVerifiedLocation: true,
       },
@@ -201,7 +201,7 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
         memberId: 'm_reg',
         memberName: '기존단원',
         part: '테너',
-        timestamp: '2026-10-10T19:30:00Z',
+        timestamp: '2026-10-10 19:30:00',
         authMethod: 'QR_WEB_CAM',
         isVerifiedLocation: true,
       },
@@ -269,7 +269,7 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
         memberId: 'm_leave',
         memberName: '휴단원A',
         part: '알토',
-        timestamp: '2026-10-10T19:30:00Z',
+        timestamp: '2026-10-10 19:30:00',
         authMethod: 'QR_WEB_CAM',
         isVerifiedLocation: true,
       },
@@ -279,7 +279,7 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
         memberId: 'm_leave',
         memberName: '휴단원A',
         part: '알토',
-        timestamp: '2026-10-20T19:30:00Z',
+        timestamp: '2026-10-20 19:30:00',
         authMethod: 'QR_WEB_CAM',
         isVerifiedLocation: true,
       },
@@ -333,7 +333,7 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
         memberId: 'm_guest',
         memberName: '휴단원B',
         part: '베이스',
-        timestamp: '2026-11-10T19:30:00Z',
+        timestamp: '2026-11-10 19:30:00',
         authMethod: 'QR_WEB_CAM',
         isVerifiedLocation: true,
       },
@@ -440,7 +440,7 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
         memberId: 'm_late_test',
         memberName: '지각단원',
         part: '알토',
-        timestamp: '2026-10-01T19:25:00Z', // 제시간 출석
+        timestamp: '2026-10-01 19:25:00', // 제시간 출석
         authMethod: 'QR_WEB_CAM',
         isVerifiedLocation: true,
       },
@@ -450,7 +450,7 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
         memberId: 'm_late_test',
         memberName: '지각단원',
         part: '알토',
-        timestamp: '2026-10-08T19:45:00Z', // 지각 출석
+        timestamp: '2026-10-08 19:45:00', // 지각 출석
         authMethod: 'QR_WEB_CAM',
         isVerifiedLocation: true,
       },
@@ -740,6 +740,49 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
       expect(isMemberRequiredForSchedule(teacherMember, concertSch.date, concertSch)).toBe(true);
       expect(isMemberRequiredForSchedule(guestMember, concertSch.date, concertSch)).toBe(true);
     });
+  });
+});
+
+describe('과거 UTC(Z) 체크인 기록의 지각 판정은 한국 시각 기준', () => {
+  const member = {
+    id: 'mem_utc',
+    name: '시각단원',
+    part: '알토',
+    phoneLast4: '0000',
+    role: 'MEMBER',
+    createdAt: '2026-01-01 00:00:00',
+    status: 'ACTIVE',
+    joinedAt: '2026-01-01',
+    memberStatus: '정단원',
+  } as Member;
+  const schedule = {
+    id: 's_utc',
+    title: '정기 연습',
+    date: '2026-10-08',
+    startTime: '19:30',
+    endTime: '22:00',
+    locationName: '제1연습실',
+    category: '정기연습',
+  } as Schedule;
+  const logAt = (timestamp: string): RawAttendanceLog => ({
+    id: `log_${timestamp}`,
+    scheduleId: schedule.id,
+    memberId: member.id,
+    memberName: member.name,
+    part: member.part,
+    timestamp,
+    authMethod: 'QR_WEB_CAM',
+    isVerifiedLocation: true,
+  });
+
+  it('UTC 10:25Z(= KST 19:25)는 출석, UTC 10:45Z(= KST 19:45)는 지각', () => {
+    expect(reconcileSingleMemberAttendance(member, schedule, [logAt('2026-10-08T10:25:00Z')]).finalStatus).toBe('출석');
+    expect(reconcileSingleMemberAttendance(member, schedule, [logAt('2026-10-08T10:45:00Z')]).finalStatus).toBe('지각');
+  });
+
+  it('같은 시각을 KST 표준 문자열로 적어도 같은 판정', () => {
+    expect(reconcileSingleMemberAttendance(member, schedule, [logAt('2026-10-08 19:25:00')]).finalStatus).toBe('출석');
+    expect(reconcileSingleMemberAttendance(member, schedule, [logAt('2026-10-08 19:45:00')]).finalStatus).toBe('지각');
   });
 });
 

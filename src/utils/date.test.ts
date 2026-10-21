@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatMatrixHeaderDate, normalizeDateToYYYYMMDD, getKSTTimestampString, parseKSTDate, getKSTDateString, addDaysKST } from './date';
+import { formatMatrixHeaderDate, normalizeDateToYYYYMMDD, getKSTTimestampString, parseKSTDate, getKSTDateString, addDaysKST, normalizeToKSTTimestamp, getKSTClock } from './date';
 
 describe('formatMatrixHeaderDate', () => {
   it('YYYY-MM-DD 형식을 10/08 (목) 형식으로 올바르게 변환한다', () => {
@@ -63,5 +63,33 @@ describe('getKSTDateString & addDaysKST', () => {
     expect(addDaysKST('2026-10-18', -1)).toBe('2026-10-17');
     expect(addDaysKST('2026-10-18', 1)).toBe('2026-10-19');
     expect(addDaysKST('2026-10-31', 1)).toBe('2026-11-01');
+  });
+});
+
+describe('KST 시각 정규화 (normalizeToKSTTimestamp / getKSTClock)', () => {
+  it('KST 표준 문자열은 그대로 시각을 읽는다 (공백/T 구분 모두)', () => {
+    expect(normalizeToKSTTimestamp('2026-10-21 19:25:10')).toBe('2026-10-21 19:25:10');
+    expect(normalizeToKSTTimestamp('2026-10-21T19:25:10')).toBe('2026-10-21 19:25:10');
+    expect(getKSTClock('2026-10-21 19:25:10')).toBe('19:25');
+  });
+
+  it('과거 UTC(Z) 기록은 9시간을 더해 KST로 변환한다', () => {
+    expect(normalizeToKSTTimestamp('2026-10-17T13:15:36.799Z')).toBe('2026-10-17 22:15:36');
+    expect(getKSTClock('2026-10-17T13:15:36.799Z')).toBe('22:15');
+    // 날짜가 넘어가는 경우
+    expect(normalizeToKSTTimestamp('2026-10-17T20:30:00Z')).toBe('2026-10-18 05:30:00');
+  });
+
+  it('+09:00 오프셋 표기도 같은 순간의 KST로 맞춘다', () => {
+    expect(getKSTClock('2026-10-21T12:00:00+09:00')).toBe('12:00');
+    expect(getKSTClock('2026-10-21T12:00:00+00:00')).toBe('21:00');
+  });
+
+  it('HH:mm만 있는 값은 그대로, 해석 불가·빈 값은 빈 문자열', () => {
+    expect(getKSTClock('19:30')).toBe('19:30');
+    expect(getKSTClock('19:30:45')).toBe('19:30');
+    expect(getKSTClock('')).toBe('');
+    expect(getKSTClock(undefined)).toBe('');
+    expect(getKSTClock('날짜아님')).toBe('');
   });
 });

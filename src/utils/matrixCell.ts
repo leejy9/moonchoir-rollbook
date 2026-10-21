@@ -1,4 +1,5 @@
 import type { AttendanceReconciliation, Schedule } from '../types/rollbook';
+import { getKSTClock } from './date';
 import { getCheckInWindowState } from './timeWindow';
 
 export interface MatrixCellDisplay {
@@ -37,7 +38,7 @@ export function getMatrixCellDisplay(input: {
 
   const status = item?.finalStatus ?? (isRequired ? '결석' : '미참');
   const vote = item?.rsvpStatus ?? 'UNVOTED';
-  const checkInTime = item?.checkInTime ? item.checkInTime.slice(11, 16) : '';
+  const checkInTime = getKSTClock(item?.checkInTime);
 
   if (status === '출석' || status === '수동인정') return cell('cell-attend', '출석', checkInTime);
   if (status === '지각') return cell('cell-late', '지각', checkInTime);
