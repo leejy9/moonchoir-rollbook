@@ -1,5 +1,7 @@
+// 기본값: 카카오 개발자 콘솔의 JavaScript 키 `moonchoir_rollbook`(JS SDK 도메인 등록 키).
+// 2026-10-22 이전에 쓰던 `b561a814…`는 다른 앱의 키라 이 사이트에서 403으로 거절됨(docs/tasks.md Task 83).
 export const KAKAO_APP_KEY =
-  import.meta.env.VITE_KAKAO_MAP_API_KEY || 'b561a814596382d5c23cd278a3539f46';
+  import.meta.env.VITE_KAKAO_MAP_API_KEY || '1465ed6063afca1d3ea91711cbdeb84a';
 
 export type KakaoLoadErrorCode =
   | 'SCRIPT_BLOCKED'
