@@ -1,5 +1,7 @@
+// 기본값: 카카오 개발자 콘솔의 JavaScript 키 `moonchoir_rollbook`(JS SDK 도메인 등록 키).
+// 2026-10-22 이전에 쓰던 `b561a814…`는 다른 앱의 키라 이 사이트에서 403으로 거절됨(docs/tasks.md Task 83).
 export const KAKAO_APP_KEY =
-  import.meta.env.VITE_KAKAO_MAP_API_KEY || 'b561a814596382d5c23cd278a3539f46';
+  import.meta.env.VITE_KAKAO_MAP_API_KEY || '1465ed6063afca1d3ea91711cbdeb84a';
 
 export type KakaoLoadErrorCode =
   | 'SCRIPT_BLOCKED'
@@ -21,7 +23,8 @@ export class KakaoLoadError extends Error {
 export function describeKakaoLoadError(error: unknown): string {
   const code = error instanceof KakaoLoadError ? error.code : undefined;
   if (code === 'SCRIPT_BLOCKED') {
-    return '카카오 지도 파일을 불러오지 못했습니다. 인터넷 연결이나 광고 차단 기능을 확인해 주세요.';
+    // 스크립트 로드 실패(error 이벤트)는 네트워크·광고 차단뿐 아니라 카카오가 키/도메인을 거절해 HTTP 오류를 돌려준 경우에도 발생한다.
+    return '카카오 지도 파일을 불러오지 못했습니다. 광고·추적 차단 기능과 인터넷 연결을 확인해 주세요. 계속되면 카카오 개발자 콘솔에서 이 사이트 주소(웹 도메인) 등록과 [카카오맵] 사용 설정을 확인해 주세요.';
   }
   return '카카오 지도 서비스 인증에 실패했습니다. 카카오 개발자 콘솔에서 이 사이트 주소(웹 도메인) 등록과 [카카오맵] 사용 설정을 확인해 주세요.';
 }
