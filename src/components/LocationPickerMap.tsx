@@ -1,10 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import {
-  resolveRoadAddressCoordinates,
-  type KakaoGeocoderResult,
-} from '../utils/kakaoAddress';
+import { geocodeAddress, resolveRoadAddressCoordinates } from '../utils/kakaoAddress';
 import { describeKakaoLoadError, loadKakaoServices } from '../utils/kakaoMaps';
 
 export interface LocationPickerMapProps {
@@ -209,21 +206,25 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const kakao = (window as any).kakao;
                 const geocoder = new kakao.maps.services.Geocoder();
-                geocoder.addressSearch(roadAddr, (result: KakaoGeocoderResult[], status: string) => {
-                  if (status === kakao.maps.services.Status.OK && result && result.length > 0) {
-                    const coordinates = resolveRoadAddressCoordinates(result[0]);
+                return geocodeAddress(geocoder, roadAddr, kakao.maps.services.Status.OK).then((outcome) => {
+                  if (outcome.results.length > 0 && outcome.status === kakao.maps.services.Status.OK) {
+                    const coordinates = resolveRoadAddressCoordinates(outcome.results[0]);
                     if (!coordinates) {
                       setSearchFeedback('⚠️ 주소는 찾았지만 좌표가 유효하지 않습니다. 아래 지도에서 건물 입구를 직접 선택해주세요.');
                       return;
                     }
                     updateSelectedAddress(roadAddr, coordinates.latitude, coordinates.longitude);
                     setSearchFeedback(
-                      `✓ 도로명주소 좌표를 설정했습니다. 건물 입구와 핀이 다르면 지도를 눌러 조정해주세요. (${coordinates.latitude}, ${coordinates.longitude})`
+                      outcome.usedSimilarMatch
+                        ? `⚠️ 정확히 일치하는 주소가 없어 비슷한 주소로 좌표를 잡았습니다. 핀 위치를 꼭 확인하고 필요하면 지도를 눌러 조정해주세요. (${coordinates.latitude}, ${coordinates.longitude})`
+                        : `✓ 도로명주소 좌표를 설정했습니다. 건물 입구와 핀이 다르면 지도를 눌러 조정해주세요. (${coordinates.latitude}, ${coordinates.longitude})`
                     );
                   } else {
-                    setSearchFeedback('⚠️ 주소는 입력했지만 좌표 변환에 실패했습니다. 아래 지도에서 건물 입구를 직접 선택해주세요.');
+                    setSearchFeedback(
+                      `⚠️ 주소는 입력했지만 좌표 변환에 실패했습니다 (카카오 응답: ${outcome.status || '없음'}). 아래 지도에서 건물 입구를 직접 선택해주세요.`
+                    );
                   }
-                }, { analyze_type: 'EXACT' });
+                });
               })
               .catch((error) => {
                 const reason = describeKakaoLoadError(error);
