@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { KakaoLoadError, describeKakaoLoadError } from './kakaoMaps';
 
 describe('describeKakaoLoadError', () => {
-  it('스크립트 자체를 못 받은 경우 네트워크/차단 안내', () => {
-    expect(describeKakaoLoadError(new KakaoLoadError('SCRIPT_BLOCKED'))).toContain('인터넷 연결');
+  it('스크립트 자체를 못 받은 경우 차단·네트워크 안내와 함께, 카카오 거절(HTTP 오류)일 때의 확인 사항도 안내', () => {
+    const message = describeKakaoLoadError(new KakaoLoadError('SCRIPT_BLOCKED'));
+    expect(message).toContain('광고');
+    expect(message).toContain('인터넷 연결');
+    expect(message).toContain('웹 도메인');
+    expect(message).toContain('카카오맵');
   });
 
   it('스크립트는 받았지만 초기화되지 않은 경우(인증 실패 의심) 카카오 개발자 콘솔 안내', () => {
