@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
+import gasSource from '../../google-apps-script.js?raw';
 
 /**
  * Apps Script(`google-apps-script.js`)의 댓글 처리(ADD/EDIT/DELETE_COMMENT)를
@@ -9,13 +9,19 @@ import { beforeEach, describe, expect, it } from 'vitest';
 type Cell = string | number;
 
 class MockRange {
-  constructor(
-    private sheet: MockSheet,
-    private row: number,
-    private col: number,
-    private rows: number,
-    private cols: number
-  ) {}
+  private sheet: MockSheet;
+  private row: number;
+  private col: number;
+  private rows: number;
+  private cols: number;
+
+  constructor(sheet: MockSheet, row: number, col: number, rows: number, cols: number) {
+    this.sheet = sheet;
+    this.row = row;
+    this.col = col;
+    this.rows = rows;
+    this.cols = cols;
+  }
   getValues(): Cell[][] {
     const out: Cell[][] = [];
     for (let r = 0; r < this.rows; r++) {
@@ -88,7 +94,7 @@ interface GasApi {
 }
 
 function loadGas(spreadsheet: MockSpreadsheet): GasApi {
-  const source = readFileSync(new URL('../../google-apps-script.js', import.meta.url), 'utf8');
+  const source = gasSource;
   const output = (text: string) => ({ text, setMimeType() { return this; } });
   const factory = new Function(
     'SpreadsheetApp',
