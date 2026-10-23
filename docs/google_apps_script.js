@@ -28,6 +28,7 @@ const SHEET_NAMES = {
   LOCATIONS: '장소정보',
   MEMBER_HISTORY: '단원변경로그',
   PROGRAM_CARDS: '일정카드',
+  COMMENTS: '일정댓글',
   CONFIG: '환경설정',
 };
 
@@ -148,6 +149,8 @@ function doGet(e) {
     const memberHistory = histSheet ? readSheetData(histSheet) : [];
     const cardSheet = ss.getSheetByName(SHEET_NAMES.PROGRAM_CARDS);
     const programCards = cardSheet ? readSheetData(cardSheet) : [];
+    const commentSheet = ss.getSheetByName(SHEET_NAMES.COMMENTS);
+    const comments = commentSheet ? readSheetData(commentSheet) : [];
     const configSheet = ss.getSheetByName(SHEET_NAMES.CONFIG);
     const config = configSheet ? readConfigData(configSheet) : {};
 
@@ -162,6 +165,7 @@ function doGet(e) {
         locations,
         memberHistory,
         programCards,
+        comments,
         config,
       },
       count: {
@@ -172,6 +176,7 @@ function doGet(e) {
         locations: locations.length,
         memberHistory: memberHistory.length,
         programCards: programCards.length,
+        comments: comments.length,
       },
     };
 
@@ -270,6 +275,92 @@ function doPost(e) {
       });
       sheet.appendRow(newRow);
       return jsonResponse({ success: true, message: '출석 로그 저장 완료' });
+    }
+
+    if (action === 'ADD_COMMENT' || action === 'EDIT_COMMENT' || action === 'DELETE_COMMENT') {
+      // 일정 댓글: 기록만 추가(append-only). 같은 id 재요청은 저장하지 않고 성공으로 응답(멱등).
+      // 수정·삭제는 원 댓글 작성자(통합된 단원 포함)만 가능하다. 시각은 서버 시각을 기록한다.
+      const cSheet = ss.getSheetByName(SHEET_NAMES.COMMENTS);
+      const cRows = cSheet.getDataRange().getValues();
+      const cHeaders = cRows[0];
+      const col = function (name) { return cHeaders.indexOf(name); };
+      const eventId = String(data.id || '').trim();
+      const scheduleId = String(data.scheduleId || '').trim();
+      const memberId = String(data.memberId || '').trim();
+      const text = String(data.text || '').trim();
+
+      if (!eventId || !memberId) {
+        return jsonResponse({ success: false, message: '댓글 요청 정보가 부족합니다.' });
+      }
+      for (let i = 1; i < cRows.length; i++) {
+        if (String(cRows[i][col('id')]).trim() === eventId) {
+          return jsonResponse({ success: true, deduplicated: true, message: '댓글 저장 완료 (중복 요청 방지)' });
+        }
+      }
+      if (action !== 'DELETE_COMMENT') {
+        if (!text) return jsonResponse({ success: false, message: '댓글 내용을 입력해 주세요.' });
+        if (text.length > 500) return jsonResponse({ success: false, message: '댓글은 500자까지 쓸 수 있습니다.' });
+      }
+
+      let rowAction = 'CREATE';
+      let targetId = '';
+      let targetScheduleId = scheduleId;
+
+      if (action === 'ADD_COMMENT') {
+        if (!scheduleId) return jsonResponse({ success: false, message: '댓글을 달 일정이 지정되지 않았습니다.' });
+      } else {
+        rowAction = action === 'EDIT_COMMENT' ? 'EDIT' : 'DELETE';
+        targetId = String(data.targetId || '').trim();
+        let original = null;
+        let alreadyDeleted = false;
+        for (let i = 1; i < cRows.length; i++) {
+          const rid = String(cRows[i][col('id')]).trim();
+          const ract = String(cRows[i][col('action')]).trim();
+          if (rid === targetId && ract === 'CREATE') original = cRows[i];
+          if (ract === 'DELETE' && String(cRows[i][col('targetId')]).trim() === targetId) alreadyDeleted = true;
+        }
+        if (!original) return jsonResponse({ success: false, message: '원본 댓글을 찾을 수 없습니다.' });
+        if (alreadyDeleted) return jsonResponse({ success: false, message: '이미 삭제된 댓글입니다.' });
+
+        const canonicalOf = function (id) {
+          const mSheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
+          const mRows = mSheet.getDataRange().getValues();
+          const mHeaders = mRows[0];
+          const idCol = mHeaders.indexOf('id');
+          const mergedCol = mHeaders.indexOf('mergedIntoId');
+          let current = String(id).trim();
+          for (let hop = 0; hop < 10; hop++) {
+            let next = '';
+            for (let i = 1; i < mRows.length; i++) {
+              if (String(mRows[i][idCol]).trim() === current && mergedCol >= 0) next = String(mRows[i][mergedCol] || '').trim();
+            }
+            if (!next) break;
+            current = next;
+          }
+          return current;
+        };
+        const authorId = String(original[col('memberId')]).trim();
+        if (authorId !== memberId && canonicalOf(authorId) !== canonicalOf(memberId)) {
+          return jsonResponse({ success: false, message: '본인이 쓴 댓글만 수정하거나 삭제할 수 있습니다.' });
+        }
+        targetScheduleId = String(original[col('scheduleId')]).trim();
+      }
+
+      const commentRow = cHeaders.map(function (h) {
+        if (h === 'id') return eventId;
+        if (h === 'scheduleId') return targetScheduleId;
+        if (h === 'memberId') return memberId;
+        if (h === 'memberName') return data.memberName || '';
+        if (h === 'part') return data.part || '';
+        if (h === 'action') return rowAction;
+        if (h === 'targetId') return targetId;
+        if (h === 'text') return rowAction === 'DELETE' ? '' : text;
+        if (h === 'timestamp') return toKSTString(new Date());
+        if (h === 'deviceId') return data.deviceId || '';
+        return data[h] !== undefined ? data[h] : '';
+      });
+      cSheet.appendRow(commentRow);
+      return jsonResponse({ success: true, message: '댓글 저장 완료' });
     }
 
     if (action === 'SUBMIT_RSVP') {
@@ -1359,6 +1450,10 @@ function ensureSheetStructure(ss) {
     {
       name: SHEET_NAMES.MEMBER_HISTORY,
       headers: ['id', 'memberId', 'name', 'status', 'part', 'startDate', 'endDate', 'reason', 'createdAt'],
+    },
+    {
+      name: SHEET_NAMES.COMMENTS,
+      headers: ['id', 'scheduleId', 'memberId', 'memberName', 'part', 'action', 'targetId', 'text', 'timestamp', 'deviceId'],
     },
     {
       name: SHEET_NAMES.PROGRAM_CARDS,
