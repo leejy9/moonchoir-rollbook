@@ -6,7 +6,7 @@ import {
   calculateCumulativeAttendanceWithLifecycle,
   getGamifiedAttendanceLevel,
 } from '../utils/attendanceStats';
-import { getKSTClock, getKSTDateString } from '../utils/date';
+import { formatShortDate, getKSTClock, getKSTDateString } from '../utils/date';
 import { InstallAppCard } from './InstallAppCard';
 
 interface MemberPortalModalProps {
@@ -357,7 +357,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                   className="scorecard-table-header"
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(140px, 1.8fr) 100px 85px 85px',
+                    gridTemplateColumns: 'minmax(140px, 1.8fr) 70px 85px 85px',
                     background: '#f1f5f9',
                     padding: '10px 12px',
                     fontSize: '12px',
@@ -385,7 +385,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         className="scorecard-table-row"
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: 'minmax(140px, 1.8fr) 100px 85px 85px',
+                          gridTemplateColumns: 'minmax(140px, 1.8fr) 70px 85px 85px',
                           alignItems: 'center',
                           padding: '11px 12px',
                           borderBottom: idx === scheduleRecords.length - 1 ? 'none' : '1px solid #f1f5f9',
@@ -424,7 +424,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
                         {/* 2. 연습일 */}
                         <span style={{ color: '#64748b', fontSize: '12px', fontFamily: 'monospace' }}>
-                          {r.date}
+                          {formatShortDate(r.date)}
                         </span>
 
                         {/* 3. 투표 상태 (클릭 시 투표 모달 열림) */}

@@ -5039,13 +5039,13 @@ a {
 /* Scorecard Table Responsive Styles */
 @media (max-width: 480px) {
   .scorecard-table-header {
-    grid-template-columns: 1fr 85px 75px 65px !important;
+    grid-template-columns: 1fr 62px 75px 65px !important;
     padding: 8px 10px !important;
     font-size: 11px !important;
   }
 
   .scorecard-table-row {
-    grid-template-columns: 1fr 85px 75px 65px !important;
+    grid-template-columns: 1fr 62px 75px 65px !important;
     padding: 9px 10px !important;
     font-size: 11.5px !important;
   }
