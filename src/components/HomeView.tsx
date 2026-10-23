@@ -555,6 +555,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       {/* Main Active / Selected Rehearsal Card */}
       {activeSchedule ? (
         <HomeActiveScheduleCard
+          commentAuthor={currentMember}
           activeSchedule={activeSchedule}
           activeDateSchedules={activeDateSchedules}
           activeScheduleIndex={activeScheduleIndex}

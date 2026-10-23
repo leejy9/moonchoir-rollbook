@@ -10,6 +10,8 @@ interface HomeRsvpTallySectionProps {
   totalTargetCount: number;
   isRosterOpen: boolean;
   onToggleRoster: () => void;
+  /** 카드 맨 아래에 붙는 영역(댓글) */
+  footer?: React.ReactNode;
 }
 
 export const HomeRsvpTallySection: React.FC<HomeRsvpTallySectionProps> = ({
@@ -21,6 +23,7 @@ export const HomeRsvpTallySection: React.FC<HomeRsvpTallySectionProps> = ({
   totalTargetCount,
   isRosterOpen,
   onToggleRoster,
+  footer,
 }) => {
   const attendTotal = mandatoryAttendees.length + onSiteAttendees.length;
   const attendBreakdown = onSiteAttendees.length > 0 ? ` (투표 ${mandatoryAttendees.length} · 현장 ${onSiteAttendees.length})` : '';
@@ -183,6 +186,7 @@ export const HomeRsvpTallySection: React.FC<HomeRsvpTallySectionProps> = ({
           </div>
         )}
       </div>
+      {footer}
     </div>
   );
 };

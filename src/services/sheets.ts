@@ -155,12 +155,16 @@ export class SheetsService {
     programCards?: ProgramCard[];
     members?: Member[];
     locations?: LocationPreset[];
+    comments?: ScheduleCommentEvent[];
   }): void {
     this.members = data.members ? [...data.members] : JSON.parse(JSON.stringify(INITIAL_MEMBERS));
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
 
     this.locations = data.locations ? [...data.locations] : JSON.parse(JSON.stringify(INITIAL_LOCATION_PRESETS));
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
+
+    this.commentEvents = data.comments ? [...data.comments] : [];
+    saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
 
     if (data.schedules) {
       this.schedules = [...data.schedules];
