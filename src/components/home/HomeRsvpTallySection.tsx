@@ -3,6 +3,7 @@ import type { Member, RSVPVote } from '../../types/rollbook';
 
 interface HomeRsvpTallySectionProps {
   mandatoryAttendees: RSVPVote[];
+  onSiteAttendees: Member[];
   mandatoryAbsentees: RSVPVote[];
   voluntaryAttendees: RSVPVote[];
   unvotedMembers: Member[];
@@ -13,6 +14,7 @@ interface HomeRsvpTallySectionProps {
 
 export const HomeRsvpTallySection: React.FC<HomeRsvpTallySectionProps> = ({
   mandatoryAttendees,
+  onSiteAttendees,
   mandatoryAbsentees,
   voluntaryAttendees,
   unvotedMembers,
@@ -20,12 +22,15 @@ export const HomeRsvpTallySection: React.FC<HomeRsvpTallySectionProps> = ({
   isRosterOpen,
   onToggleRoster,
 }) => {
+  const attendTotal = mandatoryAttendees.length + onSiteAttendees.length;
+  const attendBreakdown = onSiteAttendees.length > 0 ? ` (투표 ${mandatoryAttendees.length} · 현장 ${onSiteAttendees.length})` : '';
+
   return (
     <div className="tally-section">
       <div className="tally-header">
         <h3 className="tally-title">사전 참석 투표 현황</h3>
         <span className="tally-total">
-          {mandatoryAttendees.length + mandatoryAbsentees.length}명 응답 / 총 {totalTargetCount}명
+          {attendTotal + mandatoryAbsentees.length}명 응답·출석 / 총 {totalTargetCount}명
           {voluntaryAttendees.length > 0 && ` (🌿 자율 ${voluntaryAttendees.length}명)`}
         </span>
       </div>
@@ -33,8 +38,8 @@ export const HomeRsvpTallySection: React.FC<HomeRsvpTallySectionProps> = ({
       <div className="tally-bar">
         <div
           className="tally-bar-segment attend"
-          style={{ width: `${(mandatoryAttendees.length / Math.max(totalTargetCount, 1)) * 100}%` }}
-          title={`필수 참석 ${mandatoryAttendees.length}명`}
+          style={{ width: `${(attendTotal / Math.max(totalTargetCount, 1)) * 100}%` }}
+          title={`필수 참석 ${attendTotal}명${attendBreakdown}`}
         />
         <div
           className="tally-bar-segment absent"
@@ -45,7 +50,7 @@ export const HomeRsvpTallySection: React.FC<HomeRsvpTallySectionProps> = ({
 
       <div className="tally-stat-chips">
         <span className="stat-chip attend">
-          <span className="chip-dot attend" /> 참석 {mandatoryAttendees.length}
+          <span className="chip-dot attend" /> 참석 {attendTotal}
         </span>
         <span className="stat-chip absent">
           <span className="chip-dot absent" /> 불참 {mandatoryAbsentees.length}
@@ -86,7 +91,7 @@ export const HomeRsvpTallySection: React.FC<HomeRsvpTallySectionProps> = ({
           }}
         >
           <span>
-            👥 단원 투표 명단 (참석 {mandatoryAttendees.length} · 불참 {mandatoryAbsentees.length} · 미응답{' '}
+            👥 단원 투표 명단 (참석 {attendTotal}{attendBreakdown} · 불참 {mandatoryAbsentees.length} · 미응답{' '}
             {unvotedMembers.length}
             {voluntaryAttendees.length > 0 ? ` · 🌿 자율 ${voluntaryAttendees.length}` : ''})
           </span>
@@ -113,11 +118,13 @@ export const HomeRsvpTallySection: React.FC<HomeRsvpTallySectionProps> = ({
             {/* Mandatory Attendees */}
             <div>
               <span style={{ fontWeight: 700, color: '#059669', display: 'block', marginBottom: '4px' }}>
-                ✓ 참석 ({mandatoryAttendees.length}명)
+                ✓ 참석 ({attendTotal}명)
               </span>
-              {mandatoryAttendees.length > 0 ? (
+              {attendTotal > 0 ? (
                 <span style={{ color: '#475569', lineHeight: 1.6 }}>
                   {mandatoryAttendees.map((a) => a.memberName).join(', ')}
+                  {mandatoryAttendees.length > 0 && onSiteAttendees.length > 0 ? ', ' : ''}
+                  {onSiteAttendees.map((m) => `${m.name}(현장)`).join(', ')}
                 </span>
               ) : (
                 <span style={{ color: '#94A3B8' }}>아직 참석 투표한 필수 대상 단원이 없습니다.</span>
