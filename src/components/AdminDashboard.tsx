@@ -21,6 +21,7 @@ import { ScheduleDeleteModal } from './admin/ScheduleDeleteModal';
 import { CardGroupDeleteModal } from './admin/CardGroupDeleteModal';
 import { ManualOverrideModal } from './admin/ManualOverrideModal';
 import { useScheduleAdmin } from '../hooks/useScheduleAdmin';
+import { getLateThresholdTime } from '../utils/manualAttendance';
 import { useAttendanceAdmin } from '../hooks/useAttendanceAdmin';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
@@ -82,6 +83,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setOverrideTarget,
     overrideReason,
     setOverrideReason,
+    overrideTime,
+    setOverrideTime,
+    overrideTimeError,
+    currentScheduleStartTime,
     handleManualOverrideSubmit,
   } = useAttendanceAdmin({
     schedules,
@@ -377,6 +382,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         overrideTarget={overrideTarget}
         overrideReason={overrideReason}
         setOverrideReason={setOverrideReason}
+        arrivalTime={overrideTime}
+        setArrivalTime={setOverrideTime}
+        arrivalError={overrideTimeError}
+        lateThresholdTime={
+          currentScheduleStartTime
+            ? getLateThresholdTime(currentScheduleStartTime, sheetsService.getConfig().lateGraceMinutes ?? 10)
+            : undefined
+        }
         onSubmit={handleManualOverrideSubmit}
         onClose={() => setOverrideTarget(null)}
       />

@@ -4,6 +4,12 @@ export interface ManualOverrideModalProps {
   overrideTarget: { id: string; name: string; part: string } | null;
   overrideReason: string;
   setOverrideReason: (reason: string) => void;
+  /** 도착 시각(HH:mm). 비우면 기존처럼 입력한 시점이 기록된다. */
+  arrivalTime?: string;
+  setArrivalTime?: (time: string) => void;
+  arrivalError?: string;
+  /** 지각 기준 시각 안내용(HH:mm) */
+  lateThresholdTime?: string;
   onSubmit: (e: React.FormEvent) => void;
   onClose: () => void;
 }
@@ -12,6 +18,10 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
   overrideTarget,
   overrideReason,
   setOverrideReason,
+  arrivalTime = '',
+  setArrivalTime,
+  arrivalError,
+  lateThresholdTime,
   onSubmit,
   onClose,
 }) => {
@@ -42,6 +52,29 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
             required
             autoFocus
           />
+
+          {setArrivalTime && (
+            <>
+              <label className="form-label" htmlFor="override-arrival-time">
+                도착 시각 (선택)
+              </label>
+              <input
+                id="override-arrival-time"
+                type="time"
+                className="input-text"
+                value={arrivalTime}
+                onChange={(e) => setArrivalTime(e.target.value)}
+                style={{ minHeight: '44px', fontSize: '16px' }}
+              />
+              <p className="modal-desc" style={{ margin: 0 }}>
+                비우면 입력한 지금 시각으로 기록됩니다.
+                {lateThresholdTime ? ` 지각 기준은 ${lateThresholdTime} 이후이며, 이 시각을 넘기면 지각으로 계산됩니다.` : ''}
+              </p>
+              {arrivalError && (
+                <p style={{ margin: 0, color: '#dc2626', fontSize: '13px', fontWeight: 700 }}>{arrivalError}</p>
+              )}
+            </>
+          )}
 
           <div className="modal-button-group">
             <button type="submit" className="btn-primary-large">
