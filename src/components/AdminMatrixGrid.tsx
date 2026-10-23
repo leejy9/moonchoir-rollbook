@@ -5,7 +5,13 @@ import { LiquidGauge } from './LiquidGauge';
 import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString } from '../utils/date';
 import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
 import { getMatrixCellDisplay } from '../utils/matrixCell';
-import { getLateThresholdTime, resolveManualAttendanceTimestamp } from '../utils/manualAttendance';
+import {
+  getDefaultArrivalTime,
+  getLateThresholdTime,
+  getNowKSTTime,
+  resolveManualAttendanceTimestamp,
+} from '../utils/manualAttendance';
+import { RoundTimePicker } from './RoundTimePicker';
 
 interface AdminMatrixGridProps {
   members: Member[];
@@ -14,6 +20,16 @@ interface AdminMatrixGridProps {
   onSelectMember?: (member: Member) => void;
   onAddNewMember?: () => void;
 }
+
+type StatusChoice = '출석' | '지각' | '사유결석' | '결석' | '초기화';
+
+const STATUS_CHOICES: Array<{ key: StatusChoice; label: string; tone: string }> = [
+  { key: '출석', label: '🟢 출석', tone: 'attend' },
+  { key: '지각', label: '🟡 지각', tone: 'late' },
+  { key: '사유결석', label: '🔴 사유결석', tone: 'excused' },
+  { key: '결석', label: '⚪ 결석(노쇼)', tone: 'absent' },
+  { key: '초기화', label: '🔄 초기화', tone: 'reset' },
+];
 
 interface CellPopoverTarget {
   member: Member;
@@ -36,6 +52,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [popoverTarget, setPopoverTarget] = useState<CellPopoverTarget | null>(null);
   const [customNote, setCustomNote] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<StatusChoice | null>(null);
   const [arrivalTime, setArrivalTime] = useState('');
   const [arrivalError, setArrivalError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -160,12 +177,26 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
       y: rect.bottom + 4,
     });
     setCustomNote('');
+    setSelectedStatus(null);
     setArrivalTime('');
     setArrivalError('');
   };
 
+  const lateGraceMinutes = sheetsService.getConfig().lateGraceMinutes ?? 10;
+
+  // 상태를 고르면 출석·지각은 시계에 미리 채울 도착 시각(오늘 일정은 지금 시각)을 정한다
+  const handleChooseStatus = (choice: StatusChoice) => {
+    setSelectedStatus(choice);
+    setArrivalError('');
+    if (popoverTarget && (choice === '출석' || choice === '지각')) {
+      setArrivalTime(
+        getDefaultArrivalTime({ status: choice, schedule: popoverTarget.schedule, lateGraceMinutes })
+      );
+    }
+  };
+
   // Quick Status Override Handler
-  const handleSetStatus = async (targetStatus: '출석' | '지각' | '사유결석' | '결석' | '초기화') => {
+  const handleSetStatus = async (targetStatus: StatusChoice) => {
     if (!popoverTarget) return;
 
     const { member, schedule } = popoverTarget;
@@ -177,7 +208,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
         status: targetStatus,
         schedule,
         inputTime: arrivalTime,
-        lateGraceMinutes: sheetsService.getConfig().lateGraceMinutes ?? 10,
+        lateGraceMinutes,
         defaultTimestamp:
           targetStatus === '출석'
             ? `${schedule.date}T${schedule.startTime}:00`
@@ -456,107 +487,101 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
         </table>
       </div>
 
-      {/* Popover for Quick Cell Status Override */}
+      {/* 셀 출결 수정: 상태 선택 → (출석·지각) 도착 시각 → 사유(선택) → 적용하기 */}
       {popoverTarget && (
-        <div
-          className="cell-popover-overlay"
-          onClick={() => setPopoverTarget(null)}
-        >
+        <div className="cell-popover-overlay" onClick={() => setPopoverTarget(null)}>
           <div
             className="cell-popover-menu"
-            style={{
-              position: 'fixed',
-              top: Math.min(popoverTarget.y, window.innerHeight - 260),
-              left: Math.min(popoverTarget.x, window.innerWidth - 240),
-            }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${popoverTarget.member.name} 출결 수정`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="popover-title-row">
               <strong>{popoverTarget.member.name}</strong>
-              <span className="popover-date">{popoverTarget.schedule.date}</span>
+              <span className="popover-date">
+                {popoverTarget.schedule.date} {popoverTarget.schedule.startTime}
+              </span>
             </div>
             <div className="popover-current">
               현재: <span className="current-status-tag">{popoverTarget.currentStatus}</span>
             </div>
 
-            <div className="popover-options-stack">
-              <button
-                type="button"
-                className="opt-btn attend"
-                onClick={() => handleSetStatus('출석')}
-                disabled={isUpdating}
-              >
-                🟢 출석으로 변경
-              </button>
-              <button
-                type="button"
-                className="opt-btn late"
-                onClick={() => handleSetStatus('지각')}
-                disabled={isUpdating}
-              >
-                🟡 지각으로 변경
-              </button>
-              <button
-                type="button"
-                className="opt-btn excused"
-                onClick={() => handleSetStatus('사유결석')}
-                disabled={isUpdating}
-              >
-                🔴 사유결석 (사유 기록)
-              </button>
-              <button
-                type="button"
-                className="opt-btn absent"
-                onClick={() => handleSetStatus('결석')}
-                disabled={isUpdating}
-              >
-                ⚪ 결석으로 변경 (무단결석/노쇼)
-              </button>
-              <button
-                type="button"
-                className="opt-btn reset"
-                onClick={() => handleSetStatus('초기화')}
-                disabled={isUpdating}
-                style={{ color: '#64748b' }}
-              >
-                🔄 보정 초기화 (기본 상태로 복귀)
-              </button>
+            <div className="cell-edit-status-grid" role="radiogroup" aria-label="바꿀 상태">
+              {STATUS_CHOICES.map((choice) => (
+                <button
+                  key={choice.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={selectedStatus === choice.key}
+                  className={`cell-edit-status ${choice.tone} ${selectedStatus === choice.key ? 'selected' : ''}`}
+                  onClick={() => handleChooseStatus(choice.key)}
+                  disabled={isUpdating}
+                >
+                  {choice.label}
+                </button>
+              ))}
             </div>
 
-            <div className="popover-time-box">
-              <label htmlFor="popover-arrival-time">도착 시각 (출석·지각, 선택)</label>
-              <input
-                id="popover-arrival-time"
-                type="time"
-                value={arrivalTime}
-                onChange={(e) => {
-                  setArrivalTime(e.target.value);
-                  setArrivalError('');
-                }}
-              />
-              <span className="popover-time-hint">
-                비우면 출석은 시작 시각, 지각은 {popoverTarget.schedule.startTime.slice(0, 2)}:50으로 기록됩니다. 지각 기준은{' '}
-                {getLateThresholdTime(popoverTarget.schedule.startTime, sheetsService.getConfig().lateGraceMinutes ?? 10)} 이후입니다.
-              </span>
-              {arrivalError && <span className="popover-time-error">{arrivalError}</span>}
-            </div>
+            {(selectedStatus === '출석' || selectedStatus === '지각') && (
+              <div className="popover-time-box">
+                <label>도착 시각</label>
+                <div className="cell-edit-time-row">
+                  <RoundTimePicker
+                    value={arrivalTime}
+                    onChange={(time) => {
+                      setArrivalTime(time);
+                      setArrivalError('');
+                    }}
+                  />
+                  {getKSTDateString() === popoverTarget.schedule.date && (
+                    <button
+                      type="button"
+                      className="cell-edit-now"
+                      onClick={() => {
+                        setArrivalTime(getNowKSTTime());
+                        setArrivalError('');
+                      }}
+                    >
+                      지금
+                    </button>
+                  )}
+                </div>
+                <span className="popover-time-hint">
+                  지각 기준은 {getLateThresholdTime(popoverTarget.schedule.startTime, lateGraceMinutes)} 이후입니다.
+                </span>
+                {arrivalError && <span className="popover-time-error">{arrivalError}</span>}
+              </div>
+            )}
 
-            <div className="popover-note-box">
-              <input
-                type="text"
-                placeholder="보정 사유 (선택)"
-                value={customNote}
-                onChange={(e) => setCustomNote(e.target.value)}
-              />
-            </div>
+            {selectedStatus && (
+              <div className="popover-note-box">
+                <label htmlFor="cell-edit-note" className="cell-edit-note-label">
+                  사유 (선택)
+                </label>
+                <input
+                  id="cell-edit-note"
+                  type="text"
+                  placeholder="예: QR 인식 안 됨, 배터리 방전"
+                  value={customNote}
+                  onChange={(e) => setCustomNote(e.target.value)}
+                />
+              </div>
+            )}
 
-            <button
-              type="button"
-              className="popover-close-btn"
-              onClick={() => setPopoverTarget(null)}
-            >
-              닫기
-            </button>
+            <div className="cell-edit-actions">
+              <button
+                type="button"
+                className="cell-edit-apply"
+                disabled={!selectedStatus || isUpdating}
+                onClick={() => selectedStatus && handleSetStatus(selectedStatus)}
+              >
+                {isUpdating ? '적용 중...' : '적용하기'}
+              </button>
+              <button type="button" className="cell-edit-cancel" onClick={() => setPopoverTarget(null)}>
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}
