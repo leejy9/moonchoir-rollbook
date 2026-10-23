@@ -72,8 +72,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   const schedules = useMemo(() => {
     void _refreshTrigger;
-    return sheetsService.getSchedules();
-  }, [_refreshTrigger]);
+    return sheetsService.getSchedulesForMember(profile.memberId);
+  }, [_refreshTrigger, profile.memberId]);
   const allMembers = useMemo(() => {
     void _refreshTrigger;
     return sheetsService.getMembers(true);

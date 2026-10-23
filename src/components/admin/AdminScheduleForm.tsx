@@ -6,6 +6,7 @@ import type {
   ProgramCard,
   Schedule,
   ScheduleCategory,
+  ScheduleVisibility,
   TargetAudienceType,
 } from '../../types/rollbook';
 import {
@@ -145,6 +146,9 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
   const [newTargetMemberIds, setNewTargetMemberIds] = useState<string[]>(
     () => editingSchedule?.targetMemberIds || []
   );
+  const [newVisibility, setNewVisibility] = useState<ScheduleVisibility>(
+    () => editingSchedule?.visibility || 'ALL'
+  );
   const [isAudienceDropdownOpen, setIsAudienceDropdownOpen] = useState(false);
   const [isCustomMemberModalOpen, setIsCustomMemberModalOpen] = useState(false);
   const [customMemberSearch, setCustomMemberSearch] = useState('');
@@ -283,6 +287,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
           targetAudienceType: newTargetAudienceType,
           targetParts: newTargetAudienceType === 'PARTS' ? newTargetParts : undefined,
           targetMemberIds: newTargetAudienceType === 'CUSTOM_MEMBERS' ? newTargetMemberIds : undefined,
+          visibility: newVisibility,
         };
 
         await onSave({
@@ -309,6 +314,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
           targetAudienceType: newTargetAudienceType,
           targetParts: newTargetAudienceType === 'PARTS' ? newTargetParts : undefined,
           targetMemberIds: newTargetAudienceType === 'CUSTOM_MEMBERS' ? newTargetMemberIds : undefined,
+          visibility: newVisibility,
         };
 
         const generated = createSchedulesMultiMode({
@@ -743,6 +749,33 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
             </div>
           )}
         </div>
+
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+            minHeight: '44px',
+            padding: '10px 12px',
+            borderRadius: '10px',
+            border: newVisibility === 'TARGETS_ONLY' ? '1.5px solid #4F46E5' : '1px solid #E2E8F0',
+            background: newVisibility === 'TARGETS_ONLY' ? '#EEF2FF' : '#F8FAFC',
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={newVisibility === 'TARGETS_ONLY'}
+            onChange={(e) => setNewVisibility(e.target.checked ? 'TARGETS_ONLY' : 'ALL')}
+            style={{ width: '20px', height: '20px', marginTop: '1px', accentColor: '#4F46E5', flexShrink: 0 }}
+          />
+          <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#1E293B' }}>대상자에게만 보이기</span>
+            <span style={{ fontSize: '12px', color: '#64748B', lineHeight: 1.45 }}>
+              위 참석 대상이 아닌 단원의 홈·캘린더·내 기록에서 이 일정을 숨깁니다. 관리자 화면에는 항상 보입니다.
+            </span>
+          </span>
+        </label>
 
         <div className="form-row-2">
           {scheduleAddMode !== 'CALENDAR_PICK' ? (

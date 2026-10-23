@@ -67,7 +67,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const memberPart = currentMember.part || profile.part;
   const memberName = currentMember.name || profile.name;
 
-  const schedules = sheetsService.getSchedules();
+  const schedules = sheetsService.getSchedulesForMember(profile.memberId);
   const allLogs = sheetsService.getLogs();
   const allRsvpVotes = sheetsService.getRSVPVotes();
   const allMembersWithMerged = sheetsService.getMembers(true, true);

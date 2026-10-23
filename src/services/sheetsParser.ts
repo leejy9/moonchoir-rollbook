@@ -8,6 +8,7 @@ import type {
   RSVPVote,
   RawAttendanceLog,
   Schedule,
+  ScheduleVisibility,
   TargetAudienceType,
 } from '../types/rollbook';
 import { getKSTTimestampString, normalizeDateToYYYYMMDD } from '../utils/date';
@@ -158,11 +159,15 @@ export function parseRemoteSchedules(rawSchedules: Schedule[]): Schedule[] {
       s.isArchived === true ||
       String((s as unknown as Record<string, unknown>).isArchived).toUpperCase() === 'TRUE';
 
+    const rawVisibility = String((s as unknown as Record<string, unknown>).visibility ?? '').trim().toUpperCase();
+    const visibility: ScheduleVisibility = rawVisibility === 'TARGETS_ONLY' ? 'TARGETS_ONLY' : 'ALL';
+
     return {
       ...s,
       date: normalizedDate,
       startTime,
       endTime,
+      visibility,
       targetAudienceType,
       targetParts,
       targetMemberIds,

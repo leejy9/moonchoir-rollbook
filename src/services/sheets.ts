@@ -12,6 +12,7 @@ import type {
 } from '../types/rollbook';
 import {
   calculateCumulativeAttendanceWithLifecycle,
+  isScheduleVisibleToMember,
   reconcileSingleMemberAttendance,
   resolveMergedMemberIds,
 } from '../utils/attendanceStats';
@@ -210,6 +211,31 @@ export class SheetsService {
 
   public getSchedules(): Schedule[] {
     return [...this.schedules].sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  /**
+   * 단원 화면용 일정 목록. 노출 범위가 `TARGETS_ONLY`인 일정은 대상이 아닌 단원에게 숨긴다.
+   * 대상이 아니어도 그 일정에 출석 기록이 이미 있으면 보여서(관리자가 대신 기록한 경우 등) 본인 기록이 사라지지 않게 한다.
+   * 관리자 화면은 `getSchedules()`를 그대로 쓴다.
+   */
+  public getSchedulesForMember(memberId: string | undefined): Schedule[] {
+    const schedules = this.getSchedules();
+    if (!schedules.some((s) => s.visibility === 'TARGETS_ONLY')) return schedules;
+
+    let member = memberId ? this.members.find((m) => m.id === memberId) : undefined;
+    const visited = new Set<string>();
+    while (member?.mergedIntoId && !visited.has(member.id)) {
+      visited.add(member.id);
+      member = this.members.find((m) => m.id === member?.mergedIntoId) ?? member;
+      if (member.status !== 'MERGED') break;
+    }
+    const aliasIds = member ? resolveMergedMemberIds(member.id, this.members) : new Set<string>();
+
+    return schedules.filter(
+      (s) =>
+        isScheduleVisibleToMember(member, s) ||
+        this.logs.some((l) => l.scheduleId === s.id && aliasIds.has(l.memberId))
+    );
   }
 
   public getRSVPVotes(scheduleId?: string): RSVPVote[] {

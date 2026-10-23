@@ -183,10 +183,10 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     let targetSchedule = schedule;
     if (parsed.type === 'MASTER_WALL_QR') {
-      const activeSch = findActiveScheduleForMasterQR(sheetsService.getSchedules());
+      const activeSch = findActiveScheduleForMasterQR(sheetsService.getSchedulesForMember(profile.memberId));
       if (activeSch) targetSchedule = activeSch;
     } else if (parsed.scheduleId) {
-      const sch = sheetsService.getSchedules().find((s) => s.id === parsed.scheduleId);
+      const sch = sheetsService.getSchedulesForMember(profile.memberId).find((s) => s.id === parsed.scheduleId);
       if (sch) targetSchedule = sch;
     }
 

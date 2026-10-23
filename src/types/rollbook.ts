@@ -87,6 +87,13 @@ export interface Member {
 export type TargetAudienceType = 'ALL' | 'ALL_WITH_GUESTS' | 'PARTS' | 'CUSTOM_MEMBERS';
 
 /**
+ * 일정 노출 범위. 비어 있거나 알 수 없는 값은 모두 'ALL'(전체 공개)로 읽는다.
+ * - ALL: 모든 단원에게 보임(대상이 아니면 자율 참여로 표시)
+ * - TARGETS_ONLY: 대상자 조건에 맞는 단원(과 관리자)에게만 보임
+ */
+export type ScheduleVisibility = 'ALL' | 'TARGETS_ONLY';
+
+/**
  * 1-2. Program Card Container for grouping schedules (e.g., 2026 가을 정기연습, 연주회 프로젝트)
  */
 export interface ProgramCard {
@@ -156,6 +163,7 @@ export interface Schedule {
   targetAudienceType?: TargetAudienceType; // 대상자 구분 ('ALL' | 'PARTS' | 'CUSTOM_MEMBERS')
   targetParts?: PartType[]; // 대상 파트 목록
   targetMemberIds?: string[]; // 대상 단원 ID 목록
+  visibility?: ScheduleVisibility; // 노출 범위(시트 `visibility` 열, 빈 값 = 전체 공개)
   checkInPin?: string; // 현장 4자리 인증 PIN
   description?: string;
   isArchived?: boolean; // Archived/hidden state for past semesters

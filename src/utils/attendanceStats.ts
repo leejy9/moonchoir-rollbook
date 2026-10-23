@@ -101,6 +101,22 @@ export function isMemberRequiredForSchedule(
 }
 
 /**
+ * 단원 화면에서 이 일정을 보여줄지 판정한다.
+ * - 노출 범위가 비어 있거나 `ALL`이면 모두에게 보인다(기본값).
+ * - `TARGETS_ONLY`이면 출결 의무 대상 조건(`isMemberRequiredForSchedule`)에 맞는 단원에게만 보인다.
+ * - 단원을 확인할 수 없으면 숨긴다.
+ * 관리자 화면은 이 함수를 쓰지 않는다. 표시 전용이며 출결 통계·원천 기록은 바꾸지 않는다.
+ */
+export function isScheduleVisibleToMember(
+  member: Member | undefined,
+  schedule: Pick<Schedule, 'date' | 'visibility' | 'targetAudienceType' | 'targetParts' | 'targetMemberIds'>
+): boolean {
+  if (schedule.visibility !== 'TARGETS_ONLY') return true;
+  if (!member) return false;
+  return isMemberRequiredForSchedule(member, schedule.date, schedule);
+}
+
+/**
  * 단원의 누적 출석 횟수에 따른 게이미피케이션 레벨 및 뱃지 상태를 계산합니다.
  */
 export interface GamifiedLevel {
