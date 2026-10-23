@@ -3660,6 +3660,72 @@ a {
   color: var(--brand-accent);
 }
 
+/* Mobile matrix: 좌우 고정 열이 합쳐 화면보다 넓어 회차 칸이 사라지던 문제 — 번호·상태 열을 숨기고 오른쪽 고정은 출석률만 남긴다 */
+@media (max-width: 640px) {
+  .matrix-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .matrix-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .matrix-scroll-wrapper {
+    max-height: 75vh;
+    overscroll-behavior-x: contain;
+  }
+
+  .matrix-table .col-num,
+  .matrix-table .col-status {
+    display: none;
+  }
+
+  .matrix-table .col-name {
+    left: 0;
+    min-width: 78px;
+    max-width: 78px;
+  }
+
+  .matrix-table .col-part {
+    left: 78px;
+    min-width: 54px;
+    border-right: 2px solid #d1d5db;
+  }
+
+  .matrix-table thead th,
+  .matrix-table tbody td {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .matrix-table .sticky-col-right {
+    position: static;
+  }
+
+  .matrix-table .col-rate {
+    position: sticky;
+    right: 0;
+    min-width: 52px;
+    border-left: 2px solid #d1d5db;
+  }
+
+  .matrix-table .col-att,
+  .matrix-table .col-late,
+  .matrix-table .col-abs {
+    right: auto;
+    min-width: 40px;
+  }
+
+  .matrix-table .col-energy {
+    min-width: 48px;
+  }
+}
+
 /* Matrix Interactive Cells */
 .matrix-cell {
   cursor: pointer;
