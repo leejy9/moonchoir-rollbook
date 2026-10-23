@@ -353,40 +353,61 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
 
   return (
     <div className="location-picker-map-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {/* Keyword search: place name, building name or address */}
+      {/* Address lookup: place name search, road-address popup, selected address */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <label
           htmlFor="location-keyword-search"
           className="form-label"
           style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568', margin: 0 }}
         >
-          🔍 장소명·주소 검색
+          주소 *
         </label>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          <input
-            id="location-keyword-search"
-            type="search"
-            className="modern-input"
-            style={{ flex: 1, fontSize: '16px', minHeight: '44px' }}
-            placeholder="예: 서해문화회관, 예술의전당, 연수구 한나루로"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              // 장소 등록 창은 <form> 안에 있어 Enter가 저장 제출로 번지지 않도록 막는다
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                void handleSearchPlaces();
-              }
-            }}
-          />
+        <span
+          style={{
+            fontSize: '11px',
+            color: kakaoLoaded ? '#059669' : kakaoLoadError ? '#DC2626' : '#64748B',
+            fontWeight: 600,
+          }}
+        >
+          {kakaoLoaded
+            ? '도로명주소 좌표 변환 연결됨'
+            : kakaoLoadError || '도로명주소 좌표 서비스 연결 확인 중'}
+        </span>
+
+        <input
+          id="location-keyword-search"
+          type="search"
+          className="modern-input"
+          style={{ fontSize: '16px', minHeight: '44px' }}
+          placeholder="장소명을 입력하세요 (예: 서해문화회관, 예술의전당)"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            // 장소 등록 창은 <form> 안에 있어 Enter가 저장 제출로 번지지 않도록 막는다
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void handleSearchPlaces();
+            }
+          }}
+        />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
           <button
             type="button"
             className="btn-qr-action-primary"
-            style={{ width: 'auto', padding: '0 16px', minHeight: '44px', fontSize: '13px', whiteSpace: 'nowrap' }}
+            style={{ width: '100%', padding: '0 10px', minHeight: '44px', fontSize: '13.5px', whiteSpace: 'nowrap' }}
             onClick={() => void handleSearchPlaces()}
             disabled={isSearching}
           >
-            {isSearching ? '검색 중...' : '검색'}
+            {isSearching ? '검색 중...' : '🔍 명칭 검색'}
+          </button>
+          <button
+            type="button"
+            className="btn-qr-action-primary"
+            style={{ width: '100%', padding: '0 10px', minHeight: '44px', fontSize: '13.5px', whiteSpace: 'nowrap' }}
+            onClick={handleOpenDaumPostcode}
+          >
+            🏠 도로명주소 검색
           </button>
         </div>
 
@@ -451,52 +472,21 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
             ))}
           </ul>
         )}
-      </div>
 
-      {/* Road address lookup and current GPS */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568', margin: 0 }}>
-          주소 *
-        </label>
-        <span
-          style={{
-            fontSize: '11px',
-            color: kakaoLoaded ? '#059669' : kakaoLoadError ? '#DC2626' : '#64748B',
-            fontWeight: 600,
-          }}
-        >
-          {kakaoLoaded
-            ? '도로명주소 좌표 변환 연결됨'
-            : kakaoLoadError || '도로명주소 좌표 서비스 연결 확인 중'}
-        </span>
-
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div>
+          <label className="form-label" style={{ fontSize: '12.5px', fontWeight: 600, color: '#4A5568' }}>
+            선택된 주소
+          </label>
           <input
             type="text"
             className="modern-input"
-            style={{ flex: 1, backgroundColor: '#F8FAFC', fontSize: '13.5px' }}
-            placeholder="도로명주소 검색 버튼을 눌러 선택하세요"
+            style={{ backgroundColor: '#F8FAFC', fontSize: '13.5px' }}
+            placeholder="위 검색으로 장소나 주소를 선택하세요"
             value={address}
             readOnly
           />
-          <button
-            type="button"
-            className="btn-qr-action-primary"
-            style={{ width: 'auto', padding: '0 14px', minHeight: '44px', fontSize: '13px', whiteSpace: 'nowrap' }}
-            onClick={handleOpenDaumPostcode}
-          >
-            🏠 도로명주소 검색
-          </button>
-          <button
-            type="button"
-            className="btn-qr-action-secondary"
-            onClick={handleGetCurrentGPS}
-            disabled={isLocatingGPS}
-            style={{ width: 'auto', padding: '0 12px', minHeight: '42px', fontSize: '12.5px', whiteSpace: 'nowrap' }}
-          >
-            {isLocatingGPS ? '수신 중...' : '📍 현위치'}
-          </button>
         </div>
+
 
         {postcodeLoadError && (
           <div role="alert" className="profile-alert-danger">
@@ -556,6 +546,37 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
         <div style={{ position: 'absolute', top: '8px', left: '8px', background: 'rgba(30, 41, 59, 0.85)', color: '#FFFFFF', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
           GPS: {lat.toFixed(5)}, {lon.toFixed(5)}
         </div>
+        <button
+          type="button"
+          onClick={handleGetCurrentGPS}
+          disabled={isLocatingGPS}
+          aria-label="현재 위치(GPS)로 설정"
+          title="현재 위치(GPS)로 설정"
+          style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            width: '44px',
+            height: '44px',
+            borderRadius: '10px',
+            background: 'rgba(255,255,255,0.95)',
+            border: '1px solid #CBD5E1',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+            zIndex: 1000,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '1px',
+            fontSize: '10px',
+            fontWeight: 800,
+            color: '#4F46E5',
+            lineHeight: 1,
+          }}
+        >
+          <span style={{ fontSize: '16px' }}>{isLocatingGPS ? '⏳' : '📍'}</span>
+          <span>GPS</span>
+        </button>
         <div style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(255,255,255,0.92)', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', color: '#4A5568', pointerEvents: 'none', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 1000 }}>
           💡 지도를 클릭하거나 핀을 드래그하여 출입구 위치를 미세 조정할 수 있습니다.
         </div>
