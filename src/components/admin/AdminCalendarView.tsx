@@ -4,6 +4,8 @@ import type { Schedule } from '../../types/rollbook';
 import { getKSTDateString } from '../../utils/date';
 
 export interface AdminCalendarViewProps {
+  /** 일정별 댓글 개수 (있으면 일정 줄에 `댓글 N` 배지를 보인다) */
+  commentCounts?: Map<string, number>;
   adminCalYear: number;
   adminCalMonth: number;
   onPrevMonth: () => void;
@@ -27,6 +29,7 @@ export interface AdminCalendarViewProps {
 }
 
 export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
+  commentCounts,
   adminCalYear,
   adminCalMonth,
   onPrevMonth,
@@ -212,6 +215,20 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                         </span>
                       )}
                       <span className="schedule-category-badge">{sch.category}</span>
+                      {(commentCounts?.get(sch.id) ?? 0) > 0 && (
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            color: '#4338CA',
+                            background: '#EEF2FF',
+                            padding: '1px 7px',
+                            borderRadius: '999px',
+                            fontWeight: 700,
+                          }}
+                        >
+                          댓글 {commentCounts?.get(sch.id)}
+                        </span>
+                      )}
                       <strong
                         style={{
                           fontSize: '14px',
