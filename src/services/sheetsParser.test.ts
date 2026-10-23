@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRemoteMembers, parseRemoteSchedules } from './sheetsParser';
+import { parseRemoteCommentEvents, parseRemoteMembers, parseRemoteSchedules } from './sheetsParser';
 
 const baseSchedule = {
     title: '경찰의날 녹음',
@@ -92,5 +92,47 @@ describe('parseRemoteSchedules - visibility', () => {
   it('알 수 없는 값은 일정을 숨기지 않고 전체 공개로 읽는다', () => {
     const [parsed] = parseRemoteSchedules([row('SECRET')]);
     expect(parsed.visibility).toBe('ALL');
+  });
+});
+
+describe('parseRemoteCommentEvents', () => {
+  const row = (overrides: Record<string, unknown>) => ({
+    id: 'c1',
+    scheduleId: 's1',
+    memberId: 'm1',
+    memberName: '김하은',
+    part: '소프라노',
+    action: 'CREATE',
+    text: '안녕',
+    timestamp: '2026-10-29 18:00:00',
+    deviceId: 'dev_a',
+    ...overrides,
+  });
+
+  it('행을 이벤트로 정리한다', () => {
+    const [event] = parseRemoteCommentEvents([row({})]);
+    expect(event).toMatchObject({ id: 'c1', scheduleId: 's1', memberId: 'm1', action: 'CREATE', text: '안녕', deviceId: 'dev_a' });
+  });
+
+  it('필드가 빠진 행은 기본값으로 읽고 targetId·deviceId는 비워 둔다', () => {
+    const [event] = parseRemoteCommentEvents([row({ memberName: '', part: '', targetId: '', deviceId: undefined })]);
+    expect(event.memberName).toBe('단원');
+    expect(event.part).toBe('소프라노');
+    expect(event.targetId).toBeUndefined();
+    expect(event.deviceId).toBeUndefined();
+  });
+
+  it('행동은 대소문자와 공백에 상관없이 읽고 알 수 없는 행동과 필수값 없는 행은 건너뛴다', () => {
+    const events = parseRemoteCommentEvents([
+      row({ id: 'c1', action: ' edit ', targetId: 'c0' }),
+      row({ id: 'c2', action: 'HIDE' }),
+      row({ id: '' }),
+      row({ id: 'c4', scheduleId: '' }),
+      row({ id: 'c5', memberId: '' }),
+      null,
+      'text',
+    ]);
+    expect(events.map((e) => e.id)).toEqual(['c1']);
+    expect(events[0].action).toBe('EDIT');
   });
 });

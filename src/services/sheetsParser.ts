@@ -8,6 +8,7 @@ import type {
   RSVPVote,
   RawAttendanceLog,
   Schedule,
+  ScheduleCommentEvent,
   ScheduleVisibility,
   TargetAudienceType,
 } from '../types/rollbook';
@@ -256,4 +257,36 @@ export function parseRemoteProgramCards(rawCards: ProgramCard[]): ProgramCard[] 
       createdAt: c.createdAt ? String(c.createdAt) : getKSTTimestampString(),
     };
   });
+}
+
+/**
+ * 시트 `일정댓글` 탭의 원천 행을 이벤트로 정리한다.
+ * 필드가 빠진 과거·수동 행은 안전한 기본값으로 읽고, 알아볼 수 없는 행동이나 id·일정·단원이 없는 행은 건너뛴다(원본 시트는 그대로).
+ */
+export function parseRemoteCommentEvents(rawEvents: unknown[]): ScheduleCommentEvent[] {
+  const events: ScheduleCommentEvent[] = [];
+  for (const raw of rawEvents) {
+    if (!raw || typeof raw !== 'object') continue;
+    const row = raw as Record<string, unknown>;
+    const str = (value: unknown) => (value === undefined || value === null ? '' : String(value).trim());
+    const action = str(row.action).toUpperCase();
+    if (action !== 'CREATE' && action !== 'EDIT' && action !== 'DELETE') continue;
+    const id = str(row.id);
+    const scheduleId = str(row.scheduleId);
+    const memberId = str(row.memberId);
+    if (!id || !scheduleId || !memberId) continue;
+    events.push({
+      id,
+      scheduleId,
+      memberId,
+      memberName: str(row.memberName) || '단원',
+      part: (str(row.part) || '소프라노') as PartType,
+      action,
+      targetId: str(row.targetId) || undefined,
+      text: row.text === undefined || row.text === null ? undefined : String(row.text),
+      timestamp: str(row.timestamp),
+      deviceId: str(row.deviceId) || undefined,
+    });
+  }
+  return events;
 }
