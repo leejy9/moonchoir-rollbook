@@ -359,7 +359,11 @@ function doPost(e) {
         if (h === 'deviceId') return data.deviceId || '';
         return data[h] !== undefined ? data[h] : '';
       });
-      cSheet.appendRow(commentRow);
+      // '=SUM(..)'처럼 = + - @ 로 시작하는 글이 수식으로 저장되지 않도록 새 행 전체를 일반 텍스트 서식으로 먼저 지정한 뒤 쓴다.
+      const newRowIndex = cSheet.getLastRow() + 1;
+      const newRowRange = cSheet.getRange(newRowIndex, 1, 1, commentRow.length);
+      newRowRange.setNumberFormat('@');
+      newRowRange.setValues([commentRow]);
       return jsonResponse({ success: true, message: '댓글 저장 완료' });
     }
 
