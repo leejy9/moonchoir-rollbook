@@ -17,6 +17,7 @@ import { getCalendarGrid } from '../../utils/calendar';
 import { getKSTClock, getKSTDateString } from '../../utils/date';
 import { IconRefresh } from '../Icons';
 import { AdminCalendarView } from './AdminCalendarView';
+import { AdminScheduleComments } from './AdminScheduleComments';
 import { AdminScheduleListView } from './AdminScheduleListView';
 import { AdminProgramCardsView } from './AdminProgramCardsView';
 import { AdminScheduleForm, type AdminScheduleFormSavePayload } from './AdminScheduleForm';
@@ -169,6 +170,8 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
 }) => {
   // Unified sub-tabs: CALENDAR, ALL_LIST, PROGRAM_CARDS, QR, SESSION
   const [scheduleSubTab, setScheduleSubTab] = useState<'LIST' | 'QR' | 'SESSION'>('LIST');
+  // 일정별 댓글 개수(배지·회차 선택창 표시용). 화면이 다시 그려질 때마다 최신 값을 읽는다.
+  const commentCounts = sheetsService.getCommentCounts();
   const [isFormDrawerOpen, setIsFormDrawerOpen] = useState(false);
 
   const openScheduleFormFocus = (sch: Schedule | null) => {
@@ -501,7 +504,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                 >
                   {schedules.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.date} | {s.title} ({s.category})
+                      {s.date} | {s.title} ({s.category}){(commentCounts.get(s.id) ?? 0) > 0 ? ` · 댓글 ${commentCounts.get(s.id)}` : ''}
                     </option>
                   ))}
                 </select>
@@ -543,6 +546,9 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                   })}
                 </div>
               </div>
+
+              {/* 댓글 (읽기 전용, 임시) */}
+              <AdminScheduleComments key={currentSchedule.id} scheduleId={currentSchedule.id} />
 
               {/* Members List */}
               <div className="toss-section-card">
@@ -783,6 +789,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
             <div className="admin-form-card" style={{ padding: '16px' }}>
               {scheduleViewTab === 'CALENDAR' ? (
                 <AdminCalendarView
+                  commentCounts={commentCounts}
                   adminCalYear={adminCalYear}
                   adminCalMonth={adminCalMonth}
                   onPrevMonth={handleAdminPrevMonth}

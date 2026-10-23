@@ -279,6 +279,7 @@ erDiagram
 | **`일정카드`** | `ProgramCard` | In-place Upsert / Archive | PK: `id`<br>FK: `defaultLocationId` | 학기별 정기연습 묶음 컨테이너. |
 | **`사전투표_RSVP`** | `RSVPVote` | In-place Upsert (1인 1표) | PK: `id`<br>FK: `scheduleId`, `memberId` | 일정별 참석/불참 사전 투표. |
 | **`장소정보`** | `LocationPreset` | In-place Upsert | PK: `id` | 연습실 명칭, 도로명/상세주소, 입구 위치, GPS 좌표. |
+| **`일정댓글`** | `ScheduleCommentEvent` | **Append-Only (수정·삭제도 행 추가)** | PK: `id`<br>FK: `scheduleId`, `memberId`, `targetId`(원 댓글 `id`) | 일정별 댓글. 헤더: `id, scheduleId, memberId, memberName, part, action(CREATE/EDIT/DELETE), targetId, text, timestamp(서버 시각), deviceId`. 화면의 댓글은 이 로그를 투영한 결과(가장 최근 EDIT, DELETE는 숨김). 같은 `id` 재요청은 중복 저장하지 않으며 EDIT·DELETE는 원 작성자(통합된 단원 포함)만 가능. 글은 `=`로 시작해도 수식이 되지 않도록 일반 텍스트 서식으로 기록. 소유자 승인 2026-10-23, 계획서 14. |
 
 ### 2) 원천 로그 분리 (Event Sourcing) 및 출결 원복 아키텍처
 1. **불변 원천 데이터 (Ground Truth)**:

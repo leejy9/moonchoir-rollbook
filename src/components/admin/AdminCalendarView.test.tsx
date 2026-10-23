@@ -132,4 +132,31 @@ describe('AdminCalendarView Component', () => {
     expect(html).toContain('복제');
     expect(html).toContain('삭제');
   });
+
+  it('댓글이 있는 일정에만 댓글 개수 배지를 보여준다', () => {
+    const render = (counts?: Map<string, number>) =>
+      renderToString(
+        <AdminCalendarView
+          commentCounts={counts}
+          adminCalYear={2026}
+          adminCalMonth={9}
+          onPrevMonth={vi.fn()}
+          onNextMonth={vi.fn()}
+          calendarGrid={mockCalendarGrid}
+          schedulesByDate={new Map([['2026-10-18', mockSchedules]])}
+          activeSchedulesByDate={new Map([['2026-10-18', [mockSchedules[0]]]])}
+          selectedDate="2026-10-18"
+          onSelectDate={vi.fn()}
+          showCancelledSchedules={false}
+          onToggleShowCancelled={vi.fn()}
+          schedulesOnSelectedDate={[mockSchedules[0]]}
+          onSelectScheduleForEdit={vi.fn()}
+          onQuickNewSchedule={vi.fn()}
+        />
+      ).replace(/<!-- -->/g, '');
+
+    expect(render(new Map([['sch-1', 3]]))).toContain('댓글 3');
+    expect(render(new Map([['sch-1', 0]]))).not.toContain('댓글 0');
+    expect(render(undefined)).not.toContain('댓글 ');
+  });
 });

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>홈 화면 풀 버전 목업 (댓글 포함)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{--navy:#282C48;--brand:#5C53DB;--brand-soft:#eef0ff;--ink:#191f28;--sub:#6b7684;--line:#e5e8eb;--bg:#f4f5f9;--red:#ef4444;--blue:#3b82f6}
+*{box-sizing:border-box}
+body{margin:0;font-family:Pretendard,system-ui,sans-serif;background:#e9ebf2;color:var(--ink);font-size:14px}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+.note{background:#fffbeb;border-bottom:1px solid #fde68a;color:#92400e;padding:8px 16px;font-size:12.5px;text-align:center}
+.stage{display:flex;gap:32px;justify-content:center;align-items:flex-start;padding:28px 16px;flex-wrap:wrap}
+.cap{font-size:12px;font-weight:800;color:#4e5968;text-align:center;margin-bottom:10px}
+.phone{width:390px;max-width:100%;background:var(--bg);border-radius:34px;border:10px solid #1f2230;box-shadow:0 20px 50px rgba(15,23,42,.25);overflow:hidden}
+.screen{height:860px;overflow-y:auto;padding:0 0 28px}
+.hdr{display:flex;align-items:center;gap:10px;padding:16px 18px 6px}
+.hdr b{font-size:16px;flex:1}
+.me{font-size:12px;font-weight:700;background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+.seg{display:flex;gap:4px;background:#e8ebf1;padding:4px;border-radius:12px;margin:8px 14px}
+.seg button{flex:1;padding:9px 0;border-radius:9px;font-weight:800;color:var(--sub);min-height:40px}
+.seg button.on{background:#fff;color:var(--brand);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.card{background:#fff;border:1px solid var(--line);border-radius:18px;margin:10px 14px;padding:16px;box-shadow:0 1px 4px rgba(15,23,42,.05)}
+/* calendar: same look as the existing app calendar */
+.ch{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.ch b{flex:1;text-align:center;font-size:16px}
+.arrow{width:36px;height:36px;border-radius:50%;background:#f2f4f6;font-size:12px;color:#4e5968}
+.wds,.cells{display:grid;grid-template-columns:repeat(7,1fr)}
+.wd{text-align:center;font-size:11.5px;font-weight:700;color:var(--sub);padding:4px 0}
+.wd.sun{color:var(--red)}.wd.sat{color:var(--blue)}
+.cells{gap:4px}
+.cell{aspect-ratio:1;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;font-size:13.5px;font-weight:600;cursor:pointer;border:1.5px solid transparent}
+.cell.dim{color:#cbd5e1}.cell.past:not(.dim){color:#9aa5b1}
+.cell.today{border-color:var(--brand)}
+.cell.sel{background:var(--brand);color:#fff;box-shadow:0 3px 10px rgba(92,83,219,.35)}
+.dots{display:flex;gap:2px;position:absolute;bottom:4px}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--brand)}.dot.show{background:var(--red)}.dot.one{background:#10b981}
+.cell.sel .dot{background:#fff}
+.cell.past .dot{opacity:.5}
+/* schedule card */
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:800}
+.title{font-size:19px;font-weight:800;margin:8px 0 4px;letter-spacing:-.02em}
+.meta{color:var(--sub);font-size:13px;line-height:1.6}
+.myvote{display:flex;gap:8px;margin-top:12px}
+.pillbtn{flex:1;min-height:44px;border-radius:12px;border:1.5px solid var(--line);font-weight:800;font-size:13.5px}
+.pillbtn.on{border-color:var(--brand);background:var(--brand-soft);color:#3b34a8}
+.qr{width:100%;min-height:48px;border-radius:12px;background:var(--navy);color:#fff;font-weight:800;margin-top:10px}
+.qr.dis{background:#cbd5e1}
+.bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:#eef0f3;margin:2px 0 8px}
+.bar i{display:block}
+.chips{display:flex;gap:12px;font-size:13px;font-weight:700}
+.chips span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.chips .a::before{background:#22c55e}.chips .b::before{background:#f97316}.chips .u::before{background:#cbd5e1}
+.roster{margin-top:10px;width:100%;min-height:40px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;font-weight:700;color:#4e5968;background:#f8fafc}
+/* comments */
+.cwrap{margin-top:12px;border-top:1px solid var(--line)}
+.crow{width:100%;display:flex;align-items:center;justify-content:space-between;min-height:48px;font-weight:700;font-size:13.5px;color:#4e5968}
+.chev{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:#6b7684;transition:transform .15s}
+.chev.open{transform:rotate(180deg)}
+.chead{display:flex;align-items:center;gap:10px}
+.chead h3{margin:0;font-size:15px;flex:1}
+.sw{position:relative;width:48px;height:28px;border-radius:999px;background:#cbd5e1;transition:background .15s;flex-shrink:0}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .15s}
+.sw.on{background:var(--brand)}.sw.on::after{left:23px}
+.swwrap{min-height:44px;display:flex;align-items:center;margin-right:-4px}
+.sumchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.sc{font-size:12px;font-weight:800;padding:4px 10px;border-radius:999px}
+.sc.late{background:#fef3c7;color:#b45309}.sc.no{background:#fee2e2;color:#b91c1c}
+.clist{margin-top:8px}
+.cm{display:flex;gap:10px;padding:12px 0;border-top:1px solid #f1f3f5}
+.cm:first-child{border-top:0}
+.av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0}
+.cb{flex:1;min-width:0}
+.cn{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cn b{font-size:13.5px}
+.pt{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px}
+.tag{font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:8px}
+.tag.late{background:#fef3c7;color:#b45309}.tag.no{background:#fee2e2;color:#b91c1c}
+.ct{margin-top:4px;line-height:1.55;word-break:break-word}
+.cf{display:flex;gap:8px;align-items:center;margin-top:4px;font-size:11.5px;color:var(--sub)}
+.more{margin-left:auto;width:36px;height:36px;border-radius:10px;color:#4e5968;font-weight:800;font-size:18px}
+.more:hover{background:#f2f4f6}
+.act{display:flex;gap:8px;margin-top:8px}
+.act button{min-height:40px;padding:0 14px;border-radius:10px;border:1.5px solid var(--line);font-weight:800;font-size:13px}
+.act .dng{color:#dc2626;border-color:#fecaca}
+.act .pri{background:var(--navy);color:#fff;border-color:var(--navy)}
+.edit textarea{width:100%;min-height:72px;border:1.5px solid var(--brand);border-radius:12px;padding:10px 12px;font:inherit;resize:none;margin-top:6px}
+.empty{padding:14px 0;text-align:center;color:var(--sub)}
+.comp{border-top:1px solid var(--line);padding-top:12px;margin-top:6px}
+.tags{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.tg{min-height:40px;padding:0 14px;border-radius:999px;border:1.5px solid var(--line);font-weight:800;font-size:13px;background:#fff}
+.tg.on{border-color:var(--brand);background:var(--brand-soft);color:#3b34a8}
+.eta{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.eta .step{width:44px;height:44px;border-radius:12px;border:1.5px solid var(--line);font-weight:800;font-size:18px;background:#fff}
+.eta .tm{flex:1;min-height:44px;border-radius:12px;border:1.5px solid #e2e8f0;background:#f8fafc;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:800;font-size:16px}
+.row{display:flex;gap:8px;align-items:flex-end}
+.row textarea{flex:1;min-height:48px;max-height:120px;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px;font:inherit;resize:none;background:#f8fafc}
+.row textarea:focus{outline:0;border-color:var(--brand);background:#fff}
+.send{min-width:64px;min-height:48px;border-radius:12px;background:var(--navy);color:#fff;font-weight:800}
+.send:disabled{background:#cbd5e1}
+/* upcoming list */
+.up{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid #f1f3f5;min-height:52px;cursor:pointer}
+.up:first-of-type{border-top:0}
+.up .d{font-weight:800;width:62px}.up .t{flex:1;font-weight:700}.up .h{font-size:12px;color:var(--sub)}
+.sec{font-size:15px;font-weight:800;margin:0 0 6px}
+/* admin snippet */
+.admin{width:420px;max-width:100%;background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 1px 4px rgba(15,23,42,.06)}
+.admin h4{margin:0 0 4px;font-size:16px}
+.admin .sub{font-size:12.5px;color:var(--sub);margin-bottom:12px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.tile{background:#f8f9fb;border-radius:12px;padding:10px}
+.tile .n{font-size:22px;font-weight:800}.tile .l{font-size:11.5px;color:var(--sub);font-weight:700}
+.arow{display:flex;gap:8px;align-items:center;padding:9px 0;border-top:1px solid #f1f3f5;font-size:13px}
+.arow .t{margin-left:auto;font-size:11.5px;color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="note">목업 · 가짜 데이터, 아무것도 저장되지 않습니다. 달력 날짜를 눌러 일정을 바꿔보고, 투표 카드 아래 ‘댓글’ 줄의 화살표를 눌러 펼쳐보세요. 내 댓글(김하은)의 ⋯ 메뉴도 눌러보세요.</div>
+<div class="stage">
+  <div><div class="cap">단원 홈 화면 (폰) · 전체 구성</div><div class="phone"><div class="screen" id="screen"></div></div></div>
+  <div><div class="cap">관리자 · 일정 패널 현황 탭 (일부)</div><div class="admin" id="admin"></div></div>
+</div>
+<script>
+const ME='김하은', T0='2026-10-29', DOW=['일','월','화','수','목','금','토'], pad=n=>String(n).padStart(2,'0');
+const PART={소프라노:['#fdf2f8','#db2777'],알토:['#f5f3ff','#7c3aed'],테너:['#eff6ff','#2563eb'],베이스:['#ecfeff','#0891b2']};
+const SCH=[
+ {d:'2026-10-01',t:'19:30',e:'22:00',n:'문콰이어 정기연습',c:'reg',v:[22,3,3]},
+ {d:'2026-10-08',t:'19:30',e:'22:00',n:'문콰이어 정기연습',c:'reg',v:[23,2,3]},
+ {d:'2026-10-15',t:'19:30',e:'22:00',n:'문콰이어 정기연습',c:'reg',v:[21,3,4]},
+ {d:'2026-10-22',t:'19:30',e:'22:00',n:'문콰이어 정기연습',c:'reg',v:[25,1,2]},
+ {d:'2026-10-24',t:'10:00',e:'12:30',n:'인천성가제 추가연습',c:'add',v:[19,2,7]},
+ {d:'2026-10-27',t:'20:00',e:'21:00',n:'홍콩출장단 추가연습',c:'add',v:[11,1,4]},
+ {d:'2026-10-29',t:'19:30',e:'22:00',n:'문콰이어 정기연습',c:'reg',v:[14,3,11]},
+ {d:'2026-10-31',t:'10:00',e:'12:30',n:'인천성가제 추가연습',c:'add',v:[15,3,10]},
+ {d:'2026-11-05',t:'19:30',e:'22:00',n:'문콰이어 정기연습',c:'reg',v:[9,2,17]},
+ {d:'2026-11-07',t:'14:00',e:'17:00',n:'조미진 단원 결혼식 축가',c:'one',v:[12,2,14]},
+ {d:'2026-11-14',t:'13:00',e:'17:00',n:'인천성가제',c:'show',v:[6,1,21]},
+];
+const CAT={reg:['정기연습','#eef0ff','#3b34a8'],add:['추가연습','#ecfdf5','#047857'],one:['행사','#fef3c7','#92400e'],show:['연주','#fee2e2','#991b1b']};
+const COM={
+ '2026-10-29':[
+  {id:1,n:'서다은',p:'소프라노',text:'감기 걸려서 오늘은 쉬어요 ㅠㅠ',t:'18:05'},
+  {id:2,n:'김하은',p:'소프라노',text:'회사 일이 늦게 끝나요',t:'18:40'},
+  {id:3,n:'박지후',p:'알토',text:'내일 악보 가져갈게요',t:'18:52',edited:true},
+  {id:4,n:'이서연',p:'소프라노',text:'지하철 지연이에요',t:'19:12'}],
+ '2026-10-24':[
+  {id:5,n:'한도윤',p:'베이스',text:'주차 자리 있나요?',t:'어제 21:30'},
+  {id:6,n:'정수아',p:'알토',text:'10분 정도 늦을 것 같아요',t:'오늘 09:05'}],
+ '2026-10-22':[{id:7,n:'오채원',p:'소프라노',text:'출장이라 못 갔어요, 다음 주에 뵐게요',t:'10/22 17:40'}],
+};
+let Y=2026,M=9,sel=T0,tab='cal',on=false,text='',menu=null,editing=null,confirmDel=null,editText='',nid=20;
+const cur=()=>SCH.filter(s=>s.d===sel);
+const list=()=>COM[sel]||(COM[sel]=[]);
+function pick(d){const x=new Date(d+'T00:00:00');if(x.getMonth()!==M){Y=x.getFullYear();M=x.getMonth()}sel=d;menu=editing=confirmDel=null;render();}
+function moveMonth(n){M+=n;if(M<0){M=11;Y--}if(M>11){M=0;Y++}render();}
+function send(){const v=text.trim();if(!v)return;list().push({id:nid++,n:ME,p:'소프라노',text:v,t:'방금'});text='';render();setTimeout(()=>{const s=document.getElementById('screen');s.scrollTop=s.scrollHeight},30);}
+function toggleMenu(id){menu=menu===id?null:id;confirmDel=null;render();}
+function startEdit(id){editing=id;editText=list().find(c=>c.id===id).text;menu=null;render();}
+function saveEdit(id){const c=list().find(x=>x.id===id);c.text=editText.trim();c.edited=true;editing=null;render();}
+function del(id){COM[sel]=list().filter(c=>c.id!==id);confirmDel=null;render();}
+function cmHtml(c){
+  const mine=c.n===ME,[bg,fg]=PART[c.p];
+  const tagH='';
+  if(editing===c.id)return `<div class="cm"><div class="av" style="background:${bg};color:${fg}">${c.n[0]}</div><div class="cb edit"><div class="cn"><b>${c.n}</b>${tagH}</div><textarea oninput="editText=this.value">${editText}</textarea><div class="act"><button class="pri" onclick="saveEdit(${c.id})">저장</button><button onclick="editing=null;render()">취소</button></div></div></div>`;
+  return `<div class="cm"><div class="av" style="background:${bg};color:${fg}">${c.n[0]}</div><div class="cb"><div class="cn"><b>${c.n}</b><span class="pt" style="background:${bg};color:${fg}">${c.p}</span>${tagH}${mine?`<button class="more" onclick="toggleMenu(${c.id})" aria-label="내 댓글 메뉴">⋯</button>`:''}</div>
+   ${c.text?`<div class="ct">${c.text}</div>`:''}<div class="cf"><span>${c.t}</span>${c.edited?'<span>· 수정됨</span>':''}</div>
+   ${menu===c.id?`<div class="act"><button onclick="startEdit(${c.id})">수정</button><button class="dng" onclick="confirmDel=${c.id};menu=null;render()">삭제</button></div>`:''}
+   ${confirmDel===c.id?`<div class="act"><button class="dng" onclick="del(${c.id})">삭제하기</button><button onclick="confirmDel=null;render()">취소</button></div>`:''}</div></div>`;
+}
+function calHtml(){
+  const first=new Date(Y,M,1).getDay(),days=new Date(Y,M+1,0).getDate(),prev=new Date(Y,M,0).getDate(),cells=[];
+  for(let i=first-1;i>=0;i--)cells.push({d:`${M?Y:Y-1}-${pad(M?M:12)}-${pad(prev-i)}`,n:prev-i,dim:1});
+  for(let d=1;d<=days;d++)cells.push({d:`${Y}-${pad(M+1)}-${pad(d)}`,n:d});
+  let k=1;while(cells.length%7)cells.push({d:`${M<11?Y:Y+1}-${pad(M<11?M+2:1)}-${pad(k)}`,n:k++,dim:1});
+  return `<div class="card"><div class="ch"><button class="arrow" onclick="moveMonth(-1)">◀</button><b>${Y}년 ${M+1}월</b><button class="arrow" onclick="moveMonth(1)">▶</button></div>
+   <div class="wds"><span class="wd sun">일</span><span class="wd">월</span><span class="wd">화</span><span class="wd">수</span><span class="wd">목</span><span class="wd">금</span><span class="wd sat">토</span></div>
+   <div class="cells">${cells.map(c=>{const ev=SCH.filter(s=>s.d===c.d);return `<div class="cell ${c.dim?'dim':''} ${c.d<T0?'past':''} ${c.d===T0?'today':''} ${c.d===sel?'sel':''}" onclick="pick('${c.d}')"><span>${c.n}</span>${ev.length?`<div class="dots">${ev.slice(0,3).map(e=>`<i class="dot ${e.c}"></i>`).join('')}</div>`:''}</div>`}).join('')}</div></div>`;
+}
+function schedHtml(){
+  const ss=cur(); if(!ss.length)return `<div class="card"><div class="empty">${sel.slice(5).replace('-','월 ')}일에는 일정이 없습니다.</div></div>`;
+  return ss.map(s=>{
+    const [cn,bg,fg]=CAT[s.c],past=s.d<T0,isToday=s.d===T0,t=s.v[0]+s.v[1]+s.v[2],x=new Date(s.d+'T00:00:00');
+    return `<div class="card"><span class="badge" style="background:${bg};color:${fg}">${cn}</span> ${isToday?'<span class="badge" style="background:#dcfce7;color:#15803d">오늘</span>':''}${past?'<span class="badge" style="background:#f1f5f9;color:#64748b">지난 일정</span>':''}
+    <div class="title">${s.n}</div><div class="meta">${x.getMonth()+1}월 ${x.getDate()}일 (${DOW[x.getDay()]}) · ${s.t} ~ ${s.e}<br>📍 문콰이어 정기연습실</div>
+    ${past?'':`<div class="myvote"><button class="pillbtn on">참석 ✓</button><button class="pillbtn">불참</button></div>${isToday?'<button class="qr">QR 출석</button>':''}`}</div>
+    <div class="card"><div class="bar"><i style="width:${s.v[0]/t*100}%;background:#22c55e"></i><i style="width:${s.v[1]/t*100}%;background:#f97316"></i><i style="width:${s.v[2]/t*100}%;background:#e2e8f0"></i></div>
+     <div class="chips"><span class="a">참석 ${s.v[0]}</span><span class="b">불참 ${s.v[1]}</span><span class="u">미응답 ${s.v[2]}</span></div><button class="roster">단원 투표 명단 ▾</button>${commentsHtml()}</div>`;
+  }).join('');
+}
+const CHEV='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+function commentsHtml(){
+  const past=sel<T0,C=list();
+  return `<div class="cwrap"><button class="crow" onclick="on=!on;render()" aria-expanded="${on}" aria-label="댓글 ${on?'접기':'펼치기'}"><span>댓글 ${C.length}</span><span class="chev ${on?'open':''}">${CHEV}</span></button>
+   ${on?`<div class="clist">${C.map(cmHtml).join('')||'<div class="empty">댓글이 없습니다</div>'}</div>
+   ${`<div class="comp"><div class="row"><textarea placeholder="댓글 입력" oninput="text=this.value;document.getElementById('sendBtn').disabled=!text.trim()">${text}</textarea><button class="send" id="sendBtn" onclick="send()" ${text.trim()?'':'disabled'}>등록</button></div></div>`}`:''}</div>`;
+}
+function upcomingHtml(){
+  const up=SCH.filter(s=>s.d>T0&&s.d!==sel).slice(0,3);
+  return `<div class="card"><div class="sec">다가오는 일정</div>${up.map(s=>{const x=new Date(s.d+'T00:00:00');return `<div class="up" onclick="pick('${s.d}')"><span class="d">${x.getMonth()+1}/${x.getDate()}(${DOW[x.getDay()]})</span><span class="t">${s.n}</span><span class="h">${s.t}</span></div>`}).join('')}</div>`;
+}
+function render(){
+  const sc=document.getElementById('screen'),keep=sc.scrollTop;
+  sc.innerHTML=`<div class="hdr"><b>🎵 문콰이어</b><span class="me">김하은 · 소프라노</span></div>
+   <div class="seg"><button class="${tab==='cal'?'on':''}" onclick="tab='cal';render()">달력</button><button class="${tab==='list'?'on':''}" onclick="tab='list';render()">목록</button></div>
+   ${tab==='cal'?calHtml():''}${schedHtml()}${upcomingHtml()}`;
+  sc.scrollTop=keep;
+  const C=list(),s0=cur()[0];
+  document.getElementById('admin').innerHTML=s0?`<h4>${s0.n} · ${sel.slice(5).replace('-','/')}</h4><div class="sub">현황 탭 하단</div>
+    <div class="tiles"><div class="tile"><div class="n" style="color:#16a34a">${s0.v[0]}</div><div class="l">참석 투표</div></div><div class="tile"><div class="n" style="color:#ea580c">${s0.v[1]}</div><div class="l">불참</div></div><div class="tile"><div class="n" style="color:#64748b">${s0.v[2]}</div><div class="l">미응답</div></div></div>
+    <div class="sub" style="margin:4px 0 2px;font-weight:800;color:#4e5968">댓글 ${C.length}</div>
+    ${C.slice(-3).map(c=>`<div class="arow"><b>${c.n}</b><span style="color:#4e5968;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px">${c.text||''}</span><span class="t">${c.t}</span></div>`).join('')||'<div class="sub">댓글이 없습니다.</div>'}
+    <div class="arow" style="color:var(--sub)"><span>전체 댓글 보기 ▾</span></div>`:'<div class="sub">선택한 일정이 없습니다.</div>';
+}
+render();
+</script>
+</body>
+</html>

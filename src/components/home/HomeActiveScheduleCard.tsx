@@ -11,8 +11,11 @@ import type { CheckInWindowState } from '../../utils/timeWindow';
 import { IconClock, IconLocation, IconQrScan, IconVote } from '../Icons';
 import { LiquidGauge } from '../LiquidGauge';
 import { HomeRsvpTallySection } from './HomeRsvpTallySection';
+import { ScheduleComments } from './ScheduleComments';
 
 interface HomeActiveScheduleCardProps {
+  /** 댓글을 쓰는 단원(현재 로그인한 단원) */
+  commentAuthor: Pick<Member, 'id' | 'name' | 'part'>;
   activeSchedule: Schedule;
   activeDateSchedules: Schedule[];
   activeScheduleIndex: number;
@@ -45,6 +48,7 @@ interface HomeActiveScheduleCardProps {
 }
 
 export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
+  commentAuthor,
   activeSchedule,
   activeDateSchedules,
   activeScheduleIndex,
@@ -422,6 +426,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
         totalTargetCount={totalTargetCount}
         isRosterOpen={isRosterOpen}
         onToggleRoster={onToggleRoster}
+        footer={<ScheduleComments key={activeSchedule.id} scheduleId={activeSchedule.id} author={commentAuthor} />}
       />
     </section>
   );

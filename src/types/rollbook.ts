@@ -204,6 +204,37 @@ export interface RawAttendanceLog {
 }
 
 /**
+ * 6-1. Schedule comment event (Append-Only, sheet tab `일정댓글`)
+ * 댓글은 행을 고치거나 지우지 않고 CREATE / EDIT / DELETE 행동을 쌓는다.
+ */
+export type ScheduleCommentAction = 'CREATE' | 'EDIT' | 'DELETE';
+
+export interface ScheduleCommentEvent {
+  id: string;
+  scheduleId: string;
+  memberId: string; // 작성 당시 단원 ID (통합돼도 바꾸지 않음)
+  memberName: string; // 쓸 당시 이름 스냅샷
+  part: PartType; // 쓸 당시 파트 스냅샷
+  action: ScheduleCommentAction;
+  targetId?: string; // EDIT·DELETE가 가리키는 원 댓글(CREATE 행) id
+  text?: string; // CREATE·EDIT 내용 (DELETE는 비움)
+  timestamp: string; // 한국 시각 YYYY-MM-DD HH:mm:ss (서버 기록)
+  deviceId?: string; // 쓴 기기(브라우저) 식별값 (추적용)
+}
+
+/** 화면에 보여주는 댓글(이벤트 로그를 투영한 결과) */
+export interface ScheduleComment {
+  id: string;
+  scheduleId: string;
+  memberId: string;
+  memberName: string;
+  part: PartType;
+  text: string;
+  createdAt: string;
+  editedAt?: string;
+}
+
+/**
  * 7. Reconciled projection view for dashboard (Calculated from Raw Logs + RSVP)
  */
 export interface AttendanceReconciliation {

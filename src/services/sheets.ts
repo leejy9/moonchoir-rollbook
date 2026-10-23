@@ -9,6 +9,8 @@ import type {
   RSVPVote,
   RawAttendanceLog,
   Schedule,
+  ScheduleComment,
+  ScheduleCommentEvent,
 } from '../types/rollbook';
 import {
   calculateCumulativeAttendanceWithLifecycle,
@@ -17,6 +19,7 @@ import {
   resolveMergedMemberIds,
 } from '../utils/attendanceStats';
 import { getKSTTimestampString, getKSTDateString, addDaysKST, parseKSTDate } from '../utils/date';
+import { buildScheduleComments, createCommentEventId, normalizeCommentText } from '../utils/scheduleComments';
 import {
   INITIAL_CONFIG,
   INITIAL_LOCATION_PRESETS,
@@ -24,6 +27,7 @@ import {
 } from './mockData';
 import {
   parseRemoteAttendanceLogs,
+  parseRemoteCommentEvents,
   parseRemoteLocations,
   parseRemoteMembers,
   parseRemoteProgramCards,
@@ -75,6 +79,7 @@ interface RemoteSnapshot {
   locations?: LocationPreset[];
   memberHistory?: MemberStatusHistory[];
   programCards?: ProgramCard[];
+  comments?: unknown[];
   config?: Partial<AppConfig>;
 }
 
@@ -99,6 +104,9 @@ const WRITE_LABELS: Record<string, string> = {
   SAVE_LOCATION: '장소 저장',
   DELETE_LOCATION: '장소 삭제',
   SAVE_CONFIG: '설정 저장',
+  ADD_COMMENT: '댓글',
+  EDIT_COMMENT: '댓글 수정',
+  DELETE_COMMENT: '댓글 삭제',
 };
 
 /** 서버에서 읽기만 하는 요청: 성공해도 데이터가 바뀌지 않으므로 새로고침을 예약하지 않는다. */
@@ -112,6 +120,7 @@ export class SheetsService {
   private logs: RawAttendanceLog[];
   private locations: LocationPreset[];
   private programCards: ProgramCard[];
+  private commentEvents: ScheduleCommentEvent[];
 
   // --- Sync state (refresh-on-navigation, write tracking, failure notices) ---
   private inFlightWrites = new Set<Promise<unknown>>();
@@ -136,6 +145,7 @@ export class SheetsService {
     this.logs = loadFromStorage(STORAGE_KEYS.LOGS, []);
     this.locations = loadFromStorage(STORAGE_KEYS.LOCATIONS, []);
     this.programCards = loadFromStorage(STORAGE_KEYS.PROGRAM_CARDS, []);
+    this.commentEvents = loadFromStorage(STORAGE_KEYS.COMMENTS, []);
   }
 
   public seedTestData(data: {
@@ -145,12 +155,16 @@ export class SheetsService {
     programCards?: ProgramCard[];
     members?: Member[];
     locations?: LocationPreset[];
+    comments?: ScheduleCommentEvent[];
   }): void {
     this.members = data.members ? [...data.members] : JSON.parse(JSON.stringify(INITIAL_MEMBERS));
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
 
     this.locations = data.locations ? [...data.locations] : JSON.parse(JSON.stringify(INITIAL_LOCATION_PRESETS));
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
+
+    this.commentEvents = data.comments ? [...data.comments] : [];
+    saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
 
     if (data.schedules) {
       this.schedules = [...data.schedules];
@@ -236,6 +250,133 @@ export class SheetsService {
         isScheduleVisibleToMember(member, s) ||
         this.logs.some((l) => l.scheduleId === s.id && aliasIds.has(l.memberId))
     );
+  }
+
+  // --- Schedule comments (append-only event log, confirmed by the sheet before showing) ---
+
+  private canonicalMemberId(memberId: string): string {
+    let current = memberId;
+    const visited = new Set<string>();
+    while (!visited.has(current)) {
+      visited.add(current);
+      const member = this.members.find((m) => m.id === current);
+      if (!member?.mergedIntoId) break;
+      current = member.mergedIntoId;
+    }
+    return current;
+  }
+
+  private isSameMember = (a: string, b: string): boolean =>
+    a === b || this.canonicalMemberId(a) === this.canonicalMemberId(b);
+
+  /** 일정 하나의 댓글(오래된 순). 삭제된 댓글은 빠지고 수정은 반영된다. */
+  public getComments(scheduleId: string): ScheduleComment[] {
+    return buildScheduleComments(
+      this.commentEvents.filter((e) => e.scheduleId === scheduleId),
+      this.isSameMember
+    );
+  }
+
+  /** 일정별 댓글 개수 (관리자 화면 배지용) */
+  public getCommentCounts(): Map<string, number> {
+    const counts = new Map<string, number>();
+    for (const comment of buildScheduleComments(this.commentEvents, this.isSameMember)) {
+      counts.set(comment.scheduleId, (counts.get(comment.scheduleId) ?? 0) + 1);
+    }
+    return counts;
+  }
+
+  /** 통합 별칭까지 같은 사람인지 확인한다(내 댓글 표시용). */
+  public isOwnComment(comment: Pick<ScheduleComment, 'memberId'>, memberId: string): boolean {
+    return this.isSameMember(comment.memberId, memberId);
+  }
+
+  private async recordCommentEvent(action: string, event: ScheduleCommentEvent): Promise<ScheduleCommentEvent> {
+    // 같은 id를 다시 보내는 재시도: 이미 반영된 이벤트면 한 번만 둔다
+    if (this.commentEvents.some((e) => e.id === event.id)) return event;
+    if (this.config.sheetsWebAppUrl) {
+      const result = await this.sendToGoogleSheet(action, event);
+      if (!result.success) {
+        throw new Error(result.message || '댓글이 시트에서 확인되지 않았습니다. 네트워크를 확인하고 다시 시도해 주세요.');
+      }
+    }
+    this.commentEvents.push(event);
+    saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
+    return event;
+  }
+
+  public async addComment(input: {
+    scheduleId: string;
+    member: Pick<Member, 'id' | 'name' | 'part'>;
+    text: string;
+    deviceId?: string;
+    /** 같은 댓글을 다시 보낼 때 같은 id를 쓰도록 호출자가 유지한다 */
+    eventId?: string;
+  }): Promise<ScheduleCommentEvent> {
+    const normalized = normalizeCommentText(input.text);
+    if (normalized.error !== undefined) throw new Error(normalized.error);
+    return this.recordCommentEvent('ADD_COMMENT', {
+      id: input.eventId || createCommentEventId(),
+      scheduleId: input.scheduleId,
+      memberId: input.member.id,
+      memberName: input.member.name,
+      part: input.member.part,
+      action: 'CREATE',
+      text: normalized.text,
+      timestamp: getKSTTimestampString(),
+      deviceId: input.deviceId,
+    });
+  }
+
+  private findOwnComment(commentId: string, memberId: string, verb: string): ScheduleComment {
+    const comment = buildScheduleComments(this.commentEvents, this.isSameMember).find((c) => c.id === commentId);
+    if (!comment) throw new Error('댓글을 찾을 수 없습니다. 이미 삭제되었을 수 있어요.');
+    if (!this.isSameMember(comment.memberId, memberId)) throw new Error(`본인이 쓴 댓글만 ${verb}할 수 있습니다.`);
+    return comment;
+  }
+
+  public async editComment(input: {
+    commentId: string;
+    member: Pick<Member, 'id' | 'name' | 'part'>;
+    text: string;
+    deviceId?: string;
+    eventId?: string;
+  }): Promise<ScheduleCommentEvent> {
+    const normalized = normalizeCommentText(input.text);
+    if (normalized.error !== undefined) throw new Error(normalized.error);
+    const comment = this.findOwnComment(input.commentId, input.member.id, '수정');
+    return this.recordCommentEvent('EDIT_COMMENT', {
+      id: input.eventId || createCommentEventId(),
+      scheduleId: comment.scheduleId,
+      memberId: input.member.id,
+      memberName: input.member.name,
+      part: input.member.part,
+      action: 'EDIT',
+      targetId: comment.id,
+      text: normalized.text,
+      timestamp: getKSTTimestampString(),
+      deviceId: input.deviceId,
+    });
+  }
+
+  public async deleteComment(input: {
+    commentId: string;
+    member: Pick<Member, 'id' | 'name' | 'part'>;
+    deviceId?: string;
+    eventId?: string;
+  }): Promise<ScheduleCommentEvent> {
+    const comment = this.findOwnComment(input.commentId, input.member.id, '삭제');
+    return this.recordCommentEvent('DELETE_COMMENT', {
+      id: input.eventId || createCommentEventId(),
+      scheduleId: comment.scheduleId,
+      memberId: input.member.id,
+      memberName: input.member.name,
+      part: input.member.part,
+      action: 'DELETE',
+      targetId: comment.id,
+      timestamp: getKSTTimestampString(),
+      deviceId: input.deviceId,
+    });
   }
 
   public getRSVPVotes(scheduleId?: string): RSVPVote[] {
@@ -1320,6 +1461,11 @@ export class SheetsService {
     if (Array.isArray(data.locations)) {
       this.locations = parseRemoteLocations(data.locations);
       saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
+    }
+
+    if (Array.isArray(data.comments)) {
+      this.commentEvents = parseRemoteCommentEvents(data.comments);
+      saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
     }
 
     if (Array.isArray(data.programCards)) {
