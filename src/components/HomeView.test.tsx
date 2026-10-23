@@ -240,4 +240,48 @@ describe('HomeView Component (Multi-Schedule Smart Ranking & Switcher Bar)', () 
     expect(html).not.toContain('경찰의날 녹음 (과거)');
     expect(html).toContain('연습 일정이 없습니다');
   });
+
+  it('counts a member who checked in without voting as 현장 출석 instead of 미응답', async () => {
+    const schedule: Schedule = {
+      id: 'sch_test_onsite',
+      title: '현장 출석 확인 연습',
+      category: '정기연습',
+      date: todayStr,
+      startTime: '19:30',
+      endTime: '21:30',
+      locationName: '문콰이어 제1연습실',
+      targetLat: 37.5665,
+      targetLon: 126.978,
+      radiusMeters: 100,
+    };
+    sheetsService.seedTestData({});
+    await sheetsService.addSchedule(schedule);
+
+    const other = sheetsService.getMembers().find((m) => m.id !== mockProfile.memberId && m.status === 'ACTIVE');
+    expect(other).toBeDefined();
+    await sheetsService.addCheckInLog({
+      id: 'log_test_onsite',
+      timestamp: `${todayStr}T19:30:00`,
+      scheduleId: schedule.id,
+      memberId: other!.id,
+      memberName: other!.name,
+      part: other!.part,
+      authMethod: 'MANUAL_BY_ADMIN',
+      isVerifiedLocation: true,
+      adminNote: '테스트 현장 출석',
+    });
+
+    const html = renderToString(
+      <HomeView
+        profile={mockProfile}
+        onOpenQRScanner={() => {}}
+        onOpenRSVP={() => {}}
+        onOpenAdmin={() => {}}
+        onChangeProfile={() => {}}
+        refreshTrigger={0}
+      />
+    ).replace(/<!-- -->/g, '');
+
+    expect(html).toContain('투표 0 · 현장 1');
+  });
 });

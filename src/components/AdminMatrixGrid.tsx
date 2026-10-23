@@ -5,6 +5,7 @@ import { LiquidGauge } from './LiquidGauge';
 import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString } from '../utils/date';
 import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
 import { getMatrixCellDisplay } from '../utils/matrixCell';
+import { getLateThresholdTime, resolveManualAttendanceTimestamp } from '../utils/manualAttendance';
 
 interface AdminMatrixGridProps {
   members: Member[];
@@ -35,6 +36,8 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [popoverTarget, setPopoverTarget] = useState<CellPopoverTarget | null>(null);
   const [customNote, setCustomNote] = useState('');
+  const [arrivalTime, setArrivalTime] = useState('');
+  const [arrivalError, setArrivalError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Pre-calculate reconciliations for all visible schedules
@@ -157,14 +160,37 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
       y: rect.bottom + 4,
     });
     setCustomNote('');
+    setArrivalTime('');
+    setArrivalError('');
   };
 
   // Quick Status Override Handler
   const handleSetStatus = async (targetStatus: '출석' | '지각' | '사유결석' | '결석' | '초기화') => {
     if (!popoverTarget) return;
-    setIsUpdating(true);
 
     const { member, schedule } = popoverTarget;
+
+    // 출석/지각은 입력한 도착 시각을 로그 시각으로 쓴다(비우면 기존 기본 시각).
+    let manualTimestamp = '';
+    if (targetStatus === '출석' || targetStatus === '지각') {
+      const resolved = resolveManualAttendanceTimestamp({
+        status: targetStatus,
+        schedule,
+        inputTime: arrivalTime,
+        lateGraceMinutes: sheetsService.getConfig().lateGraceMinutes ?? 10,
+        defaultTimestamp:
+          targetStatus === '출석'
+            ? `${schedule.date}T${schedule.startTime}:00`
+            : `${schedule.date}T${schedule.startTime.slice(0, 2)}:50:00`,
+      });
+      if (resolved.error !== undefined) {
+        setArrivalError(resolved.error);
+        return;
+      }
+      manualTimestamp = resolved.timestamp;
+    }
+    setArrivalError('');
+    setIsUpdating(true);
 
     try {
       if (targetStatus === '출석') {
@@ -174,7 +200,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           memberId: member.id,
           memberName: member.name,
           part: member.part,
-          timestamp: `${schedule.date}T${schedule.startTime}:00`,
+          timestamp: manualTimestamp,
           authMethod: 'MANUAL_BY_ADMIN',
           isVerifiedLocation: true,
           adminNote: customNote || '관리자 수동 출석 인정',
@@ -187,7 +213,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           memberId: member.id,
           memberName: member.name,
           part: member.part,
-          timestamp: `${schedule.date}T${schedule.startTime.slice(0, 2)}:50:00`,
+          timestamp: manualTimestamp,
           authMethod: 'MANUAL_BY_ADMIN',
           isVerifiedLocation: true,
           adminNote: customNote || '관리자 지각 처리',
@@ -495,6 +521,24 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
               >
                 🔄 보정 초기화 (기본 상태로 복귀)
               </button>
+            </div>
+
+            <div className="popover-time-box">
+              <label htmlFor="popover-arrival-time">도착 시각 (출석·지각, 선택)</label>
+              <input
+                id="popover-arrival-time"
+                type="time"
+                value={arrivalTime}
+                onChange={(e) => {
+                  setArrivalTime(e.target.value);
+                  setArrivalError('');
+                }}
+              />
+              <span className="popover-time-hint">
+                비우면 출석은 시작 시각, 지각은 {popoverTarget.schedule.startTime.slice(0, 2)}:50으로 기록됩니다. 지각 기준은{' '}
+                {getLateThresholdTime(popoverTarget.schedule.startTime, sheetsService.getConfig().lateGraceMinutes ?? 10)} 이후입니다.
+              </span>
+              {arrivalError && <span className="popover-time-error">{arrivalError}</span>}
             </div>
 
             <div className="popover-note-box">

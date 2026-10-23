@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { buildRsvpTally } from '../utils/rsvpTally';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, RSVPVote, Schedule } from '../types/rollbook';
 import {
@@ -71,8 +72,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   const schedules = useMemo(() => {
     void _refreshTrigger;
-    return sheetsService.getSchedules();
-  }, [_refreshTrigger]);
+    return sheetsService.getSchedulesForMember(profile.memberId);
+  }, [_refreshTrigger, profile.memberId]);
   const allMembers = useMemo(() => {
     void _refreshTrigger;
     return sheetsService.getMembers(true);
@@ -356,23 +357,28 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   const targetMemberIds = useMemo(() => new Set(targetMembers.map((m) => m.id)), [targetMembers]);
 
-  // Split attendees into mandatory target attendees vs voluntary/guest attendees
-  const mandatoryAttendees = useMemo(
-    () =>
-      uniqueVotes.filter(
-        (v) => v.status === 'ATTEND' && targetMemberIds.has(v.memberId)
-      ),
-    [uniqueVotes, targetMemberIds]
-  );
+  // 실제 출석한 단원(출석·지각·수동 인정). 투표보다 출석을 우선해 현황에 반영한다.
+  const attendedMemberIds = useMemo(() => {
+    void _refreshTrigger;
+    if (!activeSchedule) return new Set<string>();
+    return new Set(
+      sheetsService
+        .reconcileAttendance(activeSchedule.id)
+        .filter((r) => r.finalStatus === '출석' || r.finalStatus === '지각' || r.finalStatus === '수동인정')
+        .map((r) => r.memberId)
+    );
+  }, [activeSchedule, _refreshTrigger]);
 
-  const mandatoryAbsentees = useMemo(
-    () =>
-      uniqueVotes.filter(
-        (v) => v.status === 'ABSENT' && targetMemberIds.has(v.memberId)
-      ),
-    [uniqueVotes, targetMemberIds]
+  const tally = useMemo(
+    () => buildRsvpTally({ targetMembers, votes: uniqueVotes, attendedMemberIds }),
+    [targetMembers, uniqueVotes, attendedMemberIds]
   );
+  const mandatoryAttendees = tally.votedAttendees;
+  const onSiteAttendees = tally.onSiteAttendees;
+  const mandatoryAbsentees = tally.absentees;
+  const unvotedMembers = tally.unvotedMembers;
 
+  // 대상이 아닌 단원의 참석 투표는 자율 참여로 따로 센다
   const voluntaryAttendees = useMemo(
     () =>
       uniqueVotes.filter(
@@ -380,17 +386,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
       ),
     [uniqueVotes, targetMemberIds]
   );
-
-  const votedIds = useMemo(
-    () => new Set(uniqueVotes.map((v) => v.memberId)),
-    [uniqueVotes]
-  );
-
-  // Unvoted members: Target members who haven't voted yet (strictly by canonical ID)
-  const unvotedMembers = useMemo(() => {
-    return targetMembers.filter((m) => !votedIds.has(m.id));
-  }, [targetMembers, votedIds]);
-
 
   const isTargetMember = useMemo(() => {
     void _refreshTrigger;
@@ -402,7 +397,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const totalTargetCount = targetMembers.length;
   const attendRate =
     totalTargetCount > 0
-      ? Math.round((mandatoryAttendees.length / totalTargetCount) * 100)
+      ? Math.round((tally.attendTotal / totalTargetCount) * 100)
       : voluntaryAttendees.length > 0
       ? 100
       : 0;
@@ -575,6 +570,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           myVote={myVote}
           windowState={windowState}
           mandatoryAttendees={mandatoryAttendees}
+          onSiteAttendees={onSiteAttendees}
           mandatoryAbsentees={mandatoryAbsentees}
           voluntaryAttendees={voluntaryAttendees}
           unvotedMembers={unvotedMembers}

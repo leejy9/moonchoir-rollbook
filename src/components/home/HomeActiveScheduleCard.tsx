@@ -28,6 +28,7 @@ interface HomeActiveScheduleCardProps {
   myVote?: RSVPVote;
   windowState: CheckInWindowState | null;
   mandatoryAttendees: RSVPVote[];
+  onSiteAttendees: Member[];
   mandatoryAbsentees: RSVPVote[];
   voluntaryAttendees: RSVPVote[];
   unvotedMembers: Member[];
@@ -59,6 +60,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
   myVote,
   windowState,
   mandatoryAttendees,
+  onSiteAttendees,
   mandatoryAbsentees,
   voluntaryAttendees,
   unvotedMembers,
@@ -209,7 +211,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
           )}
         </div>
         {/* Cute Liquid Wave Gauge (MYTURN Style) */}
-        <LiquidGauge percentage={attendRate} size={44} subText="투표율" />
+        <LiquidGauge percentage={attendRate} size={44} subText="참석" />
       </div>
 
       <h2 className="schedule-card-title">{activeSchedule.title}</h2>
@@ -413,6 +415,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
       {/* Realtime Attendance / RSVP Tally Bar */}
       <HomeRsvpTallySection
         mandatoryAttendees={mandatoryAttendees}
+        onSiteAttendees={onSiteAttendees}
         mandatoryAbsentees={mandatoryAbsentees}
         voluntaryAttendees={voluntaryAttendees}
         unvotedMembers={unvotedMembers}

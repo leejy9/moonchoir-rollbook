@@ -4,6 +4,15 @@ import { getOrCreateDeviceId } from '../services/auth';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, RawAttendanceLog, Schedule } from '../types/rollbook';
 import { calculateDistanceMeters, isWithinRadius } from '../utils/geo';
+import {
+  GeoAcquireError,
+  acquirePosition,
+  classifyCameraError,
+  describeCameraFailure,
+  describeGeoFailure,
+  formatAccuracySuffix,
+} from '../utils/geoPosition';
+import { buildKakaoExternalBrowserUrl, detectInstallEnvironment, isStandaloneDisplay } from '../utils/pwaInstall';
 import { findActiveScheduleForMasterQR, parseQRPayload, playScanSuccessSound } from '../utils/qr';
 import { getKSTTimestampString } from '../utils/date';
 import { IconKeypad, IconQrScan } from './Icons';
@@ -28,6 +37,10 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [needsExternalBrowserHint, setNeedsExternalBrowserHint] = useState(false);
+  const isKakaoInApp =
+    typeof navigator !== 'undefined' &&
+    detectInstallEnvironment(navigator.userAgent, isStandaloneDisplay()) === 'KAKAO_INAPP';
   const [geoStatus, setGeoStatus] = useState<string>('위치(GPS) 확인 중...');
   const [scanResult, setScanResult] = useState<{
     success: boolean;
@@ -53,6 +66,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     let lat: number | undefined;
     let lon: number | undefined;
     let distanceMeters: number | undefined;
+    let accuracyMeters: number | undefined;
     let isVerifiedLocation = false;
 
     // Dynamically resolve target GPS coords and radius from location presets
@@ -64,45 +78,39 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     try {
       setGeoStatus('현재 위치(GPS) 정밀 측정 중...');
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        if (!navigator.geolocation) {
-          reject(new Error('GPS 미지원'));
-          return;
-        }
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 8000,
-        });
-      });
+      const position = await acquirePosition();
 
-      lat = position.coords.latitude;
-      lon = position.coords.longitude;
+      lat = position.latitude;
+      lon = position.longitude;
+      accuracyMeters = position.accuracyMeters;
       distanceMeters = calculateDistanceMeters(lat, lon, targetLat, targetLon);
       isVerifiedLocation = isWithinRadius(lat, lon, targetLat, targetLon, radiusMeters);
-    } catch {
-      console.warn('[Geo] Failed to fetch GPS coordinates');
-      distanceMeters = undefined;
-      isVerifiedLocation = false;
-      setGeoStatus('GPS 수신 제한 (위치 권한 확인 필요)');
-    }
-
-    // Strict boundary check for both QR and PIN to prevent remote check-in
-    if (distanceMeters === undefined) {
+      setGeoStatus(
+        position.usedFallback
+          ? `위치 확인됨 (저정밀${formatAccuracySuffix(accuracyMeters)})`
+          : `위치 확인됨${formatAccuracySuffix(accuracyMeters)}`
+      );
+    } catch (error) {
+      console.warn('[Geo] Failed to fetch GPS coordinates', error);
+      setGeoStatus('위치(GPS)를 확인하지 못했습니다');
+      setNeedsExternalBrowserHint(true);
       setIsProcessing(false);
       setScanResult({
         success: false,
         distance: undefined,
         isVerified: false,
-        msg: `기기의 위치(GPS) 정보를 수신할 수 없습니다. 브라우저 위치 권한을 허용한 뒤 연습실 현장에서 다시 시도해 주세요.`,
+        msg: error instanceof GeoAcquireError ? error.message : describeGeoFailure('UNKNOWN'),
       });
       return;
     }
 
+    // Strict boundary check for both QR and PIN to prevent remote check-in
     if (!isVerifiedLocation) {
       setIsProcessing(false);
       const distFormatted = distanceMeters >= 1000
         ? `${(distanceMeters / 1000).toFixed(1)}km`
         : `${distanceMeters}m`;
+      const accuracyNote = accuracyMeters === undefined ? '' : `, 측정 오차 약 ±${accuracyMeters}m`;
 
       if (authMethod === 'MANUAL_PIN') {
         setPinError(`연습실 반경 ${radiusMeters}m 밖에서는 PIN 출석을 할 수 없습니다 (${distFormatted} 측정).`);
@@ -112,7 +120,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         success: false,
         distance: distanceMeters,
         isVerified: false,
-        msg: `현재 위치가 '${venueName}' 출석 인정 반경(${radiusMeters}m) 밖입니다 (${distFormatted} 떨어짐). 연습실에 도착하신 후 다시 시도해 주세요.`,
+        msg: `현재 위치가 '${venueName}' 출석 인정 반경(${radiusMeters}m) 밖입니다 (${distFormatted} 떨어짐${accuracyNote}). 연습실에 도착하신 후 다시 시도해 주세요.`,
       });
       return;
     }
@@ -175,10 +183,10 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     let targetSchedule = schedule;
     if (parsed.type === 'MASTER_WALL_QR') {
-      const activeSch = findActiveScheduleForMasterQR(sheetsService.getSchedules());
+      const activeSch = findActiveScheduleForMasterQR(sheetsService.getSchedulesForMember(profile.memberId));
       if (activeSch) targetSchedule = activeSch;
     } else if (parsed.scheduleId) {
-      const sch = sheetsService.getSchedules().find((s) => s.id === parsed.scheduleId);
+      const sch = sheetsService.getSchedulesForMember(profile.memberId).find((s) => s.id === parsed.scheduleId);
       if (sch) targetSchedule = sch;
     }
 
@@ -229,7 +237,12 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         }
       } catch (err: unknown) {
         console.error('[QRScanner] Camera access error:', err);
-        setCameraError('카메라를 실행할 수 없습니다. 브라우저 카메라 권한을 허용해주세요.');
+        setCameraError(
+          describeCameraFailure(
+            classifyCameraError(err, typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia))
+          )
+        );
+        setNeedsExternalBrowserHint(true);
       }
     }
 
@@ -458,6 +471,29 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               {scanResult.msg}
             </p>
 
+            {isKakaoInApp && needsExternalBrowserHint && (
+              <a
+                href={buildKakaoExternalBrowserUrl(window.location.href)}
+                style={{
+                  display: 'block',
+                  margin: '0 0 12px',
+                  padding: '10px 12px',
+                  minHeight: '44px',
+                  boxSizing: 'border-box',
+                  borderRadius: '10px',
+                  background: '#FEF9C3',
+                  color: '#854D0E',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  lineHeight: 1.45,
+                  textAlign: 'center',
+                  textDecoration: 'none',
+                }}
+              >
+                카카오톡 안에서는 카메라·위치가 막힐 수 있어요. 눌러서 기본 브라우저로 열기
+              </a>
+            )}
+
             <button
               type="button"
               onClick={() => {
@@ -589,6 +625,26 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                     <div style={{ color: '#FFFFFF', textAlign: 'center', padding: '24px' }}>
                       <span style={{ fontSize: '36px', display: 'block', marginBottom: '10px' }}>📷</span>
                       <p style={{ fontSize: '13px', margin: 0, color: '#FECACA' }}>{cameraError}</p>
+                      {isKakaoInApp && (
+                        <a
+                          href={buildKakaoExternalBrowserUrl(window.location.href)}
+                          style={{
+                            display: 'inline-block',
+                            marginTop: '12px',
+                            padding: '10px 14px',
+                            minHeight: '44px',
+                            boxSizing: 'border-box',
+                            borderRadius: '10px',
+                            background: '#FEF9C3',
+                            color: '#854D0E',
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            textDecoration: 'none',
+                          }}
+                        >
+                          기본 브라우저로 열기
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>

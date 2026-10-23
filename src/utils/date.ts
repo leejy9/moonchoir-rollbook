@@ -217,3 +217,12 @@ export function formatMatrixHeaderDate(rawDateStr: string): {
     };
   }
 }
+
+/**
+ * 화면 표시용 짧은 날짜(YY-MM-DD). 저장·시트 값은 YYYY-MM-DD 그대로 두고, 형식이 다른 값은 원문을 돌려준다.
+ */
+export function formatShortDate(dateStr: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr || '');
+  if (!match) return dateStr;
+  return `${match[1].slice(2)}-${match[2]}-${match[3]}`;
+}

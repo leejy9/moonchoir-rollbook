@@ -2911,52 +2911,65 @@ a {
   bottom: 0;
   background: linear-gradient(180deg, #7C73F0 0%, #5C53DB 60%, #2D2A68 100%);
   transition: height 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
-  overflow: hidden;
+  /* 수면 파도가 채움 영역 위로 솟아야 하므로 clip은 원형 컨테이너(.liquid-gauge-container)가 맡는다 */
+  overflow: visible;
 }
 
-/* Waving crest surface */
+/* Waving crest surface: 시작·끝 높이가 같은 타일이라 이음새 없이 반복되고, 두 겹이 서로 다른 속도·방향으로 흐른다 */
 .liquid-wave-surface {
+  /* 파도 높이는 게이지 크기에 비례(--gauge-size는 LiquidGauge가 지정). 채움 윗선 바로 위에 얹혀 파형의 골이 윗선에 닿는다 */
+  --wave-h: calc(var(--gauge-size, 48px) * 0.16);
   position: absolute;
-  top: -10px;
-  left: -50%;
+  bottom: calc(100% - 0.5px);
+  left: 0;
   width: 200%;
-  height: 20px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath d='M0,0 C150,90 350,-40 500,45 C650,130 900,-20 1200,40 L1200,120 L0,120 Z' fill='%23A59FFB' opacity='0.7'/%3E%3Cpath d='M0,20 C200,-30 400,70 600,10 C800,-40 1000,60 1200,20 L1200,120 L0,120 Z' fill='%235C53DB'/%3E%3C/svg%3E") repeat-x;
+  height: var(--wave-h);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 16' preserveAspectRatio='none'%3E%3Cpath d='M0 8 C8 3 20 0 30 0 C40 0 52 3 60 8 C68 13 80 16 90 16 C100 16 112 13 120 8 L120 16 L0 16 Z' fill='%237C73F0'/%3E%3C/svg%3E") repeat-x;
   background-size: 50% 100%;
-  animation: waveShake 2.8s linear infinite;
+  animation: waveFlow 3.2s linear infinite, waveBob 2.4s ease-in-out infinite;
 }
 
 .liquid-wave-surface.sub {
-  top: -8px;
-  opacity: 0.5;
-  animation: waveShakeReverse 2s linear infinite;
+  bottom: calc(100% - 0.5px + var(--wave-h) * 0.12);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 16' preserveAspectRatio='none'%3E%3Cpath d='M0 8 C8 3 20 0 30 0 C40 0 52 3 60 8 C68 13 80 16 90 16 C100 16 112 13 120 8 L120 16 L0 16 Z' fill='%23A59FFB' fill-opacity='0.6'/%3E%3C/svg%3E");
+  animation: waveFlowReverse 4.6s linear infinite, waveBob 3.1s ease-in-out infinite reverse;
 }
 
-@keyframes waveShake {
-  0% {
+@keyframes waveFlow {
+  from {
     transform: translateX(0);
   }
 
-  50% {
-    transform: translateX(-25%) translateY(-1px);
-  }
-
-  100% {
+  to {
     transform: translateX(-50%);
   }
 }
 
-@keyframes waveShakeReverse {
-  0% {
+@keyframes waveFlowReverse {
+  from {
     transform: translateX(-50%);
   }
 
-  50% {
-    transform: translateX(-25%) translateY(1px);
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes waveBob {
+  0%,
+  100% {
+    translate: 0 1.5px;
   }
 
-  100% {
-    transform: translateX(0);
+  50% {
+    translate: 0 -1.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liquid-wave-surface,
+  .liquid-wave-surface.sub {
+    animation: none;
   }
 }
 
@@ -3647,6 +3660,72 @@ a {
   color: var(--brand-accent);
 }
 
+/* Mobile matrix: 좌우 고정 열이 합쳐 화면보다 넓어 회차 칸이 사라지던 문제 — 번호·상태 열을 숨기고 오른쪽 고정은 출석률만 남긴다 */
+@media (max-width: 640px) {
+  .matrix-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .matrix-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .matrix-scroll-wrapper {
+    max-height: 75vh;
+    overscroll-behavior-x: contain;
+  }
+
+  .matrix-table .col-num,
+  .matrix-table .col-status {
+    display: none;
+  }
+
+  .matrix-table .col-name {
+    left: 0;
+    min-width: 78px;
+    max-width: 78px;
+  }
+
+  .matrix-table .col-part {
+    left: 78px;
+    min-width: 54px;
+    border-right: 2px solid #d1d5db;
+  }
+
+  .matrix-table thead th,
+  .matrix-table tbody td {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .matrix-table .sticky-col-right {
+    position: static;
+  }
+
+  .matrix-table .col-rate {
+    position: sticky;
+    right: 0;
+    min-width: 52px;
+    border-left: 2px solid #d1d5db;
+  }
+
+  .matrix-table .col-att,
+  .matrix-table .col-late,
+  .matrix-table .col-abs {
+    right: auto;
+    min-width: 40px;
+  }
+
+  .matrix-table .col-energy {
+    min-width: 48px;
+  }
+}
+
 /* Matrix Interactive Cells */
 .matrix-cell {
   cursor: pointer;
@@ -3834,6 +3913,42 @@ a {
   background: #f1f5f9;
   border-color: #cbd5e1;
   color: #475569;
+}
+
+.popover-time-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.popover-time-box label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4e5968;
+}
+
+.popover-time-box input {
+  width: 100%;
+  min-height: 44px;
+  padding: 5px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+.popover-time-hint {
+  font-size: 10.5px;
+  color: #8b95a1;
+  line-height: 1.4;
+}
+
+.popover-time-error {
+  font-size: 11px;
+  font-weight: 700;
+  color: #dc2626;
+  line-height: 1.4;
 }
 
 .popover-note-box input {
@@ -5039,13 +5154,13 @@ a {
 /* Scorecard Table Responsive Styles */
 @media (max-width: 480px) {
   .scorecard-table-header {
-    grid-template-columns: 1fr 85px 75px 65px !important;
+    grid-template-columns: 1fr 62px 75px 65px !important;
     padding: 8px 10px !important;
     font-size: 11px !important;
   }
 
   .scorecard-table-row {
-    grid-template-columns: 1fr 85px 75px 65px !important;
+    grid-template-columns: 1fr 62px 75px 65px !important;
     padding: 9px 10px !important;
     font-size: 11.5px !important;
   }

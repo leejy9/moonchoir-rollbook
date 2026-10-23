@@ -1342,7 +1342,7 @@ function ensureSheetStructure(ss) {
     },
     {
       name: SHEET_NAMES.SCHEDULES,
-      headers: ['id', 'title', 'date', 'startTime', 'endTime', 'locationName', 'category', 'checkInPin', 'description', 'programId', 'seriesId', 'seriesIndex', 'seriesTotal', 'isArchived', 'targetAudienceType', 'targetParts', 'targetMemberIds', 'locationId', 'latitude', 'longitude', 'radiusMeters', 'isCancelled'],
+      headers: ['id', 'title', 'date', 'startTime', 'endTime', 'locationName', 'category', 'checkInPin', 'description', 'programId', 'seriesId', 'seriesIndex', 'seriesTotal', 'isArchived', 'targetAudienceType', 'targetParts', 'targetMemberIds', 'locationId', 'latitude', 'longitude', 'radiusMeters', 'isCancelled', 'visibility'],
     },
     {
       name: SHEET_NAMES.RSVP,

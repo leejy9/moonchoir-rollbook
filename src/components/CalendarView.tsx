@@ -45,7 +45,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [currentMonthIndex, setCurrentMonthIndex] = useState(9); // 0-indexed: 9 = October
   const [selectedDateStr, setSelectedDateStr] = useState<string>('2026-10-15');
 
-  const schedules = sheetsService.getSchedules();
+  const schedules = sheetsService.getSchedulesForMember(profile.memberId);
 
   const handlePrevMonth = () => {
     if (currentMonthIndex === 0) {

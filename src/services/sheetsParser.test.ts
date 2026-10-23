@@ -63,3 +63,34 @@ describe('parseRemoteSchedules', () => {
     expect(schedule.targetParts).toEqual(['소프라노', '알토', '테너', '베이스']);
   });
 });
+
+describe('parseRemoteSchedules - visibility', () => {
+  const row = (visibility: unknown) =>
+    ({
+      id: 's1',
+      title: '연습',
+      date: '2026-10-30',
+      startTime: '19:30',
+      endTime: '21:30',
+      locationName: '연습실',
+      category: '정기연습',
+      visibility,
+    }) as unknown as Parameters<typeof parseRemoteSchedules>[0][number];
+
+  it('열이 없던 과거 행과 빈 값은 전체 공개(ALL)로 읽는다', () => {
+    const [legacy] = parseRemoteSchedules([{ ...row(undefined) }]);
+    const [blank] = parseRemoteSchedules([row('')]);
+    expect(legacy.visibility).toBe('ALL');
+    expect(blank.visibility).toBe('ALL');
+  });
+
+  it('TARGETS_ONLY는 대소문자와 공백에 상관없이 인식한다', () => {
+    const [parsed] = parseRemoteSchedules([row(' targets_only ')]);
+    expect(parsed.visibility).toBe('TARGETS_ONLY');
+  });
+
+  it('알 수 없는 값은 일정을 숨기지 않고 전체 공개로 읽는다', () => {
+    const [parsed] = parseRemoteSchedules([row('SECRET')]);
+    expect(parsed.visibility).toBe('ALL');
+  });
+});

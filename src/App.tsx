@@ -86,7 +86,7 @@ export function App() {
     void sheetsService.refreshRemoteData();
   }, [currentView, showMemberPortalModal, showQRScanner, isRsvpOpen]);
 
-  const activeSchedules = sheetsService.getSchedules();
+  const activeSchedules = sheetsService.getSchedulesForMember(profile?.memberId);
   const [todayStr, setTodayStr] = useState(() => getKSTDateString());
 
   useEffect(() => {

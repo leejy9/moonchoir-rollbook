@@ -204,6 +204,7 @@ erDiagram
 | `category` | `category` | 일정 구분 (`정기연습`, `추가연습`, `연주` 등) | `string` (필수) | 캘린더 필터 및 통계 반영 여부 | • 수정 시 일정 목록 필터링 반영. |
 | `description` | `description` | 상세 설명 (준비물, 곡목 등) | `string` (선택) | 캘린더 상세 팝업 | • 수정 시 해당 셀만 갱신. |
 | `isArchived` | `isArchived` | 아카이브 여부 (`true` / `false`) | `boolean` (선택) | 일정 뷰 표시 여부 | • `true` 설정 시 단원 캘린더에서 숨김. |
+| `visibility` | `visibility` | 일정 노출 범위 (`ALL` / `TARGETS_ONLY`, 소유자 승인 2026-10-23) | `string` (선택) | 단원 화면(홈·캘린더·내 기록·QR 자동 매칭)의 일정 노출 판정 | • **빈 값·알 수 없는 값은 `ALL`(전체 공개)** 로 읽어 기존 행이 그대로 보임.<br>• `TARGETS_ONLY`는 출결 의무 대상 조건(`targetAudienceType` 등)에 맞는 단원과 관리자에게만 보임. 대상이 아니어도 그 일정에 출석 기록이 있으면 본인에게 보임.<br>• **화면 숨김일 뿐 서버 접근 제어가 아님**: 시트·Apps Script 응답에는 그대로 포함됨(Task 76 참고).<br>• 새 열은 `ensureSheetStructure`가 기존 헤더 뒤에 추가함(기존 열·헤더 불변). |
 
 ---
 

@@ -1277,4 +1277,59 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     const schedule = service.getSchedules().find((s) => s.id === targetScheduleId);
     expect(schedule).toBeUndefined();
   });
+
+  describe('단원용 일정 노출 범위 (visibility)', () => {
+    const hiddenBass = {
+      id: 'sch_hidden_bass',
+      title: '베이스 파트연습',
+      date: '2026-11-05',
+      startTime: '19:30',
+      endTime: '21:00',
+      locationName: '연습실',
+      category: '추가연습',
+      visibility: 'TARGETS_ONLY' as const,
+      targetAudienceType: 'PARTS' as const,
+      targetParts: ['베이스' as const],
+    };
+
+    const memberOf = (part: string) => service.getMembers().find((m) => m.part === part)!;
+
+    it('대상이 아닌 단원의 목록에서는 숨기고 관리자 목록(getSchedules)에는 남긴다', async () => {
+      await service.addSchedule(hiddenBass);
+      const soprano = memberOf('소프라노');
+      const bass = memberOf('베이스');
+
+      expect(service.getSchedulesForMember(soprano.id).some((s) => s.id === hiddenBass.id)).toBe(false);
+      expect(service.getSchedulesForMember(bass.id).some((s) => s.id === hiddenBass.id)).toBe(true);
+      expect(service.getSchedules().some((s) => s.id === hiddenBass.id)).toBe(true);
+    });
+
+    it('노출 범위가 없는 기존 일정은 모든 단원에게 그대로 보인다', () => {
+      const soprano = memberOf('소프라노');
+      expect(service.getSchedulesForMember(soprano.id)).toHaveLength(service.getSchedules().length);
+    });
+
+    it('대상이 아니어도 이미 출석 기록이 있으면 본인 목록에 보인다', async () => {
+      await service.addSchedule(hiddenBass);
+      const soprano = memberOf('소프라노');
+      await service.addCheckInLog({
+        id: 'log_hidden_manual',
+        timestamp: '2026-11-05T19:30:00',
+        scheduleId: hiddenBass.id,
+        memberId: soprano.id,
+        memberName: soprano.name,
+        part: soprano.part,
+        authMethod: 'MANUAL_BY_ADMIN',
+        isVerifiedLocation: true,
+        adminNote: '관리자 수동 출석 인정',
+      });
+
+      expect(service.getSchedulesForMember(soprano.id).some((s) => s.id === hiddenBass.id)).toBe(true);
+    });
+
+    it('단원을 확인할 수 없으면(프로필 없음) 숨김 일정은 보이지 않는다', async () => {
+      await service.addSchedule(hiddenBass);
+      expect(service.getSchedulesForMember(undefined).some((s) => s.id === hiddenBass.id)).toBe(false);
+    });
+  });
 });

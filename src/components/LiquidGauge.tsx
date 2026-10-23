@@ -28,7 +28,7 @@ export const LiquidGauge: React.FC<LiquidGaugeProps> = ({
     <div className={`liquid-gauge-wrapper ${className}`}>
       <div
         className={`liquid-gauge-container ${isFull ? 'full-charge' : ''}`}
-        style={{ width: `${size}px`, height: `${size}px` }}
+        style={{ width: `${size}px`, height: `${size}px`, ['--gauge-size' as string]: `${size}px` }}
         title={`${subText || '투표율'}: ${clampedPercent}%`}
       >
         {/* Liquid Fill with Wave crests */}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatMatrixHeaderDate, normalizeDateToYYYYMMDD, getKSTTimestampString, parseKSTDate, getKSTDateString, addDaysKST, normalizeToKSTTimestamp, getKSTClock } from './date';
+import { formatMatrixHeaderDate, normalizeDateToYYYYMMDD, getKSTTimestampString, parseKSTDate, getKSTDateString, addDaysKST, normalizeToKSTTimestamp, getKSTClock, formatShortDate } from './date';
 
 describe('formatMatrixHeaderDate', () => {
   it('YYYY-MM-DD 형식을 10/08 (목) 형식으로 올바르게 변환한다', () => {
@@ -91,5 +91,20 @@ describe('KST 시각 정규화 (normalizeToKSTTimestamp / getKSTClock)', () => {
     expect(getKSTClock('')).toBe('');
     expect(getKSTClock(undefined)).toBe('');
     expect(getKSTClock('날짜아님')).toBe('');
+  });
+});
+
+describe('formatShortDate', () => {
+  it('YYYY-MM-DD를 YY-MM-DD로 줄인다', () => {
+    expect(formatShortDate('2026-10-23')).toBe('26-10-23');
+  });
+
+  it('시각이 붙은 값도 날짜 부분만 줄인다', () => {
+    expect(formatShortDate('2026-10-23 19:30:00')).toBe('26-10-23');
+  });
+
+  it('형식이 다르거나 비어 있으면 원문을 그대로 돌려준다', () => {
+    expect(formatShortDate('')).toBe('');
+    expect(formatShortDate('미정')).toBe('미정');
   });
 });

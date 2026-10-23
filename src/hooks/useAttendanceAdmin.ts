@@ -7,6 +7,7 @@ import type {
   Schedule,
 } from '../types/rollbook';
 import { getKSTDateString, getKSTTimestampString } from '../utils/date';
+import { resolveManualAttendanceTimestamp } from '../utils/manualAttendance';
 
 export type PeriodOption = '1M' | '3M' | '6M' | 'YEAR' | 'ALL';
 export type SessionFilterType = '전체' | '출석' | '지각' | '사유결석' | '결석';
@@ -127,21 +128,42 @@ export function useAttendanceAdmin({
   });
 
   // Manual Override State & Submit
-  const [overrideTarget, setOverrideTarget] = useState<{
+  const [overrideTarget, setOverrideTargetState] = useState<{
     id: string;
     name: string;
     part: string;
   } | null>(null);
   const [overrideReason, setOverrideReason] = useState('현장 확인 완료 (배터리 방전)');
+  const [overrideTime, setOverrideTime] = useState('');
+  const [overrideTimeError, setOverrideTimeError] = useState('');
+
+  // 다른 단원을 열거나 창을 닫으면 이전 입력과 오류를 비운다
+  const setOverrideTarget: typeof setOverrideTargetState = (target) => {
+    setOverrideTargetState(target);
+    setOverrideTime('');
+    setOverrideTimeError('');
+  };
 
   const handleManualOverrideSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!overrideTarget || !currentSchedule) return;
 
-    const { id, timestamp } = createManualLogMeta();
+    const { id, timestamp: enteredAt } = createManualLogMeta();
+    const resolved = resolveManualAttendanceTimestamp({
+      status: '출석',
+      schedule: currentSchedule,
+      inputTime: overrideTime,
+      lateGraceMinutes: sheetsService.getConfig().lateGraceMinutes ?? 10,
+      defaultTimestamp: enteredAt,
+    });
+    if (resolved.error !== undefined) {
+      setOverrideTimeError(resolved.error);
+      return;
+    }
+    setOverrideTimeError('');
     const log: RawAttendanceLog = {
       id,
-      timestamp,
+      timestamp: resolved.timestamp,
       scheduleId: currentSchedule.id,
       memberId: overrideTarget.id,
       memberName: overrideTarget.name,
@@ -154,6 +176,7 @@ export function useAttendanceAdmin({
     await sheetsService.addCheckInLog(log);
     setOverrideTarget(null);
     setOverrideReason('현장 확인 완료 (배터리 방전)');
+    setOverrideTime('');
     onDataChanged();
   };
 
@@ -237,6 +260,10 @@ export function useAttendanceAdmin({
     setOverrideTarget,
     overrideReason,
     setOverrideReason,
+    overrideTime,
+    setOverrideTime,
+    overrideTimeError,
+    currentScheduleStartTime: currentSchedule?.startTime,
     handleManualOverrideSubmit,
 
     // Cumulative Stats & Filters
