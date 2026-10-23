@@ -1,4 +1,5 @@
 import type { Schedule } from '../types/rollbook';
+import { getKSTDateString, getKSTTimestampString } from './date';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -56,4 +57,32 @@ export function resolveManualAttendanceTimestamp({
   }
 
   return { timestamp: `${schedule.date}T${trimmed}:00` };
+}
+
+/** 한국 시각 기준 지금의 HH:mm */
+export function getNowKSTTime(now: Date = new Date()): string {
+  return getKSTTimestampString(now).slice(11, 16);
+}
+
+interface DefaultArrivalOptions {
+  status: '출석' | '지각';
+  schedule: Pick<Schedule, 'date' | 'startTime'>;
+  lateGraceMinutes: number;
+  now?: Date;
+}
+
+/**
+ * 시계 팝업에 미리 채워 둘 도착 시각.
+ * - 오늘 일정: 지금 시각(현장에서 QR이 안 되는 단원을 바로 처리하는 경우). 지각은 지각 기준 직후보다 이르면 기준 직후로 올린다.
+ * - 다른 날 일정: 지금 시각이 의미 없으므로 출석은 시작 시각, 지각은 지각 기준 직후.
+ */
+export function getDefaultArrivalTime({ status, schedule, lateGraceMinutes, now = new Date() }: DefaultArrivalOptions): string {
+  const justAfterThreshold = formatMinutes(toMinutes(getLateThresholdTime(schedule.startTime, lateGraceMinutes)) + 1);
+  const isToday = getKSTDateString(now) === schedule.date;
+
+  if (!isToday) return status === '출석' ? schedule.startTime : justAfterThreshold;
+
+  const nowTime = getNowKSTTime(now);
+  if (status === '출석') return nowTime;
+  return toMinutes(nowTime) > toMinutes(justAfterThreshold) ? nowTime : justAfterThreshold;
 }

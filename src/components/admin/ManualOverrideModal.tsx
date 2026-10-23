@@ -1,10 +1,11 @@
 import React from 'react';
+import { RoundTimePicker } from '../RoundTimePicker';
 
 export interface ManualOverrideModalProps {
   overrideTarget: { id: string; name: string; part: string } | null;
   overrideReason: string;
   setOverrideReason: (reason: string) => void;
-  /** 도착 시각(HH:mm). 비우면 기존처럼 입력한 시점이 기록된다. */
+  /** 도착 시각(HH:mm). 오늘 일정이면 지금 시각이 미리 채워진다. */
   arrivalTime?: string;
   setArrivalTime?: (time: string) => void;
   arrivalError?: string;
@@ -39,36 +40,14 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
         </div>
 
         <form onSubmit={onSubmit} className="form-stack">
-          <label className="form-label" htmlFor="override-reason">
-            수동 인정 사유
-          </label>
-          <input
-            id="override-reason"
-            type="text"
-            className="input-text"
-            value={overrideReason}
-            onChange={(e) => setOverrideReason(e.target.value)}
-            placeholder="예: 배터리 방전 확인, 지하 연습실 GPS 오차"
-            required
-            autoFocus
-          />
-
           {setArrivalTime && (
             <>
-              <label className="form-label" htmlFor="override-arrival-time">
-                도착 시각 (선택)
-              </label>
-              <input
-                id="override-arrival-time"
-                type="time"
-                className="input-text"
-                value={arrivalTime}
-                onChange={(e) => setArrivalTime(e.target.value)}
-                style={{ minHeight: '44px', fontSize: '16px' }}
-              />
+              <label className="form-label">도착 시각</label>
+              <RoundTimePicker value={arrivalTime} onChange={setArrivalTime} />
               <p className="modal-desc" style={{ margin: 0 }}>
-                비우면 입력한 지금 시각으로 기록됩니다.
-                {lateThresholdTime ? ` 지각 기준은 ${lateThresholdTime} 이후이며, 이 시각을 넘기면 지각으로 계산됩니다.` : ''}
+                {lateThresholdTime
+                  ? `지각 기준은 ${lateThresholdTime} 이후이며, 이 시각을 넘기면 지각으로 계산됩니다.`
+                  : '선택한 시각이 출석 시각으로 기록됩니다.'}
               </p>
               {arrivalError && (
                 <p style={{ margin: 0, color: '#dc2626', fontSize: '13px', fontWeight: 700 }}>{arrivalError}</p>
@@ -76,9 +55,22 @@ export const ManualOverrideModal: React.FC<ManualOverrideModalProps> = ({
             </>
           )}
 
+          <label className="form-label" htmlFor="override-reason">
+            사유 (선택)
+          </label>
+          <input
+            id="override-reason"
+            type="text"
+            className="input-text"
+            value={overrideReason}
+            onChange={(e) => setOverrideReason(e.target.value)}
+            placeholder="예: QR 인식 안 됨, 배터리 방전"
+            style={{ minHeight: '44px', fontSize: '16px' }}
+          />
+
           <div className="modal-button-group">
             <button type="submit" className="btn-primary-large">
-              출석 인정 확정
+              적용하기
             </button>
             <button
               type="button"

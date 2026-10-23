@@ -7,7 +7,7 @@ import type {
   Schedule,
 } from '../types/rollbook';
 import { getKSTDateString, getKSTTimestampString } from '../utils/date';
-import { resolveManualAttendanceTimestamp } from '../utils/manualAttendance';
+import { getDefaultArrivalTime, resolveManualAttendanceTimestamp } from '../utils/manualAttendance';
 
 export type PeriodOption = '1M' | '3M' | '6M' | 'YEAR' | 'ALL';
 export type SessionFilterType = '전체' | '출석' | '지각' | '사유결석' | '결석';
@@ -133,15 +133,25 @@ export function useAttendanceAdmin({
     name: string;
     part: string;
   } | null>(null);
-  const [overrideReason, setOverrideReason] = useState('현장 확인 완료 (배터리 방전)');
+  const [overrideReason, setOverrideReason] = useState('');
   const [overrideTime, setOverrideTime] = useState('');
   const [overrideTimeError, setOverrideTimeError] = useState('');
 
   // 다른 단원을 열거나 창을 닫으면 이전 입력과 오류를 비운다
   const setOverrideTarget: typeof setOverrideTargetState = (target) => {
     setOverrideTargetState(target);
-    setOverrideTime('');
+    setOverrideReason('');
     setOverrideTimeError('');
+    // 시계에는 지금 시각(오늘 일정)을 미리 채워 두고, 관리자가 필요하면 고친다
+    setOverrideTime(
+      target && currentSchedule
+        ? getDefaultArrivalTime({
+            status: '출석',
+            schedule: currentSchedule,
+            lateGraceMinutes: sheetsService.getConfig().lateGraceMinutes ?? 10,
+          })
+        : ''
+    );
   };
 
   const handleManualOverrideSubmit = async (e: React.FormEvent) => {
@@ -170,12 +180,12 @@ export function useAttendanceAdmin({
       part: overrideTarget.part as any,
       authMethod: 'MANUAL_BY_ADMIN',
       isVerifiedLocation: true,
-      adminNote: overrideReason.trim(),
+      adminNote: overrideReason.trim() || '관리자 수동 출석 인정',
     };
 
     await sheetsService.addCheckInLog(log);
     setOverrideTarget(null);
-    setOverrideReason('현장 확인 완료 (배터리 방전)');
+    setOverrideReason('');
     setOverrideTime('');
     onDataChanged();
   };
