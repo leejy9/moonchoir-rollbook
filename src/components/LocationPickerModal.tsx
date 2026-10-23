@@ -130,6 +130,9 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                   }
                 }
               }}
+              onPlaceNameSelected={(placeName) => {
+                if (!name.trim()) setName(placeName);
+              }}
               onAddressSelected={(addr) => {
                 setAddress(addr);
                 setCoordinatesConfirmed(false);
