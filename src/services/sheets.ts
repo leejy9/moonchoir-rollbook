@@ -269,12 +269,21 @@ export class SheetsService {
   private isSameMember = (a: string, b: string): boolean =>
     a === b || this.canonicalMemberId(a) === this.canonicalMemberId(b);
 
+  /**
+   * 댓글에 보이는 이름·파트는 쓸 때의 값(스냅샷)이 아니라 작성자(통합된 단원은 대표 단원)의 현재 값을 우선한다.
+   * 단원 기록이 없을 때만 쓸 때의 값을 쓴다. 시트의 원본 행은 바뀌지 않는다.
+   */
+  private withCurrentAuthor(comment: ScheduleComment): ScheduleComment {
+    const author = this.members.find((m) => m.id === this.canonicalMemberId(comment.memberId));
+    return author ? { ...comment, memberName: author.name, part: author.part } : comment;
+  }
+
   /** 일정 하나의 댓글(오래된 순). 삭제된 댓글은 빠지고 수정은 반영된다. */
   public getComments(scheduleId: string): ScheduleComment[] {
     return buildScheduleComments(
       this.commentEvents.filter((e) => e.scheduleId === scheduleId),
       this.isSameMember
-    );
+    ).map((comment) => this.withCurrentAuthor(comment));
   }
 
   /** 일정별 댓글 개수 (관리자 화면 배지용) */

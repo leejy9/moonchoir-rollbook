@@ -162,6 +162,34 @@ describe('SheetsService 일정 댓글', () => {
     expect(service.getCommentCounts().get('s2')).toBe(1);
   });
 
+  it('댓글의 이름·파트는 쓸 때의 값이 아니라 작성자의 현재 값으로 보인다', async () => {
+    await service.addComment({ scheduleId: 's1', member: kim, text: '파트가 바뀌기 전에 쓴 글' });
+    expect(service.getComments('s1')[0]).toMatchObject({ memberName: '김하은', part: '소프라노' });
+
+    // 관리자 화면에서 파트와 이름을 바꾼 상황(관리자 화면과 같은 updateMember 경로)
+    await service.updateMember('m1', { name: '김하은(총무)', part: '관리자' });
+    expect(service.getComments('s1')[0]).toMatchObject({ memberName: '김하은(총무)', part: '관리자' });
+    // 시트에 저장된 원본 댓글 이벤트는 바뀌지 않는다(쓸 때의 값이 그대로 남는다)
+    expect(commentPosts()[0].data).toMatchObject({ memberName: '김하은', part: '소프라노' });
+  });
+
+  it('통합된 단원이 쓴 댓글은 대표 단원의 현재 이름·파트로 보인다', async () => {
+    const old = member('m_old', '김하은(구)', { status: 'MERGED', mergedIntoId: 'm1', part: '테너' });
+    service.seedTestData({ members: [{ ...kim, part: '알토' }, lee, old] });
+    await service.addComment({ scheduleId: 's1', member: old, text: '예전 계정으로 쓴 글' });
+
+    expect(service.getComments('s1')[0]).toMatchObject({ memberName: '김하은', part: '알토' });
+  });
+
+  it('작성자 단원 기록이 없으면 쓸 때의 이름·파트를 그대로 보여준다', async () => {
+    backend.commentRows = [
+      { id: 'c_gone', scheduleId: 's1', memberId: 'm_gone', memberName: '떠난단원', part: '테너', action: 'CREATE', text: '안녕히', timestamp: '2026-10-29 18:00:00' },
+    ];
+    await service.refreshRemoteData({ force: true });
+
+    expect(service.getComments('s1')[0]).toMatchObject({ memberName: '떠난단원', part: '테너' });
+  });
+
   it('시트 주소가 없으면(로컬 시험) 요청 없이 이 기기에만 저장한다', async () => {
     const local = new SheetsService();
     local.updateConfig({ sheetsWebAppUrl: '' });
