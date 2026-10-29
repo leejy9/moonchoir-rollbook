@@ -1068,3 +1068,8 @@
 - 조치: 카카오맵 ON, `.env`를 `1465ed…`로 변경, 코드 기본 키 복구(PR #5), 재배포 → `도로명주소 좌표 변환 연결됨` 확인. 이어서 주소 변환 실패 원인 후보(옵션 `'EXACT'` 대문자)를 소문자 `exact` + 비슷한 주소 재시도 + 응답 상태 표시로 보강.
 - Green Bar: `typecheck`, `lint` 0 errors, `npm test` 37 files / 204 tests pass(UTC·KST 모두), `build` 성공.
 
+### 11. 댓글 작성자의 이름·파트를 현재 값으로 표시 (2026-10-29, Task 87)
+- 증상: 관리자 화면에서 단원의 파트를 바꿨는데 이미 쓴 댓글에는 옛 파트가 계속 표시. 조사: 동기화 문제가 아니라, 댓글 투영(`buildScheduleComments`)이 시트 이벤트의 `memberName`/`part`(쓸 때의 스냅샷)를 그대로 화면에 넘김. 계획서 14의 "표시 이름·파트는 대표 단원 현재 값 우선"이 구현되지 않았던 것.
+- 수정: `getComments`에서 `withCurrentAuthor`로 작성자(통합 별칭은 대표 단원)의 현재 이름·파트로 교체, 단원 기록이 없으면 스냅샷 유지. 원본 이벤트·시트 기록은 불변. 안전장치를 끄면 새 테스트 2건이 실패함을 확인.
+- Green Bar: `typecheck`, `lint` 0 errors, `npm test` 46 files / 298 tests pass(UTC·KST 모두).
+
