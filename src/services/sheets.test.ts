@@ -1332,4 +1332,119 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       expect(service.getSchedulesForMember(undefined).some((s) => s.id === hiddenBass.id)).toBe(false);
     });
   });
+
+  describe('Realtime Event Merging', () => {
+    it('mergeRealtimeAttendanceLog appends new log, ignores duplicate, and notifies sync listeners', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      const log = {
+        id: 'log_rt_test_1',
+        timestamp: '2026-11-19 19:30:00',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        authMethod: 'QR_WEB_CAM' as const,
+        isVerifiedLocation: true,
+      };
+
+      service.mergeRealtimeAttendanceLog(log);
+
+      expect(service.getLogs('sch_20261105')).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: 'log_rt_test_1' })])
+      );
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // Attempt duplicate merge
+      service.mergeRealtimeAttendanceLog(log);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      unsub();
+    });
+
+    it('mergeRealtimeCommentEvent appends comment event, ignores duplicate, and notifies sync listeners', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      const commentEvent = {
+        id: 'cmt_rt_test_1',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        action: 'CREATE' as const,
+        text: '실시간 댓글 테스트입니다',
+        timestamp: '2026-11-19 19:31:00',
+      };
+
+      service.mergeRealtimeCommentEvent(commentEvent);
+
+      const comments = service.getComments('sch_20261105');
+      expect(comments.some((c) => c.id === 'cmt_rt_test_1')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // Attempt duplicate merge
+      service.mergeRealtimeCommentEvent(commentEvent);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      unsub();
+    });
+
+    it('mergeRealtimeRsvpVote handles INSERT, UPDATE, and DELETE actions', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      // INSERT
+      service.mergeRealtimeRsvpVote('INSERT', {
+        id: 'rsvp_rt_1',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        status: 'ATTEND',
+        timestamp: '2026-11-19 10:00:00',
+      });
+
+      expect(service.getRSVPVotes('sch_20261105').find((v) => v.memberId === 'mem_s01')?.status).toBe(
+        'ATTEND'
+      );
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // UPDATE
+      service.mergeRealtimeRsvpVote('UPDATE', {
+        id: 'rsvp_rt_1',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        status: 'ABSENT',
+        reason: '개인 사정',
+        timestamp: '2026-11-19 12:00:00',
+      });
+
+      const updated = service.getRSVPVotes('sch_20261105').find((v) => v.memberId === 'mem_s01');
+      expect(updated?.status).toBe('ABSENT');
+      expect(updated?.reason).toBe('개인 사정');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeRsvpVote('DELETE', null, {
+        id: 'rsvp_rt_1',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        status: 'ABSENT',
+        timestamp: '2026-11-19 12:00:00',
+      });
+
+      expect(
+        service.getRSVPVotes('sch_20261105').some((v) => v.memberId === 'mem_s01')
+      ).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+  });
 });

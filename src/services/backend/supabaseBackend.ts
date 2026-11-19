@@ -16,6 +16,10 @@ export class SupabaseBackend implements RemoteBackend {
     };
   }
 
+  public getConfig(): SupabaseConfig {
+    return { ...this.config };
+  }
+
   private getHeaders(): Record<string, string> {
     return {
       apikey: this.config.anonKey,

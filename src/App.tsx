@@ -17,6 +17,11 @@ import {
 } from './services/auth';
 import { sheetsService } from './services/sheets';
 import {
+  getActiveSupabaseRealtime,
+  startSupabaseRealtime,
+  stopSupabaseRealtime,
+} from './services/realtime/supabaseRealtime';
+import {
   getDarkModePreference,
   getDisplayModePreference,
   saveDarkModePreference,
@@ -66,12 +71,32 @@ export function App() {
   // 시트에서 새 데이터를 받아오면(또는 상태가 바뀌면) 화면을 다시 그린다
   useEffect(() => sheetsService.subscribeSync(() => setRefreshKey((k) => k + 1)), []);
 
+  // Supabase 실시간 리스너 연결 및 해제
+  useEffect(() => {
+    if (sheetsService.getBackendKind() === 'supabase') {
+      startSupabaseRealtime();
+    }
+    return () => {
+      stopSupabaseRealtime();
+    };
+  }, []);
+
   // 다른 사람이 바꾼 내용을 보려면: 앱으로 돌아오거나 네트워크가 복구될 때 새로 받아온다(20초 이내 재요청은 건너뜀)
   useEffect(() => {
     const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') void sheetsService.refreshRemoteData();
+      if (document.visibilityState === 'visible') {
+        if (sheetsService.getBackendKind() === 'supabase') {
+          getActiveSupabaseRealtime()?.checkAndReconnect();
+        }
+        void sheetsService.refreshRemoteData();
+      }
     };
-    const refreshWhenOnline = () => void sheetsService.refreshRemoteData({ force: true });
+    const refreshWhenOnline = () => {
+      if (sheetsService.getBackendKind() === 'supabase') {
+        getActiveSupabaseRealtime()?.checkAndReconnect();
+      }
+      void sheetsService.refreshRemoteData({ force: true });
+    };
     document.addEventListener('visibilitychange', refreshWhenVisible);
     window.addEventListener('online', refreshWhenOnline);
     return () => {

@@ -44,10 +44,10 @@ import {
 } from './sheetsStorage';
 import type { RemoteBackend, RemoteSnapshot } from './backend/types';
 import { GasBackend } from './backend/gasBackend';
-import { SupabaseBackend } from './backend/supabaseBackend';
+import { SupabaseBackend, type SupabaseConfig } from './backend/supabaseBackend';
 
 export { resetStorage };
-export type { RemoteBackend, RemoteSnapshot };
+export type { RemoteBackend, RemoteSnapshot, SupabaseConfig };
 
 function createDefaultBackend(getUrl: () => string | undefined): RemoteBackend {
   const isTest = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.MODE === 'test' : false;
@@ -160,6 +160,17 @@ export class SheetsService {
 
   public getBackend(): RemoteBackend {
     return this.backend;
+  }
+
+  public getBackendKind(): 'gas' | 'supabase' {
+    return this.backend.kind;
+  }
+
+  public getSupabaseConfig(): SupabaseConfig | null {
+    if (this.backend instanceof SupabaseBackend) {
+      return this.backend.getConfig();
+    }
+    return null;
   }
 
   public setBackend(backend: RemoteBackend): void {
@@ -1519,9 +1530,74 @@ export class SheetsService {
     };
   }
 
+  public notifySyncListeners(): void {
+    this.syncListeners.forEach((listener) => listener());
+  }
+
   private setSyncState(next: SyncState): void {
     this.syncState = next;
     this.syncListeners.forEach((listener) => listener());
+  }
+
+  // --- Realtime Event Merging (Supabase WebSocket Realtime) ---
+
+  public mergeRealtimeAttendanceLog(log: RawAttendanceLog): void {
+    if (!log || !log.id) return;
+    if (this.logs.some((l) => l.id === log.id)) return;
+    this.logs.push(log);
+    saveToStorage(STORAGE_KEYS.LOGS, this.logs);
+    this.setSyncState({ ...this.syncState, lastSyncedAt: Date.now() });
+  }
+
+  public mergeRealtimeCommentEvent(event: ScheduleCommentEvent): void {
+    if (!event || !event.id) return;
+    if (this.commentEvents.some((e) => e.id === event.id)) return;
+    this.commentEvents.push(event);
+    saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
+    this.setSyncState({ ...this.syncState, lastSyncedAt: Date.now() });
+  }
+
+  public mergeRealtimeRsvpVote(
+    eventType: string,
+    rawRecord: RSVPVote | null,
+    rawOldRecord?: RSVPVote | null
+  ): void {
+    const action = eventType.toUpperCase();
+    if (action === 'DELETE') {
+      const target = rawOldRecord ?? rawRecord;
+      if (!target) return;
+      const initialLen = this.rsvpVotes.length;
+      this.rsvpVotes = this.rsvpVotes.filter((v) => {
+        if (target.id && v.id === target.id) return false;
+        if (
+          target.scheduleId &&
+          target.memberId &&
+          v.scheduleId === target.scheduleId &&
+          v.memberId === target.memberId
+        ) {
+          return false;
+        }
+        return true;
+      });
+      if (this.rsvpVotes.length !== initialLen) {
+        saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
+        this.setSyncState({ ...this.syncState, lastSyncedAt: Date.now() });
+      }
+    } else if (action === 'INSERT' || action === 'UPDATE') {
+      if (!rawRecord || !rawRecord.scheduleId || !rawRecord.memberId) return;
+      const index = this.rsvpVotes.findIndex(
+        (v) =>
+          (rawRecord.id && v.id === rawRecord.id) ||
+          (v.scheduleId === rawRecord.scheduleId && v.memberId === rawRecord.memberId)
+      );
+      if (index >= 0) {
+        this.rsvpVotes[index] = { ...this.rsvpVotes[index], ...rawRecord };
+      } else {
+        this.rsvpVotes.push(rawRecord);
+      }
+      saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
+      this.setSyncState({ ...this.syncState, lastSyncedAt: Date.now() });
+    }
   }
 
   private emitNotice(dedupeKey: string, message: string): void {
