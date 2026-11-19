@@ -13,6 +13,7 @@
     "deploy": "npm run build && npx gh-pages -d dist"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.1",
     "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
     "qrcode.react": "^4.2.0",
