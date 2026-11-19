@@ -258,26 +258,17 @@ export const ScheduleRsvpLogModal: React.FC<ScheduleRsvpLogModalProps> = ({
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {filteredRows.map((r, idx) => {
+              {filteredRows.map((r) => {
                 const isAttended = r.voteStatus === 'ATTEND';
                 const isAbsent = r.voteStatus === 'ABSENT';
 
                 return (
                   <div
                     key={r.memberId}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 12px',
-                      borderBottom: idx < filteredRows.length - 1 ? '1px solid #F1F5F9' : 'none',
-                      background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC',
-                      fontSize: '13px',
-                      gap: '8px',
-                    }}
+                    className="rsvp-log-row"
                   >
                     {/* Left: Member Name, Part, Status */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '120px' }}>
+                    <div className="rsvp-log-member">
                       <strong style={{ color: '#1E293B', fontSize: '13.5px' }}>{r.memberName}</strong>
                       <span
                         style={{
@@ -298,7 +289,7 @@ export const ScheduleRsvpLogModal: React.FC<ScheduleRsvpLogModalProps> = ({
                     </div>
 
                     {/* Middle: Vote Badge & Reason */}
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                    <div className="rsvp-log-status" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                       <span
                         style={{
                           padding: '2px 8px',
@@ -338,7 +329,7 @@ export const ScheduleRsvpLogModal: React.FC<ScheduleRsvpLogModalProps> = ({
                     </div>
 
                     {/* Right: Timestamp */}
-                    <div style={{ textAlign: 'right', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    <div className="rsvp-log-time" style={{ textAlign: 'right', whiteSpace: 'nowrap', flexShrink: 0 }}>
                       {r.timestamp ? (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                           <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#334155', fontWeight: 600 }}>

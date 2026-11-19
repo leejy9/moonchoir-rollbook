@@ -84,4 +84,27 @@ describe('useLongPress', () => {
     expect(stopPropagation).toHaveBeenCalled();
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it('prevents default context menu to avoid mobile image download popups', () => {
+    let handlers: ReturnType<typeof useLongPress> | undefined;
+
+    function TestComponent() {
+      // oxlint-disable-next-line react/globals
+      handlers = useLongPress({ onLongPress: vi.fn() });
+      return React.createElement('div', handlers);
+    }
+
+    renderToString(React.createElement(TestComponent));
+    expect(handlers?.onContextMenu).toBeDefined();
+
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+    handlers!.onContextMenu({
+      preventDefault,
+      stopPropagation,
+    } as unknown as React.MouseEvent);
+
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+  });
 });

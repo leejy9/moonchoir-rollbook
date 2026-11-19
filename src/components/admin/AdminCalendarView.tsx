@@ -202,7 +202,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  <div className="sch-item-info">
+                  <div className="sch-item-info" style={{ minWidth: 0, width: '100%', wordBreak: 'keep-all' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       {sch.isCancelled && (
                         <span
@@ -243,16 +243,16 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                         {sch.title}
                       </strong>
                     </div>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7684' }}>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7684', wordBreak: 'keep-all' }}>
                       {sch.startTime} ~ {sch.endTime} · {sch.locationName}
                     </p>
                     {sch.description && (
-                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b95a1' }}>
+                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b95a1', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                         {sch.description}
                       </p>
                     )}
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                  <div className="sch-item-actions" onClick={(e) => e.stopPropagation()}>
                     {sch.isCancelled ? (
                       <>
                         {onRestoreSchedule && (

@@ -220,6 +220,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <img
             src={moonchoirLogo}
             alt="Moonchoir"
+            draggable={false}
             {...logoLongPress}
             title="3초간 길게 누르면 관리자 마스터 PIN을 재설정합니다"
             style={{
@@ -231,6 +232,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               cursor: 'pointer',
               userSelect: 'none',
               WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
             }}
           />
           <h1 className="admin-title" style={{ whiteSpace: 'nowrap' }}>

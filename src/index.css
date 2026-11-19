@@ -2085,6 +2085,7 @@ a {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .toss-member-name {
@@ -2108,6 +2109,8 @@ a {
 .toss-member-meta {
   font-size: 12px;
   line-height: 1.4;
+  word-break: keep-all;
+  overflow-wrap: break-word;
   color: var(--text-muted);
 }
 
@@ -3104,10 +3107,22 @@ a {
   padding: 16px;
   margin-bottom: 12px;
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 12px;
   box-shadow: var(--shadow-sm);
   transition: all var(--transition-fast);
+  word-break: keep-all;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .location-item-card {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
 }
 
 .location-item-card:hover {
@@ -5037,13 +5052,41 @@ a {
 
 .admin-sch-item-card {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   background: #ffffff;
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid #e5e8eb;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .admin-sch-item-card {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+}
+
+.admin-sch-item-card .sch-item-info {
+  flex: 1;
+  min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.admin-sch-item-card .sch-item-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .admin-sch-item-card:hover {
@@ -5066,6 +5109,54 @@ a {
 .btn-delete-sch-mini:hover {
   background: #fff0eb;
   border-color: #dc2626;
+}
+
+/* Schedule RSVP Log Modal */
+.rsvp-log-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  gap: 8px;
+  font-size: 13px;
+  border-bottom: 1px solid #f1f5f9;
+  word-break: keep-all;
+}
+
+.rsvp-log-row:last-child {
+  border-bottom: none;
+}
+
+.rsvp-log-row:nth-child(even) {
+  background: #f8fafc;
+}
+
+.rsvp-log-row:nth-child(odd) {
+  background: #ffffff;
+}
+
+.rsvp-log-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 110px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 520px) {
+  .rsvp-log-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 10px 10px;
+  }
+  .rsvp-log-member {
+    min-width: auto;
+  }
+  .rsvp-log-time {
+    align-self: flex-end;
+    margin-left: auto;
+  }
 }
 
 .profile-alert-success {

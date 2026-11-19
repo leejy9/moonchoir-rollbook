@@ -44,6 +44,11 @@ export function useLongPress({
     cancel();
   }, [cancel]);
 
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       if (isLongPressRef.current) {
@@ -63,6 +68,7 @@ export function useLongPress({
     onTouchStart: start,
     onTouchEnd: cancel,
     onTouchCancel: cancel,
+    onContextMenu: handleContextMenu,
     onClick: handleClick,
   };
 }

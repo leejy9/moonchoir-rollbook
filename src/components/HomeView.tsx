@@ -441,6 +441,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             src={moonchoirLogo}
             alt="Moonchoir"
             className="brand-logo-img"
+            draggable={false}
             {...logoLongPress}
             title="3초간 길게 누르면 관리자 마스터 PIN을 재설정합니다"
             style={{
@@ -451,6 +452,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               cursor: 'pointer',
               userSelect: 'none',
               WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
             }}
           />
           <div>
