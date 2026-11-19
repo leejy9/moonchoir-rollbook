@@ -143,12 +143,12 @@ export class SheetsService {
   private backend: RemoteBackend;
 
   constructor(backend?: RemoteBackend) {
-    this.backend = backend || createDefaultBackend(() => this.config.sheetsWebAppUrl);
     this.config = loadFromStorage(STORAGE_KEYS.CONFIG, { ...INITIAL_CONFIG, locationPresets: [] });
     if (!this.config.sheetsWebAppUrl && INITIAL_CONFIG.sheetsWebAppUrl) {
       this.config.sheetsWebAppUrl = INITIAL_CONFIG.sheetsWebAppUrl;
       saveToStorage(STORAGE_KEYS.CONFIG, this.config);
     }
+    this.backend = backend || createDefaultBackend(() => this.config.sheetsWebAppUrl);
     this.members = loadFromStorage(STORAGE_KEYS.MEMBERS, []);
     this.schedules = loadFromStorage(STORAGE_KEYS.SCHEDULES, []);
     this.rsvpVotes = loadFromStorage(STORAGE_KEYS.RSVP_VOTES, []);
@@ -156,6 +156,15 @@ export class SheetsService {
     this.locations = loadFromStorage(STORAGE_KEYS.LOCATIONS, []);
     this.programCards = loadFromStorage(STORAGE_KEYS.PROGRAM_CARDS, []);
     this.commentEvents = loadFromStorage(STORAGE_KEYS.COMMENTS, []);
+  }
+
+  public isBackendActive(): boolean {
+    if (this.backend.kind === 'supabase') return true;
+    return Boolean(this.config.sheetsWebAppUrl);
+  }
+
+  public canSync(): boolean {
+    return this.isBackendActive();
   }
 
   public getBackend(): RemoteBackend {
@@ -334,7 +343,7 @@ export class SheetsService {
   private async recordCommentEvent(action: string, event: ScheduleCommentEvent): Promise<ScheduleCommentEvent> {
     // 같은 id를 다시 보내는 재시도: 이미 반영된 이벤트면 한 번만 둔다
     if (this.commentEvents.some((e) => e.id === event.id)) return event;
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       const result = await this.sendToGoogleSheet(action, event);
       if (!result.success) {
         throw new Error(result.message || '댓글이 시트에서 확인되지 않았습니다. 네트워크를 확인하고 다시 시도해 주세요.');
@@ -501,7 +510,7 @@ export class SheetsService {
     const requiresSheetConfirmation = log.authMethod !== 'MANUAL_BY_ADMIN';
     if (
       requiresSheetConfirmation &&
-      (log.authMethod === 'MANUAL_PIN' || this.config.sheetsWebAppUrl)
+      (log.authMethod === 'MANUAL_PIN' || this.isBackendActive())
     ) {
       const result = await this.sendToGoogleSheet(
         'RECORD_ATTENDANCE',
@@ -538,7 +547,7 @@ export class SheetsService {
       saveToStorage(STORAGE_KEYS.LOGS, this.logs);
     }
 
-    if (!requiresSheetConfirmation && this.config.sheetsWebAppUrl) {
+    if (!requiresSheetConfirmation && this.isBackendActive()) {
       this.syncInBackground('RECORD_ATTENDANCE', log);
     }
 
@@ -573,7 +582,7 @@ export class SheetsService {
     }
     saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       this.syncInBackground('SUBMIT_RSVP', vote);
     }
 
@@ -618,7 +627,7 @@ export class SheetsService {
     this.logs.push(cancelLog);
     saveToStorage(STORAGE_KEYS.LOGS, this.logs);
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       this.syncInBackground('CLEAR_ATTENDANCE', {
         scheduleId,
         memberId,
@@ -639,7 +648,7 @@ export class SheetsService {
       const removed = this.rsvpVotes.splice(existingIndex, 1)[0];
       saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
 
-      if (this.config.sheetsWebAppUrl) {
+      if (this.isBackendActive()) {
         this.syncInBackground('CANCEL_RSVP', { scheduleId, memberId, removedVoteId: removed.id });
       }
       return true;
@@ -792,7 +801,7 @@ export class SheetsService {
     };
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       this.syncInBackground('UPDATE_MEMBER', {
         ...this.members[idx],
         historyItem: effectiveHistoryItem,
@@ -818,14 +827,14 @@ export class SheetsService {
     if (hasActivity) {
       // 과거 출결 통계 보호를 위한 소프트 삭제 (status='DELETED')
       await this.updateMember(memberId, { status: 'DELETED' });
-      if (this.config.sheetsWebAppUrl) {
+      if (this.isBackendActive()) {
         this.syncInBackground('DELETE_MEMBER', { id: memberId });
       }
     } else {
       this.members = this.members.filter((m) => m.id !== memberId);
       saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
 
-      if (this.config.sheetsWebAppUrl) {
+      if (this.isBackendActive()) {
         this.syncInBackground('DELETE_MEMBER', { id: memberId });
       }
     }
@@ -972,7 +981,7 @@ export class SheetsService {
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
 
     // 4. Sync with Google Sheets backend
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       this.syncInBackground('MERGE_MEMBERS', {
         canonicalId,
         secondaryId,
@@ -986,7 +995,7 @@ export class SheetsService {
     this.schedules.push(schedule);
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       this.syncInBackground('CREATE_SCHEDULE', serializeScheduleForSheet(schedule));
     }
 
@@ -997,7 +1006,7 @@ export class SheetsService {
     this.schedules.push(...schedules);
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       for (const sch of schedules) {
         this.syncInBackground('CREATE_SCHEDULE', serializeScheduleForSheet(sch));
       }
@@ -1012,7 +1021,7 @@ export class SheetsService {
     this.schedules[idx] = { ...this.schedules[idx], ...updates };
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       this.syncInBackground('UPDATE_SCHEDULE', serializeScheduleForSheet(this.schedules[idx]));
     }
 
@@ -1031,7 +1040,7 @@ export class SheetsService {
     if (hasActivity && !forceHardDelete) {
       // 출석로그나 투표가 있는 경우 물리 삭제하지 않고 [연습 취소]로 보존
       await this.updateSchedule(scheduleId, { isCancelled: true });
-      if (this.config.sheetsWebAppUrl) {
+      if (this.isBackendActive()) {
         this.syncInBackground('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: false });
       }
     } else {
@@ -1039,7 +1048,7 @@ export class SheetsService {
       this.schedules = this.schedules.filter((s) => s.id !== scheduleId);
       saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
-      if (this.config.sheetsWebAppUrl) {
+      if (this.isBackendActive()) {
         this.syncInBackground('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: true });
       }
     }
@@ -1052,7 +1061,7 @@ export class SheetsService {
       this.schedules = this.schedules.filter((s) => !idsToDeleteSet.has(s.id));
       saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
-      if (this.config.sheetsWebAppUrl) {
+      if (this.isBackendActive()) {
         this.syncInBackground('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: true });
       }
       return;
@@ -1078,7 +1087,7 @@ export class SheetsService {
       saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
     }
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       this.syncInBackground('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: false });
     }
   }
@@ -1098,7 +1107,7 @@ export class SheetsService {
 
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       const serializedUpdates = {
         ...updates,
         ...(updates.targetParts !== undefined
@@ -1122,7 +1131,7 @@ export class SheetsService {
     this.locations.push(preset);
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       this.syncInBackground('SAVE_LOCATION', preset);
     }
 
@@ -1157,7 +1166,7 @@ export class SheetsService {
     });
     saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       this.syncInBackground('SAVE_LOCATION', this.locations[idx]);
     }
 
@@ -1172,7 +1181,7 @@ export class SheetsService {
     }
     saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       this.syncInBackground('DELETE_LOCATION', { id });
     }
   }
@@ -1181,7 +1190,7 @@ export class SheetsService {
     this.config = { ...this.config, ...newConfig };
     saveToStorage(STORAGE_KEYS.CONFIG, this.config);
 
-    if (this.config.sheetsWebAppUrl) {
+    if (this.isBackendActive()) {
       this.syncInBackground('SAVE_CONFIG', { config: newConfig });
     }
 
@@ -1194,14 +1203,14 @@ export class SheetsService {
         ? newConfig.sheetsWebAppUrl.trim()
         : this.config.sheetsWebAppUrl;
     const endpoint = this.config.sheetsWebAppUrl || nextEndpoint;
-    if (!endpoint || !nextEndpoint) {
+    if (this.backend.kind === 'gas' && (!endpoint || !nextEndpoint)) {
       throw new Error('구글 시트 Web App URL이 설정되지 않았습니다.');
     }
 
     const result = await this.sendToGoogleSheet(
       'SAVE_CONFIG',
       { config: newConfig },
-      endpoint
+      endpoint || undefined
     );
     if (!result.success) {
       throw new Error(result.message || '설정 저장이 구글 시트에서 확인되지 않았습니다.');
@@ -1419,15 +1428,15 @@ export class SheetsService {
   // --- Remote Google Sheets API Handler ---
   public async fetchRemoteData(overrideUrl?: string): Promise<{ success: boolean; message: string; count?: { members: number; schedules: number; logs: number; locations?: number; programCards?: number } }> {
     const targetUrl = overrideUrl || this.config.sheetsWebAppUrl;
-    if (!targetUrl) {
+    if (this.backend.kind === 'gas' && !targetUrl) {
       throw new Error('구글 시트 Web App URL이 설정되지 않았습니다.');
     }
 
-    const data = await this.loadSnapshotAfterPendingWrites(targetUrl);
+    const data = await this.loadSnapshotAfterPendingWrites(targetUrl || '');
     if (!data) {
       throw new Error('저장 중인 변경이 있어 동기화를 잠시 미뤘습니다. 잠시 후 다시 시도해 주세요.');
     }
-    return this.applyRemoteSnapshot(data, targetUrl);
+    return this.applyRemoteSnapshot(data, targetUrl || '');
   }
 
   private async requestRemoteSnapshot(targetUrl: string): Promise<RemoteSnapshot> {
@@ -1476,7 +1485,7 @@ export class SheetsService {
     }
 
     if (data.config && typeof data.config === 'object') {
-      this.config = { ...this.config, ...data.config, sheetsWebAppUrl: targetUrl };
+      this.config = { ...this.config, ...data.config, sheetsWebAppUrl: targetUrl || this.config.sheetsWebAppUrl };
       saveToStorage(STORAGE_KEYS.CONFIG, this.config);
     }
 
@@ -1541,20 +1550,98 @@ export class SheetsService {
 
   // --- Realtime Event Merging (Supabase WebSocket Realtime) ---
 
-  public mergeRealtimeAttendanceLog(log: RawAttendanceLog): void {
-    if (!log || !log.id) return;
-    if (this.logs.some((l) => l.id === log.id)) return;
-    this.logs.push(log);
-    saveToStorage(STORAGE_KEYS.LOGS, this.logs);
-    this.setSyncState({ ...this.syncState, lastSyncedAt: Date.now() });
+  public mergeRealtimeAttendanceLog(
+    eventTypeOrLog: string | RawAttendanceLog,
+    rawRecord?: RawAttendanceLog | null,
+    rawOldRecord?: RawAttendanceLog | null
+  ): void {
+    let action: string;
+    let targetRecord: RawAttendanceLog | null | undefined;
+    let targetOldRecord: RawAttendanceLog | null | undefined;
+
+    if (typeof eventTypeOrLog === 'object' && eventTypeOrLog !== null) {
+      action = 'INSERT';
+      targetRecord = eventTypeOrLog;
+      targetOldRecord = null;
+    } else {
+      action = String(eventTypeOrLog || '').toUpperCase();
+      targetRecord = rawRecord;
+      targetOldRecord = rawOldRecord;
+    }
+
+    if (action === 'DELETE') {
+      const target = targetOldRecord ?? targetRecord;
+      if (!target || !target.id) return;
+      const initialLen = this.logs.length;
+      this.logs = this.logs.filter((l) => l.id !== target.id);
+      if (this.logs.length !== initialLen) {
+        saveToStorage(STORAGE_KEYS.LOGS, this.logs);
+        this.notifySyncListeners();
+      }
+    } else if (action === 'INSERT') {
+      if (!targetRecord || !targetRecord.id) return;
+      if (this.logs.some((l) => l.id === targetRecord.id)) return;
+      this.logs.push(targetRecord);
+      saveToStorage(STORAGE_KEYS.LOGS, this.logs);
+      this.notifySyncListeners();
+    } else if (action === 'UPDATE') {
+      if (!targetRecord || !targetRecord.id) return;
+      const idx = this.logs.findIndex((l) => l.id === targetRecord.id);
+      if (idx >= 0) {
+        this.logs[idx] = { ...this.logs[idx], ...targetRecord };
+      } else {
+        this.logs.push(targetRecord);
+      }
+      saveToStorage(STORAGE_KEYS.LOGS, this.logs);
+      this.notifySyncListeners();
+    }
   }
 
-  public mergeRealtimeCommentEvent(event: ScheduleCommentEvent): void {
-    if (!event || !event.id) return;
-    if (this.commentEvents.some((e) => e.id === event.id)) return;
-    this.commentEvents.push(event);
-    saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
-    this.setSyncState({ ...this.syncState, lastSyncedAt: Date.now() });
+  public mergeRealtimeCommentEvent(
+    eventTypeOrEvent: string | ScheduleCommentEvent,
+    rawRecord?: ScheduleCommentEvent | null,
+    rawOldRecord?: ScheduleCommentEvent | null
+  ): void {
+    let action: string;
+    let targetRecord: ScheduleCommentEvent | null | undefined;
+    let targetOldRecord: ScheduleCommentEvent | null | undefined;
+
+    if (typeof eventTypeOrEvent === 'object' && eventTypeOrEvent !== null) {
+      action = 'INSERT';
+      targetRecord = eventTypeOrEvent;
+      targetOldRecord = null;
+    } else {
+      action = String(eventTypeOrEvent || '').toUpperCase();
+      targetRecord = rawRecord;
+      targetOldRecord = rawOldRecord;
+    }
+
+    if (action === 'DELETE') {
+      const target = targetOldRecord ?? targetRecord;
+      if (!target || !target.id) return;
+      const initialLen = this.commentEvents.length;
+      this.commentEvents = this.commentEvents.filter((c) => c.id !== target.id);
+      if (this.commentEvents.length !== initialLen) {
+        saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
+        this.notifySyncListeners();
+      }
+    } else if (action === 'INSERT') {
+      if (!targetRecord || !targetRecord.id) return;
+      if (this.commentEvents.some((c) => c.id === targetRecord.id)) return;
+      this.commentEvents.push(targetRecord);
+      saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
+      this.notifySyncListeners();
+    } else if (action === 'UPDATE') {
+      if (!targetRecord || !targetRecord.id) return;
+      const idx = this.commentEvents.findIndex((c) => c.id === targetRecord.id);
+      if (idx >= 0) {
+        this.commentEvents[idx] = { ...this.commentEvents[idx], ...targetRecord };
+      } else {
+        this.commentEvents.push(targetRecord);
+      }
+      saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
+      this.notifySyncListeners();
+    }
   }
 
   public mergeRealtimeRsvpVote(
@@ -1581,7 +1668,7 @@ export class SheetsService {
       });
       if (this.rsvpVotes.length !== initialLen) {
         saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
-        this.setSyncState({ ...this.syncState, lastSyncedAt: Date.now() });
+        this.notifySyncListeners();
       }
     } else if (action === 'INSERT' || action === 'UPDATE') {
       if (!rawRecord || !rawRecord.scheduleId || !rawRecord.memberId) return;
@@ -1596,7 +1683,119 @@ export class SheetsService {
         this.rsvpVotes.push(rawRecord);
       }
       saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
-      this.setSyncState({ ...this.syncState, lastSyncedAt: Date.now() });
+      this.notifySyncListeners();
+    }
+  }
+
+  public mergeRealtimeSchedule(
+    eventType: string,
+    rawRecord: Schedule | null,
+    rawOldRecord?: Schedule | null
+  ): void {
+    const action = String(eventType || '').toUpperCase();
+    if (action === 'DELETE') {
+      const target = rawOldRecord ?? rawRecord;
+      if (!target || !target.id) return;
+      const initialLen = this.schedules.length;
+      this.schedules = this.schedules.filter((s) => s.id !== target.id);
+      if (this.schedules.length !== initialLen) {
+        saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+        this.notifySyncListeners();
+      }
+    } else if (action === 'INSERT' || action === 'UPDATE') {
+      if (!rawRecord || !rawRecord.id) return;
+      const idx = this.schedules.findIndex((s) => s.id === rawRecord.id);
+      if (idx >= 0) {
+        this.schedules[idx] = { ...this.schedules[idx], ...rawRecord };
+      } else {
+        this.schedules.push(rawRecord);
+      }
+      saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+      this.notifySyncListeners();
+    }
+  }
+
+  public mergeRealtimeMember(
+    eventType: string,
+    rawRecord: Member | null,
+    rawOldRecord?: Member | null
+  ): void {
+    const action = String(eventType || '').toUpperCase();
+    if (action === 'DELETE') {
+      const target = rawOldRecord ?? rawRecord;
+      if (!target || !target.id) return;
+      const initialLen = this.members.length;
+      this.members = this.members.filter((m) => m.id !== target.id);
+      if (this.members.length !== initialLen) {
+        saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+        this.notifySyncListeners();
+      }
+    } else if (action === 'INSERT' || action === 'UPDATE') {
+      if (!rawRecord || !rawRecord.id) return;
+      const idx = this.members.findIndex((m) => m.id === rawRecord.id);
+      if (idx >= 0) {
+        this.members[idx] = { ...this.members[idx], ...rawRecord };
+      } else {
+        this.members.push(rawRecord);
+      }
+      saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
+      this.notifySyncListeners();
+    }
+  }
+
+  public mergeRealtimeLocation(
+    eventType: string,
+    rawRecord: LocationPreset | null,
+    rawOldRecord?: LocationPreset | null
+  ): void {
+    const action = String(eventType || '').toUpperCase();
+    if (action === 'DELETE') {
+      const target = rawOldRecord ?? rawRecord;
+      if (!target || !target.id) return;
+      const initialLen = this.locations.length;
+      this.locations = this.locations.filter((l) => l.id !== target.id);
+      if (this.locations.length !== initialLen) {
+        saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
+        this.notifySyncListeners();
+      }
+    } else if (action === 'INSERT' || action === 'UPDATE') {
+      if (!rawRecord || !rawRecord.id) return;
+      const idx = this.locations.findIndex((l) => l.id === rawRecord.id);
+      if (idx >= 0) {
+        this.locations[idx] = { ...this.locations[idx], ...rawRecord };
+      } else {
+        this.locations.push(rawRecord);
+      }
+      saveToStorage(STORAGE_KEYS.LOCATIONS, this.locations);
+      this.notifySyncListeners();
+    }
+  }
+
+  public mergeRealtimeProgramCard(
+    eventType: string,
+    rawRecord: ProgramCard | null,
+    rawOldRecord?: ProgramCard | null
+  ): void {
+    const action = String(eventType || '').toUpperCase();
+    if (action === 'DELETE') {
+      const target = rawOldRecord ?? rawRecord;
+      if (!target || !target.id) return;
+      const initialLen = this.programCards.length;
+      this.programCards = this.programCards.filter((p) => p.id !== target.id);
+      if (this.programCards.length !== initialLen) {
+        saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
+        this.notifySyncListeners();
+      }
+    } else if (action === 'INSERT' || action === 'UPDATE') {
+      if (!rawRecord || !rawRecord.id) return;
+      const idx = this.programCards.findIndex((p) => p.id === rawRecord.id);
+      if (idx >= 0) {
+        this.programCards[idx] = { ...this.programCards[idx], ...rawRecord };
+      } else {
+        this.programCards.push(rawRecord);
+      }
+      saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
+      this.notifySyncListeners();
     }
   }
 
@@ -1617,9 +1816,10 @@ export class SheetsService {
    * 반환값: 새 데이터를 반영했으면 true, 건너뜀/실패는 false(실패 시 기존 데이터 유지).
    */
   public refreshRemoteData(options: { force?: boolean } = {}): Promise<boolean> {
-    if (!this.config.sheetsWebAppUrl) return Promise.resolve(false);
+    if (!this.isBackendActive()) return Promise.resolve(false);
     if (this.refreshPromise) return this.refreshPromise;
-    if (!options.force && Date.now() - this.syncState.lastSyncedAt < MIN_REFRESH_INTERVAL_MS) {
+    const minInterval = this.backend.kind === 'supabase' ? 5_000 : MIN_REFRESH_INTERVAL_MS;
+    if (!options.force && Date.now() - this.syncState.lastSyncedAt < minInterval) {
       return Promise.resolve(false);
     }
 
@@ -1639,7 +1839,7 @@ export class SheetsService {
 
   /** 저장이 확정된 직후 잠깐 모아서 한 번만 최신 데이터를 받아온다. */
   private scheduleRefreshAfterWrite(): void {
-    if (!this.config.sheetsWebAppUrl) return;
+    if (!this.isBackendActive()) return;
     if (this.refreshAfterWriteTimer) clearTimeout(this.refreshAfterWriteTimer);
     this.refreshAfterWriteTimer = setTimeout(() => {
       this.refreshAfterWriteTimer = null;
@@ -1652,15 +1852,24 @@ export class SheetsService {
    * 시트에 저장된 상태로 화면을 되돌리기 위해 즉시 다시 읽어 온다.
    */
   private syncInBackground(action: string, payload: unknown): void {
-    void this.sendToGoogleSheet(action, payload).then((result) => {
-      if (result.success) return;
-      const label = WRITE_LABELS[action] ?? '변경 사항';
-      this.emitNotice(
-        `write:${action}`,
-        `[${label}] 저장하지 못했어요. 네트워크를 확인하고 다시 시도해 주세요. 화면은 시트에 저장된 상태로 되돌립니다.`
-      );
-      void this.refreshRemoteData({ force: true });
-    });
+    void this.sendToGoogleSheet(action, payload)
+      .then((result) => {
+        if (result.success) return;
+        const label = WRITE_LABELS[action] ?? '변경 사항';
+        this.emitNotice(
+          `write:${action}`,
+          `[${label}] 저장하지 못했어요. 네트워크를 확인하고 다시 시도해 주세요. 화면은 시트에 저장된 상태로 되돌립니다.`
+        );
+        void this.refreshRemoteData({ force: true });
+      })
+      .catch((err) => {
+        const label = WRITE_LABELS[action] ?? '변경 사항';
+        console.error(`[SheetsService] syncInBackground failed for ${action}:`, err);
+        this.emitNotice(
+          `write:${action}`,
+          `[${label}] 동기화 중 오류가 발생했습니다. 네트워크를 확인해 주세요.`
+        );
+      });
   }
 
   /**
@@ -1672,8 +1881,16 @@ export class SheetsService {
     payload: unknown,
     endpointUrl?: string
   ): Promise<{ success: boolean; message?: string; existingMemberId?: string; boundDeviceId?: string }> {
+    const targetUrl = endpointUrl || this.config.sheetsWebAppUrl;
+    if (this.backend.kind === 'gas' && !targetUrl) {
+      return Promise.resolve({
+        success: false,
+        message: 'Google Apps Script Web App URL이 설정되지 않아 서버에 반영되지 않았습니다.',
+      });
+    }
+
     this.writeEpoch += 1;
-    const request = this.postToGoogleSheet(action, payload, endpointUrl);
+    const request = this.postToGoogleSheet(action, payload, targetUrl);
     const track = request.then(
       () => undefined,
       () => undefined

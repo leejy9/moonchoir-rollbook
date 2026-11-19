@@ -100,12 +100,12 @@ export function App() {
     document.addEventListener('visibilitychange', refreshWhenVisible);
     window.addEventListener('online', refreshWhenOnline);
 
-    // Supabase 환경: 화면이 켜져 있을 때 5초마다 자동 백업 동기화 (모바일 웹소켓 절전 대비 2중 안전망)
+    // Supabase 환경: 화면이 켜져 있을 때 30초마다 자동 백업 동기화 (모바일 웹소켓 절전 대비 2중 안전망)
     const backupTimer = setInterval(() => {
       if (document.visibilityState === 'visible' && sheetsService.getBackendKind() === 'supabase') {
         void sheetsService.refreshRemoteData({ force: true });
       }
-    }, 5000);
+    }, 30000);
 
     return () => {
       document.removeEventListener('visibilitychange', refreshWhenVisible);

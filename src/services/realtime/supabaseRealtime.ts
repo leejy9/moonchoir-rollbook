@@ -1,11 +1,20 @@
 import type {
   AuthMethod,
+  LocationPreset,
+  Member,
+  MemberStatus,
   PartType,
+  ProgramCard,
+  RoleType,
   RSVPStatus,
   RSVPVote,
   RawAttendanceLog,
+  Schedule,
+  ScheduleCategory,
   ScheduleCommentAction,
   ScheduleCommentEvent,
+  ScheduleVisibility,
+  TargetAudienceType,
 } from '../../types/rollbook';
 import { sheetsService, type SheetsService } from '../sheets';
 
@@ -115,6 +124,152 @@ export function mapSnakeToCamelRsvpVote(raw: Record<string, unknown>): RSVPVote 
   };
 }
 
+export function mapSnakeToCamelSchedule(raw: Record<string, unknown>): Schedule {
+  const str = (val: unknown, fallback = ''): string => {
+    if (val === undefined || val === null) return fallback;
+    return String(val);
+  };
+  const numOrUndefined = (val: unknown): number | undefined => {
+    if (val === undefined || val === null || val === '') return undefined;
+    const n = Number(val);
+    return isNaN(n) ? undefined : n;
+  };
+  const parseArray = (val: unknown): string[] | undefined => {
+    if (Array.isArray(val)) return val.map((x) => String(x).trim()).filter(Boolean);
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (!trimmed) return undefined;
+      const clean = trimmed.replace(/^\{|\}$/g, '');
+      return clean.split(',').map((x) => x.replace(/^"|"$/g, '').trim()).filter(Boolean);
+    }
+    return undefined;
+  };
+
+  const rawParts = parseArray(raw.target_parts ?? raw.targetParts);
+  const rawMembers = parseArray(raw.target_member_ids ?? raw.targetMemberIds);
+
+  const rawVisibility = str(raw.visibility, 'ALL').trim().toUpperCase();
+  const visibility: ScheduleVisibility = rawVisibility === 'TARGETS_ONLY' ? 'TARGETS_ONLY' : 'ALL';
+
+  return {
+    id: str(raw.id),
+    title: str(raw.title),
+    date: str(raw.date),
+    startTime: str(raw.start_time ?? raw.startTime, '19:30'),
+    endTime: str(raw.end_time ?? raw.endTime, '21:30'),
+    locationName: str(raw.location_name ?? raw.locationName),
+    locationId: str(raw.location_id ?? raw.locationId) || undefined,
+    detailAddress: str(raw.detail_address ?? raw.detailAddress) || undefined,
+    entranceNote: str(raw.entrance_note ?? raw.entranceNote) || undefined,
+    targetLat: numOrUndefined(raw.latitude ?? raw.targetLat),
+    targetLon: numOrUndefined(raw.longitude ?? raw.targetLon),
+    radiusMeters: numOrUndefined(raw.radius_meters ?? raw.radiusMeters),
+    category: (str(raw.category, '정기연습')) as ScheduleCategory,
+    checkInPin: str(raw.check_in_pin ?? raw.checkInPin) || undefined,
+    description: str(raw.description) || undefined,
+    programId: str(raw.program_id ?? raw.programId) || undefined,
+    seriesId: str(raw.series_id ?? raw.seriesId) || undefined,
+    seriesIndex: numOrUndefined(raw.series_index ?? raw.seriesIndex),
+    seriesTotal: numOrUndefined(raw.series_total ?? raw.seriesTotal),
+    isArchived: Boolean(raw.is_archived ?? raw.isArchived ?? false),
+    isCancelled: Boolean(raw.is_cancelled ?? raw.isCancelled ?? false),
+    targetAudienceType: (str(raw.target_audience_type ?? raw.targetAudienceType, 'ALL') as TargetAudienceType) || 'ALL',
+    targetParts: rawParts as PartType[] | undefined,
+    targetMemberIds: rawMembers,
+    visibility,
+  };
+}
+
+export function mapSnakeToCamelMember(raw: Record<string, unknown>): Member {
+  const str = (val: unknown, fallback = ''): string => {
+    if (val === undefined || val === null) return fallback;
+    return String(val);
+  };
+  const phone = str(raw.phone);
+  const phoneLast4 = str(raw.phone_last4 ?? raw.phoneLast4) || (phone ? phone.replace(/\D/g, '').slice(-4) : '0000');
+  const roleRaw = str(raw.role, 'MEMBER').toUpperCase();
+  const role: RoleType = roleRaw === 'ADMIN' ? 'ADMIN' : roleRaw === 'GUEST' ? 'GUEST' : 'MEMBER';
+  const statusRaw = str(raw.status, 'ACTIVE').toUpperCase();
+  const status: 'ACTIVE' | 'INACTIVE' | 'MERGED' | 'DELETED' =
+    statusRaw === 'INACTIVE' ? 'INACTIVE' : statusRaw === 'MERGED' ? 'MERGED' : statusRaw === 'DELETED' ? 'DELETED' : 'ACTIVE';
+
+  return {
+    id: str(raw.id),
+    name: str(raw.name),
+    part: (str(raw.part, '소프라노')) as PartType,
+    phone: phone || undefined,
+    phoneLast4,
+    role,
+    createdAt: str(raw.created_at ?? raw.createdAt),
+    status,
+    mergedIntoId: str(raw.merged_into_id ?? raw.mergedIntoId) || undefined,
+    joinedAt: str(raw.joined_at ?? raw.joinedAt) || undefined,
+    memberStatus: (str(raw.member_status ?? raw.memberStatus, '정단원')) as MemberStatus,
+    note: str(raw.note) || '',
+    boundDeviceId: str(raw.bound_device_id ?? raw.boundDeviceId) || undefined,
+    boundDeviceAt: str(raw.bound_device_at ?? raw.boundDeviceAt) || undefined,
+  };
+}
+
+export function mapSnakeToCamelLocation(raw: Record<string, unknown>): LocationPreset {
+  const str = (val: unknown, fallback = ''): string => {
+    if (val === undefined || val === null) return fallback;
+    return String(val);
+  };
+  const num = (val: unknown, fallback: number): number => {
+    if (val === undefined || val === null || val === '') return fallback;
+    const n = Number(val);
+    return isNaN(n) ? fallback : n;
+  };
+
+  return {
+    id: str(raw.id),
+    name: str(raw.name),
+    address: str(raw.address) || undefined,
+    detailAddress: str(raw.detail_address ?? raw.detailAddress) || undefined,
+    entranceNote: str(raw.entrance_note ?? raw.entranceNote) || undefined,
+    latitude: num(raw.latitude, 37.5665),
+    longitude: num(raw.longitude, 126.978),
+    radiusMeters: num(raw.radius_meters ?? raw.radiusMeters, 100),
+    isDefault: Boolean(raw.is_default ?? raw.isDefault ?? false),
+  };
+}
+
+export function mapSnakeToCamelProgramCard(raw: Record<string, unknown>): ProgramCard {
+  const str = (val: unknown, fallback = ''): string => {
+    if (val === undefined || val === null) return fallback;
+    return String(val);
+  };
+  const parseArray = (val: unknown): string[] | undefined => {
+    if (Array.isArray(val)) return val.map((x) => String(x).trim()).filter(Boolean);
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (!trimmed) return undefined;
+      const clean = trimmed.replace(/^\{|\}$/g, '');
+      return clean.split(',').map((x) => x.replace(/^"|"$/g, '').trim()).filter(Boolean);
+    }
+    return undefined;
+  };
+
+  const rawParts = parseArray(raw.target_parts ?? raw.targetParts);
+  const rawMembers = parseArray(raw.target_member_ids ?? raw.targetMemberIds);
+
+  return {
+    id: str(raw.id),
+    title: str(raw.title),
+    description: str(raw.description) || undefined,
+    category: (str(raw.category, '정기연습')) as ScheduleCategory,
+    defaultLocationId: str(raw.default_location_id ?? raw.defaultLocationId) || undefined,
+    defaultStartTime: str(raw.default_start_time ?? raw.defaultStartTime) || '19:30',
+    defaultEndTime: str(raw.default_end_time ?? raw.defaultEndTime) || '21:30',
+    targetAudienceType: (str(raw.target_audience_type ?? raw.targetAudienceType, 'ALL') as TargetAudienceType) || 'ALL',
+    targetParts: rawParts as PartType[] | undefined,
+    targetMemberIds: rawMembers,
+    isArchived: Boolean(raw.is_archived ?? raw.isArchived ?? false),
+    createdAt: str(raw.created_at ?? raw.createdAt),
+  };
+}
+
 export class SupabaseRealtimeClient {
   private config: SupabaseRealtimeConfig;
   private targetSheetsService: SheetsService;
@@ -125,6 +280,7 @@ export class SupabaseRealtimeClient {
   private isExplicitlyClosed = false;
   private refCounter = 1;
   private isConnected = false;
+  private lastMessageAt = Date.now();
 
   constructor(config: SupabaseRealtimeConfig, service: SheetsService = sheetsService) {
     this.config = config;
@@ -134,6 +290,14 @@ export class SupabaseRealtimeClient {
 
   public getIsConnected(): boolean {
     return this.isConnected;
+  }
+
+  public getLastMessageAt(): number {
+    return this.lastMessageAt;
+  }
+
+  public setLastMessageAt(time: number): void {
+    this.lastMessageAt = time;
   }
 
   public connect(): void {
@@ -160,6 +324,7 @@ export class SupabaseRealtimeClient {
       ws.onopen = () => {
         if (this.ws !== ws) return;
         this.isConnected = true;
+        this.lastMessageAt = Date.now();
         this.currentBackoffMs = this.config.reconnectBaseMs ?? 1000;
 
         // Phoenix channel join message (Supabase Realtime v2 protocol)
@@ -176,6 +341,10 @@ export class SupabaseRealtimeClient {
                 { event: '*', schema: 'public', table: 'attendance_logs' },
                 { event: '*', schema: 'public', table: 'schedule_comment_events' },
                 { event: '*', schema: 'public', table: 'rsvp_votes' },
+                { event: '*', schema: 'public', table: 'schedules' },
+                { event: '*', schema: 'public', table: 'members' },
+                { event: '*', schema: 'public', table: 'locations' },
+                { event: '*', schema: 'public', table: 'program_cards' },
               ],
               private: false,
             },
@@ -222,6 +391,16 @@ export class SupabaseRealtimeClient {
 
   public checkAndReconnect(): void {
     if (this.isExplicitlyClosed) return;
+    const isZombie = Boolean(
+      this.ws &&
+      this.ws.readyState === WebSocket.OPEN &&
+      Date.now() - this.lastMessageAt > 60_000
+    );
+    if (isZombie) {
+      this.cleanupSocket();
+      this.connect();
+      return;
+    }
     if (!this.ws || (this.ws.readyState !== WebSocket.OPEN && this.ws.readyState !== WebSocket.CONNECTING)) {
       if (this.reconnectTimer) {
         clearTimeout(this.reconnectTimer);
@@ -237,6 +416,8 @@ export class SupabaseRealtimeClient {
       if (!Array.isArray(envelope) || envelope.length < 5) return;
       const [_joinRef, _ref, topic, phxEvent, payload] = envelope;
 
+      this.lastMessageAt = Date.now();
+
       if (typeof topic === 'string' && topic.startsWith('realtime:') && phxEvent === 'postgres_changes') {
         const change = (payload && typeof payload === 'object' && 'data' in payload)
           ? (payload as { data: unknown }).data
@@ -250,23 +431,33 @@ export class SupabaseRealtimeClient {
         const oldRecord = changeObj.old_record as Record<string, unknown> | null;
 
         if (table === 'attendance_logs') {
-          if (record && typeof record === 'object') {
-            const log = mapSnakeToCamelAttendanceLog(record);
-            if (log.id) {
-              this.targetSheetsService.mergeRealtimeAttendanceLog(log);
-            }
-          }
+          const mappedRecord = record && typeof record === 'object' ? mapSnakeToCamelAttendanceLog(record) : null;
+          const mappedOldRecord = oldRecord && typeof oldRecord === 'object' ? mapSnakeToCamelAttendanceLog(oldRecord) : null;
+          this.targetSheetsService.mergeRealtimeAttendanceLog(type, mappedRecord, mappedOldRecord);
         } else if (table === 'schedule_comment_events') {
-          if (record && typeof record === 'object') {
-            const commentEvent = mapSnakeToCamelCommentEvent(record);
-            if (commentEvent.id) {
-              this.targetSheetsService.mergeRealtimeCommentEvent(commentEvent);
-            }
-          }
+          const mappedRecord = record && typeof record === 'object' ? mapSnakeToCamelCommentEvent(record) : null;
+          const mappedOldRecord = oldRecord && typeof oldRecord === 'object' ? mapSnakeToCamelCommentEvent(oldRecord) : null;
+          this.targetSheetsService.mergeRealtimeCommentEvent(type, mappedRecord, mappedOldRecord);
         } else if (table === 'rsvp_votes') {
           const mappedRecord = record && typeof record === 'object' ? mapSnakeToCamelRsvpVote(record) : null;
           const mappedOldRecord = oldRecord && typeof oldRecord === 'object' ? mapSnakeToCamelRsvpVote(oldRecord) : null;
           this.targetSheetsService.mergeRealtimeRsvpVote(type, mappedRecord, mappedOldRecord);
+        } else if (table === 'schedules') {
+          const mappedRecord = record && typeof record === 'object' ? mapSnakeToCamelSchedule(record) : null;
+          const mappedOldRecord = oldRecord && typeof oldRecord === 'object' ? mapSnakeToCamelSchedule(oldRecord) : null;
+          this.targetSheetsService.mergeRealtimeSchedule(type, mappedRecord, mappedOldRecord);
+        } else if (table === 'members') {
+          const mappedRecord = record && typeof record === 'object' ? mapSnakeToCamelMember(record) : null;
+          const mappedOldRecord = oldRecord && typeof oldRecord === 'object' ? mapSnakeToCamelMember(oldRecord) : null;
+          this.targetSheetsService.mergeRealtimeMember(type, mappedRecord, mappedOldRecord);
+        } else if (table === 'locations') {
+          const mappedRecord = record && typeof record === 'object' ? mapSnakeToCamelLocation(record) : null;
+          const mappedOldRecord = oldRecord && typeof oldRecord === 'object' ? mapSnakeToCamelLocation(oldRecord) : null;
+          this.targetSheetsService.mergeRealtimeLocation(type, mappedRecord, mappedOldRecord);
+        } else if (table === 'program_cards') {
+          const mappedRecord = record && typeof record === 'object' ? mapSnakeToCamelProgramCard(record) : null;
+          const mappedOldRecord = oldRecord && typeof oldRecord === 'object' ? mapSnakeToCamelProgramCard(oldRecord) : null;
+          this.targetSheetsService.mergeRealtimeProgramCard(type, mappedRecord, mappedOldRecord);
         }
       }
     } catch (err) {

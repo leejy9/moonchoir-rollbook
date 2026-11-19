@@ -4,6 +4,10 @@ import {
   mapSnakeToCamelAttendanceLog,
   mapSnakeToCamelCommentEvent,
   mapSnakeToCamelRsvpVote,
+  mapSnakeToCamelSchedule,
+  mapSnakeToCamelMember,
+  mapSnakeToCamelLocation,
+  mapSnakeToCamelProgramCard,
   SupabaseRealtimeClient,
   startSupabaseRealtime,
   stopSupabaseRealtime,
@@ -164,6 +168,156 @@ describe('supabaseRealtime', () => {
         timestamp: '2026-11-19 12:00:00',
       });
     });
+
+    it('maps snake_case schedules to camelCase Schedule', () => {
+      const mapped = mapSnakeToCamelSchedule({
+        id: 'sch_1',
+        title: '정기연습 1회차',
+        date: '2026-11-20',
+        start_time: '19:30',
+        end_time: '21:30',
+        location_name: '서초 연습실',
+        location_id: 'loc_1',
+        detail_address: '3층 대연습실',
+        entrance_note: '후문 이용',
+        latitude: 37.5,
+        longitude: 127.0,
+        radius_meters: 100,
+        category: '정기연습',
+        check_in_pin: '1234',
+        description: '오리엔테이션',
+        program_id: 'card_1',
+        series_id: 'series_1',
+        series_index: 1,
+        series_total: 10,
+        is_archived: false,
+        is_cancelled: false,
+        target_audience_type: 'PARTS',
+        target_parts: ['소프라노', '알토'],
+        target_member_ids: ['mem_1'],
+        visibility: 'TARGETS_ONLY',
+      });
+
+      expect(mapped).toEqual({
+        id: 'sch_1',
+        title: '정기연습 1회차',
+        date: '2026-11-20',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '서초 연습실',
+        locationId: 'loc_1',
+        detailAddress: '3층 대연습실',
+        entranceNote: '후문 이용',
+        targetLat: 37.5,
+        targetLon: 127.0,
+        radiusMeters: 100,
+        category: '정기연습',
+        checkInPin: '1234',
+        description: '오리엔테이션',
+        programId: 'card_1',
+        seriesId: 'series_1',
+        seriesIndex: 1,
+        seriesTotal: 10,
+        isArchived: false,
+        isCancelled: false,
+        targetAudienceType: 'PARTS',
+        targetParts: ['소프라노', '알토'],
+        targetMemberIds: ['mem_1'],
+        visibility: 'TARGETS_ONLY',
+      });
+    });
+
+    it('maps snake_case members to camelCase Member', () => {
+      const mapped = mapSnakeToCamelMember({
+        id: 'mem_1',
+        name: '홍길동',
+        part: '테너',
+        phone: '010-1234-5678',
+        phone_last4: '5678',
+        role: 'MEMBER',
+        created_at: '2026-11-20T00:00:00Z',
+        status: 'ACTIVE',
+        merged_into_id: '',
+        joined_at: '2026-11-20',
+        member_status: '정단원',
+        note: '테스트 단원',
+        bound_device_id: 'dev_123',
+        bound_device_at: '2026-11-20T01:00:00Z',
+      });
+
+      expect(mapped).toEqual({
+        id: 'mem_1',
+        name: '홍길동',
+        part: '테너',
+        phone: '010-1234-5678',
+        phoneLast4: '5678',
+        role: 'MEMBER',
+        createdAt: '2026-11-20T00:00:00Z',
+        status: 'ACTIVE',
+        mergedIntoId: undefined,
+        joinedAt: '2026-11-20',
+        memberStatus: '정단원',
+        note: '테스트 단원',
+        boundDeviceId: 'dev_123',
+        boundDeviceAt: '2026-11-20T01:00:00Z',
+      });
+    });
+
+    it('maps snake_case locations to camelCase LocationPreset', () => {
+      const mapped = mapSnakeToCamelLocation({
+        id: 'loc_1',
+        name: '서초 연습실',
+        address: '서울시 서초구',
+        detail_address: '3층',
+        entrance_note: '후문 이용',
+        latitude: 37.5,
+        longitude: 127.0,
+        radius_meters: 100,
+        is_default: true,
+      });
+
+      expect(mapped).toEqual({
+        id: 'loc_1',
+        name: '서초 연습실',
+        address: '서울시 서초구',
+        detailAddress: '3층',
+        entranceNote: '후문 이용',
+        latitude: 37.5,
+        longitude: 127.0,
+        radiusMeters: 100,
+        isDefault: true,
+      });
+    });
+
+    it('maps snake_case program_cards to camelCase ProgramCard', () => {
+      const mapped = mapSnakeToCamelProgramCard({
+        id: 'card_1',
+        title: '2026 가을 정기연습',
+        description: '정기연습 프로젝트',
+        category: '정기연습',
+        default_location_id: 'loc_1',
+        default_start_time: '19:30',
+        default_end_time: '21:30',
+        target_audience_type: 'ALL',
+        is_archived: false,
+        created_at: '2026-11-20T00:00:00Z',
+      });
+
+      expect(mapped).toEqual({
+        id: 'card_1',
+        title: '2026 가을 정기연습',
+        description: '정기연습 프로젝트',
+        category: '정기연습',
+        defaultLocationId: 'loc_1',
+        defaultStartTime: '19:30',
+        defaultEndTime: '21:30',
+        targetAudienceType: 'ALL',
+        targetParts: undefined,
+        targetMemberIds: undefined,
+        isArchived: false,
+        createdAt: '2026-11-20T00:00:00Z',
+      });
+    });
   });
 
   describe('SupabaseRealtimeClient', () => {
@@ -197,6 +351,10 @@ describe('supabaseRealtime', () => {
         { event: '*', schema: 'public', table: 'attendance_logs' },
         { event: '*', schema: 'public', table: 'schedule_comment_events' },
         { event: '*', schema: 'public', table: 'rsvp_votes' },
+        { event: '*', schema: 'public', table: 'schedules' },
+        { event: '*', schema: 'public', table: 'members' },
+        { event: '*', schema: 'public', table: 'locations' },
+        { event: '*', schema: 'public', table: 'program_cards' },
       ]);
 
       // Advance clock by heartbeat interval
@@ -254,11 +412,13 @@ describe('supabaseRealtime', () => {
 
       expect(mergeLogSpy).toHaveBeenCalledTimes(1);
       expect(mergeLogSpy).toHaveBeenCalledWith(
+        'INSERT',
         expect.objectContaining({
           id: 'log_realtime_1',
           scheduleId: 'sch_realtime_1',
           memberId: 'mem_realtime_1',
-        })
+        }),
+        null
       );
 
       client.disconnect();
@@ -306,10 +466,208 @@ describe('supabaseRealtime', () => {
 
       expect(mergeCommentSpy).toHaveBeenCalledTimes(1);
       expect(mergeCommentSpy).toHaveBeenCalledWith(
+        'INSERT',
         expect.objectContaining({
           id: 'comment_realtime_1',
           text: '실시간 댓글 테스트',
+        }),
+        null
+      );
+
+      client.disconnect();
+    });
+
+    it('routes incoming postgres_changes for schedules to service.mergeRealtimeSchedule', () => {
+      const mockService = new SheetsService(new GasBackend(() => ''));
+      const mergeScheduleSpy = vi.spyOn(mockService, 'mergeRealtimeSchedule');
+
+      const client = new SupabaseRealtimeClient(
+        {
+          url: 'https://example.supabase.co',
+          anonKey: 'anon-test',
+          customWebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+        },
+        mockService
+      );
+
+      client.connect();
+      const ws = MockWebSocket.instances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage([
+        null,
+        null,
+        'realtime:moonchoir',
+        'postgres_changes',
+        {
+          data: {
+            table: 'schedules',
+            type: 'UPDATE',
+            record: {
+              id: 'sch_realtime_1',
+              title: '수정된 일정',
+              date: '2026-11-20',
+            },
+            old_record: {
+              id: 'sch_realtime_1',
+              title: '이전 일정',
+              date: '2026-11-20',
+            },
+          },
+        },
+      ]);
+
+      expect(mergeScheduleSpy).toHaveBeenCalledTimes(1);
+      expect(mergeScheduleSpy).toHaveBeenCalledWith(
+        'UPDATE',
+        expect.objectContaining({
+          id: 'sch_realtime_1',
+          title: '수정된 일정',
+        }),
+        expect.objectContaining({
+          id: 'sch_realtime_1',
+          title: '이전 일정',
         })
+      );
+
+      client.disconnect();
+    });
+
+    it('routes incoming postgres_changes for members to service.mergeRealtimeMember', () => {
+      const mockService = new SheetsService(new GasBackend(() => ''));
+      const mergeMemberSpy = vi.spyOn(mockService, 'mergeRealtimeMember');
+
+      const client = new SupabaseRealtimeClient(
+        {
+          url: 'https://example.supabase.co',
+          anonKey: 'anon-test',
+          customWebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+        },
+        mockService
+      );
+
+      client.connect();
+      const ws = MockWebSocket.instances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage([
+        null,
+        null,
+        'realtime:moonchoir',
+        'postgres_changes',
+        {
+          data: {
+            table: 'members',
+            type: 'INSERT',
+            record: {
+              id: 'mem_realtime_1',
+              name: '새단원',
+              part: '소프라노',
+            },
+          },
+        },
+      ]);
+
+      expect(mergeMemberSpy).toHaveBeenCalledTimes(1);
+      expect(mergeMemberSpy).toHaveBeenCalledWith(
+        'INSERT',
+        expect.objectContaining({
+          id: 'mem_realtime_1',
+          name: '새단원',
+        }),
+        null
+      );
+
+      client.disconnect();
+    });
+
+    it('routes incoming postgres_changes for locations to service.mergeRealtimeLocation', () => {
+      const mockService = new SheetsService(new GasBackend(() => ''));
+      const mergeLocationSpy = vi.spyOn(mockService, 'mergeRealtimeLocation');
+
+      const client = new SupabaseRealtimeClient(
+        {
+          url: 'https://example.supabase.co',
+          anonKey: 'anon-test',
+          customWebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+        },
+        mockService
+      );
+
+      client.connect();
+      const ws = MockWebSocket.instances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage([
+        null,
+        null,
+        'realtime:moonchoir',
+        'postgres_changes',
+        {
+          data: {
+            table: 'locations',
+            type: 'DELETE',
+            old_record: {
+              id: 'loc_realtime_1',
+            },
+          },
+        },
+      ]);
+
+      expect(mergeLocationSpy).toHaveBeenCalledTimes(1);
+      expect(mergeLocationSpy).toHaveBeenCalledWith(
+        'DELETE',
+        null,
+        expect.objectContaining({
+          id: 'loc_realtime_1',
+        })
+      );
+
+      client.disconnect();
+    });
+
+    it('routes incoming postgres_changes for program_cards to service.mergeRealtimeProgramCard', () => {
+      const mockService = new SheetsService(new GasBackend(() => ''));
+      const mergeProgramCardSpy = vi.spyOn(mockService, 'mergeRealtimeProgramCard');
+
+      const client = new SupabaseRealtimeClient(
+        {
+          url: 'https://example.supabase.co',
+          anonKey: 'anon-test',
+          customWebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+        },
+        mockService
+      );
+
+      client.connect();
+      const ws = MockWebSocket.instances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage([
+        null,
+        null,
+        'realtime:moonchoir',
+        'postgres_changes',
+        {
+          data: {
+            table: 'program_cards',
+            type: 'INSERT',
+            record: {
+              id: 'card_realtime_1',
+              title: '새 카드',
+            },
+          },
+        },
+      ]);
+
+      expect(mergeProgramCardSpy).toHaveBeenCalledTimes(1);
+      expect(mergeProgramCardSpy).toHaveBeenCalledWith(
+        'INSERT',
+        expect.objectContaining({
+          id: 'card_realtime_1',
+          title: '새 카드',
+        }),
+        null
       );
 
       client.disconnect();
@@ -434,6 +792,66 @@ describe('supabaseRealtime', () => {
       // Trigger visibility wake-up immediately
       client.checkAndReconnect();
       expect(MockWebSocket.instances.length).toBe(2);
+
+      client.disconnect();
+    });
+
+    it('checkAndReconnect closes and reconnects stale zombie socket (>60s inactivity)', () => {
+      const mockService = new SheetsService(new GasBackend(() => ''));
+      const client = new SupabaseRealtimeClient(
+        {
+          url: 'https://example.supabase.co',
+          anonKey: 'anon-test',
+          customWebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+        },
+        mockService
+      );
+
+      client.connect();
+      const ws1 = MockWebSocket.instances[0];
+      ws1.simulateOpen();
+
+      // Advance time by 65 seconds without messages
+      vi.advanceTimersByTime(65000);
+
+      // Trigger checkAndReconnect
+      client.checkAndReconnect();
+      expect(ws1.readyState).toBe(WebSocket.CLOSED);
+      expect(MockWebSocket.instances.length).toBe(2);
+
+      client.disconnect();
+    });
+
+    it('keeps socket alive and avoids zombie reconnection when phoenix heartbeat/reply messages arrive', () => {
+      const mockService = new SheetsService(new GasBackend(() => ''));
+      const client = new SupabaseRealtimeClient(
+        {
+          url: 'https://example.supabase.co',
+          anonKey: 'anon-test',
+          customWebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+        },
+        mockService
+      );
+
+      client.connect();
+      const ws1 = MockWebSocket.instances[0];
+      ws1.simulateOpen();
+
+      // Advance 40 seconds
+      vi.advanceTimersByTime(40000);
+
+      // Phoenix heartbeat reply arrives (not a postgres_changes event)
+      ws1.simulateMessage([null, '2', 'phoenix', 'phx_reply', { response: {}, status: 'ok' }]);
+
+      // Advance another 30 seconds (total 70s since connect, but only 30s since last phoenix message)
+      vi.advanceTimersByTime(30000);
+
+      // Trigger checkAndReconnect
+      client.checkAndReconnect();
+
+      // Should still be open and NOT reconnected because lastMessageAt was updated
+      expect(ws1.readyState).toBe(WebSocket.OPEN);
+      expect(MockWebSocket.instances.length).toBe(1);
 
       client.disconnect();
     });

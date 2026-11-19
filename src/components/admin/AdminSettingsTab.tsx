@@ -236,6 +236,24 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
     }
   };
 
+  const handleCloudSync = async () => {
+    setIsSyncing(true);
+    setSyncStatusMsg(null);
+    try {
+      const res = await sheetsService.fetchRemoteData();
+      setSyncStatusMsg({
+        type: 'success',
+        text: `클라우드 동기화 성공! 대원 ${res.count?.members ?? 0}명, 일정 ${res.count?.schedules ?? 0}건, 원천 로그 ${res.count?.logs ?? 0}건 수신`,
+      });
+      onDataChanged();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSyncStatusMsg({ type: 'error', text: `클라우드 동기화 실패: ${msg}` });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleSyncRemote = async () => {
     if (!sheetsUrl.trim()) {
       setSyncStatusMsg({ type: 'error', text: 'Google Apps Script Web App URL을 입력해주세요.' });
@@ -649,69 +667,127 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
             </div>
           )}
 
-          <form onSubmit={handleSaveSettings} className="form-stack">
-            <label className="form-label" htmlFor="sheets-url">
-              Google Apps Script Web App URL
-            </label>
-            <input
-              id="sheets-url"
-              type="url"
-              className="input-text"
-              placeholder="https://script.google.com/macros/s/AKfycb.../exec"
-              value={sheetsUrl}
-              onChange={(e) => setSheetsUrl(e.target.value)}
-            />
-
-            <div className="settings-action-row">
+          {sheetsService.getBackendKind() === 'supabase' && (
+            <div
+              className="toss-section-card"
+              style={{
+                marginBottom: '16px',
+                border: '1.5px solid #10B981',
+                backgroundColor: '#ECFDF5',
+                padding: '16px',
+                borderRadius: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontWeight: 700, fontSize: '15px', color: '#065F46' }}>
+                  🟢 Supabase 클라우드 실시간 연동 활성화
+                </span>
+                <span style={{ fontSize: '12px', backgroundColor: '#D1FAE5', color: '#047857', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                  Active
+                </span>
+              </div>
+              <p style={{ margin: '6px 0 12px 0', fontSize: '13px', color: '#047857', lineHeight: 1.4 }}>
+                실시간 WebSocket 채널 및 원자적 DB 트랜잭션이 작동 중입니다.
+              </p>
               <button
                 type="button"
                 className="btn-sync"
-                onClick={handleSyncRemote}
+                style={{
+                  minHeight: '44px',
+                  backgroundColor: '#059669',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                }}
+                onClick={handleCloudSync}
                 disabled={isSyncing}
               >
                 <IconSync size={16} className={isSyncing ? 'spin-icon' : ''} />
-                <span>
-                  {isSyncing ? '동기화 중...' : '시트 연결 및 데이터 수신'}
-                </span>
+                <span>{isSyncing ? '클라우드 동기화 중...' : '클라우드 최신 데이터 즉시 수신'}</span>
               </button>
             </div>
+          )}
 
-            <div className="form-row-2">
-              <div>
-                <label className="form-label" htmlFor="late-grace">
-                  지각 유예 (분)
-                </label>
-                <input
-                  id="late-grace"
-                  type="number"
-                  min={0}
-                  max={60}
-                  className="input-text"
-                  value={lateGrace}
-                  onChange={(e) => setLateGrace(Number(e.target.value))}
-                />
+          <div className="toss-section-card" style={{ marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 4px 0', color: '#191f28' }}>
+              Google Sheets 보조 백업 및 내보내기
+            </h3>
+            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#6B7280' }}>
+              필요 시 Google Sheets로 데이터를 백업하거나 수동 동기화할 수 있습니다.
+            </p>
+
+            <form onSubmit={handleSaveSettings} className="form-stack">
+              <label className="form-label" htmlFor="sheets-url">
+                Google Apps Script Web App URL
+              </label>
+              <input
+                id="sheets-url"
+                type="url"
+                className="input-text"
+                placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+                value={sheetsUrl}
+                onChange={(e) => setSheetsUrl(e.target.value)}
+              />
+
+              <div className="settings-action-row">
+                <button
+                  type="button"
+                  className="btn-sync"
+                  style={{ minHeight: '44px' }}
+                  onClick={handleSyncRemote}
+                  disabled={isSyncing}
+                >
+                  <IconSync size={16} className={isSyncing ? 'spin-icon' : ''} />
+                  <span>
+                    {isSyncing ? '동기화 중...' : '시트 연결 및 데이터 수신'}
+                  </span>
+                </button>
               </div>
 
-              <div>
-                <label className="form-label" htmlFor="admin-pin-cfg">
-                  관리자 PIN
-                </label>
-                <input
-                  id="admin-pin-cfg"
-                  type="password"
-                  maxLength={8}
-                  className="input-text"
-                  placeholder="변경할 PIN 번호 입력 (미입력 시 기존 유지)"
-                  value={adminPinInput}
-                  onChange={(e) => setAdminPinInput(e.target.value)}
-                />
-              </div>
-            </div>
+              <div className="form-row-2">
+                <div>
+                  <label className="form-label" htmlFor="late-grace">
+                    지각 유예 (분)
+                  </label>
+                  <input
+                    id="late-grace"
+                    type="number"
+                    min={0}
+                    max={60}
+                    className="input-text"
+                    value={lateGrace}
+                    onChange={(e) => setLateGrace(Number(e.target.value))}
+                  />
+                </div>
 
-            <button type="submit" className="btn-primary-large">
-              저장
-            </button>
-          </form>
+                <div>
+                  <label className="form-label" htmlFor="admin-pin-cfg">
+                    관리자 PIN
+                  </label>
+                  <input
+                    id="admin-pin-cfg"
+                    type="password"
+                    maxLength={8}
+                    className="input-text"
+                    placeholder="변경할 PIN 번호 입력 (미입력 시 기존 유지)"
+                    value={adminPinInput}
+                    onChange={(e) => setAdminPinInput(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="btn-primary-large" style={{ minHeight: '44px' }}>
+                저장
+              </button>
+            </form>
+          </div>
 
           {/* Location Presets View */}
           <div className="toss-section-card" style={{ marginTop: '20px' }}>

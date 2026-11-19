@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Member, RawAttendanceLog, RSVPVote } from '../types/rollbook';
 import { SheetsService, resetStorage } from './sheets';
+import { GasBackend } from './backend/gasBackend';
+import { SupabaseBackend } from './backend/supabaseBackend';
 import {
   TEST_MOCK_SCHEDULES,
   TEST_MOCK_LOGS,
@@ -1445,6 +1447,366 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       expect(syncListener).toHaveBeenCalledTimes(3);
 
       unsub();
+    });
+
+    it('mergeRealtimeAttendanceLog handles INSERT, UPDATE, and DELETE actions without poisoning lastSyncedAt', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+      const initialSyncedAt = service.getSyncState().lastSyncedAt;
+
+      // INSERT
+      service.mergeRealtimeAttendanceLog('INSERT', {
+        id: 'log_rt_2',
+        timestamp: '2026-11-19 19:30:00',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        authMethod: 'QR_WEB_CAM',
+        isVerifiedLocation: true,
+      });
+
+      expect(service.getLogs('sch_20261105').some((l) => l.id === 'log_rt_2')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+      expect(service.getSyncState().lastSyncedAt).toBe(initialSyncedAt);
+
+      // UPDATE
+      service.mergeRealtimeAttendanceLog('UPDATE', {
+        id: 'log_rt_2',
+        timestamp: '2026-11-19 19:35:00',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        authMethod: 'MANUAL_PIN',
+        isVerifiedLocation: true,
+        adminNote: '지각 처리',
+      });
+
+      const updated = service.getLogs('sch_20261105').find((l) => l.id === 'log_rt_2');
+      expect(updated?.authMethod).toBe('MANUAL_PIN');
+      expect(updated?.adminNote).toBe('지각 처리');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeAttendanceLog('DELETE', null, {
+        id: 'log_rt_2',
+        timestamp: '2026-11-19 19:35:00',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        authMethod: 'MANUAL_PIN',
+        isVerifiedLocation: true,
+      });
+
+      expect(service.getLogs('sch_20261105').some((l) => l.id === 'log_rt_2')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+
+    it('mergeRealtimeCommentEvent handles INSERT, UPDATE, and DELETE actions without poisoning lastSyncedAt', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+      const initialSyncedAt = service.getSyncState().lastSyncedAt;
+
+      // INSERT
+      service.mergeRealtimeCommentEvent('INSERT', {
+        id: 'cmt_rt_2',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        action: 'CREATE',
+        text: '첫 댓글',
+        timestamp: '2026-11-19 19:31:00',
+      });
+
+      expect(service.getComments('sch_20261105').some((c) => c.id === 'cmt_rt_2')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+      expect(service.getSyncState().lastSyncedAt).toBe(initialSyncedAt);
+
+      // UPDATE
+      service.mergeRealtimeCommentEvent('UPDATE', {
+        id: 'cmt_rt_2',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        action: 'CREATE',
+        text: '수정된 댓글',
+        timestamp: '2026-11-19 19:35:00',
+      });
+
+      expect(service.getComments('sch_20261105').find((c) => c.id === 'cmt_rt_2')?.text).toBe('수정된 댓글');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeCommentEvent('DELETE', null, {
+        id: 'cmt_rt_2',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        action: 'DELETE',
+        timestamp: '2026-11-19 19:40:00',
+      });
+
+      expect(service.getComments('sch_20261105').some((c) => c.id === 'cmt_rt_2')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+
+    it('mergeRealtimeSchedule handles INSERT, UPDATE, and DELETE actions', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      // INSERT
+      service.mergeRealtimeSchedule('INSERT', {
+        id: 'sch_rt_1',
+        title: '실시간 생성 일정',
+        date: '2026-11-25',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '연습실',
+        category: '정기연습',
+      });
+
+      expect(service.getSchedules().some((s) => s.id === 'sch_rt_1')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // UPDATE
+      service.mergeRealtimeSchedule('UPDATE', {
+        id: 'sch_rt_1',
+        title: '실시간 수정 일정',
+        date: '2026-11-25',
+        startTime: '20:00',
+        endTime: '22:00',
+        locationName: '연습실',
+        category: '정기연습',
+      });
+
+      expect(service.getSchedules().find((s) => s.id === 'sch_rt_1')?.title).toBe('실시간 수정 일정');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeSchedule('DELETE', null, {
+        id: 'sch_rt_1',
+        title: '실시간 수정 일정',
+        date: '2026-11-25',
+        startTime: '20:00',
+        endTime: '22:00',
+        locationName: '연습실',
+        category: '정기연습',
+      });
+
+      expect(service.getSchedules().some((s) => s.id === 'sch_rt_1')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+
+    it('mergeRealtimeMember handles INSERT, UPDATE, and DELETE actions', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      // INSERT
+      service.mergeRealtimeMember('INSERT', {
+        id: 'mem_rt_1',
+        name: '실시간단원',
+        part: '테너',
+        phoneLast4: '1234',
+        role: 'MEMBER',
+        createdAt: '2026-11-20',
+        status: 'ACTIVE',
+      });
+
+      expect(service.getMembers().some((m) => m.id === 'mem_rt_1')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // UPDATE
+      service.mergeRealtimeMember('UPDATE', {
+        id: 'mem_rt_1',
+        name: '실시간수정단원',
+        part: '베이스',
+        phoneLast4: '1234',
+        role: 'MEMBER',
+        createdAt: '2026-11-20',
+        status: 'ACTIVE',
+      });
+
+      expect(service.getMembers().find((m) => m.id === 'mem_rt_1')?.name).toBe('실시간수정단원');
+      expect(service.getMembers().find((m) => m.id === 'mem_rt_1')?.part).toBe('베이스');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeMember('DELETE', null, {
+        id: 'mem_rt_1',
+        name: '실시간수정단원',
+        part: '베이스',
+        phoneLast4: '1234',
+        role: 'MEMBER',
+        createdAt: '2026-11-20',
+        status: 'ACTIVE',
+      });
+
+      expect(service.getMembers().some((m) => m.id === 'mem_rt_1')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+
+    it('mergeRealtimeLocation handles INSERT, UPDATE, and DELETE actions', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      // INSERT
+      service.mergeRealtimeLocation('INSERT', {
+        id: 'loc_rt_1',
+        name: '실시간연습실',
+        latitude: 37.5,
+        longitude: 127.0,
+        radiusMeters: 100,
+      });
+
+      expect(service.getLocationPresets().some((l) => l.id === 'loc_rt_1')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // UPDATE
+      service.mergeRealtimeLocation('UPDATE', {
+        id: 'loc_rt_1',
+        name: '실시간연습실_수정',
+        latitude: 37.6,
+        longitude: 127.1,
+        radiusMeters: 150,
+      });
+
+      expect(service.getLocationPresets().find((l) => l.id === 'loc_rt_1')?.name).toBe('실시간연습실_수정');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeLocation('DELETE', null, {
+        id: 'loc_rt_1',
+        name: '실시간연습실_수정',
+        latitude: 37.6,
+        longitude: 127.1,
+        radiusMeters: 150,
+      });
+
+      expect(service.getLocationPresets().some((l) => l.id === 'loc_rt_1')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+
+    it('mergeRealtimeProgramCard handles INSERT, UPDATE, and DELETE actions', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      // INSERT
+      service.mergeRealtimeProgramCard('INSERT', {
+        id: 'card_rt_1',
+        title: '실시간카드',
+        category: '정기연습',
+        createdAt: '2026-11-20',
+      });
+
+      expect(service.getProgramCards().some((c) => c.id === 'card_rt_1')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // UPDATE
+      service.mergeRealtimeProgramCard('UPDATE', {
+        id: 'card_rt_1',
+        title: '실시간카드_수정',
+        category: '정기연습',
+        createdAt: '2026-11-20',
+      });
+
+      expect(service.getProgramCards().find((c) => c.id === 'card_rt_1')?.title).toBe('실시간카드_수정');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeProgramCard('DELETE', null, {
+        id: 'card_rt_1',
+        title: '실시간카드_수정',
+        category: '정기연습',
+        createdAt: '2026-11-20',
+      });
+
+      expect(service.getProgramCards().some((c) => c.id === 'card_rt_1')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+  });
+
+  describe('Backend Decoupling & Supabase Active Mode', () => {
+    it('isBackendActive and canSync return true for Supabase even if sheetsWebAppUrl is empty', () => {
+      const supaBackend = new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' });
+      const supaService = new SheetsService(supaBackend);
+      supaService.updateConfig({ sheetsWebAppUrl: '' });
+
+      expect(supaService.isBackendActive()).toBe(true);
+      expect(supaService.canSync()).toBe(true);
+    });
+
+    it('isBackendActive and canSync reflect sheetsWebAppUrl presence for GasBackend', () => {
+      const gasBackend = new GasBackend(() => '');
+      const gasService = new SheetsService(gasBackend);
+      gasService.updateConfig({ sheetsWebAppUrl: '' });
+
+      expect(gasService.isBackendActive()).toBe(false);
+      expect(gasService.canSync()).toBe(false);
+
+      gasService.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+      expect(gasService.isBackendActive()).toBe(true);
+      expect(gasService.canSync()).toBe(true);
+    });
+
+    it('Supabase backend fetches remote snapshot without requiring sheetsWebAppUrl', async () => {
+      const supaBackend = new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' });
+      const supaService = new SheetsService(supaBackend);
+      supaService.updateConfig({ sheetsWebAppUrl: '' });
+
+      vi.spyOn(supaBackend, 'requestSnapshot').mockResolvedValue({
+        members: [{ id: 'mem_supa_1', name: '수파단원', part: '소프라노', phoneLast4: '1111', role: 'MEMBER', createdAt: '2026-11-20', status: 'ACTIVE' }],
+        schedules: [],
+        rsvpVotes: [],
+        logs: [],
+        locations: [],
+        programCards: [],
+      });
+
+      const res = await supaService.fetchRemoteData();
+      expect(res.success).toBe(true);
+      expect(supaService.getMembers().some((m) => m.id === 'mem_supa_1')).toBe(true);
+    });
+
+    it('Supabase backend dispatches mutations without requiring sheetsWebAppUrl', async () => {
+      const supaBackend = new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' });
+      const supaService = new SheetsService(supaBackend);
+      supaService.updateConfig({ sheetsWebAppUrl: '' });
+
+      const callActionSpy = vi.spyOn(supaBackend, 'callAction').mockResolvedValue({ success: true });
+
+      await supaService.addCheckInLog({
+        id: 'log_supa_1',
+        timestamp: '2026-11-20 19:30:00',
+        scheduleId: 'sch_1',
+        memberId: 'mem_1',
+        memberName: '홍길동',
+        part: '소프라노',
+        authMethod: 'MANUAL_PIN',
+        isVerifiedLocation: true,
+      }, '1234');
+
+      expect(callActionSpy).toHaveBeenCalledWith(
+        'RECORD_ATTENDANCE',
+        expect.objectContaining({ id: 'log_supa_1', checkInPin: '1234' }),
+        ''
+      );
     });
   });
 });
