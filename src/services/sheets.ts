@@ -1,19 +1,15 @@
 import type {
   AppConfig,
   AttendanceReconciliation,
-  AuthMethod,
   CumulativeMemberAttendance,
   LocationPreset,
   Member,
   MemberStatusHistory,
-  PartType,
   ProgramCard,
-  RSVPStatus,
   RSVPVote,
   RawAttendanceLog,
   Schedule,
   ScheduleComment,
-  ScheduleCommentAction,
   ScheduleCommentEvent,
 } from '../types/rollbook';
 import {
@@ -49,7 +45,6 @@ import {
 import type { RemoteBackend, RemoteSnapshot } from './backend/types';
 import { GasBackend } from './backend/gasBackend';
 import { SupabaseBackend } from './backend/supabaseBackend';
-import { getSupabaseConfig } from './backend/supabaseConfig';
 
 export { resetStorage };
 export type { RemoteBackend, RemoteSnapshot };
@@ -57,14 +52,15 @@ export type { RemoteBackend, RemoteSnapshot };
 function createDefaultBackend(getUrl: () => string | undefined): RemoteBackend {
   const isTest = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.MODE === 'test' : false;
   const backendKind = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_BACKEND : undefined;
-  const supaConfig = getSupabaseConfig();
+  const supaUrl = (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_URL : undefined) || 'https://hvsftdbqwxjbpfogoldw.supabase.co';
+  const supaKey = (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_ANON_KEY : undefined) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2c2Z0ZGJxd3hqYnBmb2dvbGR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUwNDk2NjksImV4cCI6MjExMDYyNTY2OX0.Pg5U9ger1SD9mrjmKf404--AkKF5RRfU2E7va5EepjQ';
 
   // In production/dev runtime, default to Supabase unless explicitly configured as 'gas'
-  if (!isTest && backendKind !== 'gas' && supaConfig) {
-    return new SupabaseBackend(supaConfig);
+  if (!isTest && backendKind !== 'gas' && supaUrl && supaKey) {
+    return new SupabaseBackend({ url: supaUrl, anonKey: supaKey });
   }
-  if (backendKind === 'supabase' && supaConfig) {
-    return new SupabaseBackend(supaConfig);
+  if (backendKind === 'supabase' && supaUrl && supaKey) {
+    return new SupabaseBackend({ url: supaUrl, anonKey: supaKey });
   }
   return new GasBackend(getUrl);
 }
@@ -1535,125 +1531,6 @@ export class SheetsService {
     this.lastNoticeAt.set(dedupeKey, now);
     const notice: SheetsNotice = { id: ++this.noticeSeq, kind: 'error', message };
     this.noticeListeners.forEach((listener) => listener(notice));
-  }
-
-  // --- Supabase Realtime Event Ingestion ------------------------------------
-
-  public mergeRealtimeAttendanceLog(raw: Record<string, unknown>): boolean {
-    const id = String(raw.id || '').trim();
-    if (!id) return false;
-    if (this.logs.some((l) => l.id === id)) return false;
-
-    const memberId = String(raw.member_id || raw.memberId || '').trim();
-    const scheduleId = String(raw.schedule_id || raw.scheduleId || '').trim();
-    if (!memberId || !scheduleId) return false;
-
-    const member = this.members.find((m) => m.id === memberId);
-    const memberName = String(raw.member_name || raw.memberName || member?.name || '');
-    const part = (String(raw.part || member?.part || '소프라노')) as PartType;
-
-    const log: RawAttendanceLog = {
-      id,
-      timestamp: String(raw.timestamp || ''),
-      scheduleId,
-      memberId,
-      memberName,
-      part,
-      authMethod: (String(raw.auth_method || raw.authMethod || 'MANUAL')) as AuthMethod,
-      isVerifiedLocation: raw.is_verified_location === true || raw.isVerifiedLocation === true,
-      adminNote:
-        raw.admin_note !== undefined
-          ? String(raw.admin_note)
-          : raw.adminNote !== undefined
-            ? String(raw.adminNote)
-            : undefined,
-      distanceMeters:
-        typeof raw.distance_meters === 'number'
-          ? raw.distance_meters
-          : typeof raw.distanceMeters === 'number'
-            ? raw.distanceMeters
-            : undefined,
-      deviceId: raw.device_id ? String(raw.device_id) : raw.deviceId ? String(raw.deviceId) : undefined,
-    };
-
-    this.logs.push(log);
-    saveToStorage(STORAGE_KEYS.LOGS, this.logs);
-    this.setSyncState({ status: 'IDLE', lastSyncedAt: Date.now() });
-    return true;
-  }
-
-  public mergeRealtimeRsvpVote(raw: Record<string, unknown>): boolean {
-    const memberId = String(raw.member_id || raw.memberId || '').trim();
-    const scheduleId = String(raw.schedule_id || raw.scheduleId || '').trim();
-    if (!memberId || !scheduleId) return false;
-
-    const member = this.members.find((m) => m.id === memberId);
-    const memberName = String(raw.member_name || raw.memberName || member?.name || '');
-    const part = (String(raw.part || member?.part || '소프라노')) as PartType;
-    const id = String(raw.id || `rsvp_${scheduleId}_${memberId}`);
-    const timestamp = String(raw.timestamp || '');
-
-    const vote: RSVPVote = {
-      id,
-      scheduleId,
-      memberId,
-      memberName,
-      part,
-      status: (String(raw.status || 'ATTEND')) as RSVPStatus,
-      reason: raw.reason ? String(raw.reason) : '',
-      timestamp,
-    };
-
-    const existingIndex = this.rsvpVotes.findIndex(
-      (v) => v.scheduleId === scheduleId && v.memberId === memberId
-    );
-
-    if (existingIndex >= 0) {
-      const existing = this.rsvpVotes[existingIndex];
-      if (timestamp && existing.timestamp && timestamp < existing.timestamp) {
-        return false;
-      }
-      this.rsvpVotes[existingIndex] = vote;
-    } else {
-      this.rsvpVotes.push(vote);
-    }
-
-    saveToStorage(STORAGE_KEYS.RSVP_VOTES, this.rsvpVotes);
-    this.setSyncState({ status: 'IDLE', lastSyncedAt: Date.now() });
-    return true;
-  }
-
-  public mergeRealtimeCommentEvent(raw: Record<string, unknown>): boolean {
-    const id = String(raw.id || '').trim();
-    if (!id) return false;
-    if (this.commentEvents.some((c) => c.id === id)) return false;
-
-    const memberId = String(raw.member_id || raw.memberId || '').trim();
-    const scheduleId = String(raw.schedule_id || raw.scheduleId || '').trim();
-    const action = String(raw.action || 'CREATE').toUpperCase() as ScheduleCommentAction;
-    if (!memberId || !scheduleId) return false;
-
-    const member = this.members.find((m) => m.id === memberId);
-    const memberName = String(raw.member_name || raw.memberName || member?.name || '단원');
-    const part = (String(raw.part || member?.part || '소프라노')) as PartType;
-
-    const event: ScheduleCommentEvent = {
-      id,
-      scheduleId,
-      memberId,
-      memberName,
-      part,
-      action,
-      targetId: raw.target_id ? String(raw.target_id) : raw.targetId ? String(raw.targetId) : undefined,
-      text: raw.text !== undefined && raw.text !== null ? String(raw.text) : undefined,
-      timestamp: String(raw.timestamp || ''),
-      deviceId: raw.device_id ? String(raw.device_id) : raw.deviceId ? String(raw.deviceId) : undefined,
-    };
-
-    this.commentEvents.push(event);
-    saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
-    this.setSyncState({ status: 'IDLE', lastSyncedAt: Date.now() });
-    return true;
   }
 
   /**

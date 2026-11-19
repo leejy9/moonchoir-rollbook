@@ -25,7 +25,6 @@ import {
 } from './services/displayMode';
 import type { BoundDeviceProfile, Schedule } from './types/rollbook';
 import { getKSTDateString } from './utils/date';
-import { supabaseRealtime } from './services/realtime/supabaseRealtime';
 
 export function App() {
   // Device binding state
@@ -61,14 +60,6 @@ export function App() {
 
     return () => {
       isCancelled = true;
-    };
-  }, []);
-
-  // Supabase Realtime WebSocket 실시간 동기화 초기화
-  useEffect(() => {
-    supabaseRealtime.init();
-    return () => {
-      supabaseRealtime.disconnect();
     };
   }, []);
 
