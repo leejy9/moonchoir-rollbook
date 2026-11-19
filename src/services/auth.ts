@@ -112,7 +112,8 @@ export function clearDeviceProfile(): void {
 
 export function validateAdminPin(inputPin: string): boolean {
   const config = sheetsService.getConfig();
-  const validPin = config.adminPin || '1234';
+  const validPin = config.adminPin;
+  if (!validPin) return false;
   return inputPin.trim() === validPin.trim();
 }
 

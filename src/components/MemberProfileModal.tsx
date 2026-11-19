@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { Member, Schedule, RawAttendanceLog, PartType, MemberStatus, RoleType, MemberStatusHistory } from '../types/rollbook';
-import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString, addDaysKST } from '../utils/date';
+import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString, addDaysKST, normalizeToKSTTimestamp } from '../utils/date';
 import { calculateCumulativeAttendanceWithLifecycle } from '../utils/attendanceStats';
 import { sheetsService } from '../services/sheets';
 import { RoundDatePicker } from './RoundDatePicker';
@@ -794,6 +794,9 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                     else if (isExcused) badgeClass = 'badge-excused';
                     else if (isExempt) badgeClass = 'badge-exempt';
 
+                    const memberVote = sheetsService.getRSVPVotes(sch.id).find((v) => v.memberId === formData.id);
+                    const voteTime = memberVote?.timestamp ? normalizeToKSTTimestamp(memberVote.timestamp) : '';
+
                     return (
                       <div key={sch.id} className="attendance-record-row">
                         <span className="col-cell col-date">
@@ -803,10 +806,18 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                           <span className="record-sch-title">{sch.title}</span>
                           <span className="record-sch-cat">{sch.category}</span>
                         </div>
-                        <div className="col-cell col-status">
+                        <div className="col-cell col-status" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                           <span className={`record-badge ${badgeClass}`}>
                             {isExempt ? '미참' : status}
                           </span>
+                          {memberVote ? (
+                            <span style={{ fontSize: '11px', color: '#64748B' }} title={voteTime ? `투표 일시: ${voteTime}` : undefined}>
+                              투표: {memberVote.status === 'ATTEND' ? '참석' : memberVote.status === 'ABSENT' ? '불참' : '지각'}
+                              {voteTime && ` (${voteTime.slice(5, 16)})`}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '10.5px', color: '#94A3B8' }}>미투표</span>
+                          )}
                         </div>
                       </div>
                     );

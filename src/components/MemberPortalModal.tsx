@@ -6,7 +6,7 @@ import {
   calculateCumulativeAttendanceWithLifecycle,
   getGamifiedAttendanceLevel,
 } from '../utils/attendanceStats';
-import { formatShortDate, getKSTClock, getKSTDateString } from '../utils/date';
+import { formatShortDate, getKSTClock, getKSTDateString, normalizeToKSTTimestamp } from '../utils/date';
 import { InstallAppCard } from './InstallAppCard';
 
 interface MemberPortalModalProps {
@@ -126,6 +126,9 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         checkInTime = '수동인정';
       }
 
+      const myVote = allRsvpVotes.find((v) => v.scheduleId === s.id && v.memberId === profile.memberId);
+      const voteTimestamp = myVote?.timestamp ? normalizeToKSTTimestamp(myVote.timestamp) : '';
+
       return {
         id: s.id,
         schedule: s,
@@ -134,6 +137,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         category: s.category || '정기연습',
         voteStatus: rec?.rsvpStatus && rec.rsvpStatus !== 'UNVOTED' ? rec.rsvpStatus : null,
         voteReason: rec?.rsvpReason || '',
+        voteTimestamp,
         isAttended,
         finalStatus: rec?.finalStatus || (isPast ? '결석' : '대기'),
         checkInTime,
@@ -142,7 +146,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         isExempt,
       };
     });
-  }, [schedules, profile.memberId, profile.name, todayStr]);
+  }, [schedules, profile.memberId, profile.name, todayStr, allRsvpVotes]);
 
   // 4. 시트 동기화 핸들러
   const handleSyncRemote = async () => {
@@ -497,6 +501,20 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                               </span>
                             )}
                           </button>
+                          {r.voteTimestamp && (
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                color: '#64748B',
+                                marginTop: '2px',
+                                display: 'block',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={`투표 일시: ${r.voteTimestamp}`}
+                            >
+                              {r.voteTimestamp.slice(5, 16)}
+                            </span>
+                          )}
                         </div>
 
                         {/* 4. 출결 시간 (당일 미출석 시 출석체크 버튼 지원) */}

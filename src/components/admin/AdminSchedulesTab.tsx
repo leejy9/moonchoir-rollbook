@@ -797,6 +797,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                   calendarGrid={adminCalendarGrid}
                   schedulesByDate={schedulesByDate}
                   activeSchedulesByDate={activeSchedulesByDate}
+                  members={members}
                   selectedDate={adminSelectedDate}
                   onSelectDate={(dateStr) => {
                     setAdminSelectedDate(dateStr);
@@ -825,6 +826,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                 <AdminScheduleListView
                   schedules={schedules}
                   categories={dynamicCategories}
+                  members={members}
                   programCards={programCards}
                   onAssignProgramCard={async (scheduleId, cardId) => {
                     await sheetsService.updateSchedule(scheduleId, { programId: cardId });

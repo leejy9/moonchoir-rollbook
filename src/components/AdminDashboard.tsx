@@ -23,6 +23,8 @@ import { ManualOverrideModal } from './admin/ManualOverrideModal';
 import { useScheduleAdmin } from '../hooks/useScheduleAdmin';
 import { getLateThresholdTime } from '../utils/manualAttendance';
 import { useAttendanceAdmin } from '../hooks/useAttendanceAdmin';
+import { useLongPress } from '../hooks/useLongPress';
+import { AdminPinResetModal } from './admin/AdminPinResetModal';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface AdminDashboardProps {
@@ -39,6 +41,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   refreshTrigger,
 }) => {
   const [adminTab, setAdminTab] = useState<AdminTab>('ROSTER');
+  const [showPinResetModal, setShowPinResetModal] = useState(false);
+
+  const logoLongPress = useLongPress({
+    thresholdMs: 3000,
+    onLongPress: () => setShowPinResetModal(true),
+  });
 
   // Schedules & Config (reactive to refreshTrigger)
   const schedules = useMemo(() => {
@@ -212,7 +220,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <img
             src={moonchoirLogo}
             alt="Moonchoir"
-            style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+            {...logoLongPress}
+            title="3초간 길게 누르면 관리자 마스터 PIN을 재설정합니다"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              objectFit: 'cover',
+              flexShrink: 0,
+              cursor: 'pointer',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
           />
           <h1 className="admin-title" style={{ whiteSpace: 'nowrap' }}>
             관리자
@@ -447,6 +466,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           setTimeout(() => setScheduleSuccessMsg(''), 4000);
         }}
       />
+
+      {/* ============================================================== */}
+      {/* MODAL: Master Admin PIN Reset Modal (3s Long Press Easter Egg) */}
+      {/* ============================================================== */}
+      {showPinResetModal && (
+        <AdminPinResetModal
+          onClose={() => setShowPinResetModal(false)}
+          onSuccess={() => onDataChanged()}
+        />
+      )}
 
     </div>
   );

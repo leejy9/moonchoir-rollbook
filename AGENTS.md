@@ -1,5 +1,7 @@
 # Moonchoir Rollbook — Agent Constitution & System Harness
 
+> 관련 문서: [기획 배경](docs/PRODUCT_BACKGROUND.md) 프로젝트 탄생 배경 및 목표 · [구조 복구 기록](docs/ARCHITECTURE_RECOVERY.md) 현재 코드 상태
+
 ## 0. 비판적 파트너십 (Critical Partnership)
 - 상위 워크스페이스 규칙([critical_partnership.md](file:///Users/grasshop/Desktop/Antigravity/.agents/rules/critical_partnership.md))을 준수한다.
 - 무조건적인 칭찬과 맹목적 동조를 절대 금지한다.

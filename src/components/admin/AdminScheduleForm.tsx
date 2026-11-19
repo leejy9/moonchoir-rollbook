@@ -728,6 +728,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
                   type="button"
                   onClick={() => {
                     setNewTargetAudienceType('CUSTOM_MEMBERS');
+                    setNewVisibility('TARGETS_ONLY');
                     setIsAudienceDropdownOpen(false);
                     setIsCustomMemberModalOpen(true);
                   }}
@@ -1027,7 +1028,12 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
               <button
                 type="button"
                 className="btn-primary-large"
-                onClick={() => setIsCustomMemberModalOpen(false)}
+                onClick={() => {
+                  if (newTargetMemberIds.length > 0) {
+                    setNewVisibility('TARGETS_ONLY');
+                  }
+                  setIsCustomMemberModalOpen(false);
+                }}
               >
                 확인
               </button>

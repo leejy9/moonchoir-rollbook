@@ -91,23 +91,29 @@ class MockSpreadsheet {
 interface GasApi {
   doPost: (e: { postData: { contents: string } }) => { text: string };
   doGet: (e: object) => { text: string };
+  performanceLogs: string[];
 }
 
 function loadGas(spreadsheet: MockSpreadsheet): GasApi {
   const source = gasSource;
+  const performanceLogs: string[] = [];
   const output = (text: string) => ({ text, setMimeType() { return this; } });
   const factory = new Function(
     'SpreadsheetApp',
     'LockService',
     'ContentService',
     'Utilities',
-    `${source}\nreturn { doPost, doGet };`
+    'console',
+    'performanceLogs',
+    `${source}\nreturn { doPost, doGet, performanceLogs };`
   );
   return factory(
     { getActiveSpreadsheet: () => spreadsheet, getUi: () => ({}) },
     { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     { createTextOutput: (text: string) => output(text), MimeType: { JSON: 'JSON' } },
-    { formatDate: () => '2026-10-23 19:30:00' }
+    { formatDate: () => '2026-10-23 19:30:00' },
+    { log: (message: string) => performanceLogs.push(message) },
+    performanceLogs
   ) as GasApi;
 }
 
@@ -151,6 +157,21 @@ describe('Apps Script 일정 댓글 처리', () => {
     expect(result.success).toBe(true);
     const row = comments()[1];
     expect(row).toEqual(['c1', 's1', 'm1', '김하은', '소프라노', 'CREATE', '', '늦을 것 같아요', '2026-10-23 19:30:00', 'dev_a']);
+  });
+
+  it('댓글 처리 시간만 기록하고 요청 내용을 로그에 넣지 않는다', () => {
+    const commentText = '비공개 댓글 내용';
+    post('ADD_COMMENT', { ...base, id: 'c1', text: commentText });
+    const log = gas.performanceLogs.find((entry) => entry.includes('"action":"ADD_COMMENT"'));
+
+    expect(log).toBeDefined();
+    expect(log).toContain('"lockWaitMs"');
+    expect(log).toContain('"ensureStructureMs"');
+    expect(log).toContain('"commentReadMs"');
+    expect(log).toContain('"dedupeScanMs"');
+    expect(log).toContain('"commentWriteMs"');
+    expect(log).not.toContain(commentText);
+    expect(log).not.toContain(base.memberName);
   });
 
   it('같은 id로 다시 보내도 한 번만 저장하고 성공으로 응답한다', () => {
@@ -214,5 +235,6 @@ describe('Apps Script 일정 댓글 처리', () => {
     post('ADD_COMMENT', { ...base, id: 'c1', text: '안녕' });
     const body = JSON.parse(gas.doGet({}).text) as { data: { comments: Array<{ id: string; text: string }> } };
     expect(body.data.comments.map((c) => [c.id, c.text])).toEqual([['c1', '안녕']]);
+    expect(gas.performanceLogs.some((entry) => entry.includes('"operation":"doGet"') && entry.includes('"commentsReadMs"'))).toBe(true);
   });
 });

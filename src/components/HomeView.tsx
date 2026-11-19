@@ -16,6 +16,8 @@ import {
 import { HomeActiveScheduleCard } from './home/HomeActiveScheduleCard';
 import { HomeCalendarSection } from './home/HomeCalendarSection';
 import { HomeUpcomingListSection } from './home/HomeUpcomingListSection';
+import { useLongPress } from '../hooks/useLongPress';
+import { AdminPinResetModal } from './admin/AdminPinResetModal';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface HomeViewProps {
@@ -69,6 +71,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [currentMonthIndex, setCurrentMonthIndex] = useState(() => parseInt(todayStr.slice(5, 7), 10) - 1);
   const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
   const [userSelectedScheduleId, setUserSelectedScheduleId] = useState<string | null>(null);
+  const [showPinResetModal, setShowPinResetModal] = useState(false);
+
+  const logoLongPress = useLongPress({
+    thresholdMs: 3000,
+    onLongPress: () => setShowPinResetModal(true),
+  });
 
   const schedules = useMemo(() => {
     void _refreshTrigger;
@@ -433,7 +441,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
             src={moonchoirLogo}
             alt="Moonchoir"
             className="brand-logo-img"
-            style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover' }}
+            {...logoLongPress}
+            title="3초간 길게 누르면 관리자 마스터 PIN을 재설정합니다"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: '50%',
+              objectFit: 'cover',
+              cursor: 'pointer',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
           />
           <div>
             <h1 className="brand-title">문콰이어 출석부</h1>
@@ -626,6 +644,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
           setHomeViewTab('CALENDAR');
         }}
       />
+
+      {/* ============================================================== */}
+      {/* MODAL: Master Admin PIN Reset Modal (3s Long Press Easter Egg) */}
+      {/* ============================================================== */}
+      {showPinResetModal && (
+        <AdminPinResetModal
+          onClose={() => setShowPinResetModal(false)}
+        />
+      )}
     </div>
   );
 };

@@ -55,7 +55,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onSuccess, onClose
             inputMode="numeric"
             maxLength={8}
             className="input-text"
-            placeholder="기본 비밀번호: 1234"
+            placeholder="관리자 PIN 번호를 입력하세요"
             value={pin}
             onChange={(e) => setPin(e.target.value)}
             disabled={isChecking}

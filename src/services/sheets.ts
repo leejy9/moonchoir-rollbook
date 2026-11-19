@@ -42,8 +42,28 @@ import {
   resetStorage,
   saveToStorage,
 } from './sheetsStorage';
+import type { RemoteBackend, RemoteSnapshot } from './backend/types';
+import { GasBackend } from './backend/gasBackend';
+import { SupabaseBackend } from './backend/supabaseBackend';
 
 export { resetStorage };
+export type { RemoteBackend, RemoteSnapshot };
+
+function createDefaultBackend(getUrl: () => string | undefined): RemoteBackend {
+  const isTest = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.MODE === 'test' : false;
+  const backendKind = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_BACKEND : undefined;
+  const supaUrl = (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_URL : undefined) || 'https://hvsftdbqwxjbpfogoldw.supabase.co';
+  const supaKey = (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_ANON_KEY : undefined) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2c2Z0ZGJxd3hqYnBmb2dvbGR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUwNDk2NjksImV4cCI6MjExMDYyNTY2OX0.Pg5U9ger1SD9mrjmKf404--AkKF5RRfU2E7va5EepjQ';
+
+  // In production/dev runtime, default to Supabase unless explicitly configured as 'gas'
+  if (!isTest && backendKind !== 'gas' && supaUrl && supaKey) {
+    return new SupabaseBackend({ url: supaUrl, anonKey: supaKey });
+  }
+  if (backendKind === 'supabase' && supaUrl && supaKey) {
+    return new SupabaseBackend({ url: supaUrl, anonKey: supaKey });
+  }
+  return new GasBackend(getUrl);
+}
 
 export class ExistingMemberConflictError extends Error {
   public readonly existingMemberId: string;
@@ -68,19 +88,6 @@ export interface SheetsNotice {
   id: number;
   kind: 'error';
   message: string;
-}
-
-interface RemoteSnapshot {
-  members?: Member[];
-  schedules?: Schedule[];
-  rsvpVotes?: RSVPVote[];
-  logs?: RawAttendanceLog[];
-  recentLogs?: RawAttendanceLog[];
-  locations?: LocationPreset[];
-  memberHistory?: MemberStatusHistory[];
-  programCards?: ProgramCard[];
-  comments?: unknown[];
-  config?: Partial<AppConfig>;
 }
 
 /** 같은 요청이 이 간격 안에 다시 오면 새로 받아오지 않는다(각 기기 안에서만 적용). */
@@ -133,7 +140,10 @@ export class SheetsService {
   private noticeSeq = 0;
   private lastNoticeAt = new Map<string, number>();
 
-  constructor() {
+  private backend: RemoteBackend;
+
+  constructor(backend?: RemoteBackend) {
+    this.backend = backend || createDefaultBackend(() => this.config.sheetsWebAppUrl);
     this.config = loadFromStorage(STORAGE_KEYS.CONFIG, { ...INITIAL_CONFIG, locationPresets: [] });
     if (!this.config.sheetsWebAppUrl && INITIAL_CONFIG.sheetsWebAppUrl) {
       this.config.sheetsWebAppUrl = INITIAL_CONFIG.sheetsWebAppUrl;
@@ -146,6 +156,14 @@ export class SheetsService {
     this.locations = loadFromStorage(STORAGE_KEYS.LOCATIONS, []);
     this.programCards = loadFromStorage(STORAGE_KEYS.PROGRAM_CARDS, []);
     this.commentEvents = loadFromStorage(STORAGE_KEYS.COMMENTS, []);
+  }
+
+  public getBackend(): RemoteBackend {
+    return this.backend;
+  }
+
+  public setBackend(backend: RemoteBackend): void {
+    this.backend = backend;
   }
 
   public seedTestData(data: {
@@ -243,13 +261,15 @@ export class SheetsService {
       member = this.members.find((m) => m.id === member?.mergedIntoId) ?? member;
       if (member.status !== 'MERGED') break;
     }
-    const aliasIds = member ? resolveMergedMemberIds(member.id, this.members) : new Set<string>();
 
-    return schedules.filter(
-      (s) =>
-        isScheduleVisibleToMember(member, s) ||
-        this.logs.some((l) => l.scheduleId === s.id && aliasIds.has(l.memberId))
-    );
+    return schedules.filter((s) => {
+      if (isScheduleVisibleToMember(member, s)) return true;
+      if (!member) return false;
+      // TARGETS_ONLY 일정이라도 해당 단원의 최종 출석이 실제로 인정된 경우에만 내역 보존을 위해 노출
+      // (단순 raw 로그 존재나 취소/미인정 로그만 있는 비대상자에게는 절대 노출하지 않음)
+      const reconciled = this.reconcileMemberAttendance(member.id, s.id, member.name);
+      return Boolean(reconciled && (reconciled.finalStatus === '출석' || reconciled.finalStatus === '지각'));
+    });
   }
 
   // --- Schedule comments (append-only event log, confirmed by the sheet before showing) ---
@@ -1400,25 +1420,7 @@ export class SheetsService {
   }
 
   private async requestRemoteSnapshot(targetUrl: string): Promise<RemoteSnapshot> {
-    const fetchUrl = targetUrl.includes('?')
-      ? `${targetUrl}&action=GET_INITIAL_DATA`
-      : `${targetUrl}?action=GET_INITIAL_DATA`;
-
-    const res = await fetch(fetchUrl, {
-      method: 'GET',
-      redirect: 'follow',
-    });
-
-    if (!res.ok) {
-      throw new Error(`구글 시트 통신 오류 (HTTP ${res.status})`);
-    }
-
-    const json = (await res.json()) as { success: boolean; error?: string; data?: RemoteSnapshot };
-
-    if (!json.success || !json.data) {
-      throw new Error(json.error || '구글 시트 응답 형식이 올바르지 않습니다.');
-    }
-    return json.data;
+    return this.backend.requestSnapshot(targetUrl);
   }
 
   /**
@@ -1617,42 +1619,7 @@ export class SheetsService {
     payload: unknown,
     endpointUrl?: string
   ): Promise<{ success: boolean; message?: string; existingMemberId?: string; boundDeviceId?: string }> {
-    const targetUrl = endpointUrl || this.config.sheetsWebAppUrl;
-    if (!targetUrl) {
-      return { success: false, message: '시트 Web App URL이 설정되지 않았습니다.' };
-    }
-
-    try {
-      const res = await fetch(targetUrl, {
-        method: 'POST',
-        redirect: 'follow',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({ action, data: payload, payload }),
-      });
-
-      if (!res.ok) {
-        return { success: false, message: `구글 시트 통신 오류 (HTTP ${res.status})` };
-      }
-
-      const json = (await res.json()) as {
-        success?: boolean;
-        message?: string;
-        error?: string;
-        existingMemberId?: string;
-        boundDeviceId?: string;
-      };
-      return {
-        success: json.success === true,
-        message: json.message || json.error || (json.success === true ? '저장 완료' : '시트 저장이 확인되지 않았습니다.'),
-        existingMemberId: json.existingMemberId,
-        boundDeviceId: json.boundDeviceId,
-      };
-    } catch (err) {
-      console.error('[Sheets API] POST failed:', err);
-      return { success: false, message: '시트 전송 실패' };
-    }
+    return this.backend.callAction(action, payload, endpointUrl || this.config.sheetsWebAppUrl);
   }
 }
 

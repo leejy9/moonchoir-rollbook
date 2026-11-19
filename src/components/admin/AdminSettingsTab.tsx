@@ -26,7 +26,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
   // --- 1. Settings State (Google Sheets Sync) ---
   const [sheetsUrl, setSheetsUrl] = useState(config.sheetsWebAppUrl || '');
   const [lateGrace, setLateGrace] = useState(config.lateGraceMinutes || 10);
-  const [adminPinInput, setAdminPinInput] = useState(config.adminPin || '1234');
+  const [adminPinInput, setAdminPinInput] = useState(config.adminPin || '');
   const [syncStatusMsg, setSyncStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [settingsSuccessMsg, setSettingsSuccessMsg] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -701,6 +701,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                   type="password"
                   maxLength={8}
                   className="input-text"
+                  placeholder="변경할 PIN 번호 입력 (미입력 시 기존 유지)"
                   value={adminPinInput}
                   onChange={(e) => setAdminPinInput(e.target.value)}
                 />

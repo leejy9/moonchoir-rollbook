@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { CalendarDay } from '../../utils/calendar';
-import type { Schedule } from '../../types/rollbook';
+import type { Member, Schedule } from '../../types/rollbook';
 import { getKSTDateString } from '../../utils/date';
+import { ScheduleRsvpLogModal } from './ScheduleRsvpLogModal';
 
 export interface AdminCalendarViewProps {
   /** 일정별 댓글 개수 (있으면 일정 줄에 `댓글 N` 배지를 보인다) */
   commentCounts?: Map<string, number>;
+  members?: Member[];
   adminCalYear: number;
   adminCalMonth: number;
   onPrevMonth: () => void;
@@ -30,6 +32,7 @@ export interface AdminCalendarViewProps {
 
 export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
   commentCounts,
+  members = [],
   adminCalYear,
   adminCalMonth,
   onPrevMonth,
@@ -51,6 +54,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
   onCloneSchedule,
   onDeleteSchedule,
 }) => {
+  const [selectedScheduleForRsvpLog, setSelectedScheduleForRsvpLog] = useState<Schedule | null>(null);
   const todayStr = getKSTDateString();
 
   return (
@@ -300,6 +304,23 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                       </>
                     ) : (
                       <>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedScheduleForRsvpLog(sch)}
+                          style={{
+                            background: '#F0FDF4',
+                            color: '#15803D',
+                            border: '1px solid #BBF7D0',
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          투표 로그 📋
+                        </button>
                         {onToggleArchiveSchedule && (
                           <button
                             type="button"
@@ -361,6 +382,15 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
           </p>
         )}
       </div>
+
+      {/* Schedule RSVP Log Modal */}
+      {selectedScheduleForRsvpLog && (
+        <ScheduleRsvpLogModal
+          schedule={selectedScheduleForRsvpLog}
+          members={members}
+          onClose={() => setSelectedScheduleForRsvpLog(null)}
+        />
+      )}
     </div>
   );
 };

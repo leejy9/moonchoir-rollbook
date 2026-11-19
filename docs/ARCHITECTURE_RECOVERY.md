@@ -1,5 +1,7 @@
 # Architecture Recovery Record
 
+> 관련 문서: [AGENTS.md](../AGENTS.md) 작업 헌장 · [기획 배경](./PRODUCT_BACKGROUND.md) 프로젝트 탄생 배경 및 목표
+
 ## Purpose
 
 This record separates verified behavior in the current code from decisions agreed for the desired behavior. The PRD describes product requirements; this file records the data-flow risks and why recovery work is needed. Keep it current as findings are verified and decisions change.
@@ -8,7 +10,9 @@ The complete phased plan, owner decision gates, and acceptance checks are in [Ar
 
 ## Decisions Agreed With The Owner
 
-- Google Spreadsheet is the official record for operational data such as members, schedules, attendance, and RSVP.
+- Google Spreadsheet is the official record for operational data such as members, schedules, attendance, and RSVP (retained as cold backup/archive).
+- **Supabase (PostgreSQL 15) Primary Backend Confirmed (2026-11-19):** To eliminate GAS concurrency lockouts and reduce mobile scan round-trip latency from ~5.7s to <600ms, the primary backend is Supabase with row-level security and stored procedures. Append-only attendance immutability is strictly enforced by DB triggers.
+- **Target-Only Schedule Visibility Rule Confirmed (2026-11-19):** For schedules marked `visibility: 'TARGETS_ONLY'`, non-target members are excluded from Home, Calendar, and Profile views. A non-target member only sees the schedule if they hold an actual confirmed attendance/late record (`reconciled.finalStatus === '출석' || '지각'`) to protect personal attendance history. Mere presence of raw, unconfirmed, or cleared logs (`[ATTENDANCE_CLEARED]`) does NOT expose target-only schedules.
 - Browser storage may cache data for display and temporarily hold writes that cannot yet reach the spreadsheet. It is not a second official record.
 - A write is not complete until the spreadsheet confirms it. The UI must distinguish saving, confirmed, and failed/pending states.
 - A check-in is not official attendance until the spreadsheet confirms it. If the same check-in is retried, it must retain the same unique ID so retries do not create duplicate records.
@@ -333,5 +337,9 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 - **Combined result (device-binding behavior):**
   - Local work kept: the lock UI and messages are removed (`BindingModal` wording, member profile device bar, portal text), member logout only clears the browser's own profile, `phone`/`phoneLast4` cells are formatted as text after Apps Script writes, numeric `phoneLast4` is restored to four digits, the admin matrix hides records of members not in the roster, and a manual absence override of an exempt member is `미참`.
   - PR #1 semantics kept for `boundDeviceId`: the first bound device stays in the sheet and a new browser causes no sheet write (the local work overwrote it with the latest browser). Full-phone identity check, `출석원천로그.deviceId`, KST normalization, refresh-on-navigation and the other PR #1 items are unchanged.
-- **Deployment status to verify:** The production Apps Script was at version 19 (atomic register/bind actions, one-device rule still enforced server-side) when the local log was written; a later paste of either script version is not confirmed. The combined `google-apps-script.js` needs a new Apps Script version (GAS first, then the front end).
-
+- **Comment latency root cause identified and fixed (2026-10-23):** The owner-provided Apps Script executions screenshot shows version 26 `doPost` runs of 3.656–4.684 seconds. Root cause was two compounding issues in `doPost`:
+  1. **`ensureSheetStructure` ran on every `doPost` call regardless of action**, including ADD/EDIT/DELETE_COMMENT. This function checks all 9 sheets (18+ Sheets API calls at ~200–400 ms each = 1.5–3.6 s per call). For comment operations the sheet structure already exists and this check is wasteful.
+  2. **`canonicalOf` read the full members sheet twice** for EDIT/DELETE comment operations (`getDataRange().getValues()` called once per `canonicalOf(authorId)` and once per `canonicalOf(memberId)`), adding ~200–400 ms when the author ID did not directly match the requesting member ID.
+  - **Fix applied to `google-apps-script.js` and `docs/google_apps_script.js`:** Payload is now parsed before `ensureSheetStructure` so the action is known first. ADD_COMMENT, EDIT_COMMENT, DELETE_COMMENT, RECORD_ATTENDANCE, and SUBMIT_CHECKIN skip `ensureSheetStructure` entirely. `canonicalOf` now caches the members sheet rows (`cachedMemberRows`) so `getDataRange().getValues()` is called at most once per request. Expected improvement: ADD_COMMENT drops from ~4 s to under 1 s; EDIT/DELETE_COMMENT from ~4–5 s to ~1 s; RECORD_ATTENDANCE from ~4 s to ~0.5 s (lock held only during dedup check + append, not during structure scan).
+  - **Required action:** Deploy the updated `google-apps-script.js` to Apps Script as a new version (edit → 배포 관리 → 새 버전 → 배포).
+- **Deployment status to verify:** The production Apps Script was at version 19 (atomic register/bind actions, one-device rule still enforced server-side) when the local log was written; the owner-provided execution screenshot later showed version 26. The local instrumentation requires a new Apps Script version to be deployed before its stage timings can be observed. `gas/Code.gs` remains the older five-tab protocol; live spreadsheet contents have not been audited.
