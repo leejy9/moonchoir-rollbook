@@ -20,6 +20,7 @@
 13. [2026-10-21: 카카오톡 인앱 브라우저·회원 연결·전화번호 데이터 정합성 개선](#2026-10-21-카카오톡-인앱-브라우저회원-연결전화번호-데이터-정합성-개선)
 14. [2026-11-08: 외부 카메라 QR 딥링크·푸시 알림 검토 및 네이티브 앱 전환 판단](#2026-11-08-외부-카메라-qr-딥링크푸시-알림-검토-및-네이티브-앱-전환-판단)
 15. [2026-11-19: Phase 6 — Supabase PostgreSQL 백엔드 전면 전환, 비대상 일정 노출 방지 & 보안 이스터에그 구축](#2026-11-19-phase-6--supabase-postgresql-백엔드-전면-전환-비대상-일정-노출-방지--보안-이스터에그-구축)
+16. [2026-11-20: Phase 6.1 — Google Sheets 레거시 분리, Supabase Realtime 전 테이블 확장, 좀비 소켓 복구 & 모바일 최적화](#2026-11-20-phase-61--google-sheets-레거시-분리-supabase-realtime-전-테이블-확장-좀비-소켓-복구--모바일-최적화)
 
 ---
 
@@ -1122,6 +1123,34 @@
 - **결정론적 테스트 검증**:
   - `npm run typecheck`, `npm run lint` 0 warnings/errors.
   - 전체 단위 테스트 **50개 파일, 312개 테스트 100% Green Bar 달성**.
+
+---
+
+## 2026-11-20: Phase 6.1 — Google Sheets 레거시 분리, Supabase Realtime 전 테이블 확장, 좀비 소켓 복구 & 모바일 최적화
+
+### 1. 배경 및 기획 의도
+- Supabase 백엔드로 전환한 이후에도 `SheetsService` 전반에 남아 있던 27곳의 구글 시트 하드코딩 체크(`sheetsWebAppUrl`), 20초 스냅샷 스로틀, 인위적 1.5초 쓰기 지연 등으로 인해 실시간성이 저하되고 동기화 버튼 없이 즉각 반영되지 않는 마찰이 발생함.
+- PC와 모바일 간 삭제 댓글 등 CDC 이벤트 전파 시 일부 테이블만 구독되어 일정/명단/공지 변경 사항이 실시간으로 공유되지 못하던 구조적 한계를 극복하고, "코드베이스 내 다른 문제는 없는지 더 탐색"하라는 사용자 지침에 따라 dev-team(dev-lead, code-explorer, builder, critic) 협업으로 전수 감사를 단행함.
+
+### 2. 주요 개선 및 아키텍처 고도화
+- **`src/services/sheets.ts` 레거시 종속성 완전 분리**:
+  - `isBackendActive()`, `canSync()`를 신설하여 Supabase 활성화 시 `sheetsWebAppUrl` 없이도 모든 읽기/쓰기가 100% 정상 작동하도록 일원화.
+  - 생성자에서 `this.config`를 `this.backend`보다 먼저 초기화하여 클로저 초기화 순서 위험 제거.
+  - `syncInBackground()`의 unhandled promise rejection을 막기 위해 `.catch()` 에러 핸들러 및 사용자 노티스 발행 추가.
+  - 개별 WebSocket 수신 시 `lastSyncedAt`을 오염시켜 20초간 화면 복귀 전체 동기화를 차단하던 결함 제거 (`notifySyncListeners()`만 트리거).
+  - 도메인 엔티티 실시간 병합기(`mergeRealtimeSchedule`, `mergeRealtimeMember`, `mergeRealtimeLocation`, `mergeRealtimeProgramCard`) 구축 및 `INSERT`/`UPDATE`/`DELETE` 안전 처리.
+- **`src/services/realtime/supabaseRealtime.ts` 실시간 동기화 범위 7개 테이블 확장**:
+  - `schedules`, `members`, `locations`, `program_cards` 테이블에 대한 `postgres_changes` 구독 추가.
+  - 스네이크 케이스 ↔ 카멜 케이스 도메인 매퍼 구축.
+  - **iOS/Safari 모바일 좀비 웹소켓 탐지 및 복구**: 기기 절전/백그라운드 복귀 시 브라우저 소켓이 끊겼음에도 OPEN 상태로 유지되는 현상을 방지하고자 60초 무응답 시 강제 재연결 로직 구현. Phoenix Envelope 파싱 즉시 `lastMessageAt`을 갱신하여 25초 주기 하트비트 응답 시 가짜 좀비 판정(False Positive) 방지.
+- **모바일 배터리 및 네트워크 최적화 (`src/App.tsx`)**:
+  - 전 테이블 WebSocket 실시간 동기화 완성에 따라 매 5초 전체 DB를 받던 백그라운드 폴링 주기를 **30초**로 대폭 완화하여 네트워크 트래픽 및 배터리 소모 방지.
+- **관리자 설정 UI (`AdminSettingsTab.tsx`) 개편**:
+  - Supabase가 현재 활성 클라우드 백엔드(🟢)임을 명확히 표시하고, Google Sheets는 "보조 백업 및 내보내기"로 위상을 정립. 모바일 터치 타깃 최소 44px 준수.
+- **결정론적 테스트 및 Critic 통과**:
+  - `critic` 점수: **95/100 (PASS)**
+  - 단위 테스트: **52개 파일, 352개 테스트 전원 통과 (Green Bar)**
+  - 타입체크, 린트 0 errors. 프로덕션 빌드 및 GitHub Pages 배포 완료.
 
 
 
