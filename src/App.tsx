@@ -81,14 +81,14 @@ export function App() {
     };
   }, []);
 
-  // 다른 사람이 바꾼 내용을 보려면: 앱으로 돌아오거나 네트워크가 복구될 때 새로 받아온다(20초 이내 재요청은 건너뜀)
+  // 다른 사람이 바꾼 내용을 보려면: 앱으로 돌아오거나 네트워크가 복구될 때 새로 받아온다
   useEffect(() => {
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') {
         if (sheetsService.getBackendKind() === 'supabase') {
           getActiveSupabaseRealtime()?.checkAndReconnect();
         }
-        void sheetsService.refreshRemoteData();
+        void sheetsService.refreshRemoteData({ force: true });
       }
     };
     const refreshWhenOnline = () => {
@@ -99,9 +99,18 @@ export function App() {
     };
     document.addEventListener('visibilitychange', refreshWhenVisible);
     window.addEventListener('online', refreshWhenOnline);
+
+    // Supabase 환경: 화면이 켜져 있을 때 5초마다 자동 백업 동기화 (모바일 웹소켓 절전 대비 2중 안전망)
+    const backupTimer = setInterval(() => {
+      if (document.visibilityState === 'visible' && sheetsService.getBackendKind() === 'supabase') {
+        void sheetsService.refreshRemoteData({ force: true });
+      }
+    }, 5000);
+
     return () => {
       document.removeEventListener('visibilitychange', refreshWhenVisible);
       window.removeEventListener('online', refreshWhenOnline);
+      clearInterval(backupTimer);
     };
   }, []);
 
