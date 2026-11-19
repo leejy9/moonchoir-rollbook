@@ -34,7 +34,7 @@ export function buildSupabaseRealtimeUrl(rawUrl: string, anonKey: string): strin
     wsBase = `wss://${cleanBase}`;
   }
 
-  return `${wsBase}/realtime/v1/websocket?apikey=${encodeURIComponent(anonKey)}&vsn=1.0.0`;
+  return `${wsBase}/realtime/v1/websocket?apikey=${encodeURIComponent(anonKey)}&vsn=2.0.0`;
 }
 
 export function mapSnakeToCamelAttendanceLog(raw: Record<string, unknown>): RawAttendanceLog {
@@ -162,21 +162,22 @@ export class SupabaseRealtimeClient {
         this.isConnected = true;
         this.currentBackoffMs = this.config.reconnectBaseMs ?? 1000;
 
-        // Phoenix channel join message
+        // Phoenix channel join message (Supabase Realtime v2 protocol)
         const joinMessage = [
           '1',
           String(this.refCounter++),
-          'realtime:public',
+          'realtime:moonchoir',
           'phx_join',
           {
             config: {
               broadcast: { ack: false, self: false },
-              presence: { key: '' },
+              presence: { key: '', enabled: false },
               postgres_changes: [
                 { event: '*', schema: 'public', table: 'attendance_logs' },
                 { event: '*', schema: 'public', table: 'schedule_comment_events' },
                 { event: '*', schema: 'public', table: 'rsvp_votes' },
               ],
+              private: false,
             },
           },
         ];
@@ -236,7 +237,7 @@ export class SupabaseRealtimeClient {
       if (!Array.isArray(envelope) || envelope.length < 5) return;
       const [_joinRef, _ref, topic, phxEvent, payload] = envelope;
 
-      if (topic === 'realtime:public' && phxEvent === 'postgres_changes') {
+      if (typeof topic === 'string' && topic.startsWith('realtime:') && phxEvent === 'postgres_changes') {
         const change = (payload && typeof payload === 'object' && 'data' in payload)
           ? (payload as { data: unknown }).data
           : payload;

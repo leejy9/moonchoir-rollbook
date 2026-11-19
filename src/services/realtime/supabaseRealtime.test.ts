@@ -66,17 +66,17 @@ describe('supabaseRealtime', () => {
   describe('buildSupabaseRealtimeUrl', () => {
     it('converts https to wss and adds parameters', () => {
       const url = buildSupabaseRealtimeUrl('https://example.supabase.co', 'anon-key-123');
-      expect(url).toBe('wss://example.supabase.co/realtime/v1/websocket?apikey=anon-key-123&vsn=1.0.0');
+      expect(url).toBe('wss://example.supabase.co/realtime/v1/websocket?apikey=anon-key-123&vsn=2.0.0');
     });
 
     it('converts http to ws for local development', () => {
       const url = buildSupabaseRealtimeUrl('http://127.0.0.1:54321', 'anon-key-123');
-      expect(url).toBe('ws://127.0.0.1:54321/realtime/v1/websocket?apikey=anon-key-123&vsn=1.0.0');
+      expect(url).toBe('ws://127.0.0.1:54321/realtime/v1/websocket?apikey=anon-key-123&vsn=2.0.0');
     });
 
     it('strips trailing slash and /rest/v1 paths', () => {
       const url = buildSupabaseRealtimeUrl('https://example.supabase.co/rest/v1/', 'anon-key-123');
-      expect(url).toBe('wss://example.supabase.co/realtime/v1/websocket?apikey=anon-key-123&vsn=1.0.0');
+      expect(url).toBe('wss://example.supabase.co/realtime/v1/websocket?apikey=anon-key-123&vsn=2.0.0');
     });
   });
 
@@ -191,7 +191,7 @@ describe('supabaseRealtime', () => {
       expect(ws.sentMessages.length).toBe(1);
       const joinMsg = JSON.parse(ws.sentMessages[0]);
       expect(joinMsg[0]).toBe('1');
-      expect(joinMsg[2]).toBe('realtime:public');
+      expect(joinMsg[2]).toBe('realtime:moonchoir');
       expect(joinMsg[3]).toBe('phx_join');
       expect(joinMsg[4].config.postgres_changes).toEqual([
         { event: '*', schema: 'public', table: 'attendance_logs' },
@@ -232,7 +232,7 @@ describe('supabaseRealtime', () => {
       ws.simulateMessage([
         null,
         null,
-        'realtime:public',
+        'realtime:moonchoir',
         'postgres_changes',
         {
           data: {
@@ -284,7 +284,7 @@ describe('supabaseRealtime', () => {
       ws.simulateMessage([
         null,
         null,
-        'realtime:public',
+        'realtime:moonchoir',
         'postgres_changes',
         {
           data: {
@@ -335,7 +335,7 @@ describe('supabaseRealtime', () => {
       ws.simulateMessage([
         null,
         null,
-        'realtime:public',
+        'realtime:moonchoir',
         'postgres_changes',
         {
           data: {
