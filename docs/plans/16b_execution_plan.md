@@ -41,7 +41,7 @@
 | 7 | `P1-07` | 오늘 탭(`TodayTab`) 구현 및 카드 경량화 | `src/components/TodayTab.tsx`(신규), `src/components/home/HomeActiveScheduleCard.tsx`, `src/components/TodayTab.test.tsx` | P1-03, P1-04, P1-06 | 뷰포트 확인 | 완료 (84a1ee7) |
 | 8 | `P1-08` | 일정 상세 바텀시트(`ScheduleDetailSheet`, `ScheduleDetailBody`) | `src/components/ScheduleDetailSheet.tsx`(신규), `src/components/ScheduleDetailBody.tsx`(신규) 및 테스트 | P1-06 | 아니오 | 완료 (e7133c1) |
 | 9 | `P1-09` | 일정 탭(`CalendarTab`) 구현 및 기존 `CalendarView.tsx` 폐기 | `src/components/MonthCalendarGrid.tsx`(승격), `src/components/CalendarTab.tsx`(신규), `src/components/CalendarView.tsx`(삭제), `src/App.tsx` 등 | P1-08 | 아니오 | 완료 (1c1156c) |
-| 10 | `P1-10` | QR 대상 일정 명시(`scheduleId`) 및 RSVP `alert()` 인라인화 | `src/App.tsx`, `src/components/RSVPModal.tsx` | P1-07 | 아니오 | 대기 |
+| 10 | `P1-10` | QR 대상 일정 명시(`scheduleId`) 및 RSVP `alert()` 인라인화 | `src/App.tsx`, `src/components/RSVPModal.tsx` | P1-07 | 아니오 | 완료 (877cfc4) |
 | 11 | `P1-11` | Supabase 백그라운드 새로고침 비용 최적화 (실시간 중 5분) | `src/App.tsx`, `src/services/realtime/supabaseRealtime.ts` | P1-06 | **질문 필수** (A/B 선택) | 대기 |
 | 12 | `P1-12` | Phase 1 문서 갱신 | `docs/ARCHITECTURE_RECOVERY.md`, `docs/tasks.md`, `docs/DEV_LOG.md` | P1-01~11 | 아니오 | 대기 |
 | **[Phase 2a]** | | **연습곡 데이터 (브랜치: `feat/practice-catalog-phase2a`)** | | | | |
