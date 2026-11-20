@@ -60,7 +60,7 @@
 | 23 | `P2b-02` | 전역 오디오 플레이어 Provider 및 미니 플레이어 바 구현 | `src/components/audio/AudioPlayerProvider.tsx`(신규), `src/components/audio/MiniPlayer.tsx`(신규), `src/utils/audioQueue.ts`(신규), `src/App.tsx` | P1-06, P2a-04 | 아니오 | 완료 (3fa8bbc) |
 | 24 | `P2b-03` | 연습실 탭(`StudioTab`) 신설 및 QR 스캔 시 일시정지 연동 | `src/components/StudioTab.tsx`(신규), `src/components/BottomNav.tsx`, `src/utils/route.ts`, `src/components/QRScannerModal.tsx` | P2b-02 | 아니오 | 완료 (0cfb942) |
 | 25 | `P2b-04` | iOS 홈 화면 PWA 독립 앱 안내 배너 | `src/components/StudioTab.tsx` | P2b-03 | 아니오 | 완료 (00df730) |
-| 26 | `P2b-05` | 운영진 음원 인코딩 및 업로드 가이드 작성 | `docs/user-guide/practice_audio_upload.md`(신규) | P2b-01 | 아니오 | 대기 |
+| 26 | `P2b-05` | 운영진 음원 인코딩 및 업로드 가이드 작성 | `docs/user-guide/practice_audio_upload.md`(신규) | P2b-01 | 아니오 | 완료 (f874b3e) |
 | 27 | `P2b-06` | 실기기 13개 항목 테스트 기록표 작성 및 검수 요청 | `docs/plans/16a_studio_device_test_log.md`(신규) | P2b-04 | **사용자 테스트 필수** | 대기 |
 
 ---
