@@ -112,6 +112,17 @@ export function buildMemberScheduleRecords({
 
     const voteTimestamp = memberRsvp?.timestamp ? normalizeToKSTTimestamp(memberRsvp.timestamp) : '';
 
+    let finalStatus: AttendanceStatus | '대기';
+    if (isAttended) {
+      finalStatus = rec?.finalStatus || '출석';
+    } else if (isExempt) {
+      finalStatus = rec?.finalStatus || '미참';
+    } else if (isPast) {
+      finalStatus = rec?.finalStatus || '결석';
+    } else {
+      finalStatus = '대기';
+    }
+
     return {
       id: s.id,
       schedule: s,
@@ -122,7 +133,7 @@ export function buildMemberScheduleRecords({
       voteReason: rec?.rsvpReason || '',
       voteTimestamp,
       isAttended,
-      finalStatus: rec?.finalStatus || (isPast ? '결석' : '대기'),
+      finalStatus,
       checkInTime,
       isPast,
       isToday,

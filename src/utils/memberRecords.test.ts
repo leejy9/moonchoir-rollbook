@@ -170,7 +170,7 @@ describe('buildMemberScheduleRecords', () => {
 
     const future = records.find((r) => r.id === 'sch_future');
     expect(future?.isPast).toBe(false);
-    expect(future?.finalStatus).toBe('결석');
+    expect(future?.finalStatus).toBe('대기');
   });
 
   it('resolves merged member alias IDs when reconciling', () => {
