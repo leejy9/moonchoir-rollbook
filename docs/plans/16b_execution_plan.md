@@ -48,7 +48,7 @@
 | 13 | `P2a-01` | 연습곡 및 트랙 도메인 타입 정의 | `src/types/rollbook.ts`, `src/types/schema.test.ts` | P1 완료 (또는 main) | 아니오 | 완료 (f814e5f) |
 | 14 | `P2a-02` | 마이그레이션 SQL 및 검증 스크립트 작성 | `supabase/migrations/20261122000000_practice_catalog.sql`(신규), `supabase/tests/practice_catalog_check.sql`(신규) | P2a-01 | **사용자 적용 필수** | 완료 (12fc2f9) |
 | 15 | `P2a-03` | Supabase 백엔드 매핑, 카탈로그 파서, 재생 방식 판정 | `src/services/backend/supabaseBackend.ts`, `src/services/sheetsParser.ts`, `src/utils/practiceMedia.ts`(신규) 및 테스트 | P2a-01 | 아니오 | 완료 (2753760) |
-| 16 | `P2a-04` | `SheetsService` 카탈로그 조회 및 편집 메서드 추가 | `src/services/sheets.ts`, `src/services/sheetsStorage.ts`, `src/services/sheets.test.ts` | P2a-03 | 아니오 | 대기 |
+| 16 | `P2a-04` | `SheetsService` 카탈로그 조회 및 편집 메서드 추가 | `src/services/sheets.ts`, `src/services/sheetsStorage.ts`, `src/services/sheets.test.ts` | P2a-03 | 아니오 | 완료 (b2e8149) |
 | 17 | `P2a-05` | 관리자 화면 연습곡 관리 탭(`AdminPracticeTab`) 신설 | `src/components/admin/AdminPracticeTab.tsx`(신규), `src/components/AdminDashboard.tsx` | P2a-04 | 아니오 | 대기 |
 | **[Phase 3]** | | **내 활동 (브랜치: `feat/member-profile-phase3`)** | | | | |
 | 18 | `P3-01` | 회차별 출결 기록 조립 순수 함수 추출 (`buildMemberScheduleRecords`) | `src/utils/memberRecords.ts`(신규) 및 테스트, `src/components/MemberPortalModal.tsx` | P1-06 | 아니오 | 대기 |
