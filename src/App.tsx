@@ -5,8 +5,9 @@ import { AdminPinModal } from './components/AdminPinModal';
 import { AppHeader } from './components/AppHeader';
 import { BindingModal } from './components/BindingModal';
 import { BottomNav } from './components/BottomNav';
-import { CalendarView } from './components/CalendarView';
+import { CalendarTab } from './components/CalendarTab';
 import { HomeView } from './components/HomeView';
+import { ScheduleDetailSheet } from './components/ScheduleDetailSheet';
 import { MemberPortalModal } from './components/MemberPortalModal';
 import { QRScannerModal } from './components/QRScannerModal';
 import { RSVPModal } from './components/RSVPModal';
@@ -317,16 +318,25 @@ export function App() {
               onOpenSuperAdmin={handleOpenSuperAdmin}
               onChangeProfile={() => setShowBindingModal(true)}
               onOpenProfilePortal={() => setShowMemberPortalModal(true)}
+              onOpenDetail={(sch) =>
+                navigate({
+                  type: 'OPEN',
+                  overlay: { kind: 'scheduleSheet', date: sch.date, scheduleId: sch.id },
+                })
+              }
               onViewCalendar={() => navigate({ type: 'TAB', tab: 'calendar' })}
               refreshTrigger={refreshKey}
             />
           )}
 
           {route.tab === 'calendar' && (
-            <CalendarView
+            <CalendarTab
               profile={profile}
+              month={route.month}
+              selectedDate={route.overlay?.kind === 'scheduleSheet' ? route.overlay.date : undefined}
+              onNavigate={navigate}
               onOpenRSVP={(sch) => setRsvSchedule(sch)}
-              onBackToHome={() => navigate({ type: 'TAB', tab: 'today' })}
+              refreshTrigger={refreshKey}
             />
           )}
         </main>
@@ -366,6 +376,28 @@ export function App() {
       <SyncStatus />
 
       {/* Overlay Modals */}
+      {isBound && profile && route.area === 'member' && route.overlay?.kind === 'scheduleSheet' && (
+        <ScheduleDetailSheet
+          isOpen={true}
+          date={route.overlay.date}
+          scheduleId={route.overlay.scheduleId}
+          schedules={activeSchedules}
+          member={
+            sheetsService.getMembers().find((m) => m.id === profile.memberId) || {
+              id: profile.memberId,
+              name: profile.name,
+              part: profile.part,
+              phoneLast4: profile.phoneLast4,
+              role: 'MEMBER',
+              status: 'ACTIVE',
+              createdAt: '2026-01-01T00:00:00Z',
+              joinedAt: '2020-01-01',
+            }
+          }
+          onClose={() => navigate({ type: 'CLOSE' })}
+        />
+      )}
+
       {showBindingModal && isBound && (
         <BindingModal
           onSuccess={handleDeviceBound}

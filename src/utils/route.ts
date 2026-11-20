@@ -11,7 +11,7 @@ export type Route =
   | { area: 'superAdmin' };
 
 export type NavAction =
-  | { type: 'TAB'; tab: MemberTab }
+  | { type: 'TAB'; tab: MemberTab; month?: string }
   | { type: 'OPEN'; overlay: Overlay }
   | { type: 'CLOSE' }
   | { type: 'ADMIN' }
@@ -144,7 +144,19 @@ export function formatRoute(route: Route): string {
 export function navReducer(currentRoute: Route, action: NavAction): NavResult {
   switch (action.type) {
     case 'TAB': {
-      if (currentRoute.area === 'member' && currentRoute.tab === action.tab && !currentRoute.overlay) {
+      const requestedMonth =
+        action.month !== undefined
+          ? action.month
+          : currentRoute.area === 'member'
+          ? currentRoute.month
+          : undefined;
+
+      if (
+        currentRoute.area === 'member' &&
+        currentRoute.tab === action.tab &&
+        !currentRoute.overlay &&
+        (action.month === undefined || action.month === currentRoute.month)
+      ) {
         return { route: currentRoute, history: 'none' };
       }
       const isFromToday = currentRoute.area === 'member' && currentRoute.tab === 'today';
@@ -153,7 +165,7 @@ export function navReducer(currentRoute: Route, action: NavAction): NavResult {
       const nextRoute: Route = {
         area: 'member',
         tab: action.tab,
-        month: action.tab === 'calendar' && currentRoute.area === 'member' ? currentRoute.month : undefined,
+        month: requestedMonth,
       };
 
       return {
