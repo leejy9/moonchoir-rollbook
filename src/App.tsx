@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { SuperAdminDashboard } from './components/admin/SuperAdminDashboard';
 import { AdminPinModal } from './components/AdminPinModal';
+import { AppHeader } from './components/AppHeader';
 import { BindingModal } from './components/BindingModal';
+import { BottomNav } from './components/BottomNav';
 import { CalendarView } from './components/CalendarView';
 import { HomeView } from './components/HomeView';
 import { MemberPortalModal } from './components/MemberPortalModal';
 import { QRScannerModal } from './components/QRScannerModal';
 import { RSVPModal } from './components/RSVPModal';
 import { SyncStatus } from './components/SyncStatus';
+import { useHashRoute } from './hooks/useHashRoute';
 import {
   clearDeviceProfile,
   getBoundDeviceProfile,
@@ -33,6 +36,7 @@ import {
 } from './services/displayMode';
 import type { BoundDeviceProfile, Schedule } from './types/rollbook';
 import { getKSTDateString } from './utils/date';
+import { parseRoute, type MemberTab } from './utils/route';
 
 export function App() {
   // Device binding state
@@ -41,8 +45,19 @@ export function App() {
   const [showBindingModal, setShowBindingModal] = useState(false);
   const [showMemberPortalModal, setShowMemberPortalModal] = useState(false);
 
-  // View state: 'HOME' | 'CALENDAR' | 'ADMIN' | 'SUPER_ADMIN'
-  const [currentView, setCurrentView] = useState<'HOME' | 'CALENDAR' | 'ADMIN' | 'SUPER_ADMIN'>('HOME');
+  // Hash-based routing state
+  const { route, navigate } = useHashRoute();
+  const pendingHashRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (profile === null && typeof window !== 'undefined') {
+      const raw = window.location.hash.trim().replace(/^#\/?/, '');
+      if (raw && raw !== 'today') {
+        pendingHashRef.current = window.location.hash;
+      }
+    }
+  }, [profile]);
+
   const [displayMode, setDisplayMode] = useState<DisplayMode>(getDisplayModePreference);
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference);
 
@@ -122,7 +137,7 @@ export function App() {
   const isRsvpOpen = rsvpSchedule !== null;
   useEffect(() => {
     void sheetsService.refreshRemoteData();
-  }, [currentView, showMemberPortalModal, showQRScanner, isRsvpOpen]);
+  }, [route, showMemberPortalModal, showQRScanner, isRsvpOpen]);
 
   const activeSchedules = sheetsService.getSchedulesForMember(profile?.memberId);
   const [todayStr, setTodayStr] = useState(() => getKSTDateString());
@@ -136,17 +151,17 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (currentView !== 'ADMIN' && currentView !== 'SUPER_ADMIN') return;
+    if (route.area !== 'admin' && route.area !== 'superAdmin') return;
 
     let lastPersistedActivity = Date.now();
     const returnHomeIfExpired = () => {
-      if (currentView === 'ADMIN' && !isAdminLoggedIn()) {
-        setCurrentView('HOME');
+      if (route.area === 'admin' && !isAdminLoggedIn()) {
+        navigate({ type: 'RESET' });
         triggerRefresh();
         return true;
       }
-      if (currentView === 'SUPER_ADMIN' && !isSuperAdminLoggedIn()) {
-        setCurrentView('HOME');
+      if (route.area === 'superAdmin' && !isSuperAdminLoggedIn()) {
+        navigate({ type: 'RESET' });
         triggerRefresh();
         return true;
       }
@@ -155,8 +170,8 @@ export function App() {
     const handleActivity = () => {
       if (returnHomeIfExpired()) return;
       if (Date.now() - lastPersistedActivity >= 30_000) {
-        if (currentView === 'ADMIN') touchAdminSession();
-        if (currentView === 'SUPER_ADMIN') touchSuperAdminSession();
+        if (route.area === 'admin') touchAdminSession();
+        if (route.area === 'superAdmin') touchSuperAdminSession();
         lastPersistedActivity = Date.now();
       }
     };
@@ -180,7 +195,7 @@ export function App() {
       window.removeEventListener('focus', returnHomeIfExpired);
       window.clearInterval(timer);
     };
-  }, [currentView]);
+  }, [route.area, navigate]);
 
   // Synchronize bound profile with remote/local member data if part or name changed in Sheets
   useEffect(() => {
@@ -191,7 +206,7 @@ export function App() {
       clearDeviceProfile();
       queueMicrotask(() => {
         setShowMemberPortalModal(false);
-        setCurrentView('HOME');
+        navigate({ type: 'RESET' });
         setProfile(null);
       });
       return;
@@ -207,7 +222,7 @@ export function App() {
         });
       }
     }
-  }, [hasConfirmedRosterSync, profile, refreshKey]);
+  }, [hasConfirmedRosterSync, navigate, profile, refreshKey]);
 
   const currentSchedule =
     qrTargetSchedule ||
@@ -221,11 +236,22 @@ export function App() {
     setProfile(newProfile);
     setShowBindingModal(false);
     triggerRefresh();
+    if (pendingHashRef.current) {
+      const savedHash = pendingHashRef.current;
+      pendingHashRef.current = null;
+      const parsed = parseRoute(savedHash);
+      if (parsed.area === 'member') {
+        navigate({ type: 'TAB', tab: parsed.tab });
+        if (parsed.overlay) {
+          navigate({ type: 'OPEN', overlay: parsed.overlay });
+        }
+      }
+    }
   };
 
   const handleOpenAdmin = () => {
     if (isAdminLoggedIn()) {
-      setCurrentView('ADMIN');
+      navigate({ type: 'ADMIN' });
     } else {
       setShowAdminPinModal(true);
     }
@@ -233,10 +259,18 @@ export function App() {
 
   const handleOpenSuperAdmin = () => {
     if (isSuperAdminLoggedIn()) {
-      setCurrentView('SUPER_ADMIN');
+      navigate({ type: 'SUPER' });
     } else {
       setShowSuperAdminPinModal(true);
     }
+  };
+
+  const handleSelectTab = (tab: MemberTab) => {
+    if (tab === 'profile') {
+      setShowMemberPortalModal(true);
+      return;
+    }
+    navigate({ type: 'TAB', tab });
   };
 
   const handleDisplayModeChange = (mode: DisplayMode) => {
@@ -251,7 +285,7 @@ export function App() {
 
   return (
     <div
-      className={`app-shell ${currentView === 'ADMIN' ? 'admin-mode' : ''}`}
+      className={`app-shell ${route.area === 'admin' ? 'admin-mode' : ''}`}
       data-display-mode={displayMode}
       data-theme={isDarkMode ? 'dark' : 'light'}
     >
@@ -260,36 +294,49 @@ export function App() {
         <BindingModal onSuccess={handleDeviceBound} />
       )}
 
-      {/* Main Views */}
-      {isBound && currentView === 'HOME' && (
-        <HomeView
-          profile={profile}
-          onOpenQRScanner={(sch) => {
-            if (sch) setQrTargetSchedule(sch);
-            setShowQRScanner(true);
-          }}
-          onOpenRSVP={(sch) => setRsvSchedule(sch)}
+      {/* Member Header */}
+      {isBound && route.area === 'member' && (
+        <AppHeader
           onOpenAdmin={handleOpenAdmin}
           onOpenSuperAdmin={handleOpenSuperAdmin}
-          onChangeProfile={() => setShowBindingModal(true)}
-          onOpenProfilePortal={() => setShowMemberPortalModal(true)}
-          onViewCalendar={() => setCurrentView('CALENDAR')}
-          refreshTrigger={refreshKey}
         />
       )}
 
-      {isBound && currentView === 'CALENDAR' && (
-        <CalendarView
-          profile={profile}
-          onOpenRSVP={(sch) => setRsvSchedule(sch)}
-          onBackToHome={() => setCurrentView('HOME')}
-        />
+      {/* Member Content wrapped in main */}
+      {isBound && route.area === 'member' && (
+        <main className="app-member-main">
+          {route.tab === 'today' && (
+            <HomeView
+              profile={profile}
+              onOpenQRScanner={(sch) => {
+                if (sch) setQrTargetSchedule(sch);
+                setShowQRScanner(true);
+              }}
+              onOpenRSVP={(sch) => setRsvSchedule(sch)}
+              onOpenAdmin={handleOpenAdmin}
+              onOpenSuperAdmin={handleOpenSuperAdmin}
+              onChangeProfile={() => setShowBindingModal(true)}
+              onOpenProfilePortal={() => setShowMemberPortalModal(true)}
+              onViewCalendar={() => navigate({ type: 'TAB', tab: 'calendar' })}
+              refreshTrigger={refreshKey}
+            />
+          )}
+
+          {route.tab === 'calendar' && (
+            <CalendarView
+              profile={profile}
+              onOpenRSVP={(sch) => setRsvSchedule(sch)}
+              onBackToHome={() => navigate({ type: 'TAB', tab: 'today' })}
+            />
+          )}
+        </main>
       )}
 
-      {isBound && currentView === 'ADMIN' && (
+      {/* Admin Dashboards */}
+      {isBound && route.area === 'admin' && (
         <AdminDashboard
           onBackToHome={() => {
-            setCurrentView('HOME');
+            navigate({ type: 'RESET' });
             triggerRefresh();
           }}
           onDataChanged={triggerRefresh}
@@ -297,14 +344,22 @@ export function App() {
         />
       )}
 
-      {currentView === 'SUPER_ADMIN' && (
+      {route.area === 'superAdmin' && (
         <SuperAdminDashboard
           onBackToHome={() => {
-            setCurrentView('HOME');
+            navigate({ type: 'RESET' });
             triggerRefresh();
           }}
           onDataChanged={triggerRefresh}
           refreshTrigger={refreshKey}
+        />
+      )}
+
+      {/* Member Bottom Navigation (Only visible when bound in member area) */}
+      {isBound && route.area === 'member' && (
+        <BottomNav
+          currentTab={route.tab}
+          onSelectTab={handleSelectTab}
         />
       )}
 
@@ -344,6 +399,7 @@ export function App() {
             clearDeviceProfile();
             setProfile(null);
             setShowMemberPortalModal(false);
+            navigate({ type: 'RESET' });
           }}
           onRefreshData={triggerRefresh}
         />
@@ -382,7 +438,7 @@ export function App() {
         <AdminPinModal
           onSuccess={() => {
             setShowAdminPinModal(false);
-            setCurrentView('ADMIN');
+            navigate({ type: 'ADMIN' });
           }}
           onClose={() => setShowAdminPinModal(false)}
         />
@@ -393,7 +449,7 @@ export function App() {
           isSuperAdminMode={true}
           onSuccess={() => {
             setShowSuperAdminPinModal(false);
-            setCurrentView('SUPER_ADMIN');
+            navigate({ type: 'SUPER' });
           }}
           onClose={() => setShowSuperAdminPinModal(false)}
         />
