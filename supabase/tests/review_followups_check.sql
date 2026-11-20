@@ -25,6 +25,25 @@ select 'C3: fn_delete_program_card__impl checks all linked pieces (no archived_a
             else 'FAIL'
        end;
 
+-- C9 Check 1: fn_reorder_practice_tracks definition includes 'distinct' check
+insert into _checks
+select 'C9: fn_reorder_practice_tracks checks distinct track IDs',
+       case when pg_get_functiondef('fn_reorder_practice_tracks(jsonb)'::regprocedure) ilike '%count(distinct%'
+            then 'PASS'
+            else 'FAIL'
+       end;
+
+-- C9 Check 2: fn_reorder_practice_tracks still requires admin token
+do $$
+declare
+  r jsonb;
+begin
+  r := fn_reorder_practice_tracks('{"pieceId":"test","trackIds":[]}'::jsonb);
+  insert into _checks values ('C9: fn_reorder_practice_tracks requires token',
+    case when r->>'code' = 'ADMIN_AUTH_REQUIRED' then 'PASS' else 'FAIL ' || r::text end);
+end
+$$;
+
 select * from _checks;
 
 rollback;

@@ -1965,6 +1965,26 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       expect(tracks.find((t) => t.id === 't2')?.orderIndex).toBe(0);
       expect(tracks.find((t) => t.id === 't1')?.orderIndex).toBe(1);
     });
+
+    it('reorderPracticeTracks does not change local track order when server returns failure', async () => {
+      vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+      await service.savePracticeTrack({ id: 't1', pieceId: 'p2', label: '1번', orderIndex: 0 });
+      await service.savePracticeTrack({ id: 't2', pieceId: 'p2', label: '2번', orderIndex: 1 });
+
+      // Server rejects due to duplicate tracks or other error
+      vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+        success: false,
+        message: '중복된 트랙이 있습니다.',
+      });
+
+      await expect(service.reorderPracticeTracks('p2', ['t2', 't2'])).rejects.toThrow(
+        '중복된 트랙이 있습니다.'
+      );
+
+      const tracks = service.getPracticeCatalog().tracks.filter((t) => t.pieceId === 'p2');
+      expect(tracks.find((t) => t.id === 't1')?.orderIndex).toBe(0);
+      expect(tracks.find((t) => t.id === 't2')?.orderIndex).toBe(1);
+    });
   });
 });
 
