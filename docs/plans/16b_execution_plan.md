@@ -54,7 +54,7 @@
 | 18 | `P3-01` | 회차별 출결 기록 조립 순수 함수 추출 (`buildMemberScheduleRecords`) | `src/utils/memberRecords.ts`(신규) 및 테스트, `src/components/MemberPortalModal.tsx` | P1-06 | 아니오 | 완료 (962b6b0) |
 | 19 | `P3-02` | 운영진 판정 하드코딩 제거 및 `isStaffMember()` 구현 | `src/utils/staff.ts`(신규) 및 테스트, `src/components/TodayTab.tsx`, `src/components/MemberPortalModal.tsx` | P3-01 | **질문 필수** (판정 기준) | 완료 (7aa2683) |
 | 20 | `P3-03` | `MemberPortalModal` → `ProfileTab` 탭 화면 전환 | `src/components/ProfileTab.tsx`(신규), `src/components/MemberPortalModal.tsx`, `src/App.tsx`, `src/components/BottomNav.tsx` | P3-02 | 아니오 | 완료 (60b5d13) |
-| 21 | `P3-04` | 과거 보관 일정(Archived) 출결 기록 포함 옵션 적용 | `src/components/ProfileTab.tsx`, `src/utils/memberRecords.ts` 및 테스트 | P3-03 | 아니오 | 대기 |
+| 21 | `P3-04` | 과거 보관 일정(Archived) 출결 기록 포함 옵션 적용 | `src/components/ProfileTab.tsx`, `src/utils/memberRecords.ts` 및 테스트 | P3-03 | 아니오 | 완료 (435c11d) |
 | **[Phase 2b]** | | **R2, Worker, 연습실, 플레이어 (브랜치: `feat/studio-player-phase2b`)** | | | | |
 | 22 | `P2b-01` | Cloudflare Worker 스트리밍 소스 및 설치 안내서 작성 | `workers/media/index.js`(신규), `workers/media/README.md`(신규) | P2a-04 | **질문 필수** (CORS 주소) | 대기 |
 | 23 | `P2b-02` | 전역 오디오 플레이어 Provider 및 미니 플레이어 바 구현 | `src/components/audio/AudioPlayerProvider.tsx`(신규), `src/components/audio/MiniPlayer.tsx`(신규), `src/utils/audioQueue.ts`(신규), `src/App.tsx` | P1-06, P2a-04 | 아니오 | 대기 |
