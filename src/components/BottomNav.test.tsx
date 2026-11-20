@@ -3,13 +3,14 @@ import { renderToString } from 'react-dom/server';
 import { BottomNav } from './BottomNav';
 
 describe('BottomNav Component', () => {
-  it('renders exactly 3 buttons with expected labels', () => {
+  it('renders exactly 4 buttons with expected labels', () => {
     const html = renderToString(
       <BottomNav currentTab="today" onSelectTab={() => {}} />
     );
 
     expect(html).toContain('오늘');
     expect(html).toContain('일정');
+    expect(html).toContain('연습실');
     expect(html).toContain('내 활동');
   });
 
@@ -23,6 +24,11 @@ describe('BottomNav Component', () => {
       <BottomNav currentTab="calendar" onSelectTab={() => {}} />
     );
     expect(calendarHtml).toMatch(/aria-current="page"[^>]*><span[^>]*>일정/);
+
+    const studioHtml = renderToString(
+      <BottomNav currentTab="studio" onSelectTab={() => {}} />
+    );
+    expect(studioHtml).toMatch(/aria-current="page"[^>]*><span[^>]*>연습실/);
 
     const profileHtml = renderToString(
       <BottomNav currentTab="profile" onSelectTab={() => {}} />

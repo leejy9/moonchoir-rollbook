@@ -35,6 +35,15 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onSelectTab })
 
       <button
         type="button"
+        className={`bottom-nav-btn ${currentTab === 'studio' ? 'active' : ''}`}
+        aria-current={currentTab === 'studio' ? 'page' : undefined}
+        onClick={() => onSelectTab('studio')}
+      >
+        <span className="bottom-nav-label">연습실</span>
+      </button>
+
+      <button
+        type="button"
         className={`bottom-nav-btn ${currentTab === 'profile' ? 'active' : ''}`}
         aria-current={currentTab === 'profile' ? 'page' : undefined}
         onClick={() => onSelectTab('profile')}

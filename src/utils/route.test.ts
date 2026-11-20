@@ -12,7 +12,7 @@ describe('Route Pure Functions & navReducer', () => {
     expect(parseRoute('#')).toEqual({ area: 'member', tab: 'today' });
     expect(parseRoute('#/')).toEqual({ area: 'member', tab: 'today' });
     expect(parseRoute('#/unknown_route')).toEqual({ area: 'member', tab: 'today' });
-    expect(parseRoute('#/studio')).toEqual({ area: 'member', tab: 'today' }); // Phase 2 fallback
+    expect(parseRoute('#/studio')).toEqual({ area: 'member', tab: 'studio' });
   });
 
   it('parses admin and super admin routes', () => {
@@ -23,6 +23,7 @@ describe('Route Pure Functions & navReducer', () => {
 
   it('parses member tabs and query parameters', () => {
     expect(parseRoute('#/today')).toEqual({ area: 'member', tab: 'today' });
+    expect(parseRoute('#/studio')).toEqual({ area: 'member', tab: 'studio' });
     expect(parseRoute('#/profile')).toEqual({ area: 'member', tab: 'profile' });
     expect(parseRoute('#/calendar')).toEqual({ area: 'member', tab: 'calendar' });
 
@@ -83,6 +84,7 @@ describe('Route Pure Functions & navReducer', () => {
       { area: 'admin' },
       { area: 'superAdmin' },
       { area: 'member', tab: 'today' },
+      { area: 'member', tab: 'studio' },
       { area: 'member', tab: 'profile' },
       { area: 'member', tab: 'calendar' },
       { area: 'member', tab: 'calendar', month: '2026-11' },

@@ -49,6 +49,10 @@ export const useAudioPlayer = (): AudioPlayerContextValue => {
   return ctx;
 };
 
+export const useOptionalAudioPlayer = (): AudioPlayerContextValue | null => {
+  return useContext(AudioPlayerContext);
+};
+
 export interface AudioPlayerProviderProps {
   children: React.ReactNode;
   initialTrack?: PlayableTrackItem | null;

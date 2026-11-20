@@ -9,6 +9,7 @@ import { CalendarTab } from './components/CalendarTab';
 import { HomeView } from './components/HomeView';
 import { ScheduleDetailSheet } from './components/ScheduleDetailSheet';
 import { ProfileTab } from './components/ProfileTab';
+import { StudioTab } from './components/StudioTab';
 import { QRScannerModal } from './components/QRScannerModal';
 import { RSVPModal } from './components/RSVPModal';
 import { SyncStatus } from './components/SyncStatus';
@@ -339,6 +340,12 @@ function MainApp() {
               onNavigate={navigate}
               onOpenRSVP={(sch) => setRsvSchedule(sch)}
               refreshTrigger={refreshKey}
+            />
+          )}
+
+          {route.tab === 'studio' && profile && (
+            <StudioTab
+              onOpenAdmin={handleOpenAdmin}
             />
           )}
 

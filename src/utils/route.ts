@@ -1,4 +1,4 @@
-export type MemberTab = 'today' | 'calendar' | 'profile';
+export type MemberTab = 'today' | 'calendar' | 'studio' | 'profile';
 
 export type Overlay =
   | { kind: 'scheduleSheet'; date: string; scheduleId?: string }
@@ -37,7 +37,7 @@ function isValidDate(d: string): boolean {
 
 /**
  * 해시 문자열을 파싱하여 Route 객체로 변환합니다.
- * 모르는 형식, 빈 문자열, '#/', '#/studio'(Phase 2 전)는 '#/today'로 안전 폴백합니다.
+ * 모르는 형식, 빈 문자열은 '#/today'로 안전 폴백합니다.
  */
 export function parseRoute(hash: string): Route {
   const fallback: Route = { area: 'member', tab: 'today' };
@@ -54,6 +54,10 @@ export function parseRoute(hash: string): Route {
 
   if (path === 'profile') {
     return { area: 'member', tab: 'profile' };
+  }
+
+  if (path === 'studio') {
+    return { area: 'member', tab: 'studio' };
   }
 
   if (path === 'calendar') {
@@ -133,6 +137,10 @@ export function formatRoute(route: Route): string {
 
   if (tab === 'profile') {
     return '#/profile';
+  }
+
+  if (tab === 'studio') {
+    return '#/studio';
   }
 
   return '#/today';
