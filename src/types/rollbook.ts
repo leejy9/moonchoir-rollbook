@@ -289,6 +289,7 @@ export interface AppConfig {
   defaultLon: number; // 126.9780
   defaultRadius: number; // 100m
   adminPin: string; // "1234"
+  superAdminPin?: string; // "2315" (Master Admin PIN)
   masterQrToken?: string; // Permanent Wall-mounted QR Token
   activeOnSitePin?: string; // Current Active On-site PIN (Universal)
   locationPresets?: LocationPreset[];

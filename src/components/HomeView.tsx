@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildRsvpTally } from '../utils/rsvpTally';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, RSVPVote, Schedule } from '../types/rollbook';
@@ -16,8 +16,6 @@ import {
 import { HomeActiveScheduleCard } from './home/HomeActiveScheduleCard';
 import { HomeCalendarSection } from './home/HomeCalendarSection';
 import { HomeUpcomingListSection } from './home/HomeUpcomingListSection';
-import { useLongPress } from '../hooks/useLongPress';
-import { AdminPinResetModal } from './admin/AdminPinResetModal';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
 interface HomeViewProps {
@@ -25,6 +23,7 @@ interface HomeViewProps {
   onOpenQRScanner: (schedule?: Schedule) => void;
   onOpenRSVP: (schedule: Schedule) => void;
   onOpenAdmin: () => void;
+  onOpenSuperAdmin?: () => void;
   onChangeProfile?: () => void;
   onOpenProfilePortal?: () => void;
   onViewCalendar?: () => void;
@@ -38,6 +37,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenQRScanner,
   onOpenRSVP,
   onOpenAdmin,
+  onOpenSuperAdmin,
   onChangeProfile,
   onOpenProfilePortal,
   onViewCalendar,
@@ -71,12 +71,67 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [currentMonthIndex, setCurrentMonthIndex] = useState(() => parseInt(todayStr.slice(5, 7), 10) - 1);
   const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
   const [userSelectedScheduleId, setUserSelectedScheduleId] = useState<string | null>(null);
-  const [showPinResetModal, setShowPinResetModal] = useState(false);
+  const [showEasterEgg, setShowEasterEgg] = useState(false);
+  const easterEggRef = useRef<HTMLDivElement>(null);
+  const lastTapTimeRef = useRef<number>(0);
+  const tapCountRef = useRef<number>(0);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const logoLongPress = useLongPress({
-    thresholdMs: 3000,
-    onLongPress: () => setShowPinResetModal(true),
-  });
+  const triggerEasterEgg = useCallback(() => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try {
+        navigator.vibrate(100);
+      } catch {
+        // ignore vibrate failures
+      }
+    }
+    setShowEasterEgg(true);
+  }, []);
+
+  useEffect(() => {
+    if (!showEasterEgg) return;
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (easterEggRef.current && !easterEggRef.current.contains(e.target as Node)) {
+        setShowEasterEgg(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleOutsideClick);
+    return () => document.removeEventListener('pointerdown', handleOutsideClick);
+  }, [showEasterEgg]);
+
+  const handleLogoTouchStart = () => {
+    const now = Date.now();
+    if (now - lastTapTimeRef.current < 450) {
+      tapCountRef.current += 1;
+      if (tapCountRef.current >= 3) {
+        tapCountRef.current = 0;
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        triggerEasterEgg();
+        return;
+      }
+    } else {
+      tapCountRef.current = 1;
+    }
+    lastTapTimeRef.current = now;
+
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      triggerEasterEgg();
+    }, 600);
+  };
+
+  const handleLogoTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleLogoContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    triggerEasterEgg();
+  };
 
   const schedules = useMemo(() => {
     void _refreshTrigger;
@@ -109,6 +164,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
       joinedAt: '2020-01-01',
     } as Member;
   }, [allMembers, members, profile, _refreshTrigger]);
+
+  const isStaffAdmin = useMemo(() => {
+    return (
+      currentMember.role === 'ADMIN' ||
+      currentMember.memberStatus === '선생님' ||
+      currentMember.memberStatus === '운영진'
+    );
+  }, [currentMember]);
 
   // Map user's attended schedules (reconciled projection view: only actual attendances get checkmark)
   const myLogsByScheduleId = useMemo(() => {
@@ -436,14 +499,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
     <div className="home-container">
       {/* Top Header */}
       <header className="home-header">
-        <div className="header-brand">
+        <div className="header-brand" style={{ position: 'relative' }}>
           <img
             src={moonchoirLogo}
             alt="Moonchoir"
             className="brand-logo-img"
             draggable={false}
-            {...logoLongPress}
-            title="3초간 길게 누르면 관리자 마스터 PIN을 재설정합니다"
+            onTouchStart={handleLogoTouchStart}
+            onTouchEnd={handleLogoTouchEnd}
+            onContextMenu={handleLogoContextMenu}
+            title="우클릭(PC) 또는 3연타(모바일) 시 최고 관리자 메뉴를 엽니다"
             style={{
               width: 38,
               height: 38,
@@ -453,12 +518,74 @@ export const HomeView: React.FC<HomeViewProps> = ({
               userSelect: 'none',
               WebkitUserSelect: 'none',
               WebkitTouchCallout: 'none',
+              touchAction: 'manipulation',
             }}
           />
           <div>
             <h1 className="brand-title">문콰이어 출석부</h1>
             <p className="brand-subtitle">MOONCHOIR ATTENDANCE</p>
           </div>
+
+          {/* Master Admin "Get in" Easter Egg Popover */}
+          {showEasterEgg && (
+            <div
+              ref={easterEggRef}
+              data-testid="easter-egg-popover"
+              style={{
+                position: 'absolute',
+                top: '44px',
+                left: '0px',
+                zIndex: 1000,
+                background: '#1e293b',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '8px',
+                padding: '4px',
+                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.2)',
+                minWidth: '130px',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEasterEgg(false);
+                  if (onOpenSuperAdmin) onOpenSuperAdmin();
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  width: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#FFFFFF',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  fontSize: '12.5px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  minHeight: '36px',
+                  textAlign: 'left',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <span>Get in</span>
+                <span
+                  style={{
+                    fontSize: '10.5px',
+                    fontWeight: 500,
+                    color: '#94a3b8',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                  }}
+                >
+                  Master
+                </span>
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="header-actions">
@@ -472,15 +599,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <span className="profile-name">{currentMember.name || profile.name}</span>
           </button>
 
-          <button
-            type="button"
-            className="admin-icon-btn"
-            onClick={onOpenAdmin}
-            title="관리자 모드"
-            aria-label="관리자 모드"
-          >
-            <IconSettings size={18} />
-          </button>
+          {isStaffAdmin && (
+            <button
+              type="button"
+              className="admin-icon-btn"
+              onClick={onOpenAdmin}
+              title="운영진 관리자 모드"
+              aria-label="운영진 관리자 모드"
+            >
+              <IconSettings size={18} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -646,15 +775,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
           setHomeViewTab('CALENDAR');
         }}
       />
-
-      {/* ============================================================== */}
-      {/* MODAL: Master Admin PIN Reset Modal (3s Long Press Easter Egg) */}
-      {/* ============================================================== */}
-      {showPinResetModal && (
-        <AdminPinResetModal
-          onClose={() => setShowPinResetModal(false)}
-        />
-      )}
     </div>
   );
 };

@@ -463,6 +463,21 @@ export class SheetsService {
     });
   }
 
+  /** 최고 관리자 감사 로그용 전체 원천 출결 로그(Append-Only) */
+  public getRawLogs(): RawAttendanceLog[] {
+    return [...this.logs];
+  }
+
+  /** 최고 관리자 감사 로그용 전체 원천 댓글 이벤트(생성/수정/삭제) */
+  public getCommentEvents(): ScheduleCommentEvent[] {
+    return [...this.commentEvents];
+  }
+
+  /** 최고 관리자 감사 로그용 전체 원천 사전투표(RSVP) 이력 */
+  public getAllRSVPVotes(): RSVPVote[] {
+    return [...this.rsvpVotes];
+  }
+
   public getLocationPresets(): LocationPreset[] {
     return [...this.locations];
   }
@@ -1233,6 +1248,44 @@ export class SheetsService {
     if (!result.success) {
       throw new Error(result.message || '관리자 PIN이 일치하지 않거나 확인되지 않았습니다.');
     }
+  }
+
+  public async verifySuperAdminPin(pin: string): Promise<void> {
+    const result = await this.sendToGoogleSheet('VERIFY_SUPER_ADMIN_PIN', { pin });
+    if (!result.success) {
+      throw new Error(result.message || '최고 관리자 PIN이 일치하지 않거나 확인되지 않았습니다.');
+    }
+  }
+
+  public async getAdminSecrets(): Promise<{ adminPin: string; activeOnSitePin: string; superAdminPin?: string }> {
+    if (this.backend.kind === 'supabase') {
+      try {
+        const res = await this.backend.callAction('GET_ADMIN_SECRETS', {});
+        if (res.success && res.data && typeof res.data === 'object') {
+          const secrets = res.data as { adminPin?: string; activeOnSitePin?: string; superAdminPin?: string };
+          if (secrets.adminPin || secrets.activeOnSitePin) {
+            this.config = {
+              ...this.config,
+              adminPin: secrets.adminPin || this.config.adminPin,
+              activeOnSitePin: secrets.activeOnSitePin || this.config.activeOnSitePin,
+            };
+            saveToStorage(STORAGE_KEYS.CONFIG, this.config);
+            return {
+              adminPin: secrets.adminPin || this.config.adminPin || '1004',
+              activeOnSitePin: secrets.activeOnSitePin || this.config.activeOnSitePin || '5027',
+              superAdminPin: secrets.superAdminPin || '2315',
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('[Sheets] Failed to fetch server secrets, falling back to cached config:', err);
+      }
+    }
+    return {
+      adminPin: this.config.adminPin || '1004',
+      activeOnSitePin: this.config.activeOnSitePin || '5027',
+      superAdminPin: '2315',
+    };
   }
 
   // --- Taxonomy & Categories Dynamic Management ---

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { AdminSettingsTab, type AdminSettingsTabProps } from './AdminSettingsTab';
-import { sheetsService } from '../../services/sheets';
 import type { AppConfig, LocationPreset } from '../../types/rollbook';
 
 vi.mock('../LocationPickerMap', () => ({
@@ -47,49 +46,40 @@ function createMockProps(overrides: Partial<AdminSettingsTabProps> = {}): AdminS
   };
 }
 
-describe('AdminSettingsTab Component', () => {
-  it('renders subsegment pill bar with 3 tabs', () => {
+describe('AdminSettingsTab Component (Notion Gallery & Drawers)', () => {
+  it('renders subsegment pill bar with LOCATIONS and TAXONOMY tabs', () => {
     const props = createMockProps();
     const html = renderToString(<AdminSettingsTab {...props} />);
 
     expect(html).toContain('admin-settings-layout');
     expect(html).toContain('admin-settings-nav');
-    expect(html).toContain('시트 연동');
     expect(html).toContain('장소 관리');
     expect(html).toContain('태그 관리');
+    // 시트 연동은 마스터 어드민으로 완전히 이관되어 일반 설정 탭에서 제거됨
+    expect(html).not.toContain('시트 연동');
   });
 
-  it('renders sheets settings by default', () => {
+  it('renders location notion gallery cards by default', () => {
     const props = createMockProps();
     const html = renderToString(<AdminSettingsTab {...props} />);
 
-    expect(html).toContain('시트 연동');
-    expect(html).toContain('Google Sheets 보조 백업 및 내보내기');
-    expect(html).toContain('필요 시 Google Sheets로 데이터를 백업하거나 수동 동기화할 수 있습니다.');
-    expect(html).toContain('Google Apps Script Web App URL');
-    expect(html).toContain('지각 유예 (분)');
-    expect(html).toContain('관리자 PIN');
-  });
-
-  it('renders Supabase cloud status card when backend is supabase', () => {
-    const originalKind = sheetsService.getBackendKind();
-    vi.spyOn(sheetsService, 'getBackendKind').mockReturnValue('supabase');
-
-    const props = createMockProps();
-    const html = renderToString(<AdminSettingsTab {...props} />);
-
-    expect(html).toContain('🟢 Supabase 클라우드 실시간 연동 활성화');
-    expect(html).toContain('실시간 WebSocket 채널 및 원자적 DB 트랜잭션이 작동 중입니다.');
-    expect(html).toContain('클라우드 최신 데이터 즉시 수신');
-
-    vi.spyOn(sheetsService, 'getBackendKind').mockReturnValue(originalKind);
-  });
-
-  it('renders location preset preview within sheets subtab', () => {
-    const props = createMockProps();
-    const html = renderToString(<AdminSettingsTab {...props} />);
-
-    expect(html).toContain('등록된 장소');
+    expect(html).toContain('등록 장소 (1곳)');
+    expect(html).toContain('새 장소 등록');
+    expect(html).toContain('notion-gallery-card');
     expect(html).toContain('메인 연습실');
+    expect(html).toContain('기본 연습실');
+    expect(html).toContain('반경 100m');
+    expect(html).toContain('서울시 서초구');
+    expect(html).toContain('수정');
+    expect(html).toContain('삭제');
+  });
+
+  it('renders empty gallery placeholder when there are no locations', () => {
+    const props = createMockProps({ locationPresets: [] });
+    const html = renderToString(<AdminSettingsTab {...props} />);
+
+    expect(html).toContain('등록 장소 (0곳)');
+    expect(html).toContain('등록된 장소가 없습니다.');
+    expect(html).toContain('새 장소 등록');
   });
 });

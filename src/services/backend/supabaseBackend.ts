@@ -74,6 +74,7 @@ export class SupabaseBackend implements RemoteBackend {
           (json.success === true ? '저장 완료' : '저장이 확인되지 않았습니다.'),
         existingMemberId: json.existingMemberId,
         boundDeviceId: json.boundDeviceId,
+        data: json.data,
       };
     } catch (err) {
       console.error('[Supabase API] RPC call failed:', err);
@@ -87,6 +88,10 @@ export class SupabaseBackend implements RemoteBackend {
         return 'fn_verify_admin_pin';
       case 'VERIFY_ON_SITE_PIN':
         return 'fn_verify_on_site_pin';
+      case 'VERIFY_SUPER_ADMIN_PIN':
+        return 'fn_verify_super_admin_pin';
+      case 'GET_ADMIN_SECRETS':
+        return 'fn_get_admin_secrets';
       case 'RECORD_ATTENDANCE':
       case 'SUBMIT_CHECKIN':
         return 'fn_record_attendance';
@@ -144,12 +149,19 @@ export class SupabaseBackend implements RemoteBackend {
   }
 
   private formatRpcBody(action: string, payload: unknown): Record<string, unknown> {
-    if (action === 'VERIFY_ADMIN_PIN' || action === 'VERIFY_ON_SITE_PIN') {
+    if (
+      action === 'VERIFY_ADMIN_PIN' ||
+      action === 'VERIFY_ON_SITE_PIN' ||
+      action === 'VERIFY_SUPER_ADMIN_PIN'
+    ) {
       const pinObj =
         payload && typeof payload === 'object' && 'pin' in payload
           ? (payload as { pin: string })
           : { pin: String(payload || '') };
       return { p_pin: pinObj.pin };
+    }
+    if (action === 'GET_ADMIN_SECRETS') {
+      return {};
     }
     if (action === 'SAVE_CONFIG') {
       const configObj =

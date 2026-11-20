@@ -28,6 +28,7 @@ export interface BackendActionResult {
   error?: string;
   existingMemberId?: string;
   boundDeviceId?: string;
+  data?: unknown;
 }
 
 export interface RemoteBackend {

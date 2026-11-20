@@ -59,8 +59,11 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
 
   return (
     <div className="admin-calendar-view-root">
-      {/* Calendar Header with Month Switcher */}
-      <div className="admin-cal-header-row">
+      <div className="admin-calendar-split-container">
+        {/* Left: 70% Calendar Grid */}
+        <div className="admin-calendar-split-left">
+          {/* Calendar Header with Month Switcher */}
+          <div className="admin-cal-header-row">
         <h2 className="section-title" style={{ margin: 0 }}>
           캘린더
         </h2>
@@ -130,9 +133,11 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
           })}
         </div>
       </div>
+    </div>
 
-      {/* Selected Date Schedule List */}
-      <div className="selected-date-schedules-box" style={{ marginTop: '18px' }}>
+    {/* Right: 30% Selected Date Schedules Detail */}
+    <div className="admin-calendar-split-right">
+      <div className="selected-date-schedules-box">
         <div
           className="box-header-row"
           style={{
@@ -381,9 +386,11 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
             등록된 일정이 없습니다.
           </p>
         )}
+        </div>
       </div>
+    </div>
 
-      {/* Schedule RSVP Log Modal */}
+    {/* Schedule RSVP Log Modal */}
       {selectedScheduleForRsvpLog && (
         <ScheduleRsvpLogModal
           schedule={selectedScheduleForRsvpLog}

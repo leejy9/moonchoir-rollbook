@@ -36,7 +36,9 @@ export const AdminNotionFilterBar: React.FC<AdminNotionFilterBarProps> = ({
   >('NONE');
 
   // Quick preset ranges (dynamically calculated based on current KST date)
-  const applyDatePreset = (preset: 'ALL' | 'THIS_MONTH' | 'LAST_3_MONTHS' | 'THIS_YEAR') => {
+  const applyDatePreset = (
+    preset: 'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_3_MONTHS' | 'THIS_YEAR'
+  ) => {
     if (preset === 'ALL') {
       onChangeFilters({ ...filters, dateStart: '', dateEnd: '' });
     } else {
@@ -45,7 +47,26 @@ export const AdminNotionFilterBar: React.FC<AdminNotionFilterBarProps> = ({
       const y = Number(yStr);
       const m = Number(mStr);
 
-      if (preset === 'THIS_MONTH') {
+      if (preset === 'TODAY') {
+        onChangeFilters({
+          ...filters,
+          dateStart: today,
+          dateEnd: today,
+        });
+      } else if (preset === 'THIS_WEEK') {
+        const curDate = new Date();
+        const dayOfWeek = curDate.getDay();
+        const diffToMonday = (dayOfWeek + 6) % 7;
+        const monday = new Date(curDate);
+        monday.setDate(curDate.getDate() - diffToMonday);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        onChangeFilters({
+          ...filters,
+          dateStart: getKSTDateString(monday),
+          dateEnd: getKSTDateString(sunday),
+        });
+      } else if (preset === 'THIS_MONTH') {
         const lastDay = new Date(y, m, 0).getDate();
         onChangeFilters({
           ...filters,
@@ -284,10 +305,12 @@ export const AdminNotionFilterBar: React.FC<AdminNotionFilterBarProps> = ({
           </div>
           <div className="popover-body">
             <div className="preset-buttons-row">
-              <button type="button" onClick={() => applyDatePreset('ALL')}>전체 일정</button>
+              <button type="button" onClick={() => applyDatePreset('TODAY')}>오늘 하루</button>
+              <button type="button" onClick={() => applyDatePreset('THIS_WEEK')}>이번 주</button>
               <button type="button" onClick={() => applyDatePreset('THIS_MONTH')}>이번 달 ({Number(getKSTDateString().slice(5, 7))}월)</button>
               <button type="button" onClick={() => applyDatePreset('LAST_3_MONTHS')}>최근 3개월</button>
               <button type="button" onClick={() => applyDatePreset('THIS_YEAR')}>{getKSTDateString().slice(0, 4)}년 전체</button>
+              <button type="button" onClick={() => applyDatePreset('ALL')}>전체 일정</button>
             </div>
             <div className="date-inputs-row">
               <label>

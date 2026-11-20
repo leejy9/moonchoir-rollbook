@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
+import { SuperAdminDashboard } from './components/admin/SuperAdminDashboard';
 import { AdminPinModal } from './components/AdminPinModal';
 import { BindingModal } from './components/BindingModal';
 import { CalendarView } from './components/CalendarView';
@@ -12,7 +13,9 @@ import {
   clearDeviceProfile,
   getBoundDeviceProfile,
   isAdminLoggedIn,
+  isSuperAdminLoggedIn,
   touchAdminSession,
+  touchSuperAdminSession,
   updateBoundDeviceProfile,
 } from './services/auth';
 import { sheetsService } from './services/sheets';
@@ -38,8 +41,8 @@ export function App() {
   const [showBindingModal, setShowBindingModal] = useState(false);
   const [showMemberPortalModal, setShowMemberPortalModal] = useState(false);
 
-  // View state: 'HOME' | 'CALENDAR' | 'ADMIN'
-  const [currentView, setCurrentView] = useState<'HOME' | 'CALENDAR' | 'ADMIN'>('HOME');
+  // View state: 'HOME' | 'CALENDAR' | 'ADMIN' | 'SUPER_ADMIN'
+  const [currentView, setCurrentView] = useState<'HOME' | 'CALENDAR' | 'ADMIN' | 'SUPER_ADMIN'>('HOME');
   const [displayMode, setDisplayMode] = useState<DisplayMode>(getDisplayModePreference);
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference);
 
@@ -48,6 +51,7 @@ export function App() {
   const [qrTargetSchedule, setQrTargetSchedule] = useState<Schedule | null>(null);
   const [rsvpSchedule, setRsvSchedule] = useState<Schedule | null>(null);
   const [showAdminPinModal, setShowAdminPinModal] = useState(false);
+  const [showSuperAdminPinModal, setShowSuperAdminPinModal] = useState(false);
 
   // Refresh trigger for re-rendering when data changes
   const [refreshKey, setRefreshKey] = useState(0);
@@ -132,11 +136,16 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (currentView !== 'ADMIN') return;
+    if (currentView !== 'ADMIN' && currentView !== 'SUPER_ADMIN') return;
 
     let lastPersistedActivity = Date.now();
     const returnHomeIfExpired = () => {
-      if (!isAdminLoggedIn()) {
+      if (currentView === 'ADMIN' && !isAdminLoggedIn()) {
+        setCurrentView('HOME');
+        triggerRefresh();
+        return true;
+      }
+      if (currentView === 'SUPER_ADMIN' && !isSuperAdminLoggedIn()) {
         setCurrentView('HOME');
         triggerRefresh();
         return true;
@@ -146,7 +155,8 @@ export function App() {
     const handleActivity = () => {
       if (returnHomeIfExpired()) return;
       if (Date.now() - lastPersistedActivity >= 30_000) {
-        touchAdminSession();
+        if (currentView === 'ADMIN') touchAdminSession();
+        if (currentView === 'SUPER_ADMIN') touchSuperAdminSession();
         lastPersistedActivity = Date.now();
       }
     };
@@ -221,6 +231,14 @@ export function App() {
     }
   };
 
+  const handleOpenSuperAdmin = () => {
+    if (isSuperAdminLoggedIn()) {
+      setCurrentView('SUPER_ADMIN');
+    } else {
+      setShowSuperAdminPinModal(true);
+    }
+  };
+
   const handleDisplayModeChange = (mode: DisplayMode) => {
     saveDisplayModePreference(mode);
     setDisplayMode(mode);
@@ -252,6 +270,7 @@ export function App() {
           }}
           onOpenRSVP={(sch) => setRsvSchedule(sch)}
           onOpenAdmin={handleOpenAdmin}
+          onOpenSuperAdmin={handleOpenSuperAdmin}
           onChangeProfile={() => setShowBindingModal(true)}
           onOpenProfilePortal={() => setShowMemberPortalModal(true)}
           onViewCalendar={() => setCurrentView('CALENDAR')}
@@ -269,6 +288,17 @@ export function App() {
 
       {isBound && currentView === 'ADMIN' && (
         <AdminDashboard
+          onBackToHome={() => {
+            setCurrentView('HOME');
+            triggerRefresh();
+          }}
+          onDataChanged={triggerRefresh}
+          refreshTrigger={refreshKey}
+        />
+      )}
+
+      {currentView === 'SUPER_ADMIN' && (
+        <SuperAdminDashboard
           onBackToHome={() => {
             setCurrentView('HOME');
             triggerRefresh();
@@ -305,6 +335,7 @@ export function App() {
             if (sch) setQrTargetSchedule(sch);
             setShowQRScanner(true);
           }}
+          onOpenAdmin={handleOpenAdmin}
           displayMode={displayMode}
           isDarkMode={isDarkMode}
           onChangeDisplayMode={handleDisplayModeChange}
@@ -354,6 +385,17 @@ export function App() {
             setCurrentView('ADMIN');
           }}
           onClose={() => setShowAdminPinModal(false)}
+        />
+      )}
+
+      {showSuperAdminPinModal && (
+        <AdminPinModal
+          isSuperAdminMode={true}
+          onSuccess={() => {
+            setShowSuperAdminPinModal(false);
+            setCurrentView('SUPER_ADMIN');
+          }}
+          onClose={() => setShowSuperAdminPinModal(false)}
         />
       )}
     </div>

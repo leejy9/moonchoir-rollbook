@@ -17,6 +17,7 @@ interface MemberPortalModalProps {
   onRefreshData?: () => void;
   onOpenRSVP?: (schedule: Schedule) => void;
   onOpenQRScanner?: (schedule: Schedule) => void;
+  onOpenAdmin?: () => void;
   displayMode: DisplayMode;
   isDarkMode: boolean;
   onChangeDisplayMode: (mode: DisplayMode) => void;
@@ -33,6 +34,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   onRefreshData,
   onOpenRSVP,
   onOpenQRScanner,
+  onOpenAdmin,
   displayMode,
   isDarkMode,
   onChangeDisplayMode,
@@ -63,6 +65,14 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       memberStatus: '정단원',
     };
   }, [members, profile]);
+
+  const isStaffAdmin = useMemo(() => {
+    return (
+      currentMember.role === 'ADMIN' ||
+      currentMember.memberStatus === '선생님' ||
+      currentMember.memberStatus === '운영진'
+    );
+  }, [currentMember]);
 
   const memberPart = currentMember.part || profile.part;
   const memberName = currentMember.name || profile.name;
@@ -218,15 +228,44 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                 </span>
               </div>
             </div>
-            <button
-              type="button"
-              className="btn-modal-round-close"
-              onClick={onClose}
-              aria-label="닫기"
-              style={{ background: 'rgba(255,255,255,0.15)', color: '#ffffff', border: 'none' }}
-            >
-              ✕
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {isStaffAdmin && onOpenAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenAdmin();
+                  }}
+                  title="운영진 관리자 모드 진입"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    color: '#ffffff',
+                    border: '1px solid rgba(255, 255, 255, 0.35)',
+                    borderRadius: '8px',
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    minHeight: '34px',
+                  }}
+                >
+                  <span>⚙️</span>
+                  <span>운영진 모드</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-modal-round-close"
+                onClick={onClose}
+                aria-label="닫기"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#ffffff', border: 'none' }}
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           {/* 2-Tab Segmented Control */}

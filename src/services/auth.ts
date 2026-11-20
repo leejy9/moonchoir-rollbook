@@ -5,6 +5,7 @@ import { getKSTTimestampString } from '../utils/date';
 const AUTH_KEYS = {
   DEVICE_PROFILE: 'moonchoir_bound_device_v1',
   ADMIN_SESSION: 'moonchoir_admin_session_v1',
+  SUPER_ADMIN_SESSION: 'moonchoir_super_admin_session_v1',
 };
 const ADMIN_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 
@@ -162,3 +163,50 @@ export function touchAdminSession(): void {
     JSON.stringify({ lastActivityAt: Date.now() })
   );
 }
+
+export function isSuperAdminLoggedIn(): boolean {
+  const storage = getStorage();
+  if (!storage) return false;
+  const raw = storage.getItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
+  if (!raw) return false;
+
+  try {
+    const session = JSON.parse(raw) as { lastActivityAt?: number };
+    if (
+      typeof session.lastActivityAt !== 'number' ||
+      Date.now() - session.lastActivityAt >= ADMIN_IDLE_TIMEOUT_MS
+    ) {
+      storage.removeItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Auth] Invalid super admin session; requiring sign-in:', err);
+    storage.removeItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
+    return false;
+  }
+}
+
+export function setSuperAdminLoggedIn(loggedIn: boolean): void {
+  const storage = getStorage();
+  if (storage) {
+    if (loggedIn) {
+      storage.setItem(
+        AUTH_KEYS.SUPER_ADMIN_SESSION,
+        JSON.stringify({ lastActivityAt: Date.now() })
+      );
+    } else {
+      storage.removeItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
+    }
+  }
+}
+
+export function touchSuperAdminSession(): void {
+  if (!isSuperAdminLoggedIn()) return;
+  const storage = getStorage();
+  storage.setItem(
+    AUTH_KEYS.SUPER_ADMIN_SESSION,
+    JSON.stringify({ lastActivityAt: Date.now() })
+  );
+}
+
