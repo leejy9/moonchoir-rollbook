@@ -307,10 +307,18 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     startCamera();
 
+    const currentVideoEl = videoRef.current;
     return () => {
       isCancelled = true;
       if (animId !== null) cancelAnimationFrame(animId);
       if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (currentVideoEl && currentVideoEl.srcObject) {
+        const s = currentVideoEl.srcObject as MediaStream;
+        if (s && typeof s.getTracks === 'function') {
+          s.getTracks().forEach((t) => t.stop());
+        }
+        currentVideoEl.srcObject = null;
+      }
     };
   }, [activeTab, scanResult]);
 

@@ -37,7 +37,7 @@ import {
   saveDisplayModePreference,
   type DisplayMode,
 } from './services/displayMode';
-import type { BoundDeviceProfile, Schedule } from './types/rollbook';
+import type { BoundDeviceProfile } from './types/rollbook';
 import { parseRoute, type MemberTab } from './utils/route';
 import { AudioPlayerProvider } from './components/audio/AudioPlayerProvider';
 import { MiniPlayer } from './components/audio/MiniPlayer';
@@ -65,9 +65,6 @@ function MainApp() {
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference);
 
   // Modal states
-  const [showQRScanner, setShowQRScanner] = useState(false);
-  const [qrTargetSchedule, setQrTargetSchedule] = useState<Schedule | null>(null);
-  const [rsvpSchedule, setRsvSchedule] = useState<Schedule | null>(null);
   const [showAdminPinModal, setShowAdminPinModal] = useState(false);
   const [showSuperAdminPinModal, setShowSuperAdminPinModal] = useState(false);
 
@@ -144,17 +141,29 @@ function MainApp() {
   }, []);
 
   // 관리자 진입 또는 모달/오버레이 오픈 시에만 최신 데이터를 동기화합니다 (단순 탭 전환은 로컬 캐시 사용).
-  const isRsvpOpen = rsvpSchedule !== null;
   const overlayKind = route.area === 'member' ? route.overlay?.kind : undefined;
   const isManagementArea = route.area === 'admin' || route.area === 'superAdmin';
 
   useEffect(() => {
-    if (isManagementArea || overlayKind || showQRScanner || isRsvpOpen) {
+    if (isManagementArea || overlayKind) {
       void sheetsService.refreshRemoteData();
     }
-  }, [isManagementArea, overlayKind, showQRScanner, isRsvpOpen]);
+  }, [isManagementArea, overlayKind]);
 
   const activeSchedules = sheetsService.getSchedulesForMember(profile?.memberId);
+
+  // Overlay 대상 일정이 없거나 비공개/숨김 대상인 경우 모달을 열지 않고 오버레이를 닫는다
+  useEffect(() => {
+    if (route.area === 'member' && route.overlay) {
+      if (route.overlay.kind === 'qr' || route.overlay.kind === 'rsvp') {
+        const targetId = route.overlay.scheduleId;
+        const exists = activeSchedules.some((s) => s.id === targetId);
+        if (!exists) {
+          navigate({ type: 'CLOSE' });
+        }
+      }
+    }
+  }, [route, activeSchedules, navigate]);
 
   useEffect(() => {
     if (route.area !== 'admin' && route.area !== 'superAdmin') return;
@@ -229,7 +238,15 @@ function MainApp() {
     }
   }, [hasConfirmedRosterSync, navigate, profile, refreshKey]);
 
-  const currentSchedule = qrTargetSchedule;
+  const qrSchedule =
+    route.area === 'member' && route.overlay?.kind === 'qr'
+      ? activeSchedules.find((s) => s.id === route.overlay?.scheduleId) ?? null
+      : null;
+
+  const targetRsvpSchedule =
+    route.area === 'member' && route.overlay?.kind === 'rsvp'
+      ? activeSchedules.find((s) => s.id === route.overlay?.scheduleId) ?? null
+      : null;
 
   // If user has not bound a device yet, show binding prompt
   const isBound = profile !== null;
@@ -308,15 +325,14 @@ function MainApp() {
               profile={profile}
               onOpenQRScanner={(sch) => {
                 if (sch) {
-                  setQrTargetSchedule(sch);
-                  setShowQRScanner(true);
+                  navigate({ type: 'OPEN', overlay: { kind: 'qr', scheduleId: sch.id } });
                 } else {
-                  setQrTargetSchedule(null);
-                  setShowQRScanner(false);
                   navigate({ type: 'TAB', tab: 'today' });
                 }
               }}
-              onOpenRSVP={(sch) => setRsvSchedule(sch)}
+              onOpenRSVP={(sch) => {
+                navigate({ type: 'OPEN', overlay: { kind: 'rsvp', scheduleId: sch.id } });
+              }}
               onOpenAdmin={handleOpenAdmin}
               onOpenSuperAdmin={handleOpenSuperAdmin}
               onChangeProfile={() => setShowBindingModal(true)}
@@ -338,7 +354,9 @@ function MainApp() {
               month={route.month}
               selectedDate={route.overlay?.kind === 'scheduleSheet' ? route.overlay.date : undefined}
               onNavigate={navigate}
-              onOpenRSVP={(sch) => setRsvSchedule(sch)}
+              onOpenRSVP={(sch) => {
+                navigate({ type: 'OPEN', overlay: { kind: 'rsvp', scheduleId: sch.id } });
+              }}
               refreshTrigger={refreshKey}
             />
           )}
@@ -363,14 +381,13 @@ function MainApp() {
                 navigate({ type: 'RESET' });
               }}
               onRefreshData={triggerRefresh}
-              onOpenRSVP={(sch) => setRsvSchedule(sch)}
+              onOpenRSVP={(sch) => {
+                navigate({ type: 'OPEN', overlay: { kind: 'rsvp', scheduleId: sch.id } });
+              }}
               onOpenQRScanner={(sch) => {
                 if (sch) {
-                  setQrTargetSchedule(sch);
-                  setShowQRScanner(true);
+                  navigate({ type: 'OPEN', overlay: { kind: 'qr', scheduleId: sch.id } });
                 } else {
-                  setQrTargetSchedule(null);
-                  setShowQRScanner(false);
                   navigate({ type: 'TAB', tab: 'today' });
                 }
               }}
@@ -449,30 +466,26 @@ function MainApp() {
 
 
 
-      {showQRScanner && currentSchedule && profile && (
+      {route.area === 'member' && route.overlay?.kind === 'qr' && qrSchedule && profile && (
         <QRScannerModal
-          schedule={currentSchedule}
+          schedule={qrSchedule}
           profile={profile}
-          onClose={() => {
-            setShowQRScanner(false);
-            setQrTargetSchedule(null);
-          }}
+          onClose={() => navigate({ type: 'CLOSE' })}
           onSuccess={() => {
-            setShowQRScanner(false);
-            setQrTargetSchedule(null);
+            navigate({ type: 'CLOSE' });
             triggerRefresh();
           }}
         />
       )}
 
-      {rsvpSchedule && profile && (
+      {route.area === 'member' && route.overlay?.kind === 'rsvp' && targetRsvpSchedule && profile && (
         <RSVPModal
-          schedule={rsvpSchedule}
+          schedule={targetRsvpSchedule}
           profile={profile}
-          currentVote={sheetsService.getRSVPVotes(rsvpSchedule.id).find((v) => v.memberId === profile.memberId)}
-          onClose={() => setRsvSchedule(null)}
+          currentVote={sheetsService.getRSVPVotes(targetRsvpSchedule.id).find((v) => v.memberId === profile.memberId)}
+          onClose={() => navigate({ type: 'CLOSE' })}
           onSuccess={() => {
-            setRsvSchedule(null);
+            navigate({ type: 'CLOSE' });
             triggerRefresh();
           }}
         />
