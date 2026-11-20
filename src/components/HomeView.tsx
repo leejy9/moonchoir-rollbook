@@ -9,6 +9,7 @@ import {
 import { getCalendarGrid } from '../utils/calendar';
 import { getCheckInWindowState } from '../utils/timeWindow';
 import { getKSTDateString } from '../utils/date';
+import { getSchedulePriorityScore, selectTodayFocus } from '../utils/todayFocus';
 import {
   IconCalendar,
   IconSettings,
@@ -224,89 +225,46 @@ export const HomeView: React.FC<HomeViewProps> = ({
     }
   };
 
-  // Priority score for smart auto-ranking:
-  // 1. Time state urgency: OPEN (300) > UPCOMING (200) > CLOSED (100)
-  // 2. Member target relevance: Mandatory for me (+50) > Voluntary/Guest (+0)
-  const getSchedulePriorityScore = useCallback(
-    (sch: Schedule): number => {
-      const win = getCheckInWindowState(sch, currentNow);
-      let timeScore = 100;
-      if (win.isOpen) {
-        timeScore = 300;
-      } else if (win.status !== 'WINDOW_CLOSED') {
-        timeScore = 200;
-      }
-
-      const isTarget = isMemberRequiredForSchedule(currentMember, sch.date, sch);
-      const targetScore = isTarget ? 50 : 0;
-
-      return timeScore + targetScore;
-    },
-    [currentNow, currentMember]
-  );
+  const todayFocus = useMemo(() => {
+    return selectTodayFocus({
+      schedules,
+      member: currentMember,
+      now: currentNow,
+      todayStr,
+      selectedId: userSelectedScheduleId,
+    });
+  }, [schedules, currentMember, currentNow, todayStr, userSelectedScheduleId]);
 
   // Candidate schedules for currently focused day, sorted by priority descending
   const activeDateSchedules = useMemo(() => {
-    const directList = schedulesByDate.get(selectedDateStr) || [];
-    if (directList.length === 0) {
-      // 사용자가 오늘이 아닌 다른 날짜(예: 일정 없는 날)를 직접 클릭한 경우에는 과거 일정을 억지로 끌어오지 않고 빈 상태 표시
-      if (selectedDateStr !== todayStr) {
-        return [];
-      }
-      // 오늘 날짜에 일정이 없을 때만 오늘 이후 예정된 가장 가까운 미래 일정을 표시 (이미 지난 과거 연습 제외)
-      const nextSch = schedules.find(
-        (s) => !s.isCancelled && !s.isArchived && s.date > todayStr
-      );
-      return nextSch
-        ? (schedulesByDate.get(nextSch.date) || [nextSch]).filter(
-            (s) => !s.isCancelled && !s.isArchived
-          )
-        : [];
+    if (selectedDateStr === todayStr) {
+      return todayFocus.schedules;
     }
-
-    // 오늘 날짜인 경우 이미 종료된 연습(WINDOW_CLOSED)이 아닌 진행 중/예정 연습만 남김
-    // (단, 사용자가 달력에서 과거 날짜를 직접 클릭한 경우에는 해당 날짜 기록 열람 허용)
-    const filteredList =
-      selectedDateStr === todayStr
-        ? directList.filter((s) => {
-            if (s.isCancelled || s.isArchived) return false;
-            return getCheckInWindowState(s, currentNow).status !== 'WINDOW_CLOSED';
-          })
-        : directList.filter((s) => !s.isCancelled && !s.isArchived);
-
-    if (filteredList.length === 0 && selectedDateStr === todayStr) {
-      // 오늘 연습이 모두 시간이 지나 종료되었다면 다음 미래 연습으로 자동 전환
-      const nextSch = schedules.find(
-        (s) => !s.isCancelled && !s.isArchived && s.date > todayStr
-      );
-      if (nextSch) {
-        return (schedulesByDate.get(nextSch.date) || [nextSch]).filter(
-          (s) => !s.isCancelled && !s.isArchived
-        );
-      }
-      return [];
-    }
-
-    return [...filteredList].sort((a, b) => {
-      const scoreA = getSchedulePriorityScore(a);
-      const scoreB = getSchedulePriorityScore(b);
+    const directList = (schedulesByDate.get(selectedDateStr) || []).filter(
+      (s) => !s.isCancelled && !s.isArchived
+    );
+    return [...directList].sort((a, b) => {
+      const scoreA = getSchedulePriorityScore(a, currentMember, currentNow);
+      const scoreB = getSchedulePriorityScore(b, currentMember, currentNow);
       if (scoreB !== scoreA) {
         return scoreB - scoreA;
       }
       return a.startTime.localeCompare(b.startTime);
     });
-  }, [schedulesByDate, selectedDateStr, todayStr, schedules, currentNow, getSchedulePriorityScore]);
+  }, [selectedDateStr, todayStr, todayFocus.schedules, schedulesByDate, currentMember, currentNow]);
 
   // Safe active schedule resolution (Clamping & Fallback Guard)
   const activeSchedule: Schedule | undefined = useMemo(() => {
+    if (selectedDateStr === todayStr) {
+      return todayFocus.focus;
+    }
     if (activeDateSchedules.length === 0) return undefined;
     if (userSelectedScheduleId) {
       const found = activeDateSchedules.find((s) => s.id === userSelectedScheduleId);
       if (found) return found;
     }
-    // Default to the top-priority schedule
     return activeDateSchedules[0];
-  }, [activeDateSchedules, userSelectedScheduleId]);
+  }, [selectedDateStr, todayStr, todayFocus.focus, activeDateSchedules, userSelectedScheduleId]);
 
   const activeScheduleIndex = useMemo(() => {
     if (!activeSchedule) return 0;
