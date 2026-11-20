@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatMatrixHeaderDate, normalizeDateToYYYYMMDD, getKSTTimestampString, parseKSTDate, getKSTDateString, addDaysKST, normalizeToKSTTimestamp, getKSTClock, formatShortDate } from './date';
+import { formatMatrixHeaderDate, normalizeDateToYYYYMMDD, getKSTTimestampString, parseKSTDate, getKSTDateString, addDaysKST, normalizeToKSTTimestamp, getKSTClock, formatShortDate, computeDDay } from './date';
 
 describe('formatMatrixHeaderDate', () => {
   it('YYYY-MM-DD 형식을 10/08 (목) 형식으로 올바르게 변환한다', () => {
@@ -108,3 +108,37 @@ describe('formatShortDate', () => {
     expect(formatShortDate('미정')).toBe('미정');
   });
 });
+
+describe('computeDDay Pure Function', () => {
+  it('동일한 날짜이면 0을 반환한다', () => {
+    const now = new Date('2026-10-15T14:00:00+09:00');
+    expect(computeDDay('2026-10-15', now)).toBe(0);
+  });
+
+  it('미래 날짜이면 양수 일수를 반환한다 (D-3, D-1)', () => {
+    const now = new Date('2026-10-15T14:00:00+09:00');
+    expect(computeDDay('2026-10-18', now)).toBe(3);
+    expect(computeDDay('2026-10-16', now)).toBe(1);
+  });
+
+  it('과거 날짜이면 음수 일수를 반환한다', () => {
+    const now = new Date('2026-10-15T14:00:00+09:00');
+    expect(computeDDay('2026-10-12', now)).toBe(-3);
+  });
+
+  it('월말/월초 경계를 정확히 계산한다', () => {
+    const endOfOct = new Date('2026-10-31T10:00:00+09:00');
+    expect(computeDDay('2026-11-01', endOfOct)).toBe(1);
+    expect(computeDDay('2026-11-03', endOfOct)).toBe(3);
+  });
+
+  it('KST 자정 직전(23:59:59)과 자정 직후(00:00:01)의 D-Day 변화를 정확히 반영한다', () => {
+    const target = '2026-10-18';
+    const justBeforeMidnight = new Date('2026-10-15T23:59:59+09:00'); // KST 15일 -> D-3
+    const justAfterMidnight = new Date('2026-10-16T00:00:01+09:00'); // KST 16일 -> D-2
+
+    expect(computeDDay(target, justBeforeMidnight)).toBe(3);
+    expect(computeDDay(target, justAfterMidnight)).toBe(2);
+  });
+});
+

@@ -5,7 +5,10 @@ import {
   expandRecurringSchedules,
   formatYearMonth,
   getCalendarGrid,
+  getCategoryDotKind,
+  groupSchedulesByDate,
 } from './calendar';
+import type { Schedule } from '../types/rollbook';
 
 describe('Calendar Utility', () => {
   it('formats year and month as YYYY-MM', () => {
@@ -236,4 +239,63 @@ describe('Calendar Utility', () => {
       ]);
     });
   });
+
+  describe('getCategoryDotKind Pure Function', () => {
+    it('연습 계열 카테고리는 practice를 반환한다', () => {
+      expect(getCategoryDotKind('정기연습')).toBe('practice');
+      expect(getCategoryDotKind('추가연습')).toBe('practice');
+      expect(getCategoryDotKind('파트연습')).toBe('practice');
+    });
+
+    it('연주/공연/콘서트 계열 카테고리는 concert를 반환한다', () => {
+      expect(getCategoryDotKind('정기연주회')).toBe('concert');
+      expect(getCategoryDotKind('초청공연')).toBe('concert');
+      expect(getCategoryDotKind('가을 콘서트')).toBe('concert');
+    });
+
+    it('행사/합숙/이벤트/MT/기타 계열 카테고리는 event를 반환한다', () => {
+      expect(getCategoryDotKind('여름 MT')).toBe('event');
+      expect(getCategoryDotKind('겨울합숙')).toBe('event');
+      expect(getCategoryDotKind('송년행사')).toBe('event');
+      expect(getCategoryDotKind('기타모임')).toBe('event');
+      expect(getCategoryDotKind('신입생 이벤트')).toBe('event');
+    });
+
+    it('모르는 카테고리나 빈 문자열은 default를 반환한다', () => {
+      expect(getCategoryDotKind('특별 강습')).toBe('default');
+      expect(getCategoryDotKind('스튜디오 녹음')).toBe('default');
+      expect(getCategoryDotKind('')).toBe('default');
+      expect(getCategoryDotKind('   ')).toBe('default');
+    });
+  });
+
+  describe('groupSchedulesByDate Pure Function', () => {
+    const makeSch = (id: string, date: string, startTime: string): Schedule => ({
+      id,
+      title: id,
+      date,
+      startTime,
+      endTime: '21:30',
+      locationName: '연습실',
+      category: '정기연습',
+    });
+
+    it('일정을 날짜별로 그룹화하고 시작 시각 순으로 오름차순 정렬한다', () => {
+      const sch1 = makeSch('s1', '2026-10-15', '19:30');
+      const sch2 = makeSch('s2', '2026-10-15', '17:00');
+      const sch3 = makeSch('s3', '2026-10-18', '14:00');
+
+      const map = groupSchedulesByDate([sch1, sch2, sch3]);
+
+      expect(map.size).toBe(2);
+      expect(map.get('2026-10-15')?.map((s) => s.id)).toEqual(['s2', 's1']); // 17:00 before 19:30
+      expect(map.get('2026-10-18')?.map((s) => s.id)).toEqual(['s3']);
+    });
+
+    it('빈 목록인 경우 빈 Map을 반환한다', () => {
+      const map = groupSchedulesByDate([]);
+      expect(map.size).toBe(0);
+    });
+  });
 });
+

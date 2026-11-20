@@ -1,14 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { SuperAdminDashboard } from './components/admin/SuperAdminDashboard';
 import { AdminPinModal } from './components/AdminPinModal';
+import { AppHeader } from './components/AppHeader';
 import { BindingModal } from './components/BindingModal';
-import { CalendarView } from './components/CalendarView';
+import { BottomNav } from './components/BottomNav';
+import { CalendarTab } from './components/CalendarTab';
 import { HomeView } from './components/HomeView';
-import { MemberPortalModal } from './components/MemberPortalModal';
+import { ScheduleDetailSheet } from './components/ScheduleDetailSheet';
+import { ProfileTab } from './components/ProfileTab';
+import { StudioTab } from './components/StudioTab';
 import { QRScannerModal } from './components/QRScannerModal';
 import { RSVPModal } from './components/RSVPModal';
 import { SyncStatus } from './components/SyncStatus';
+import { useHashRoute } from './hooks/useHashRoute';
 import {
   clearDeviceProfile,
   getBoundDeviceProfile,
@@ -21,6 +26,7 @@ import {
 import { sheetsService } from './services/sheets';
 import {
   getActiveSupabaseRealtime,
+  getBackupPollingIntervalMs,
   startSupabaseRealtime,
   stopSupabaseRealtime,
 } from './services/realtime/supabaseRealtime';
@@ -32,17 +38,29 @@ import {
   type DisplayMode,
 } from './services/displayMode';
 import type { BoundDeviceProfile, Schedule } from './types/rollbook';
-import { getKSTDateString } from './utils/date';
+import { parseRoute, type MemberTab } from './utils/route';
+import { AudioPlayerProvider } from './components/audio/AudioPlayerProvider';
+import { MiniPlayer } from './components/audio/MiniPlayer';
 
-export function App() {
+function MainApp() {
   // Device binding state
   const [profile, setProfile] = useState<BoundDeviceProfile | null>(() => getBoundDeviceProfile());
   const [hasConfirmedRosterSync, setHasConfirmedRosterSync] = useState(false);
   const [showBindingModal, setShowBindingModal] = useState(false);
-  const [showMemberPortalModal, setShowMemberPortalModal] = useState(false);
 
-  // View state: 'HOME' | 'CALENDAR' | 'ADMIN' | 'SUPER_ADMIN'
-  const [currentView, setCurrentView] = useState<'HOME' | 'CALENDAR' | 'ADMIN' | 'SUPER_ADMIN'>('HOME');
+  // Hash-based routing state
+  const { route, navigate } = useHashRoute();
+  const pendingHashRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (profile === null && typeof window !== 'undefined') {
+      const raw = window.location.hash.trim().replace(/^#\/?/, '');
+      if (raw && raw !== 'today') {
+        pendingHashRef.current = window.location.hash;
+      }
+    }
+  }, [profile]);
+
   const [displayMode, setDisplayMode] = useState<DisplayMode>(getDisplayModePreference);
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference);
 
@@ -104,12 +122,19 @@ export function App() {
     document.addEventListener('visibilitychange', refreshWhenVisible);
     window.addEventListener('online', refreshWhenOnline);
 
-    // Supabase 환경: 화면이 켜져 있을 때 30초마다 자동 백업 동기화 (모바일 웹소켓 절전 대비 2중 안전망)
+    // Supabase 환경: 실시간 웹소켓 연결 시 5분, 연결 끊김 시 30초 간격으로 백업 동기화
+    let lastBackupFetchAt = Date.now();
     const backupTimer = setInterval(() => {
-      if (document.visibilityState === 'visible' && sheetsService.getBackendKind() === 'supabase') {
+      if (document.visibilityState !== 'visible' || sheetsService.getBackendKind() !== 'supabase') {
+        return;
+      }
+      const isConnected = getActiveSupabaseRealtime()?.getIsConnected() ?? false;
+      const intervalMs = getBackupPollingIntervalMs(isConnected);
+      if (Date.now() - lastBackupFetchAt >= intervalMs) {
+        lastBackupFetchAt = Date.now();
         void sheetsService.refreshRemoteData({ force: true });
       }
-    }, 30000);
+    }, 10000);
 
     return () => {
       document.removeEventListener('visibilitychange', refreshWhenVisible);
@@ -118,35 +143,31 @@ export function App() {
     };
   }, []);
 
-  // 화면 전환·주요 창을 열 때 최신 데이터를 받아온다
+  // 관리자 진입 또는 모달/오버레이 오픈 시에만 최신 데이터를 동기화합니다 (단순 탭 전환은 로컬 캐시 사용).
   const isRsvpOpen = rsvpSchedule !== null;
+  const overlayKind = route.area === 'member' ? route.overlay?.kind : undefined;
+  const isManagementArea = route.area === 'admin' || route.area === 'superAdmin';
+
   useEffect(() => {
-    void sheetsService.refreshRemoteData();
-  }, [currentView, showMemberPortalModal, showQRScanner, isRsvpOpen]);
+    if (isManagementArea || overlayKind || showQRScanner || isRsvpOpen) {
+      void sheetsService.refreshRemoteData();
+    }
+  }, [isManagementArea, overlayKind, showQRScanner, isRsvpOpen]);
 
   const activeSchedules = sheetsService.getSchedulesForMember(profile?.memberId);
-  const [todayStr, setTodayStr] = useState(() => getKSTDateString());
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      const currentKst = getKSTDateString();
-      setTodayStr((prev) => (prev !== currentKst ? currentKst : prev));
-    }, 10000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (currentView !== 'ADMIN' && currentView !== 'SUPER_ADMIN') return;
+    if (route.area !== 'admin' && route.area !== 'superAdmin') return;
 
     let lastPersistedActivity = Date.now();
     const returnHomeIfExpired = () => {
-      if (currentView === 'ADMIN' && !isAdminLoggedIn()) {
-        setCurrentView('HOME');
+      if (route.area === 'admin' && !isAdminLoggedIn()) {
+        navigate({ type: 'RESET' });
         triggerRefresh();
         return true;
       }
-      if (currentView === 'SUPER_ADMIN' && !isSuperAdminLoggedIn()) {
-        setCurrentView('HOME');
+      if (route.area === 'superAdmin' && !isSuperAdminLoggedIn()) {
+        navigate({ type: 'RESET' });
         triggerRefresh();
         return true;
       }
@@ -155,8 +176,8 @@ export function App() {
     const handleActivity = () => {
       if (returnHomeIfExpired()) return;
       if (Date.now() - lastPersistedActivity >= 30_000) {
-        if (currentView === 'ADMIN') touchAdminSession();
-        if (currentView === 'SUPER_ADMIN') touchSuperAdminSession();
+        if (route.area === 'admin') touchAdminSession();
+        if (route.area === 'superAdmin') touchSuperAdminSession();
         lastPersistedActivity = Date.now();
       }
     };
@@ -180,7 +201,7 @@ export function App() {
       window.removeEventListener('focus', returnHomeIfExpired);
       window.clearInterval(timer);
     };
-  }, [currentView]);
+  }, [route.area, navigate]);
 
   // Synchronize bound profile with remote/local member data if part or name changed in Sheets
   useEffect(() => {
@@ -190,8 +211,7 @@ export function App() {
     if (!current) {
       clearDeviceProfile();
       queueMicrotask(() => {
-        setShowMemberPortalModal(false);
-        setCurrentView('HOME');
+        navigate({ type: 'RESET' });
         setProfile(null);
       });
       return;
@@ -207,12 +227,9 @@ export function App() {
         });
       }
     }
-  }, [hasConfirmedRosterSync, profile, refreshKey]);
+  }, [hasConfirmedRosterSync, navigate, profile, refreshKey]);
 
-  const currentSchedule =
-    qrTargetSchedule ||
-    activeSchedules.find((s) => !s.isCancelled && !s.isArchived && s.date === todayStr) ||
-    activeSchedules.find((s) => !s.isCancelled && !s.isArchived && s.date >= todayStr);
+  const currentSchedule = qrTargetSchedule;
 
   // If user has not bound a device yet, show binding prompt
   const isBound = profile !== null;
@@ -221,11 +238,22 @@ export function App() {
     setProfile(newProfile);
     setShowBindingModal(false);
     triggerRefresh();
+    if (pendingHashRef.current) {
+      const savedHash = pendingHashRef.current;
+      pendingHashRef.current = null;
+      const parsed = parseRoute(savedHash);
+      if (parsed.area === 'member') {
+        navigate({ type: 'TAB', tab: parsed.tab });
+        if (parsed.overlay) {
+          navigate({ type: 'OPEN', overlay: parsed.overlay });
+        }
+      }
+    }
   };
 
   const handleOpenAdmin = () => {
     if (isAdminLoggedIn()) {
-      setCurrentView('ADMIN');
+      navigate({ type: 'ADMIN' });
     } else {
       setShowAdminPinModal(true);
     }
@@ -233,10 +261,14 @@ export function App() {
 
   const handleOpenSuperAdmin = () => {
     if (isSuperAdminLoggedIn()) {
-      setCurrentView('SUPER_ADMIN');
+      navigate({ type: 'SUPER' });
     } else {
       setShowSuperAdminPinModal(true);
     }
+  };
+
+  const handleSelectTab = (tab: MemberTab) => {
+    navigate({ type: 'TAB', tab });
   };
 
   const handleDisplayModeChange = (mode: DisplayMode) => {
@@ -251,7 +283,7 @@ export function App() {
 
   return (
     <div
-      className={`app-shell ${currentView === 'ADMIN' ? 'admin-mode' : ''}`}
+      className={`app-shell ${route.area === 'admin' ? 'admin-mode' : ''}`}
       data-display-mode={displayMode}
       data-theme={isDarkMode ? 'dark' : 'light'}
     >
@@ -260,36 +292,100 @@ export function App() {
         <BindingModal onSuccess={handleDeviceBound} />
       )}
 
-      {/* Main Views */}
-      {isBound && currentView === 'HOME' && (
-        <HomeView
-          profile={profile}
-          onOpenQRScanner={(sch) => {
-            if (sch) setQrTargetSchedule(sch);
-            setShowQRScanner(true);
-          }}
-          onOpenRSVP={(sch) => setRsvSchedule(sch)}
+      {/* Member Header */}
+      {isBound && route.area === 'member' && (
+        <AppHeader
           onOpenAdmin={handleOpenAdmin}
           onOpenSuperAdmin={handleOpenSuperAdmin}
-          onChangeProfile={() => setShowBindingModal(true)}
-          onOpenProfilePortal={() => setShowMemberPortalModal(true)}
-          onViewCalendar={() => setCurrentView('CALENDAR')}
-          refreshTrigger={refreshKey}
         />
       )}
 
-      {isBound && currentView === 'CALENDAR' && (
-        <CalendarView
-          profile={profile}
-          onOpenRSVP={(sch) => setRsvSchedule(sch)}
-          onBackToHome={() => setCurrentView('HOME')}
-        />
+      {/* Member Content wrapped in main */}
+      {isBound && route.area === 'member' && (
+        <main className="app-member-main">
+          {route.tab === 'today' && (
+            <HomeView
+              profile={profile}
+              onOpenQRScanner={(sch) => {
+                if (sch) {
+                  setQrTargetSchedule(sch);
+                  setShowQRScanner(true);
+                } else {
+                  setQrTargetSchedule(null);
+                  setShowQRScanner(false);
+                  navigate({ type: 'TAB', tab: 'today' });
+                }
+              }}
+              onOpenRSVP={(sch) => setRsvSchedule(sch)}
+              onOpenAdmin={handleOpenAdmin}
+              onOpenSuperAdmin={handleOpenSuperAdmin}
+              onChangeProfile={() => setShowBindingModal(true)}
+              onOpenProfilePortal={() => navigate({ type: 'TAB', tab: 'profile' })}
+              onOpenDetail={(sch) =>
+                navigate({
+                  type: 'OPEN',
+                  overlay: { kind: 'scheduleSheet', date: sch.date, scheduleId: sch.id },
+                })
+              }
+              onViewCalendar={() => navigate({ type: 'TAB', tab: 'calendar' })}
+              refreshTrigger={refreshKey}
+            />
+          )}
+
+          {route.tab === 'calendar' && (
+            <CalendarTab
+              profile={profile}
+              month={route.month}
+              selectedDate={route.overlay?.kind === 'scheduleSheet' ? route.overlay.date : undefined}
+              onNavigate={navigate}
+              onOpenRSVP={(sch) => setRsvSchedule(sch)}
+              refreshTrigger={refreshKey}
+            />
+          )}
+
+          {route.tab === 'studio' && profile && (
+            <StudioTab
+              onOpenAdmin={handleOpenAdmin}
+            />
+          )}
+
+          {route.tab === 'profile' && profile && (
+            <ProfileTab
+              profile={profile}
+              displayMode={displayMode}
+              isDarkMode={isDarkMode}
+              onChangeDisplayMode={handleDisplayModeChange}
+              onChangeDarkMode={handleDarkModeChange}
+              onChangeBinding={() => setShowBindingModal(true)}
+              onLogout={async () => {
+                clearDeviceProfile();
+                setProfile(null);
+                navigate({ type: 'RESET' });
+              }}
+              onRefreshData={triggerRefresh}
+              onOpenRSVP={(sch) => setRsvSchedule(sch)}
+              onOpenQRScanner={(sch) => {
+                if (sch) {
+                  setQrTargetSchedule(sch);
+                  setShowQRScanner(true);
+                } else {
+                  setQrTargetSchedule(null);
+                  setShowQRScanner(false);
+                  navigate({ type: 'TAB', tab: 'today' });
+                }
+              }}
+              onOpenAdmin={handleOpenAdmin}
+              refreshTrigger={refreshKey}
+            />
+          )}
+        </main>
       )}
 
-      {isBound && currentView === 'ADMIN' && (
+      {/* Admin Dashboards */}
+      {isBound && route.area === 'admin' && (
         <AdminDashboard
           onBackToHome={() => {
-            setCurrentView('HOME');
+            navigate({ type: 'RESET' });
             triggerRefresh();
           }}
           onDataChanged={triggerRefresh}
@@ -297,20 +393,53 @@ export function App() {
         />
       )}
 
-      {currentView === 'SUPER_ADMIN' && (
+      {route.area === 'superAdmin' && (
         <SuperAdminDashboard
           onBackToHome={() => {
-            setCurrentView('HOME');
+            navigate({ type: 'RESET' });
             triggerRefresh();
           }}
           onDataChanged={triggerRefresh}
           refreshTrigger={refreshKey}
+        />
+      )}
+
+      {/* Mini Audio Player (Fixed above BottomNav) */}
+      {isBound && route.area === 'member' && <MiniPlayer />}
+
+      {/* Member Bottom Navigation (Only visible when bound in member area) */}
+      {isBound && route.area === 'member' && (
+        <BottomNav
+          currentTab={route.tab}
+          onSelectTab={handleSelectTab}
         />
       )}
 
       <SyncStatus />
 
       {/* Overlay Modals */}
+      {isBound && profile && route.area === 'member' && route.overlay?.kind === 'scheduleSheet' && (
+        <ScheduleDetailSheet
+          isOpen={true}
+          date={route.overlay.date}
+          scheduleId={route.overlay.scheduleId}
+          schedules={activeSchedules}
+          member={
+            sheetsService.getMembers().find((m) => m.id === profile.memberId) || {
+              id: profile.memberId,
+              name: profile.name,
+              part: profile.part,
+              phoneLast4: profile.phoneLast4,
+              role: 'MEMBER',
+              status: 'ACTIVE',
+              createdAt: '2026-01-01T00:00:00Z',
+              joinedAt: '2020-01-01',
+            }
+          }
+          onClose={() => navigate({ type: 'CLOSE' })}
+        />
+      )}
+
       {showBindingModal && isBound && (
         <BindingModal
           onSuccess={handleDeviceBound}
@@ -318,36 +447,7 @@ export function App() {
         />
       )}
 
-      {showMemberPortalModal && profile && (
-        <MemberPortalModal
-          profile={profile}
-          onClose={() => setShowMemberPortalModal(false)}
-          onChangeBinding={() => {
-            setShowMemberPortalModal(false);
-            setShowBindingModal(true);
-          }}
-          onOpenRSVP={(sch) => {
-            setShowMemberPortalModal(false);
-            setRsvSchedule(sch);
-          }}
-          onOpenQRScanner={(sch) => {
-            setShowMemberPortalModal(false);
-            if (sch) setQrTargetSchedule(sch);
-            setShowQRScanner(true);
-          }}
-          onOpenAdmin={handleOpenAdmin}
-          displayMode={displayMode}
-          isDarkMode={isDarkMode}
-          onChangeDisplayMode={handleDisplayModeChange}
-          onChangeDarkMode={handleDarkModeChange}
-          onLogout={async () => {
-            clearDeviceProfile();
-            setProfile(null);
-            setShowMemberPortalModal(false);
-          }}
-          onRefreshData={triggerRefresh}
-        />
-      )}
+
 
       {showQRScanner && currentSchedule && profile && (
         <QRScannerModal
@@ -382,7 +482,7 @@ export function App() {
         <AdminPinModal
           onSuccess={() => {
             setShowAdminPinModal(false);
-            setCurrentView('ADMIN');
+            navigate({ type: 'ADMIN' });
           }}
           onClose={() => setShowAdminPinModal(false)}
         />
@@ -393,12 +493,20 @@ export function App() {
           isSuperAdminMode={true}
           onSuccess={() => {
             setShowSuperAdminPinModal(false);
-            setCurrentView('SUPER_ADMIN');
+            navigate({ type: 'SUPER' });
           }}
           onClose={() => setShowSuperAdminPinModal(false)}
         />
       )}
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <AudioPlayerProvider>
+      <MainApp />
+    </AudioPlayerProvider>
   );
 }
 

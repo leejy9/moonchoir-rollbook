@@ -1,40 +1,29 @@
 import React from 'react';
-import type { Schedule } from '../../types/rollbook';
-import type { CalendarDay } from '../../utils/calendar';
+import type { Schedule } from '../types/rollbook';
+import { getCategoryDotKind, type CalendarDay } from '../utils/calendar';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 function getCategoryDotClass(category: string): string {
-  if (category.includes('연주') || category.includes('공연') || category.includes('콘서트')) {
-    return 'dot-concert';
-  }
-  if (
-    category.includes('행사') ||
-    category.includes('합숙') ||
-    category.includes('이벤트') ||
-    category.includes('MT') ||
-    category.includes('기타')
-  ) {
-    return 'dot-event';
-  }
-  return 'dot-practice';
+  const kind = getCategoryDotKind(category);
+  return `dot-${kind}`;
 }
 
-interface HomeCalendarSectionProps {
+export interface MonthCalendarGridProps {
   currentYear: number;
   currentMonthIndex: number;
-  selectedDateStr: string;
+  selectedDateStr?: string;
   todayStr: string;
   calendarDays: CalendarDay[];
   schedulesByDate: Map<string, Schedule[]>;
   myLogsByScheduleId: Map<string, boolean>;
   onSelectDate: (dateStr: string) => void;
-  onJumpToToday: () => void;
+  onJumpToToday?: () => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
 }
 
-export const HomeCalendarSection: React.FC<HomeCalendarSectionProps> = ({
+export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = ({
   currentYear,
   currentMonthIndex,
   selectedDateStr,
@@ -51,12 +40,11 @@ export const HomeCalendarSection: React.FC<HomeCalendarSectionProps> = ({
     <section
       className="integrated-calendar-card"
       style={{
-        background: '#ffffff',
-        borderRadius: '16px',
+        background: 'var(--bg-card)',
+        borderRadius: 'var(--radius-xl)',
         padding: '16px',
-        border: '1px solid #e2e8f0',
-        marginBottom: '16px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+        border: '1px solid var(--border-subtle)',
+        boxShadow: 'var(--shadow-card)',
       }}
     >
       {/* Calendar Header Month Switcher */}
@@ -69,22 +57,27 @@ export const HomeCalendarSection: React.FC<HomeCalendarSectionProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b', margin: 0 }}>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
             {currentYear}년 {currentMonthIndex + 1}월
           </h2>
-          {selectedDateStr !== todayStr && (
+          {selectedDateStr && selectedDateStr !== todayStr && onJumpToToday && (
             <button
               type="button"
               onClick={onJumpToToday}
               style={{
                 fontSize: '0.75rem',
                 fontWeight: 600,
-                padding: '2px 8px',
-                borderRadius: '999px',
-                background: '#e0e7ff',
-                color: '#4338ca',
+                padding: '4px 10px',
+                minHeight: '44px',
+                minWidth: '44px',
+                borderRadius: 'var(--radius-full)',
+                background: 'var(--brand-primary-light)',
+                color: 'var(--brand-primary)',
                 border: 'none',
                 cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
               오늘
@@ -98,38 +91,42 @@ export const HomeCalendarSection: React.FC<HomeCalendarSectionProps> = ({
             onClick={onPrevMonth}
             aria-label="이전 달"
             style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              border: '1px solid #e2e8f0',
-              background: '#ffffff',
+              minWidth: '44px',
+              minHeight: '44px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--bg-card)',
+              color: 'var(--text-sub)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '14px',
             }}
           >
-            ◀
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
           </button>
           <button
             type="button"
             onClick={onNextMonth}
             aria-label="다음 달"
             style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              border: '1px solid #e2e8f0',
-              background: '#ffffff',
+              minWidth: '44px',
+              minHeight: '44px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--bg-card)',
+              color: 'var(--text-sub)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '14px',
             }}
           >
-            ▶
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
           </button>
         </div>
       </div>
@@ -161,6 +158,12 @@ export const HomeCalendarSection: React.FC<HomeCalendarSectionProps> = ({
                 isToday ? 'today' : ''
               } ${isSelected ? 'selected' : ''}`}
               onClick={() => onSelectDate(day.dateStr)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelectDate(day.dateStr);
+                }
+              }}
               role="button"
               tabIndex={0}
               aria-label={`${day.dateStr} 일정 선택`}
@@ -175,7 +178,7 @@ export const HomeCalendarSection: React.FC<HomeCalendarSectionProps> = ({
                       style={{
                         fontSize: '9px',
                         fontWeight: 800,
-                        color: isSelected ? '#ffffff' : '#10b981',
+                        color: isSelected ? 'var(--text-white)' : 'var(--status-success)',
                         lineHeight: 1,
                       }}
                       title="출석 완료"
@@ -205,20 +208,23 @@ export const HomeCalendarSection: React.FC<HomeCalendarSectionProps> = ({
           justifyContent: 'center',
           gap: '12px',
           fontSize: '0.75rem',
-          color: '#64748b',
+          color: 'var(--text-muted)',
           marginTop: '12px',
+          flexWrap: 'wrap',
         }}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1' }} /> 정기연습
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--brand-primary)' }} /> 정기연습
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} /> 연주/행사
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--status-danger)' }} /> 연주/행사
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <strong style={{ color: '#10b981' }}>✓</strong> 내 출석 완료
+          <strong style={{ color: 'var(--status-success)' }}>✓</strong> 내 출석 완료
         </span>
       </div>
     </section>
   );
 };
+
+export { MonthCalendarGrid as HomeCalendarSection };
