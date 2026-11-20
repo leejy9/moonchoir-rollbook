@@ -9,7 +9,7 @@ import type {
   ScheduleCommentEvent,
 } from '../../types/rollbook';
 import { getActiveSupabaseRealtime } from '../../services/realtime/supabaseRealtime';
-import { getKSTDateString, parseKSTDate } from '../../utils/date';
+import { getKSTDateString, parseKSTDate, getKSTTimestampString } from '../../utils/date';
 
 interface SuperAdminDashboardProps {
   onBackToHome: () => void;
@@ -17,7 +17,7 @@ interface SuperAdminDashboardProps {
   refreshTrigger?: number;
 }
 
-type SuperAdminTab = 'AUDIT_LOGS' | 'CLOUD_INTEGRATION' | 'SECURITY';
+type SuperAdminTab = 'AUDIT_LOGS' | 'DIAGNOSTICS' | 'CLOUD_INTEGRATION' | 'SECURITY';
 type AuditSubTab = 'ATTENDANCE' | 'COMMENTS' | 'RSVP' | 'DEVICES';
 type TimeRangePreset = 'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'CUSTOM';
 type SortField = 'timestamp' | 'memberName';
@@ -58,6 +58,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const [endDate, setEndDate] = useState('');
   const [sortField, setSortField] = useState<SortField>('timestamp');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
+  // Field Diagnostics & Member Doctor State
+  const [diagMemberSearch, setDiagMemberSearch] = useState('');
+  const [selectedMemberIdForDiag, setSelectedMemberIdForDiag] = useState<string>('');
 
   // Load audit data & secrets
   const logs: RawAttendanceLog[] = useMemo(() => {
@@ -203,6 +207,54 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     }
   };
 
+  // Emergency GPS Bypass handler
+  const isEmergencyGpsBypassed = sheetsService.isEmergencyGpsBypassed();
+  const emergencyGpsBypassUntil = sheetsService.getConfig().emergencyGpsBypassUntil;
+
+  const handleToggleEmergencyGpsBypass = async (durationMinutes: number) => {
+    setIsProcessing(true);
+    try {
+      const until = await sheetsService.setEmergencyGpsBypass(durationMinutes);
+      onDataChanged();
+      if (durationMinutes > 0 && until) {
+        showSuccess(`한시적 GPS 위치 인증 면제가 ${durationMinutes}분간 활성화되었습니다.`);
+      } else {
+        showSuccess('한시적 GPS 위치 인증 면제가 정상 해제되었습니다.');
+      }
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'GPS 면제 설정 실패');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleManualApproveAttendance = async (targetMember: Member, targetSchedule: Schedule) => {
+    if (!window.confirm(`'${targetMember.name}' 단원을 '${targetSchedule.title}' 세션에 수동 출석 인정 처리하시겠습니까?`)) {
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const log: RawAttendanceLog = {
+        id: `log_manual_${Date.now()}`,
+        timestamp: getKSTTimestampString(),
+        scheduleId: targetSchedule.id,
+        memberId: targetMember.id,
+        memberName: targetMember.name,
+        part: targetMember.part,
+        authMethod: 'MANUAL_BY_ADMIN',
+        isVerifiedLocation: true,
+        adminNote: '마스터 콘솔 긴급 진단 직권 인정',
+      };
+      await sheetsService.addCheckInLog(log);
+      onDataChanged();
+      showSuccess(`'${targetMember.name}' 단원의 출석이 수동 인정 처리되었습니다.`);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '수동 출석 인정 실패');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleUpdateAdminPin = async () => {
     const val = adminPinInput.trim();
     if (!val || val.length < 4 || val.length > 8) {
@@ -272,12 +324,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   // Filtering & Sorting Audit Logs
   const filteredAttendanceLogs = useMemo(() => {
     return logs.filter((l) => {
-      // Date range check
       const dateOnly = (l.timestamp || '').slice(0, 10);
       if (rangeBounds.start && dateOnly < rangeBounds.start) return false;
       if (rangeBounds.end && dateOnly > rangeBounds.end) return false;
 
-      // Query search
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
       const schTitle = scheduleMap.get(l.scheduleId)?.title || '';
@@ -379,6 +429,132 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     }
   };
 
+  // Member Doctor: Active Schedule & Target Member Evaluation
+  const activeTodaySchedule = useMemo(() => {
+    return (
+      schedules.find((s) => !s.isCancelled && !s.isArchived && s.date === todayStr) ||
+      schedules.find((s) => !s.isCancelled && !s.isArchived && s.date >= todayStr)
+    );
+  }, [schedules, todayStr]);
+
+  const searchedDiagMembers = useMemo(() => {
+    if (!diagMemberSearch.trim()) return members.slice(0, 8);
+    const q = diagMemberSearch.toLowerCase();
+    return members.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) ||
+        m.part.toLowerCase().includes(q) ||
+        (m.phoneLast4 && m.phoneLast4.includes(q))
+    ).slice(0, 10);
+  }, [members, diagMemberSearch]);
+
+  const diagTargetMember = useMemo(() => {
+    return members.find((m) => m.id === selectedMemberIdForDiag);
+  }, [members, selectedMemberIdForDiag]);
+
+  // Diagnosis Results for diagTargetMember
+  const memberDiagnosis = useMemo(() => {
+    if (!diagTargetMember) return null;
+
+    const issues: { type: 'ERROR' | 'WARNING' | 'SUCCESS'; title: string; desc: string }[] = [];
+
+    // 1. Roster Status
+    if (diagTargetMember.status === 'MERGED') {
+      issues.push({
+        type: 'ERROR',
+        title: '중복 명부 통합 상태',
+        desc: `다른 단원 ID(${diagTargetMember.mergedIntoId || '기존'})로 병합된 이전 계정입니다. 새 프로필로 접속해야 합니다.`,
+      });
+    } else if (diagTargetMember.status === 'DELETED') {
+      issues.push({
+        type: 'ERROR',
+        title: '삭제된 단원',
+        desc: '명부에서 삭제 처리된 단원입니다.',
+      });
+    } else {
+      issues.push({
+        type: 'SUCCESS',
+        title: '단원 명부 상태 정상',
+        desc: `${diagTargetMember.part} 파트 · ${diagTargetMember.memberStatus || '정단원'} (ACTIVE)`,
+      });
+    }
+
+    // 2. Device Lock
+    if (diagTargetMember.boundDeviceId) {
+      issues.push({
+        type: 'WARNING',
+        title: '스마트폰 기기 1대 연동 중',
+        desc: `단원이 폰을 바꿨거나 사파리 시크릿 모드를 켠 경우 '다른 기기에 연동됨' 오류로 진입이 차단됩니다. (기기 ID: ${diagTargetMember.boundDeviceId})`,
+      });
+    } else {
+      issues.push({
+        type: 'SUCCESS',
+        title: '기기 연동 자유 상태',
+        desc: '바인딩된 기기가 없어 새 폰이나 브라우저에서 즉시 연동 가능합니다.',
+      });
+    }
+
+    // 3. Schedule Target
+    if (activeTodaySchedule) {
+      let isEligible = true;
+      if (activeTodaySchedule.targetAudienceType === 'PARTS') {
+        isEligible = Boolean(activeTodaySchedule.targetParts?.includes(diagTargetMember.part));
+      } else if (activeTodaySchedule.targetAudienceType === 'CUSTOM_MEMBERS') {
+        isEligible = Boolean(activeTodaySchedule.targetMemberIds?.includes(diagTargetMember.id));
+      }
+
+      if (!isEligible) {
+        issues.push({
+          type: 'ERROR',
+          title: '오늘 일정 대상자 아님',
+          desc: `'${activeTodaySchedule.title}' 세션은 ${diagTargetMember.part} 파트가 대상에 포함되지 않아 단원 화면에 일정이 뜨지 않습니다.`,
+        });
+      } else {
+        issues.push({
+          type: 'SUCCESS',
+          title: '오늘 일정 대상자 부합',
+          desc: `'${activeTodaySchedule.title}' 연습의 정상 참여 대상입니다.`,
+        });
+      }
+    }
+
+    // 4. GPS Bypass Status
+    if (isEmergencyGpsBypassed) {
+      issues.push({
+        type: 'SUCCESS',
+        title: '비상 GPS 면제 모드 적용 중',
+        desc: '위치 오차나 권한 문제와 관계없이 QR/PIN 출석이 즉시 승인됩니다.',
+      });
+    } else {
+      issues.push({
+        type: 'WARNING',
+        title: 'GPS 100m 엄격 검증 모드',
+        desc: '단원 폰의 위치 권한이 꺼져 있거나 지하/건물 밖이면 위치 오류가 발생할 수 있습니다.',
+      });
+    }
+
+    // 5. Today's Attendance Record
+    const todayLogs = logs.filter(
+      (l) => l.memberId === diagTargetMember.id && (l.timestamp || '').slice(0, 10) === todayStr
+    );
+    if (todayLogs.length > 0) {
+      const latest = todayLogs[todayLogs.length - 1];
+      issues.push({
+        type: 'SUCCESS',
+        title: '오늘 출결 로그 기록 완료',
+        desc: `${latest.timestamp}에 ${latest.authMethod} 방식으로 정상 출석 기록되었습니다.`,
+      });
+    } else {
+      issues.push({
+        type: 'WARNING',
+        title: '오늘 출결 원천 로그 없음',
+        desc: '아직 오늘 세션에 대한 출석 기록이 서버에 접수되지 않았습니다.',
+      });
+    }
+
+    return issues;
+  }, [diagTargetMember, activeTodaySchedule, isEmergencyGpsBypassed, logs, todayStr]);
+
   return (
     <div
       style={{
@@ -438,7 +614,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               </span>
             </div>
             <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94A3B8' }}>
-              원천 데이터베이스 조회, 백엔드 클라우드 연동 및 시스템 자격 증명 관리
+              원천 데이터베이스 조회, 현장 장애 진단 및 시스템 자격 증명 관리
             </p>
           </div>
 
@@ -514,11 +690,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
           </div>
         )}
 
-        {/* Top 3-Tab Bar */}
+        {/* 4-Tab Bar */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateColumns: 'repeat(4, 1fr)',
             gap: '4px',
             background: 'rgba(15, 23, 42, 0.6)',
             padding: '4px',
@@ -535,15 +711,33 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               color: activeTab === 'AUDIT_LOGS' ? '#FFFFFF' : '#94A3B8',
               border: 'none',
               borderRadius: '6px',
-              padding: '8px 12px',
-              fontSize: '13px',
+              padding: '8px 6px',
+              fontSize: '12.5px',
               fontWeight: activeTab === 'AUDIT_LOGS' ? 600 : 400,
               cursor: 'pointer',
               minHeight: '38px',
-              transition: 'background 0.15s ease, color 0.15s ease',
+              textAlign: 'center',
             }}
           >
-            원천 감사 로그
+            원천 로그
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('DIAGNOSTICS')}
+            style={{
+              background: activeTab === 'DIAGNOSTICS' ? '#334155' : 'transparent',
+              color: activeTab === 'DIAGNOSTICS' ? '#FFFFFF' : '#94A3B8',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '8px 6px',
+              fontSize: '12.5px',
+              fontWeight: activeTab === 'DIAGNOSTICS' ? 600 : 400,
+              cursor: 'pointer',
+              minHeight: '38px',
+              textAlign: 'center',
+            }}
+          >
+            현장 진단
           </button>
           <button
             type="button"
@@ -553,15 +747,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               color: activeTab === 'CLOUD_INTEGRATION' ? '#FFFFFF' : '#94A3B8',
               border: 'none',
               borderRadius: '6px',
-              padding: '8px 12px',
-              fontSize: '13px',
+              padding: '8px 6px',
+              fontSize: '12.5px',
               fontWeight: activeTab === 'CLOUD_INTEGRATION' ? 600 : 400,
               cursor: 'pointer',
               minHeight: '38px',
-              transition: 'background 0.15s ease, color 0.15s ease',
+              textAlign: 'center',
             }}
           >
-            클라우드 연동 및 진단
+            클라우드
           </button>
           <button
             type="button"
@@ -571,12 +765,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               color: activeTab === 'SECURITY' ? '#FFFFFF' : '#94A3B8',
               border: 'none',
               borderRadius: '6px',
-              padding: '8px 12px',
-              fontSize: '13px',
+              padding: '8px 6px',
+              fontSize: '12.5px',
               fontWeight: activeTab === 'SECURITY' ? 600 : 400,
               cursor: 'pointer',
               minHeight: '38px',
-              transition: 'background 0.15s ease, color 0.15s ease',
+              textAlign: 'center',
             }}
           >
             보안 설정
@@ -588,15 +782,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
         {/* ================================================================ */}
         {activeTab === 'AUDIT_LOGS' && (
           <div>
-            {/* 1. Sub-tab Selector */}
-            <div
-              style={{
-                display: 'flex',
-                gap: '8px',
-                flexWrap: 'wrap',
-                marginBottom: '12px',
-              }}
-            >
+            {/* Sub-tab Selector */}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
               {[
                 { id: 'ATTENDANCE', label: `출결 로그 (${logs.length})` },
                 { id: 'COMMENTS', label: `댓글 이력 (${comments.length})` },
@@ -624,7 +811,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               ))}
             </div>
 
-            {/* 2. Grid Control Toolbar (Search & Time Series Range) */}
+            {/* Grid Control Toolbar (Search & Time Series Range) */}
             <div
               style={{
                 background: 'rgba(15, 23, 42, 0.75)',
@@ -639,7 +826,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 justifyContent: 'space-between',
               }}
             >
-              {/* Search Bar */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 240px' }}>
                 <input
                   type="text"
@@ -675,7 +861,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 )}
               </div>
 
-              {/* Time Range Preset Bar */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
                 {[
                   { id: 'ALL', label: '전체' },
@@ -704,7 +889,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 ))}
               </div>
 
-              {/* Custom Date Range Picker */}
               {timeRangePreset === 'CUSTOM' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', marginTop: '4px' }}>
                   <input
@@ -738,7 +922,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               )}
             </div>
 
-            {/* 3. Database / Excel Table View */}
+            {/* Table View */}
             <div
               style={{
                 background: 'rgba(15, 23, 42, 0.8)',
@@ -990,11 +1174,312 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
         )}
 
         {/* ================================================================ */}
-        {/* TAB 2: CLOUD INTEGRATION & DIAGNOSTICS (Doctor & Recovery)        */}
+        {/* TAB 2: FIELD DIAGNOSTICS & HOTFIX OVERRIDES (Doctor)             */}
+        {/* ================================================================ */}
+        {activeTab === 'DIAGNOSTICS' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Card 1: Emergency GPS Bypass Switchboard */}
+            <div
+              style={{
+                background: 'rgba(15, 23, 42, 0.85)',
+                border: isEmergencyGpsBypassed
+                  ? '1px solid rgba(245, 158, 11, 0.5)'
+                  : '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '12px',
+                padding: '16px 20px',
+                boxShadow: isEmergencyGpsBypassed ? '0 0 16px rgba(245, 158, 11, 0.15)' : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#FFFFFF' }}>
+                    한시적 GPS 위치 인증 면제 (Emergency GPS Bypass)
+                  </h3>
+                  <span
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      background: isEmergencyGpsBypassed ? '#f59e0b' : '#334155',
+                      color: isEmergencyGpsBypassed ? '#0f172a' : '#94a3b8',
+                    }}
+                  >
+                    {isEmergencyGpsBypassed ? '비상 모드 가동 중' : '정상 운영 (100m 검증)'}
+                  </span>
+                </div>
+              </div>
+
+              <p style={{ margin: '0 0 12px', fontSize: '12.5px', color: '#94A3B8', lineHeight: 1.5 }}>
+                지하 연습실, 우천 시 GPS 위치 인식이 튀거나 단원들의 브라우저 권한 문제로 출석 실패가 속출할 때 켜두세요.
+                활성화 시 <strong>위치 오차나 반경 밖 여부와 관계없이 모든 단원의 QR/PIN 출석이 즉시 승인</strong>됩니다.
+                {isEmergencyGpsBypassed && emergencyGpsBypassUntil && (
+                  <span style={{ display: 'block', marginTop: '4px', color: '#fbbf24', fontWeight: 500 }}>
+                    면제 만료 예정: {emergencyGpsBypassUntil.replace('T', ' ').slice(0, 19)} (KST)
+                  </span>
+                )}
+              </p>
+
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => handleToggleEmergencyGpsBypass(60)}
+                  disabled={isProcessing}
+                  style={{
+                    background: '#d97706',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 14px',
+                    fontSize: '12.5px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    minHeight: '36px',
+                  }}
+                >
+                  1시간 동안 GPS 면제 켜기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleEmergencyGpsBypass(120)}
+                  disabled={isProcessing}
+                  style={{
+                    background: '#b45309',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 14px',
+                    fontSize: '12.5px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    minHeight: '36px',
+                  }}
+                >
+                  2시간 동안 GPS 면제 켜기
+                </button>
+                {isEmergencyGpsBypassed && (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleEmergencyGpsBypass(0)}
+                    disabled={isProcessing}
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.2)',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      color: '#F87171',
+                      borderRadius: '6px',
+                      padding: '8px 14px',
+                      fontSize: '12.5px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      minHeight: '36px',
+                    }}
+                  >
+                    즉시 정상 복원 (면제 끄기)
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Card 2: Member Trouble Doctor (단원별 출결/접속 불량 종합 진단기) */}
+            <div
+              style={{
+                background: 'rgba(15, 23, 42, 0.85)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '12px',
+                padding: '16px 20px',
+              }}
+            >
+              <h3 style={{ margin: '0 0 6px', fontSize: '15px', fontWeight: 600, color: '#FFFFFF' }}>
+                단원 출결 및 접속 불량 진단기 (Member Trouble Doctor)
+              </h3>
+              <p style={{ margin: '0 0 14px', fontSize: '12.5px', color: '#94A3B8' }}>
+                현장에서 "출석이 안 돼요", "화면이 안 떠요"라고 호소하는 단원의 이름을 검색해 <strong>정확한 원인과 처방</strong>을 즉시 확인합니다.
+              </p>
+
+              {/* Member Search & Selector */}
+              <div style={{ marginBottom: '14px' }}>
+                <input
+                  type="text"
+                  placeholder="진단할 단원명 또는 파트 검색 (예: 이재현, 베이스)"
+                  value={diagMemberSearch}
+                  onChange={(e) => setDiagMemberSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    color: '#FFFFFF',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    marginBottom: '8px',
+                  }}
+                />
+
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {searchedDiagMembers.map((m) => {
+                    const isSelected = m.id === selectedMemberIdForDiag;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setSelectedMemberIdForDiag(m.id)}
+                        style={{
+                          background: isSelected ? '#282C48' : 'rgba(255, 255, 255, 0.05)',
+                          color: isSelected ? '#FFFFFF' : '#CBD5E1',
+                          border: isSelected ? '1px solid #818CF8' : '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: '6px',
+                          padding: '5px 10px',
+                          fontSize: '12px',
+                          fontWeight: isSelected ? 600 : 400,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {m.name} ({m.part})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Diagnosis Output Card */}
+              {diagTargetMember && memberDiagnosis ? (
+                <div
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    padding: '14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF' }}>
+                        {diagTargetMember.name} 단원 진단 결과
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#94A3B8' }}>
+                        {diagTargetMember.part} · {diagTargetMember.phoneLast4 ? `끝4자리 ${diagTargetMember.phoneLast4}` : '연락처 미등록'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Checklist */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+                    {memberDiagnosis.map((item, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '10px',
+                          background:
+                            item.type === 'ERROR'
+                              ? 'rgba(239, 68, 68, 0.1)'
+                              : item.type === 'WARNING'
+                              ? 'rgba(245, 158, 11, 0.08)'
+                              : 'rgba(16, 185, 129, 0.08)',
+                          border:
+                            item.type === 'ERROR'
+                              ? '1px solid rgba(239, 68, 68, 0.25)'
+                              : item.type === 'WARNING'
+                              ? '1px solid rgba(245, 158, 11, 0.2)'
+                              : '1px solid rgba(16, 185, 129, 0.2)',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                        }}
+                      >
+                        <span style={{ fontSize: '13px', marginTop: '1px' }}>
+                          {item.type === 'ERROR' ? '🔴' : item.type === 'WARNING' ? '🟡' : '🟢'}
+                        </span>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: '#F8FAFC' }}>
+                            {item.title}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px', lineHeight: 1.4 }}>
+                            {item.desc}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Action Prescriptions */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '12px' }}>
+                    {diagTargetMember.boundDeviceId && (
+                      <button
+                        type="button"
+                        onClick={() => handleEmergencyUnbindDevice(diagTargetMember.id, diagTargetMember.name)}
+                        disabled={isProcessing}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          color: '#F87171',
+                          borderRadius: '6px',
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        기기 바인딩 즉시 해제 (기기 교체 허용)
+                      </button>
+                    )}
+
+                    {activeTodaySchedule && (
+                      <button
+                        type="button"
+                        onClick={() => handleManualApproveAttendance(diagTargetMember, activeTodaySchedule)}
+                        disabled={isProcessing}
+                        style={{
+                          background: '#282C48',
+                          color: '#FFFFFF',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '6px',
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        오늘 세션 수동 출석 인정
+                      </button>
+                    )}
+
+                    {!isEmergencyGpsBypassed && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleEmergencyGpsBypass(60)}
+                        disabled={isProcessing}
+                        style={{
+                          background: '#d97706',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        GPS 면제 모드 1시간 켜기
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '24px', color: '#64748B', fontSize: '13px' }}>
+                  위 목록에서 진단할 단원을 클릭하거나 검색하세요.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================ */}
+        {/* TAB 3: CLOUD & SHEETS INTEGRATION (Supabase & GAS Webhook)        */}
         {/* ================================================================ */}
         {activeTab === 'CLOUD_INTEGRATION' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Diagnostic Doctor Overview Card */}
+            {/* System Status Overview */}
             <div
               style={{
                 background: 'rgba(15, 23, 42, 0.8)',
@@ -1004,15 +1489,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               }}
             >
               <h3 style={{ margin: '0 0 6px', fontSize: '15px', fontWeight: 600, color: '#FFFFFF' }}>
-                시스템 상태 진단 (System Doctor)
+                클라우드 파이프라인 상태
               </h3>
               <p style={{ margin: '0 0 14px', fontSize: '12.5px', color: '#94A3B8' }}>
-                현장에서 앱 이상 현상이나 출결 동기화 지연 발생 시 실시간 통신 파이프라인과 데이터 정합성을 진단합니다.
+                Supabase 실시간 WebSocket 및 원격 스토리지 동기화 상태를 확인합니다.
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
                 <div style={{ background: 'rgba(0, 0, 0, 0.25)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                  <div style={{ fontSize: '11.5px', color: '#94A3B8', marginBottom: '4px' }}>Supabase Realtime 통신</div>
+                  <div style={{ fontSize: '11.5px', color: '#94A3B8', marginBottom: '4px' }}>Supabase Realtime</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: realtimeConnected ? '#10B981' : '#EF4444' }} />
                     <span style={{ fontSize: '13px', fontWeight: 600, color: realtimeConnected ? '#34D399' : '#F87171' }}>
@@ -1029,7 +1514,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 </div>
 
                 <div style={{ background: 'rgba(0, 0, 0, 0.25)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                  <div style={{ fontSize: '11.5px', color: '#94A3B8', marginBottom: '4px' }}>적재된 원천 로그 건수</div>
+                  <div style={{ fontSize: '11.5px', color: '#94A3B8', marginBottom: '4px' }}>원천 로그 건수</div>
                   <div style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF' }}>
                     출결 {logs.length}건 · 댓글 {comments.length}건
                   </div>
@@ -1092,7 +1577,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* Card 2: Google Sheets Webhook URL */}
+            {/* Google Sheets Webhook URL */}
             <div
               style={{
                 background: 'rgba(15, 23, 42, 0.8)',
@@ -1148,7 +1633,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
         )}
 
         {/* ================================================================ */}
-        {/* TAB 3: SECURITY CREDENTIALS (Compact Width & Eye Toggle)          */}
+        {/* TAB 4: SECURITY CREDENTIALS (Compact Width & Eye Toggle)          */}
         {/* ================================================================ */}
         {activeTab === 'SECURITY' && (
           <div style={{ maxWidth: '520px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>

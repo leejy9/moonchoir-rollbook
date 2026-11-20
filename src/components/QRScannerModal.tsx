@@ -76,40 +76,51 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const radiusMeters = locInfo.radiusMeters;
     const venueName = locInfo.locationName;
 
+    const isEmergencyGpsBypassed = sheetsService.isEmergencyGpsBypassed();
+
     try {
-      setGeoStatus('현재 위치(GPS) 정밀 측정 중...');
+      setGeoStatus(isEmergencyGpsBypassed ? '위치 측정 중 (비상 GPS 면제 활성)' : '현재 위치(GPS) 정밀 측정 중...');
       const position = await acquirePosition();
 
       lat = position.latitude;
       lon = position.longitude;
       accuracyMeters = position.accuracyMeters;
       distanceMeters = calculateDistanceMeters(lat, lon, targetLat, targetLon);
-      isVerifiedLocation = isWithinRadius(lat, lon, targetLat, targetLon, radiusMeters);
+      isVerifiedLocation = isWithinRadius(lat, lon, targetLat, targetLon, radiusMeters) || isEmergencyGpsBypassed;
       setGeoStatus(
-        position.usedFallback
+        isEmergencyGpsBypassed
+          ? '위치 확인됨 (비상 GPS 면제 적용)'
+          : position.usedFallback
           ? `위치 확인됨 (저정밀${formatAccuracySuffix(accuracyMeters)})`
           : `위치 확인됨${formatAccuracySuffix(accuracyMeters)}`
       );
     } catch (error) {
-      console.warn('[Geo] Failed to fetch GPS coordinates', error);
-      setGeoStatus('위치(GPS)를 확인하지 못했습니다');
-      setNeedsExternalBrowserHint(true);
-      setIsProcessing(false);
-      setScanResult({
-        success: false,
-        distance: undefined,
-        isVerified: false,
-        msg: error instanceof GeoAcquireError ? error.message : describeGeoFailure('UNKNOWN'),
-      });
-      return;
+      if (isEmergencyGpsBypassed) {
+        console.warn('[Geo] GPS failed but emergency bypass is active, granting attendance');
+        isVerifiedLocation = true;
+        setGeoStatus('위치 확인 생략 (비상 GPS 면제 적용)');
+      } else {
+        console.warn('[Geo] Failed to fetch GPS coordinates', error);
+        setGeoStatus('위치(GPS)를 확인하지 못했습니다');
+        setNeedsExternalBrowserHint(true);
+        setIsProcessing(false);
+        setScanResult({
+          success: false,
+          distance: undefined,
+          isVerified: false,
+          msg: error instanceof GeoAcquireError ? error.message : describeGeoFailure('UNKNOWN'),
+        });
+        return;
+      }
     }
 
-    // Strict boundary check for both QR and PIN to prevent remote check-in
-    if (!isVerifiedLocation) {
+    // Strict boundary check for both QR and PIN (skipped when emergency bypass is active)
+    if (!isVerifiedLocation && !isEmergencyGpsBypassed) {
       setIsProcessing(false);
-      const distFormatted = distanceMeters >= 1000
-        ? `${(distanceMeters / 1000).toFixed(1)}km`
-        : `${distanceMeters}m`;
+      const distNum = distanceMeters ?? 0;
+      const distFormatted = distNum >= 1000
+        ? `${(distNum / 1000).toFixed(1)}km`
+        : `${distNum}m`;
       const accuracyNote = accuracyMeters === undefined ? '' : `, 측정 오차 약 ±${accuracyMeters}m`;
 
       if (authMethod === 'MANUAL_PIN') {
@@ -137,6 +148,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       longitude: lon,
       distanceMeters,
       isVerifiedLocation: true,
+      adminNote: isEmergencyGpsBypassed ? '비상 GPS 면제 출석' : undefined,
       deviceId: getOrCreateDeviceId(),
     };
 

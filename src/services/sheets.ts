@@ -1344,6 +1344,24 @@ export class SheetsService {
     };
   }
 
+  // --- Field Emergency Controls (GPS Bypass) ---
+  public isEmergencyGpsBypassed(): boolean {
+    const until = this.config.emergencyGpsBypassUntil;
+    if (!until) return false;
+    return new Date().toISOString() < until;
+  }
+
+  public async setEmergencyGpsBypass(durationMinutes: number): Promise<string> {
+    if (durationMinutes <= 0) {
+      await this.saveConfigConfirmed({ emergencyGpsBypassUntil: '' });
+      return '';
+    }
+    const untilDate = new Date(Date.now() + durationMinutes * 60 * 1000);
+    const untilIso = untilDate.toISOString();
+    await this.saveConfigConfirmed({ emergencyGpsBypassUntil: untilIso });
+    return untilIso;
+  }
+
   // --- Taxonomy & Categories Dynamic Management ---
   public getParts(): string[] {
     return this.config.customParts && this.config.customParts.length > 0

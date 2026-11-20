@@ -301,6 +301,7 @@ export interface AppConfig {
   qrPrintTitle?: string;
   qrPrintSubtitle?: string;
   qrPrintNotice?: string;
+  emergencyGpsBypassUntil?: string; // ISO 8601 timestamp until which GPS boundary check is bypassed
 }
 
 /**
