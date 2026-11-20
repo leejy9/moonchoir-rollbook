@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildRsvpTally } from './rsvpTally';
-import type { Member, RSVPVote } from '../types/rollbook';
+import { buildRsvpTally, countCheckedIn } from './rsvpTally';
+import type { AttendanceReconciliation, Member, RSVPVote } from '../types/rollbook';
 
 const member = (id: string): Member =>
   ({ id, name: id, part: '소프라노', phoneLast4: '0000', role: 'MEMBER', createdAt: '', status: 'ACTIVE' }) as Member;
@@ -71,3 +71,71 @@ describe('buildRsvpTally', () => {
     expect(tally.onSiteAttendees).toHaveLength(0);
   });
 });
+
+describe('countCheckedIn Pure Function', () => {
+  const rec = (
+    memberId: string,
+    finalStatus: AttendanceReconciliation['finalStatus'],
+    partial?: Partial<AttendanceReconciliation>
+  ): AttendanceReconciliation => ({
+    memberId,
+    memberName: memberId,
+    part: '소프라노',
+    rsvpStatus: 'UNVOTED',
+    finalStatus,
+    isManualOverride: false,
+    ...partial,
+  });
+
+  it('출석·지각·운영진(수동) 인정 상태인 단원 수를 정확히 센다', () => {
+    const list: AttendanceReconciliation[] = [
+      rec('m1', '출석'),
+      rec('m2', '지각'),
+      rec('m3', '수동인정'),
+      rec('m4', '결석'),
+      rec('m5', '사유결석'),
+      rec('m6', '미참'),
+    ];
+
+    expect(countCheckedIn(list, [])).toBe(3);
+  });
+
+  it('출결이 취소된(isAttendanceCleared) 기록은 집계에서 제외한다', () => {
+    const list: AttendanceReconciliation[] = [
+      rec('m1', '출석'),
+      rec('m2', '출석', { isAttendanceCleared: true }),
+    ];
+
+    expect(countCheckedIn(list, [])).toBe(1);
+  });
+
+  it('병합된 단원 ID 2개가 같은 사람이면 1명으로 센다', () => {
+    const memberA = member('mem_a');
+    const memberB: Member = { ...member('mem_b'), mergedIntoId: 'mem_a' };
+
+    // mem_a와 mem_b 둘 다 출석으로 기록되어 있어도 대표 1명으로 집계
+    const list: AttendanceReconciliation[] = [
+      rec('mem_a', '출석'),
+      rec('mem_b', '출석'),
+      rec('mem_c', '지각'),
+    ];
+
+    const count = countCheckedIn(list, [memberA, memberB, member('mem_c')]);
+    expect(count).toBe(2); // (mem_a + mem_b) -> 1명, mem_c -> 1명 => 총 2명
+  });
+
+  it('체인 병합 (C -> B -> A) 구조에서도 최상위 대표 1명으로 센다', () => {
+    const memberA = member('mem_a');
+    const memberB: Member = { ...member('mem_b'), mergedIntoId: 'mem_a' };
+    const memberC: Member = { ...member('mem_c'), mergedIntoId: 'mem_b' };
+
+    const list: AttendanceReconciliation[] = [
+      rec('mem_b', '출석'),
+      rec('mem_c', '수동인정'),
+    ];
+
+    const count = countCheckedIn(list, [memberA, memberB, memberC]);
+    expect(count).toBe(1);
+  });
+});
+

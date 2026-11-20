@@ -32,24 +32,24 @@
 | 순서 | 티켓 ID | 한 줄 설명 | 고칠 파일 | 선행 티켓 | 사용자 확인 필요 | 상태 |
 | :---: | :---: | :--- | :--- | :---: | :---: | :---: |
 | **[Phase 1]** | | **셸, 오늘, 일정 (브랜치: `feat/member-ux-phase1`)** | | | | |
-| 1 | `P1-01` | 출석 창·투표 마감 시간을 KST로 고정하고 60분 상수 통합 | `src/utils/timeWindow.ts`, `src/utils/timeWindow.test.ts` | 없음 | 아니오 | 대기 |
-| 2 | `P1-02` | 해시 라우팅 순수 함수(`parseRoute`, `formatRoute`, `navReducer`) 구현 | `src/utils/route.ts`(신규), `src/utils/route.test.ts`(신규) | P1-01 | 아니오 | 대기 |
-| 3 | `P1-03` | 오늘 집중 일정 선택을 순수 함수로 추출 (`selectTodayFocus`) | `src/utils/todayFocus.ts`(신규), `src/utils/todayFocus.test.ts`(신규), `src/components/HomeView.tsx` | P1-01 | 아니오 | 대기 |
-| 4 | `P1-04` | CTA 상태 판정 순수 함수 구현 (`deriveTodayCta`) | `src/utils/todayCta.ts`(신규), `src/utils/todayCta.test.ts`(신규) | P1-01 | 판정 매핑 확인 | 대기 |
-| 5 | `P1-05` | 지도 링크, D-Day, 출석 인원 집계 등 순수 함수 묶음 | `src/utils/kakaoMaps.ts`, `src/utils/date.ts`, `src/utils/rsvpTally.ts`, `src/utils/calendar.ts` 및 각 `.test.ts` | P1-01 | 아니오 | 대기 |
-| 6 | `P1-06` | 앱 셸, 헤더(`AppHeader`), 하단 탭(`BottomNav`), 라우팅 연결 | `src/App.tsx`, `src/components/AppHeader.tsx`(신규), `src/components/BottomNav.tsx`(신규), `src/hooks/useMasterEntryGesture.ts`(신규), `src/hooks/useHashRoute.ts`(신규), `src/components/HomeView.tsx`, `src/index.css` | P1-02, P1-05 | 아니오 | 대기 |
-| 7 | `P1-07` | 오늘 탭(`TodayTab`) 구현 및 카드 경량화 | `src/components/TodayTab.tsx`(신규), `src/components/home/HomeActiveScheduleCard.tsx`, `src/components/TodayTab.test.tsx` | P1-03, P1-04, P1-06 | 뷰포트 확인 | 대기 |
-| 8 | `P1-08` | 일정 상세 바텀시트(`ScheduleDetailSheet`, `ScheduleDetailBody`) | `src/components/ScheduleDetailSheet.tsx`(신규), `src/components/ScheduleDetailBody.tsx`(신규) 및 테스트 | P1-06 | 아니오 | 대기 |
-| 9 | `P1-09` | 일정 탭(`CalendarTab`) 구현 및 기존 `CalendarView.tsx` 폐기 | `src/components/MonthCalendarGrid.tsx`(승격), `src/components/CalendarTab.tsx`(신규), `src/components/CalendarView.tsx`(삭제), `src/App.tsx` 등 | P1-08 | 아니오 | 대기 |
-| 10 | `P1-10` | QR 대상 일정 명시(`scheduleId`) 및 RSVP `alert()` 인라인화 | `src/App.tsx`, `src/components/RSVPModal.tsx` | P1-07 | 아니오 | 대기 |
-| 11 | `P1-11` | Supabase 백그라운드 새로고침 비용 최적화 (실시간 중 5분) | `src/App.tsx`, `src/services/realtime/supabaseRealtime.ts` | P1-06 | **질문 필수** (A/B 선택) | 대기 |
-| 12 | `P1-12` | Phase 1 문서 갱신 | `docs/ARCHITECTURE_RECOVERY.md`, `docs/tasks.md`, `docs/DEV_LOG.md` | P1-01~11 | 아니오 | 대기 |
+| 1 | `P1-01` | 출석 창·투표 마감 시간을 KST로 고정하고 60분 상수 통합 | `src/utils/timeWindow.ts`, `src/utils/timeWindow.test.ts` | 없음 | 아니오 | 완료 (04f5c99) |
+| 2 | `P1-02` | 해시 라우팅 순수 함수(`parseRoute`, `formatRoute`, `navReducer`) 구현 | `src/utils/route.ts`(신규), `src/utils/route.test.ts`(신규) | P1-01 | 아니오 | 완료 (862d227) |
+| 3 | `P1-03` | 오늘 집중 일정 선택을 순수 함수로 추출 (`selectTodayFocus`) | `src/utils/todayFocus.ts`(신규), `src/utils/todayFocus.test.ts`(신규), `src/components/HomeView.tsx` | P1-01 | 아니오 | 완료 (da19229) |
+| 4 | `P1-04` | CTA 상태 판정 순수 함수 구현 (`deriveTodayCta`) | `src/utils/todayCta.ts`(신규), `src/utils/todayCta.test.ts`(신규) | P1-01 | 판정 매핑 확인 | 완료 (95fd72b) |
+| 5 | `P1-05` | 지도 링크, D-Day, 출석 인원 집계 등 순수 함수 묶음 | `src/utils/kakaoMaps.ts`, `src/utils/date.ts`, `src/utils/rsvpTally.ts`, `src/utils/calendar.ts` 및 각 `.test.ts` | P1-01 | 아니오 | 완료 (f4f92af) |
+| 6 | `P1-06` | 앱 셸, 헤더(`AppHeader`), 하단 탭(`BottomNav`), 라우팅 연결 | `src/App.tsx`, `src/components/AppHeader.tsx`(신규), `src/components/BottomNav.tsx`(신규), `src/hooks/useMasterEntryGesture.ts`(신규), `src/hooks/useHashRoute.ts`(신규), `src/components/HomeView.tsx`, `src/index.css` | P1-02, P1-05 | 아니오 | 완료 (110398f) |
+| 7 | `P1-07` | 오늘 탭(`TodayTab`) 구현 및 카드 경량화 | `src/components/TodayTab.tsx`(신규), `src/components/home/HomeActiveScheduleCard.tsx`, `src/components/TodayTab.test.tsx` | P1-03, P1-04, P1-06 | 뷰포트 확인 | 완료 (84a1ee7) |
+| 8 | `P1-08` | 일정 상세 바텀시트(`ScheduleDetailSheet`, `ScheduleDetailBody`) | `src/components/ScheduleDetailSheet.tsx`(신규), `src/components/ScheduleDetailBody.tsx`(신규) 및 테스트 | P1-06 | 아니오 | 완료 (e7133c1) |
+| 9 | `P1-09` | 일정 탭(`CalendarTab`) 구현 및 기존 `CalendarView.tsx` 폐기 | `src/components/MonthCalendarGrid.tsx`(승격), `src/components/CalendarTab.tsx`(신규), `src/components/CalendarView.tsx`(삭제), `src/App.tsx` 등 | P1-08 | 아니오 | 완료 (1c1156c) |
+| 10 | `P1-10` | QR 대상 일정 명시(`scheduleId`) 및 RSVP `alert()` 인라인화 | `src/App.tsx`, `src/components/RSVPModal.tsx` | P1-07 | 아니오 | 완료 (877cfc4) |
+| 11 | `P1-11` | Supabase 백그라운드 새로고침 비용 최적화 (실시간 중 5분) | `src/App.tsx`, `src/services/realtime/supabaseRealtime.ts` | P1-06 | **질문 필수** (A/B 선택) | 완료 (aa4104b) |
+| 12 | `P1-12` | Phase 1 문서 갱신 | `docs/ARCHITECTURE_RECOVERY.md`, `docs/tasks.md`, `docs/DEV_LOG.md` | P1-01~11 | 아니오 | 완료 (44e119c) |
 | **[Phase 2a]** | | **연습곡 데이터 (브랜치: `feat/practice-catalog-phase2a`)** | | | | |
-| 13 | `P2a-01` | 연습곡 및 트랙 도메인 타입 정의 | `src/types/rollbook.ts`, `src/types/schema.test.ts` | P1 완료 (또는 main) | 아니오 | 대기 |
-| 14 | `P2a-02` | 마이그레이션 SQL 및 검증 스크립트 작성 | `supabase/migrations/20261122000000_practice_catalog.sql`(신규), `supabase/tests/practice_catalog_check.sql`(신규) | P2a-01 | **사용자 적용 필수** | 대기 |
-| 15 | `P2a-03` | Supabase 백엔드 매핑, 카탈로그 파서, 재생 방식 판정 | `src/services/backend/supabaseBackend.ts`, `src/services/sheetsParser.ts`, `src/utils/practiceMedia.ts`(신규) 및 테스트 | P2a-01 | 아니오 | 대기 |
-| 16 | `P2a-04` | `SheetsService` 카탈로그 조회 및 편집 메서드 추가 | `src/services/sheets.ts`, `src/services/sheetsStorage.ts`, `src/services/sheets.test.ts` | P2a-03 | 아니오 | 대기 |
-| 17 | `P2a-05` | 관리자 화면 연습곡 관리 탭(`AdminPracticeTab`) 신설 | `src/components/admin/AdminPracticeTab.tsx`(신규), `src/components/AdminDashboard.tsx` | P2a-04 | 아니오 | 대기 |
+| 13 | `P2a-01` | 연습곡 및 트랙 도메인 타입 정의 | `src/types/rollbook.ts`, `src/types/schema.test.ts` | P1 완료 (또는 main) | 아니오 | 완료 (1997df6) |
+| 14 | `P2a-02` | 마이그레이션 SQL 및 검증 스크립트 작성 | `supabase/migrations/20261122000000_practice_catalog.sql`(신규), `supabase/tests/practice_catalog_check.sql`(신규) | P2a-01 | **사용자 적용 필수** | 완료 (19312bc) |
+| 15 | `P2a-03` | Supabase 백엔드 매핑, 카탈로그 파서, 재생 방식 판정 | `src/services/backend/supabaseBackend.ts`, `src/services/sheetsParser.ts`, `src/utils/practiceMedia.ts`(신규) 및 테스트 | P2a-01 | 아니오 | 완료 (e0efd46) |
+| 16 | `P2a-04` | `SheetsService` 카탈로그 조회 및 편집 메서드 추가 | `src/services/sheets.ts`, `src/services/sheetsStorage.ts`, `src/services/sheets.test.ts` | P2a-03 | 아니오 | 완료 (ade7900) |
+| 17 | `P2a-05` | 관리자 화면 연습곡 관리 탭(`AdminPracticeTab`) 신설 | `src/components/admin/AdminPracticeTab.tsx`(신규), `src/components/AdminDashboard.tsx` | P2a-04 | 아니오 | 완료 (6dc1986) |
 | **[Phase 3]** | | **내 활동 (브랜치: `feat/member-profile-phase3`)** | | | | |
 | 18 | `P3-01` | 회차별 출결 기록 조립 순수 함수 추출 (`buildMemberScheduleRecords`) | `src/utils/memberRecords.ts`(신규) 및 테스트, `src/components/MemberPortalModal.tsx` | P1-06 | 아니오 | 대기 |
 | 19 | `P3-02` | 운영진 판정 하드코딩 제거 및 `isStaffMember()` 구현 | `src/utils/staff.ts`(신규) 및 테스트, `src/components/TodayTab.tsx`, `src/components/MemberPortalModal.tsx` | P3-01 | **질문 필수** (판정 기준) | 대기 |

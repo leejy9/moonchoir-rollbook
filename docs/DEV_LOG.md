@@ -21,6 +21,7 @@
 14. [2026-11-08: 외부 카메라 QR 딥링크·푸시 알림 검토 및 네이티브 앱 전환 판단](#2026-11-08-외부-카메라-qr-딥링크푸시-알림-검토-및-네이티브-앱-전환-판단)
 15. [2026-11-19: Phase 6 — Supabase PostgreSQL 백엔드 전면 전환, 비대상 일정 노출 방지 & 보안 이스터에그 구축](#2026-11-19-phase-6--supabase-postgresql-백엔드-전면-전환-비대상-일정-노출-방지--보안-이스터에그-구축)
 16. [2026-11-20: Phase 6.1 — Google Sheets 레거시 분리, Supabase Realtime 전 테이블 확장, 좀비 소켓 복구 & 모바일 최적화](#2026-11-20-phase-61--google-sheets-레거시-분리-supabase-realtime-전-테이블-확장-좀비-소켓-복구--모바일-최적화)
+17. [2026-11-20: Phase 6.2 — 단원 UX 개편 Phase 1 (앱 셸, 오늘 탭, 일정 상세 시트, 일정 탭)](#2026-11-20-phase-62--단원-ux-개편-phase-1-앱-셸-오늘-탭-일정-상세-시트-일정-탭)
 
 ---
 
@@ -1151,6 +1152,51 @@
   - `critic` 점수: **95/100 (PASS)**
   - 단위 테스트: **52개 파일, 352개 테스트 전원 통과 (Green Bar)**
   - 타입체크, 린트 0 errors. 프로덕션 빌드 및 GitHub Pages 배포 완료.
+
+---
+
+## 2026-11-20: Phase 6.2 — 단원 UX 개편 Phase 1 (앱 셸, 오늘 탭, 일정 상세 시트, 일정 탭)
+
+### 1. 배경 및 기획 의도
+- 기존 단원 홈 화면은 복잡한 월간 캘린더 그리드, 투표자 전체 명단, 댓글 창, 게이지가 한 화면에 길게 늘어서 있어 목요일 저녁 연습 현장에서 스마트폰으로 출석 체크를 하려면 수 차례 스크롤을 내려야 하는 불편이 존재함.
+- 출석 창(시작 60분 전)과 투표 마감 시간(시작 60분 전)의 분리 하드코딩, 기기 로컬 시간대 파싱 오류로 인한 해외 기기 시차 문제, QR 모달의 무차별 당일 첫 일정 대체 버그, 화면 전환 시 불필요한 전체 DB 재조회 등 구조적 데이터 흐름 결함을 해결함.
+- "오늘 출석 체크"에 집중하는 경량 1카드 오늘 탭(`TodayTab`), 모바일 네이티브 감각의 바텀시트(`ScheduleDetailSheet`), 월간 달력과 다가오는 일정이 통합된 일정 탭(`CalendarTab`)의 3탭 모바일 최적화 UX를 완성함.
+
+### 2. 주요 개발 및 복구 내용 (P1-01 ~ P1-12)
+- **KST 고정 및 출석/투표 윈도우 단일 상수화 (`timeWindow.ts`)**:
+  - `CHECKIN_OPEN_BEFORE_MIN = 60`, `RSVP_CUTOFF_BEFORE_MIN = 60` 통합.
+  - 날짜/시간 파싱에 `+09:00`을 강제하여 KST 기준 판정 확립, 파싱 실패 시 안전 닫힘 처리.
+- **해시 라우팅 순수 함수 & 리듀서 (`src/utils/route.ts`)**:
+  - `#/today`, `#/calendar?m=YYYY-MM`, `#/calendar?d=YYYY-MM-DD&sheet=1`, `#/profile`, `#/admin`, `#/super`.
+  - 브라우저 히스토리 스택 규칙 엄수: 탭 전환은 replace(첫 진입만 push), 시트/모달은 push, 뒤로 가기는 모달 닫기 지원.
+- **판정 엔진 순수 함수 분리**:
+  - `selectTodayFocus()`: 당일 복수 일정(파트연습 + 본연습) 중 우선순위 기반 집중 일정 자동 선택.
+  - `deriveTodayCta()`: 10개 상태(CANCELLED, RSVP_NEW, CHECKIN_OPEN, ATTENDED 등) 판별 유니언.
+  - `kakaoMaps.ts` 카카오맵 다이렉트 딥링크, `rsvpTally.ts` 실시간 출석 인원 집계.
+- **앱 셸 & 미니멀 3탭 UI**:
+  - 상단 44px 헤더(`AppHeader` - 마스터 진입 제스처 포함) 및 하단 44px 탭 바(`BottomNav`).
+  - 안티슬롭(Anti-slop) 규칙 100% 준수: UI 텍스트 내 이모지 전면 제거, 정돈된 SVG 아이콘 사용.
+- **오늘 탭(`TodayTab`) 경량화 & 뷰포트 최적화**:
+  - 상단 집중 카드 1장에 44px 당일 복수 일정 캐러셀 컨트롤, 카카오맵 링크, 확정 출석 인원 및 명확한 상태 버튼 배치.
+  - 출석 완료 후 "다시 출석 체크" 버튼 제거(불변식 준수). 긴 설명과 댓글/투표 명단은 상세 시트로 이동.
+- **일정 상세 바텀시트(`ScheduleDetailSheet`, `ScheduleDetailBody`)**:
+  - 모바일 터치 친화적 제스처 드래그 닫기(80px 임계치, Pointer Events), Esc, 닫기 버튼, 배경 탭 지원.
+  - 웹 접근성 `role="dialog"`, `aria-modal="true"`, 포커스 트래핑 및 복귀 구현.
+- **일정 탭(`CalendarTab`) 승격 & 레거시 `CalendarView.tsx` 폐기**:
+  - `HomeCalendarSection`을 `MonthCalendarGrid`로 승격하여 재사용.
+  - 하드코딩된 레거시 `CalendarView.tsx` 전면 삭제.
+  - 하단 다가오는 3개 일정 및 마감 여부 텍스트 표시.
+- **QR 대상 일정 강제 & RSVP 인라인 알림 (`RSVPModal.tsx`, `App.tsx`)**:
+  - `currentSchedule`의 "오늘 첫 일정으로 대체" 폴백 완전 제거 (`scheduleId` 명시 필수).
+  - 브라우저 `window.alert()` 차단 및 모달 내부 인라인 에러 배너 대체.
+- **Supabase 백그라운드 폴링 비용 최적화**:
+  - 실시간 웹소켓 정상 연결 중 백그라운드 풀 폴링 주기를 30초에서 5분으로 완화.
+  - 단순 탭 전환 시 원격 읽기 차단(로컬 캐시 사용).
+
+### 3. 결정론적 테스트 검증
+- **60개 테스트 파일, 447개 단위 테스트 전원 통과 (Green Bar)**.
+- `npm run typecheck`, `npm run lint`, `npm run build` 무결성 검증 완료.
+
 
 
 

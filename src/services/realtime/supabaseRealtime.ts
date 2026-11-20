@@ -27,6 +27,15 @@ export interface SupabaseRealtimeConfig {
   customWebSocketClass?: typeof WebSocket;
 }
 
+/**
+ * 실시간 WebSocket 연결 상태에 따른 백업 폴링 주기(ms)를 계산합니다.
+ * - 실시간 연결 중: 5분 (300,000ms)으로 완화하여 과도한 DB 조회 방지
+ * - 연결 끊김/재연결 중: 30초 (30,000ms) 백업 안전망 가동
+ */
+export function getBackupPollingIntervalMs(isRealtimeConnected: boolean): number {
+  return isRealtimeConnected ? 5 * 60 * 1000 : 30 * 1000;
+}
+
 export function buildSupabaseRealtimeUrl(rawUrl: string, anonKey: string): string {
   const trimmed = rawUrl.trim();
   const withoutTrailingSlash = trimmed.replace(/\/+$/, '');

@@ -72,6 +72,11 @@
   /* Timing */
   --transition-fast: 0.15s ease;
   --transition-normal: 0.22s ease;
+
+  /* Bottom navigation & chrome geometry */
+  --bottom-nav-h: 56px;
+  --mini-player-h: 0px;
+  --bottom-chrome-h: calc(var(--bottom-nav-h) + var(--mini-player-h) + env(safe-area-inset-bottom, 0px));
 }
 
 /* ==========================================================================
@@ -6484,7 +6489,7 @@ a {
 .sync-status-pill {
   position: fixed;
   left: 8px;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+  bottom: calc(var(--bottom-chrome-h) + 8px);
   z-index: 50;
   display: inline-flex;
   align-items: center;
@@ -6981,4 +6986,72 @@ a {
   justify-content: center;
   color: #334155;
 }
+
+/* ==========================================================================
+   Bottom Navigation & Member Main Container
+   ========================================================================== */
+.app-member-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--bottom-chrome-h);
+}
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  height: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background-color: var(--bg-card);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  z-index: 100;
+  box-sizing: border-box;
+}
+
+.bottom-nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 44px;
+  min-width: 44px;
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: color var(--transition-fast);
+}
+
+.bottom-nav-btn[aria-current="page"],
+.bottom-nav-btn.active {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.bottom-nav-btn[aria-current="page"]::after,
+.bottom-nav-btn.active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background-color: var(--brand-accent);
+  border-radius: 1px;
+}
+
 
