@@ -45,11 +45,11 @@
 | 11 | `P1-11` | Supabase 백그라운드 새로고침 비용 최적화 (실시간 중 5분) | `src/App.tsx`, `src/services/realtime/supabaseRealtime.ts` | P1-06 | **질문 필수** (A/B 선택) | 완료 (aa4104b) |
 | 12 | `P1-12` | Phase 1 문서 갱신 | `docs/ARCHITECTURE_RECOVERY.md`, `docs/tasks.md`, `docs/DEV_LOG.md` | P1-01~11 | 아니오 | 완료 (44e119c) |
 | **[Phase 2a]** | | **연습곡 데이터 (브랜치: `feat/practice-catalog-phase2a`)** | | | | |
-| 13 | `P2a-01` | 연습곡 및 트랙 도메인 타입 정의 | `src/types/rollbook.ts`, `src/types/schema.test.ts` | P1 완료 (또는 main) | 아니오 | 완료 (f814e5f) |
-| 14 | `P2a-02` | 마이그레이션 SQL 및 검증 스크립트 작성 | `supabase/migrations/20261122000000_practice_catalog.sql`(신규), `supabase/tests/practice_catalog_check.sql`(신규) | P2a-01 | **사용자 적용 필수** | 완료 (12fc2f9) |
-| 15 | `P2a-03` | Supabase 백엔드 매핑, 카탈로그 파서, 재생 방식 판정 | `src/services/backend/supabaseBackend.ts`, `src/services/sheetsParser.ts`, `src/utils/practiceMedia.ts`(신규) 및 테스트 | P2a-01 | 아니오 | 완료 (2753760) |
-| 16 | `P2a-04` | `SheetsService` 카탈로그 조회 및 편집 메서드 추가 | `src/services/sheets.ts`, `src/services/sheetsStorage.ts`, `src/services/sheets.test.ts` | P2a-03 | 아니오 | 완료 (b2e8149) |
-| 17 | `P2a-05` | 관리자 화면 연습곡 관리 탭(`AdminPracticeTab`) 신설 | `src/components/admin/AdminPracticeTab.tsx`(신규), `src/components/AdminDashboard.tsx` | P2a-04 | 아니오 | 대기 |
+| 13 | `P2a-01` | 연습곡 및 트랙 도메인 타입 정의 | `src/types/rollbook.ts`, `src/types/schema.test.ts` | P1 완료 (또는 main) | 아니오 | 완료 (1997df6) |
+| 14 | `P2a-02` | 마이그레이션 SQL 및 검증 스크립트 작성 | `supabase/migrations/20261122000000_practice_catalog.sql`(신규), `supabase/tests/practice_catalog_check.sql`(신규) | P2a-01 | **사용자 적용 필수** | 완료 (19312bc) |
+| 15 | `P2a-03` | Supabase 백엔드 매핑, 카탈로그 파서, 재생 방식 판정 | `src/services/backend/supabaseBackend.ts`, `src/services/sheetsParser.ts`, `src/utils/practiceMedia.ts`(신규) 및 테스트 | P2a-01 | 아니오 | 완료 (e0efd46) |
+| 16 | `P2a-04` | `SheetsService` 카탈로그 조회 및 편집 메서드 추가 | `src/services/sheets.ts`, `src/services/sheetsStorage.ts`, `src/services/sheets.test.ts` | P2a-03 | 아니오 | 완료 (ade7900) |
+| 17 | `P2a-05` | 관리자 화면 연습곡 관리 탭(`AdminPracticeTab`) 신설 | `src/components/admin/AdminPracticeTab.tsx`(신규), `src/components/AdminDashboard.tsx` | P2a-04 | 아니오 | 완료 (6dc1986) |
 | **[Phase 3]** | | **내 활동 (브랜치: `feat/member-profile-phase3`)** | | | | |
 | 18 | `P3-01` | 회차별 출결 기록 조립 순수 함수 추출 (`buildMemberScheduleRecords`) | `src/utils/memberRecords.ts`(신규) 및 테스트, `src/components/MemberPortalModal.tsx` | P1-06 | 아니오 | 대기 |
 | 19 | `P3-02` | 운영진 판정 하드코딩 제거 및 `isStaffMember()` 구현 | `src/utils/staff.ts`(신규) 및 테스트, `src/components/TodayTab.tsx`, `src/components/MemberPortalModal.tsx` | P3-01 | **질문 필수** (판정 기준) | 대기 |
