@@ -189,4 +189,37 @@ describe('StudioTab Component (MEMBER_UX_AUDIO_SPEC §3-5)', () => {
     expect(html).toContain('min-height:44px');
     expect(html).toContain('min-width:44px');
   });
+
+  describe('iOS Standalone App Notice Banner (Spec §3-4, P2b-04)', () => {
+    it('renders notice banner with Safari link when running in iOS standalone mode', () => {
+      vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15'
+      );
+      Object.defineProperty(navigator, 'standalone', { value: true, configurable: true });
+
+      const html = renderToString(
+        <AudioPlayerProvider>
+          <StudioTab />
+        </AudioPlayerProvider>
+      );
+
+      expect(html).toContain('음원은 Safari에서 들으면 화면이 꺼져도 끊기지 않아요');
+      expect(html).toContain('Safari로 열기');
+    });
+
+    it('does NOT render notice banner on Android or Desktop browsers', () => {
+      vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+        'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36'
+      );
+      Object.defineProperty(navigator, 'standalone', { value: false, configurable: true });
+
+      const html = renderToString(
+        <AudioPlayerProvider>
+          <StudioTab />
+        </AudioPlayerProvider>
+      );
+
+      expect(html).not.toContain('음원은 Safari에서 들으면 화면이 꺼져도 끊기지 않아요');
+    });
+  });
 });

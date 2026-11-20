@@ -3,6 +3,7 @@ import { sheetsService } from '../services/sheets';
 import { useAudioPlayer } from './audio/AudioPlayerProvider';
 import { buildStudioView, resolveTrackPlayback, type StudioViewSection } from '../utils/practiceMedia';
 import { buildAudioQueue } from '../utils/audioQueue';
+import { isStandaloneDisplay } from '../utils/pwaInstall';
 import type { PracticeTrack } from '../types/rollbook';
 
 export interface StudioTabProps {
@@ -54,6 +55,13 @@ export const StudioTab: React.FC<StudioTabProps> = () => {
       isCancelled = true;
     };
   }, [backendKind]);
+
+  // iOS 홈 화면(PWA) 독립 앱 감지 (MEMBER_UX_AUDIO_SPEC.md §3-4)
+  const isIosStandalone = useMemo(() => {
+    if (typeof navigator === 'undefined') return false;
+    const isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    return isIos && isStandaloneDisplay();
+  }, []);
 
   // 시즌별 곡/트랙 뷰 모델 조립 (순수 함수)
   const sections: StudioViewSection[] = useMemo(() => {
@@ -126,6 +134,51 @@ export const StudioTab: React.FC<StudioTabProps> = () => {
           시즌별 연습곡과 파트 음원을 재생하고 악보를 확인합니다.
         </p>
       </header>
+
+      {/* iOS 홈 화면 앱 안내 배너 (MEMBER_UX_AUDIO_SPEC.md §3-4) */}
+      {isIosStandalone && (
+        <aside
+          className="ios-standalone-banner"
+          role="note"
+          style={{
+            marginBottom: '16px',
+            padding: '12px 14px',
+            backgroundColor: 'var(--bg-card, #ffffff)',
+            border: '1px solid var(--border-subtle, #e2e8f0)',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+          }}
+        >
+          <div style={{ fontSize: '13px', color: 'var(--text-main, #0f172a)', lineHeight: 1.4 }}>
+            음원은 Safari에서 들으면 화면이 꺼져도 끊기지 않아요
+          </div>
+          <a
+            href={typeof window !== 'undefined' ? window.location.href : '#/studio'}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              minHeight: '44px',
+              minWidth: '44px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 12px',
+              backgroundColor: 'var(--brand-accent, #3b82f6)',
+              color: '#ffffff',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: 600,
+              textDecoration: 'none',
+              flexShrink: 0,
+            }}
+          >
+            Safari로 열기
+          </a>
+        </aside>
+      )}
 
       {isLoading && sections.length === 0 && (
         <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted, #64748b)' }}>
