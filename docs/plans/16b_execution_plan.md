@@ -51,7 +51,7 @@
 | 16 | `P2a-04` | `SheetsService` 카탈로그 조회 및 편집 메서드 추가 | `src/services/sheets.ts`, `src/services/sheetsStorage.ts`, `src/services/sheets.test.ts` | P2a-03 | 아니오 | 완료 (ade7900) |
 | 17 | `P2a-05` | 관리자 화면 연습곡 관리 탭(`AdminPracticeTab`) 신설 | `src/components/admin/AdminPracticeTab.tsx`(신규), `src/components/AdminDashboard.tsx` | P2a-04 | 아니오 | 완료 (6dc1986) |
 | **[Phase 3]** | | **내 활동 (브랜치: `feat/member-profile-phase3`)** | | | | |
-| 18 | `P3-01` | 회차별 출결 기록 조립 순수 함수 추출 (`buildMemberScheduleRecords`) | `src/utils/memberRecords.ts`(신규) 및 테스트, `src/components/MemberPortalModal.tsx` | P1-06 | 아니오 | 대기 |
+| 18 | `P3-01` | 회차별 출결 기록 조립 순수 함수 추출 (`buildMemberScheduleRecords`) | `src/utils/memberRecords.ts`(신규) 및 테스트, `src/components/MemberPortalModal.tsx` | P1-06 | 아니오 | 완료 (962b6b0) |
 | 19 | `P3-02` | 운영진 판정 하드코딩 제거 및 `isStaffMember()` 구현 | `src/utils/staff.ts`(신규) 및 테스트, `src/components/TodayTab.tsx`, `src/components/MemberPortalModal.tsx` | P3-01 | **질문 필수** (판정 기준) | 대기 |
 | 20 | `P3-03` | `MemberPortalModal` → `ProfileTab` 탭 화면 전환 | `src/components/ProfileTab.tsx`(신규), `src/components/MemberPortalModal.tsx`, `src/App.tsx`, `src/components/BottomNav.tsx` | P3-02 | 아니오 | 대기 |
 | 21 | `P3-04` | 과거 보관 일정(Archived) 출결 기록 포함 옵션 적용 | `src/components/ProfileTab.tsx`, `src/utils/memberRecords.ts` 및 테스트 | P3-03 | 아니오 | 대기 |
