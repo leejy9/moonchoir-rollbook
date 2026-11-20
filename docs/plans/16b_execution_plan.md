@@ -61,7 +61,7 @@
 | 24 | `P2b-03` | 연습실 탭(`StudioTab`) 신설 및 QR 스캔 시 일시정지 연동 | `src/components/StudioTab.tsx`(신규), `src/components/BottomNav.tsx`, `src/utils/route.ts`, `src/components/QRScannerModal.tsx` | P2b-02 | 아니오 | 완료 (0cfb942) |
 | 25 | `P2b-04` | iOS 홈 화면 PWA 독립 앱 안내 배너 | `src/components/StudioTab.tsx` | P2b-03 | 아니오 | 완료 (00df730) |
 | 26 | `P2b-05` | 운영진 음원 인코딩 및 업로드 가이드 작성 | `docs/user-guide/practice_audio_upload.md`(신규) | P2b-01 | 아니오 | 완료 (f874b3e) |
-| 27 | `P2b-06` | 실기기 13개 항목 테스트 기록표 작성 및 검수 요청 | `docs/plans/16a_studio_device_test_log.md`(신규) | P2b-04 | **사용자 테스트 필수** | 대기 |
+| 27 | `P2b-06` | 실기기 13개 항목 테스트 기록표 작성 및 검수 요청 | `docs/plans/16a_studio_device_test_log.md`(신규) | P2b-04 | **사용자 테스트 필수** | 완료 (bf7fe1b) |
 
 ---
 
