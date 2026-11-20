@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   formatRoute,
   navReducer,
@@ -23,6 +23,12 @@ export function useHashRoute(): UseHashRouteResult {
     return parseRoute(hash);
   });
 
+  const routeRef = useRef<Route>(route);
+
+  useEffect(() => {
+    routeRef.current = route;
+  }, [route]);
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
@@ -30,7 +36,9 @@ export function useHashRoute(): UseHashRouteResult {
 
     const handleHashChange = () => {
       const currentHash = window.location.hash;
-      setRoute(parseRoute(currentHash));
+      const next = parseRoute(currentHash);
+      routeRef.current = next;
+      setRoute(next);
     };
 
     window.addEventListener('hashchange', handleHashChange);
@@ -49,19 +57,36 @@ export function useHashRoute(): UseHashRouteResult {
   }, []);
 
   const navigate = useCallback((action: NavAction) => {
-    setRoute((prevRoute) => {
-      const { route: nextRoute, history: historyAction } = navReducer(prevRoute, action);
-      const nextHash = formatRoute(nextRoute);
-
-      if (typeof window !== 'undefined') {
-        if (historyAction === 'push') {
-          window.history.pushState(null, '', nextHash);
-        } else if (historyAction === 'replace') {
-          window.history.replaceState(null, '', nextHash);
-        }
+    if (action.type === 'CLOSE') {
+      if (typeof window !== 'undefined' && window.history.state?.mcOverlay === true) {
+        window.history.back();
+        return;
       }
-      return nextRoute;
-    });
+      const { route: next } = navReducer(routeRef.current, action);
+      const nextHash = formatRoute(next);
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', nextHash);
+      }
+      routeRef.current = next;
+      setRoute(next);
+      return;
+    }
+
+    const { route: next, history: historyAction } = navReducer(routeRef.current, action);
+    const nextHash = formatRoute(next);
+
+    if (typeof window !== 'undefined') {
+      if (action.type === 'OPEN') {
+        window.history.pushState({ mcOverlay: true }, '', nextHash);
+      } else if (historyAction === 'push') {
+        window.history.pushState(null, '', nextHash);
+      } else if (historyAction === 'replace') {
+        window.history.replaceState(null, '', nextHash);
+      }
+    }
+
+    routeRef.current = next;
+    setRoute(next);
   }, []);
 
   return { route, navigate };
