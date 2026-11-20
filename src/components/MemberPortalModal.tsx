@@ -8,6 +8,7 @@ import {
 } from '../utils/attendanceStats';
 import { formatShortDate, getKSTDateString } from '../utils/date';
 import { buildMemberScheduleRecords } from '../utils/memberRecords';
+import { isStaffMember } from '../utils/staff';
 import { InstallAppCard } from './InstallAppCard';
 
 interface MemberPortalModalProps {
@@ -67,17 +68,10 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     };
   }, [members, profile]);
 
+  // 운영진 모드 메뉴 노출 여부 판정 (실제 권한은 PIN 및 서버 토큰으로 검증)
   const isStaffAdmin = useMemo(() => {
-    return (
-      currentMember.role === 'ADMIN' ||
-      currentMember.memberStatus === '선생님' ||
-      currentMember.memberStatus === '운영진' ||
-      currentMember.name === '이재현' ||
-      currentMember.phoneLast4 === '2440' ||
-      profile.name === '이재현' ||
-      profile.phoneLast4 === '2440'
-    );
-  }, [currentMember, profile]);
+    return isStaffMember(currentMember, members);
+  }, [currentMember, members]);
 
   const memberPart = currentMember.part || profile.part;
   const memberName = currentMember.name || profile.name;
