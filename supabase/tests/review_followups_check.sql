@@ -41,6 +41,24 @@ begin
   r := fn_reorder_practice_tracks('{"pieceId":"test","trackIds":[]}'::jsonb);
   insert into _checks values ('C9: fn_reorder_practice_tracks requires token',
     case when r->>'code' = 'ADMIN_AUTH_REQUIRED' then 'PASS' else 'FAIL ' || r::text end);
+
+  -- C15 Token checks
+  r := fn_save_practice_track('{"pieceId":"test","label":"test"}'::jsonb);
+  insert into _checks values ('C15: fn_save_practice_track requires token',
+    case when r->>'code' = 'ADMIN_AUTH_REQUIRED' then 'PASS' else 'FAIL ' || r::text end);
+
+  r := fn_set_practice_piece_archived('{"id":"test","isArchived":true}'::jsonb);
+  insert into _checks values ('C15: fn_set_practice_piece_archived requires token',
+    case when r->>'code' = 'ADMIN_AUTH_REQUIRED' then 'PASS' else 'FAIL ' || r::text end);
+
+  r := fn_set_practice_track_archived('{"id":"test","isArchived":true}'::jsonb);
+  insert into _checks values ('C15: fn_set_practice_track_archived requires token',
+    case when r->>'code' = 'ADMIN_AUTH_REQUIRED' then 'PASS' else 'FAIL ' || r::text end);
+
+  -- C15 fn_get_practice_catalog public read check
+  r := fn_get_practice_catalog(false, null);
+  insert into _checks values ('C15: fn_get_practice_catalog public read works',
+    case when (r->>'success')::boolean = true and (r ? 'data') then 'PASS' else 'FAIL ' || r::text end);
 end
 $$;
 

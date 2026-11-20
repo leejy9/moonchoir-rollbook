@@ -244,6 +244,72 @@ describe('parsePracticeCatalog', () => {
     expect(parsed.programPieces[0].isArchived).toBe(false);
   });
 
+  it('parses camelCase-only RPC payload (C15 payload optimization)', () => {
+    const rawRpc = {
+      success: true,
+      data: {
+        pieces: [
+          {
+            id: 'piece_clean',
+            title: '순수 카멜케이스 곡',
+            composer: '작곡가',
+            arranger: '편곡자',
+            scoreUrl: 'https://example.com/clean.pdf',
+            notes: '악보 메모',
+            isArchived: false,
+            archivedAt: null,
+            createdAt: '2026-11-21T00:00:00Z',
+            updatedAt: '2026-11-21T00:00:00Z',
+          },
+        ],
+        tracks: [
+          {
+            id: 'track_clean',
+            pieceId: 'piece_clean',
+            label: '소프라노',
+            kind: '가이드',
+            source: 'r2',
+            url: 'https://media.moonchoir.workers.dev/audio/soprano.m4a',
+            storageKey: 'audio/soprano.m4a',
+            mimeType: 'audio/mp4',
+            durationSeconds: 215,
+            orderIndex: 0,
+            isArchived: false,
+            archivedAt: null,
+            createdAt: '2026-11-21T00:00:00Z',
+            updatedAt: '2026-11-21T00:00:00Z',
+          },
+        ],
+        programPieces: [
+          {
+            programId: 'card_season_1',
+            pieceId: 'piece_clean',
+            orderIndex: 0,
+            isArchived: false,
+            archivedAt: null,
+            createdAt: '2026-11-21T00:00:00Z',
+          },
+        ],
+      },
+    };
+
+    const parsed = parsePracticeCatalog(rawRpc);
+    expect(parsed.pieces).toHaveLength(1);
+    expect(parsed.pieces[0].id).toBe('piece_clean');
+    expect(parsed.pieces[0].title).toBe('순수 카멜케이스 곡');
+    expect(parsed.pieces[0].scoreUrl).toBe('https://example.com/clean.pdf');
+
+    expect(parsed.tracks).toHaveLength(1);
+    expect(parsed.tracks[0].id).toBe('track_clean');
+    expect(parsed.tracks[0].durationSeconds).toBe(215);
+    expect(parsed.tracks[0].storageKey).toBe('audio/soprano.m4a');
+    expect(parsed.tracks[0].source).toBe('r2');
+
+    expect(parsed.programPieces).toHaveLength(1);
+    expect(parsed.programPieces[0].programId).toBe('card_season_1');
+    expect(parsed.programPieces[0].pieceId).toBe('piece_clean');
+  });
+
   it('preserves rows without id by assigning orphan IDs and preserves custom kinds and sources', () => {
     const raw = {
       pieces: [{ title: '이름 없는 곡' }],
