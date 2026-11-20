@@ -131,6 +131,8 @@ export class SupabaseBackend implements RemoteBackend {
         return 'fn_delete_member';
       case 'MERGE_MEMBERS':
         return 'fn_merge_members';
+      case 'UNBIND_DEVICE':
+        return 'fn_unbind_member_device';
       case 'CREATE_SCHEDULE':
       case 'REGISTER_SCHEDULE':
         return 'fn_create_schedule';

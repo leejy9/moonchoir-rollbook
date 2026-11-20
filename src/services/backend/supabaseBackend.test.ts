@@ -84,6 +84,25 @@ describe('SupabaseBackend', () => {
     expect(result.message).toContain('지원되지 않는 작업입니다');
   });
 
+  it('maps UNBIND_DEVICE to fn_unbind_member_device with adminToken', async () => {
+    const backend = new SupabaseBackend(mockConfig);
+    setAdminToken('admin', 'tok_admin');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: '기기 바인딩이 해제되었습니다.' }), { status: 200 })
+    );
+
+    const result = await backend.callAction('UNBIND_DEVICE', { memberId: 'mem_1' });
+    expect(result.success).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://test.supabase.co/rest/v1/rpc/fn_unbind_member_device',
+      expect.objectContaining({
+        body: JSON.stringify({
+          p_payload: { memberId: 'mem_1', adminToken: 'tok_admin' },
+        }),
+      })
+    );
+  });
+
   describe('admin session tokens', () => {
     beforeEach(() => {
       clearAllAdminTokens();

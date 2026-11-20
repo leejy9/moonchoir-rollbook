@@ -59,6 +59,11 @@ begin
   r := fn_get_practice_catalog(false, null);
   insert into _checks values ('C15: fn_get_practice_catalog public read works',
     case when (r->>'success')::boolean = true and (r ? 'data') then 'PASS' else 'FAIL ' || r::text end);
+
+  -- C6 Token check
+  r := fn_unbind_member_device('{"memberId":"test"}'::jsonb);
+  insert into _checks values ('C6: fn_unbind_member_device requires token',
+    case when r->>'code' = 'ADMIN_AUTH_REQUIRED' then 'PASS' else 'FAIL ' || r::text end);
 end
 $$;
 

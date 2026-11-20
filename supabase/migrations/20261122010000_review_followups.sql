@@ -371,4 +371,40 @@ $$;
 revoke all on function fn_get_practice_catalog(boolean, text) from public;
 grant execute on function fn_get_practice_catalog(boolean, text) to anon, authenticated;
 
+-- ------------------------------------------------------------------------------
+-- C6. fn_unbind_member_device (Admin unbind member device RPC)
+-- ------------------------------------------------------------------------------
+create or replace function fn_unbind_member_device(p_payload jsonb)
+returns jsonb
+security definer
+set search_path = public, extensions
+language plpgsql as $$
+declare
+  v_member_id text;
+begin
+  if not fn_check_admin_token(p_payload->>'adminToken', 'admin') then
+    return fn_admin_auth_required();
+  end if;
+
+  v_member_id := trim(coalesce(p_payload->>'memberId', p_payload->>'member_id', ''));
+  if v_member_id = '' then
+    return jsonb_build_object('success', false, 'message', '단원 ID가 필요합니다.');
+  end if;
+
+  update members
+     set bound_device_id = '',
+         bound_device_at = '',
+         updated_at = now()
+   where id = v_member_id;
+
+  if not found then
+    return jsonb_build_object('success', false, 'message', '단원을 찾을 수 없습니다.');
+  end if;
+
+  return jsonb_build_object('success', true, 'message', '기기 바인딩이 해제되었습니다.');
+end;
+$$;
+revoke all on function fn_unbind_member_device(jsonb) from public;
+grant execute on function fn_unbind_member_device(jsonb) to anon, authenticated;
+
 notify pgrst, 'reload schema';
