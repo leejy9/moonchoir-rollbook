@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { sheetsService } from '../../services/sheets';
 import type {
@@ -173,6 +173,19 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
   // 일정별 댓글 개수(배지·회차 선택창 표시용). 화면이 다시 그려질 때마다 최신 값을 읽는다.
   const commentCounts = sheetsService.getCommentCounts();
   const [isFormDrawerOpen, setIsFormDrawerOpen] = useState(false);
+  // 현장 PIN은 공개 설정이 아니라 서버 비밀값이다. 운영진 세션 토큰으로 서버에서 읽어 온다.
+  // getAdminSecrets()가 서비스 설정을 갱신하므로, 응답이 오면 한 번 다시 그린다.
+  // (재발급 시에는 상위 컴포넌트가 다시 그리며 갱신된 설정 값을 읽는다.)
+  const [, setSecretsLoadedAt] = useState(0);
+  useEffect(() => {
+    let mounted = true;
+    void sheetsService.getAdminSecrets().then(() => {
+      if (mounted) setSecretsLoadedAt(Date.now());
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const openScheduleFormFocus = (sch: Schedule | null) => {
     setRightPanelMode('SCHEDULE_FORM');
@@ -670,7 +683,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                       borderRadius: '8px',
                     }}
                   >
-                    {sheetsService.getActiveOnSitePin()}
+                    {sheetsService.getActiveOnSitePin() || '불러오는 중'}
                   </span>
                 </div>
 

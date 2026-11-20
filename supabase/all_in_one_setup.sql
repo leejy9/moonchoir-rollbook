@@ -1,4 +1,9 @@
 -- ==============================================================================
+-- WARNING (2026-11-21): This combined script creates the ORIGINAL, UNPROTECTED functions.
+-- After running it, you MUST also run migrations/20261121000000_security_hardening.sql
+-- and then rotate the admin/super PINs to 6-8 digits (see docs/DEPLOYMENT.md section 0).
+-- ==============================================================================
+-- ==============================================================================
 -- Moonchoir Rollbook — Supabase Database Migration (00_schema_and_tables.sql)
 -- Domain Invariants: Append-Only Event Sourcing & Configurable Dynamic Taxonomy
 -- ==============================================================================

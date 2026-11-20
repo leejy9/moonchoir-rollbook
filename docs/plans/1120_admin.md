@@ -10,8 +10,8 @@
 ## 0. 한 줄 요약 & 기획 의도
 
 문콰이어 출석부의 관리자 권한을 **[1. 일반 운영진 관리자(Staff Admin)]**와 **[2. 최고 시스템 관리자(Super Admin)]**로 2단계 분리(Two-Tier RBAC)한다.  
-- **일반 운영진(PIN: `1004`, ⚙️ 톱니바퀴 진입)**: 실수로 시스템 설정을 건드리지 않도록 위험한 구글 시트 URL 입력 및 시스템 설정 탭을 제거하고, 대신 매주 연습에 필수적인 **출결 통계 대시보드(`AdminStatsTab`)를 고도화하여 전면에 배치**한다.
-- **최고 관리자(PIN: `2315`, 이스터에그 진입)**: 브랜드 로고의 **우클릭(PC) / 트리플 탭(모바일 3연타) 제스처**를 통해 미니 팝오버 메뉴 `[ 🔒 Get in ]`을 노출하고, **단원별 원천 감사 로그(출결/댓글/RSVP/접속·열람 이력 등) 조회**, **구글 시트 연동 Webhook URL 설정**, **PIN 번호(1004, 현장 PIN, 2315) 통합 관리**를 전담한다.
+- **일반 운영진(PIN: `<운영진 PIN>`, ⚙️ 톱니바퀴 진입)**: 실수로 시스템 설정을 건드리지 않도록 위험한 구글 시트 URL 입력 및 시스템 설정 탭을 제거하고, 대신 매주 연습에 필수적인 **출결 통계 대시보드(`AdminStatsTab`)를 고도화하여 전면에 배치**한다.
+- **최고 관리자(PIN: `<최고관리자 PIN>`, 이스터에그 진입)**: 브랜드 로고의 **우클릭(PC) / 트리플 탭(모바일 3연타) 제스처**를 통해 미니 팝오버 메뉴 `[ 🔒 Get in ]`을 노출하고, **단원별 원천 감사 로그(출결/댓글/RSVP/접속·열람 이력 등) 조회**, **구글 시트 연동 Webhook URL 설정**, **PIN 번호(<운영진 PIN>, 현장 PIN, <최고관리자 PIN>) 통합 관리**를 전담한다.
 
 ---
 
@@ -22,7 +22,7 @@
 | :--- | :--- | :--- | :--- |
 | **1** | **연결 기능 불일치** | `src/components/HomeView.tsx` L76~79:<br>`onLongPress: () => setShowPinResetModal(true)` | 로고를 눌렀을 때 관리자 페이지로 '들어가는' 것이 아니라 비밀번호를 바꾸는 `AdminPinResetModal`이 열렸음. |
 | **2** | **3초 롱프레스 마찰** | `src/hooks/useLongPress.ts` L10:<br>`thresholdMs = 3000` | 모바일 환경에서 3초(3,000ms)는 너무 긴 시간이며, 손가락이 1mm만 떨려도 브라우저 스크롤 이벤트로 인식되어 터치가 취소되거나 iOS Safari/Chrome의 '이미지 복사/저장' 팝업이 가로막음. |
-| **3** | **비밀번호 불일치** | Supabase DB `app_secrets`의 `adminPin` | 구글 시트에서 초기 마이그레이션된 값이 `1004`였기 때문에, 사용자가 `2315`를 입력해도 "일치하지 않습니다" 오류 발생. |
+| **3** | **비밀번호 불일치** | Supabase DB `app_secrets`의 `adminPin` | 구글 시트에서 초기 마이그레이션된 값이 `<운영진 PIN>`였기 때문에, 사용자가 `<최고관리자 PIN>`를 입력해도 "일치하지 않습니다" 오류 발생. |
 
 ### 1.2 현재 일반 관리자 페이지(`AdminDashboard.tsx`)의 구조적 결함
 - **위험한 설정 노출**: 파트장, 총무진 등 일반 운영진이 들어가는 화면에 `AdminSettingsTab`(구글 시트 Web App URL 입력, 클라우드 동기화 덮어쓰기 등)이 노출되어 있어, 실수로 URL을 수정하거나 백엔드 설정을 망가뜨릴 위험이 상존함.
@@ -35,7 +35,7 @@
 ```
 [ 일반 단원 홈 화면 (HomeView) ]
     │
-    ├─ (우측 상단 ⚙️ 아이콘 클릭) ─────────────────► PIN 모달 (1004 입력) 
+    ├─ (우측 상단 ⚙️ 아이콘 클릭) ─────────────────► PIN 모달 (<운영진 PIN> 입력) 
     │                                                     │
     │                                                     ▼
     │                                          [ 1. 일반 운영진 관리자 화면 (AdminDashboard) ]
@@ -47,7 +47,7 @@
     └─ (로고 우클릭[PC] / 3연타[모바일] 이스터에그) ──► 미니 팝오버 [ 🔒 Get in ] 클릭 
                                                               │
                                                               ▼
-                                                        PIN 모달 (2315 입력)
+                                                        PIN 모달 (<최고관리자 PIN> 입력)
                                                               │
                                                               ▼
                                                [ 2. 최고 시스템 관리자 화면 (SuperAdminDashboard) ]
@@ -56,7 +56,7 @@
                                                • 탭 2: ☁️ 클라우드 & 시트 연동 제어 (CLOUD_INTEGRATION)
                                                  (구글 시트 Webhook URL, 실시간 소켓 헬스체크, 수동 백업)
                                                • 탭 3: 🔐 보안 자격 증명 관리 (SECURITY)
-                                                 (운영진 PIN 1004, 현장 출석 PIN, 슈퍼 PIN 2315 관리)
+                                                 (운영진 PIN <운영진 PIN>, 현장 출석 PIN, 슈퍼 PIN <최고관리자 PIN> 관리)
 ```
 
 ---
@@ -99,10 +99,10 @@ export function setSuperAdminLoggedIn(loggedIn: boolean): void;
 
 ### 4.2 Supabase DB 및 RPC 함수 명세
 1. **자격 증명 키 보관 (`app_secrets`)**:
-   - `adminPin`: `'1004'` (일반 운영진 PIN)
-   - `superAdminPin`: `'2315'` (최고 관리자 PIN)
+   - `adminPin`: `'<운영진 PIN>'` (일반 운영진 PIN)
+   - `superAdminPin`: `'<최고관리자 PIN>'` (최고 관리자 PIN)
 2. **RPC 함수 (`supabase/migrations/` 및 Supabase SQL)**:
-   - `fn_verify_admin_pin(p_pin text)`: `app_secrets`의 `adminPin`과 대조 (기존 유지, `1004`)
+   - `fn_verify_admin_pin(p_pin text)`: `app_secrets`의 `adminPin`과 대조 (기존 유지, `<운영진 PIN>`)
    - `fn_verify_super_admin_pin(p_pin text)` (신규):
      ```sql
      create or replace function fn_verify_super_admin_pin(p_pin text)
@@ -112,8 +112,8 @@ export function setSuperAdminLoggedIn(loggedIn: boolean): void;
      begin
        select value into v_real_pin from app_secrets where key = 'superAdminPin';
        if v_real_pin is null then
-         -- Fallback 기본값 2315
-         v_real_pin := '2315';
+         -- Fallback 기본값 <최고관리자 PIN>
+         v_real_pin := '<최고관리자 PIN>';
        end if;
        if trim(p_pin) = trim(v_real_pin) then
          return jsonb_build_object('success', true, 'message', '최고 관리자 인증 성공');
@@ -189,15 +189,15 @@ export function setSuperAdminLoggedIn(loggedIn: boolean): void;
      - 원클릭 수동 전체 백업 내보내기 / 스냅샷 강제 동기화 버튼.
      - 캐시 비상 초기화 버튼.
   3. **탭 3: 보안 & 자격 증명 관리 (`SECURITY`)**:
-     - **일반 운영진 관리자 PIN** (현재: `1004`): 조회 및 새 PIN으로 즉시 변경 기능.
+     - **일반 운영진 관리자 PIN** (현재: `<운영진 PIN>`): 조회 및 새 PIN으로 즉시 변경 기능.
      - **현장 출석 PIN**: 오늘 연습용 4자리 현장 PIN 조회 및 수동 갱신 기능.
-     - **최고 관리자 PIN** (현재: `2315`): 최고 관리자 PIN 번호 자체 변경 기능.
+     - **최고 관리자 PIN** (현재: `<최고관리자 PIN>`): 최고 관리자 PIN 번호 자체 변경 기능.
 
 ### 4.6 루트 앱 라우팅 통합 (`src/App.tsx`)
 - `currentView` 타입 확장: `'HOME' | 'CALENDAR' | 'ADMIN' | 'SUPER_ADMIN'`
 - 최고 관리자 인증 처리:
   - `showSuperAdminPinModal` 상태 추가.
-  - `handleOpenSuperAdmin`: `isSuperAdminLoggedIn()` 검사 → 미인증 시 모달 오픈 → `2315` 검증 성공 시 `setCurrentView('SUPER_ADMIN')`.
+  - `handleOpenSuperAdmin`: `isSuperAdminLoggedIn()` 검사 → 미인증 시 모달 오픈 → `<최고관리자 PIN>` 검증 성공 시 `setCurrentView('SUPER_ADMIN')`.
 
 ---
 
@@ -205,7 +205,7 @@ export function setSuperAdminLoggedIn(loggedIn: boolean): void;
 
 ### Phase 1: DB & RPC 마이그레이션
 1. `supabase/migrations/20261120000000_super_admin.sql` 생성:
-   - `superAdminPin`을 `app_secrets`에 삽입 (기본값: `'2315'`).
+   - `superAdminPin`을 `app_secrets`에 삽입 (기본값: `'<최고관리자 PIN>'`).
    - `fn_verify_super_admin_pin(p_pin text)` RPC 함수 선언 및 실행 권한 부여.
    - `fn_save_config`에 `superAdminPin` 라우팅 추가.
 2. `supabase/all_in_one_setup.sql` 최신화 동기화.
@@ -236,7 +236,7 @@ export function setSuperAdminLoggedIn(loggedIn: boolean): void;
 1. `src/components/admin/SuperAdminDashboard.tsx` 신설:
    - 탭 1: `AuditLogsTab.tsx` (출결 로그, 댓글 로그, 투표 로그, 기기 접속 정보 테이블 뷰).
    - 탭 2: `CloudIntegrationTab.tsx` (`AdminSettingsTab`의 시트 연동 및 웹소켓 헬스체크 이관).
-   - 탭 3: `SecurityCredentialsTab.tsx` (1004 운영진 PIN, 현장 PIN, 2315 최고 관리자 PIN 변경).
+   - 탭 3: `SecurityCredentialsTab.tsx` (<운영진 PIN> 운영진 PIN, 현장 PIN, <최고관리자 PIN> 최고 관리자 PIN 변경).
 
 ### Phase 6: 앱 쉘 연동 & 통합 테스트
 1. `src/App.tsx`:
@@ -252,25 +252,25 @@ export function setSuperAdminLoggedIn(loggedIn: boolean): void;
 ## 6. 결정론적 검증 시나리오 (WHEN ... THEN ...)
 
 1. **SCENARIO 1: 일반 운영진 진입 및 대시보드 통계 열람**
-   - **WHEN**: 홈 화면 우측 상단의 톱니바퀴(⚙️) 아이콘을 클릭하고 PIN `1004`를 입력하면,
+   - **WHEN**: 홈 화면 우측 상단의 톱니바퀴(⚙️) 아이콘을 클릭하고 PIN `<운영진 PIN>`를 입력하면,
    - **THEN**: 일반 관리자 화면(`AdminDashboard`)이 열리고, 상단 탭에 `ROSTER`, `SCHEDULES`, `STATS`가 나타나며, `STATS` 클릭 시 기간별/파트별 출석률 액체 게이지와 랭킹이 정상 렌더링된다. (위험한 시트 설정 탭은 보이지 않아야 함)
 
 2. **SCENARIO 2: PC 환경 로고 우클릭 이스터에그 진입**
    - **WHEN**: PC 브라우저에서 브랜드 로고 이미지를 마우스 우클릭하면,
    - **THEN**: 브라우저 기본 컨텍스트 메뉴가 차단되고, 로고 바로 아래에 `[ 🔒 Get in ]` 미니 팝오버가 나타난다.
-   - **WHEN**: `[ 🔒 Get in ]`을 클릭하고 PIN `2315`를 입력하면,
+   - **WHEN**: `[ 🔒 Get in ]`을 클릭하고 PIN `<최고관리자 PIN>`를 입력하면,
    - **THEN**: 최고 관리자 화면(`SuperAdminDashboard`)으로 즉시 진입한다.
 
 3. **SCENARIO 3: 모바일 스마트폰 로고 제스처 이스터에그 진입**
    - **WHEN**: 스마트폰 모바일 화면에서 브랜드 로고를 400ms 이내에 톡-톡-톡 3번 연속 터치하거나 0.6초간 길게 누르면,
-   - **THEN**: 100ms 햅틱 진동과 함께 `[ 🔒 Get in ]` 미니 팝오버가 렌더링되고, `2315` 입력 시 최고 관리자 화면으로 진입한다.
+   - **THEN**: 100ms 햅틱 진동과 함께 `[ 🔒 Get in ]` 미니 팝오버가 렌더링되고, `<최고관리자 PIN>` 입력 시 최고 관리자 화면으로 진입한다.
 
 4. **SCENARIO 4: 최고 관리자 화면에서 원천 감사 로그 열람**
    - **WHEN**: 최고 관리자 화면의 `AUDIT_LOGS` 탭에 진입하면,
    - **THEN**: 모든 단원의 출결 원천 로그(인증수단, 시각, 관리자 수동 취소 이력), 댓글 작성/수정/삭제 이벤트 로그, 기기 바인딩 ID가 상세 테이블로 정확히 표시된다.
 
 5. **SCENARIO 5: 잘못된 PIN 입력 시 차단**
-   - **WHEN**: 일반 관리자 PIN에 `2315`를 입력하거나, 최고 관리자 PIN에 `1004`를 입력하면,
+   - **WHEN**: 일반 관리자 PIN에 `<최고관리자 PIN>`를 입력하거나, 최고 관리자 PIN에 `<운영진 PIN>`를 입력하면,
    - **THEN**: "PIN 번호가 일치하지 않습니다" 에러 배너가 노출되고 진입이 철저히 차단된다.
 
 6. **SCENARIO 6: 최종 시스템 센서 (Green Bar)**

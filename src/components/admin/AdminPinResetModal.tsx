@@ -34,8 +34,8 @@ export const AdminPinResetModal: React.FC<AdminPinResetModalProps> = ({
       setErrorMsg('새로운 관리자 PIN을 입력해주세요.');
       return;
     }
-    if (trimmedNew.length < 4 || trimmedNew.length > 8) {
-      setErrorMsg('새로운 PIN은 4~8자리여야 합니다.');
+    if (trimmedNew.length < 6 || trimmedNew.length > 8) {
+      setErrorMsg('새로운 PIN은 6~8자리여야 합니다.');
       return;
     }
     if (!/^\d+$/.test(trimmedNew)) {
@@ -124,7 +124,7 @@ export const AdminPinResetModal: React.FC<AdminPinResetModalProps> = ({
 
           <div>
             <label className="form-label" htmlFor="reset-new-pin">
-              새로운 관리자 PIN (4~8자리 숫자)
+              새로운 관리자 PIN (6~8자리 숫자)
             </label>
             <input
               id="reset-new-pin"

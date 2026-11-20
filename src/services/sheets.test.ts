@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Member, RawAttendanceLog, RSVPVote } from '../types/rollbook';
 import { SheetsService, resetStorage } from './sheets';
 import { GasBackend } from './backend/gasBackend';
 import { SupabaseBackend } from './backend/supabaseBackend';
+import { clearAllAdminTokens, getAdminToken } from './adminSession';
 import {
   TEST_MOCK_SCHEDULES,
   TEST_MOCK_LOGS,
@@ -1005,9 +1006,8 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       success: true,
       message: '환경설정 저장 완료',
     });
-    const pin1 = service.getActiveOnSitePin();
-    expect(pin1).toBeDefined();
-    expect(pin1.length).toBe(4);
+    // 서버에서 받은 값이 없으면 기본 PIN을 지어내지 않는다.
+    expect(service.getActiveOnSitePin()).toBe('');
 
     const pin2 = await service.refreshActiveOnSitePin();
     expect(pin2).toBeDefined();
@@ -1739,6 +1739,77 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       expect(syncListener).toHaveBeenCalledTimes(3);
 
       unsub();
+    });
+  });
+
+  describe('Admin PIN verification (no local fallback, server-issued tokens)', () => {
+    afterEach(() => {
+      clearAllAdminTokens();
+    });
+
+    it('rejects formerly hardcoded fallback PINs when the server cannot be reached', async () => {
+      const gasService = new SheetsService(new GasBackend(() => ''));
+      gasService.updateConfig({ sheetsWebAppUrl: '' });
+
+      for (const pin of ['1004', '1234', '2315', '2325']) {
+        await expect(gasService.verifyAdminPin(pin)).rejects.toThrow();
+        await expect(gasService.verifySuperAdminPin(pin)).rejects.toThrow();
+      }
+    });
+
+    it('rejects when a network error prevents verification', async () => {
+      const supaService = new SheetsService(
+        new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' })
+      );
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+
+      await expect(supaService.verifyAdminPin('1004')).rejects.toThrow();
+      expect(getAdminToken('admin')).toBeNull();
+    });
+
+    it('stores the server-issued token after a successful Supabase admin login', async () => {
+      const supaService = new SheetsService(
+        new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' })
+      );
+      const token = 'a'.repeat(64);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({ success: true, message: 'ok', data: { token, tier: 'admin' } }),
+          { status: 200 }
+        )
+      );
+
+      await supaService.verifyAdminPin('777001');
+      expect(getAdminToken('admin')).toBe(token);
+      expect(getAdminToken('super')).toBeNull();
+    });
+
+    it('fails Supabase login when the server does not issue a token (migration not applied)', async () => {
+      const supaService = new SheetsService(
+        new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' })
+      );
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({ success: true, message: 'ok' }), { status: 200 })
+      );
+
+      await expect(supaService.verifySuperAdminPin('990011')).rejects.toThrow('세션');
+      expect(getAdminToken('super')).toBeNull();
+    });
+
+    it('returns empty secrets instead of invented default PINs when the server refuses', async () => {
+      const supaService = new SheetsService(
+        new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' })
+      );
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({ success: false, code: 'ADMIN_AUTH_REQUIRED', message: '관리자 인증이 필요합니다.' }),
+          { status: 200 }
+        )
+      );
+
+      const secrets = await supaService.getAdminSecrets();
+      expect(secrets.adminPin).toBe('');
+      expect(secrets.superAdminPin).toBe('');
     });
   });
 

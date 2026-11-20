@@ -5,8 +5,14 @@ const SHEETS_URL =
   'https://script.google.com/macros/s/AKfycbwWEhINO6ve9f7GSZhehhmWAcY8NkJ6vbNchWQoXkWpNnxFRsM110CoEgGuJ-41SKb4/exec?action=GET_INITIAL_DATA';
 
 const SUPABASE_URL = 'https://hvsftdbqwxjbpfogoldw.supabase.co';
-const SUPABASE_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2c2Z0ZGJxd3hqYnBmb2dvbGR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUwNDk2NjksImV4cCI6MjExMDYyNTY2OX0.Pg5U9ger1SD9mrjmKf404--AkKF5RRfU2E7va5EepjQ';
+// fn_import_sheets_snapshot truncates every table, so only the service role may call it
+// (security hardening migration). Never commit this key; pass it via the environment:
+//   SUPABASE_SERVICE_ROLE_KEY=... npx tsx scripts/migrate-sheets-to-supabase.ts
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+if (!SUPABASE_KEY) {
+  console.error('SUPABASE_SERVICE_ROLE_KEY is not set. Aborting.');
+  process.exit(1);
+}
 
 async function run() {
   console.log('1. Fetching live production snapshot from Google Sheets...');

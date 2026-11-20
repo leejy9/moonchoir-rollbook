@@ -45,6 +45,7 @@ import {
 import type { RemoteBackend, RemoteSnapshot } from './backend/types';
 import { GasBackend } from './backend/gasBackend';
 import { SupabaseBackend, type SupabaseConfig } from './backend/supabaseBackend';
+import { extractIssuedToken, getAdminToken, setAdminToken, type AdminTier } from './adminSession';
 
 export { resetStorage };
 export type { RemoteBackend, RemoteSnapshot, SupabaseConfig };
@@ -117,7 +118,11 @@ const WRITE_LABELS: Record<string, string> = {
 };
 
 /** 서버에서 읽기만 하는 요청: 성공해도 데이터가 바뀌지 않으므로 새로고침을 예약하지 않는다. */
-const NON_MUTATING_ACTIONS = new Set(['VERIFY_ADMIN_PIN', 'VERIFY_ON_SITE_PIN']);
+const NON_MUTATING_ACTIONS = new Set([
+  'VERIFY_ADMIN_PIN',
+  'VERIFY_SUPER_ADMIN_PIN',
+  'VERIFY_ON_SITE_PIN',
+]);
 
 export class SheetsService {
   private config: AppConfig;
@@ -1243,104 +1248,99 @@ export class SheetsService {
     }
   }
 
+  /**
+   * 운영진 PIN을 서버에서 확인한다. 서버를 확인할 수 없으면 실패로 처리한다
+   * (기기 안에서 PIN을 비교하는 대체 경로는 두지 않는다).
+   * Supabase 백엔드는 성공 시 관리자 세션 토큰을 발급하고, 이 토큰으로만 관리자 RPC가 실행된다.
+   */
   public async verifyAdminPin(pin: string): Promise<void> {
-    const trimmed = pin.trim();
-    if (!trimmed) {
-      throw new Error('관리자 PIN을 입력해주세요.');
-    }
-
-    try {
-      const result = await this.sendToGoogleSheet('VERIFY_ADMIN_PIN', { pin: trimmed });
-      if (result.success) {
-        return;
-      }
-      if (result.message && !result.message.includes('404') && !result.message.includes('통신 오류') && !result.message.includes('실패')) {
-        throw new Error(result.message);
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('일치하지 않습니다')) {
-        throw err;
-      }
-      console.warn('[SheetsService] Remote admin PIN verification unavailable, checking local fallback:', msg);
-    }
-
-    const fallbackPin = this.config.adminPin || '1004';
-    if (trimmed === fallbackPin || trimmed === '1004' || trimmed === '1234') {
-      return;
-    }
-    throw new Error('관리자 PIN 번호가 일치하지 않습니다.');
+    await this.verifyPrivilegedPin('VERIFY_ADMIN_PIN', 'admin', pin, '관리자');
   }
 
   public async verifySuperAdminPin(pin: string): Promise<void> {
-    const trimmed = pin.trim();
-    if (!trimmed) {
-      throw new Error('최고 관리자 PIN을 입력해주세요.');
-    }
-
-    try {
-      const result = await this.sendToGoogleSheet('VERIFY_SUPER_ADMIN_PIN', { pin: trimmed });
-      if (result.success) {
-        return;
-      }
-      if (result.message && !result.message.includes('404') && !result.message.includes('통신 오류') && !result.message.includes('실패')) {
-        throw new Error(result.message);
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('일치하지 않습니다')) {
-        throw err;
-      }
-      console.warn('[SheetsService] Remote super admin PIN verification unavailable or unmigrated (404), checking local fallback:', msg);
-    }
-
-    const envSuperPin =
-      typeof import.meta !== 'undefined' && import.meta.env
-        ? import.meta.env.VITE_SUPER_ADMIN_PIN
-        : undefined;
-    const fallbackPin = this.config.adminPin || '1004';
-
-    if (
-      (envSuperPin && trimmed === envSuperPin) ||
-      trimmed === '2315' ||
-      trimmed === '2325' ||
-      trimmed === fallbackPin ||
-      trimmed === '1004' ||
-      trimmed === '1234'
-    ) {
-      return;
-    }
-    throw new Error('최고 관리자 PIN 번호가 일치하지 않습니다.');
+    await this.verifyPrivilegedPin('VERIFY_SUPER_ADMIN_PIN', 'super', pin, '최고 관리자');
   }
 
-  public async getAdminSecrets(): Promise<{ adminPin: string; activeOnSitePin: string; superAdminPin?: string }> {
+  private async verifyPrivilegedPin(
+    action: 'VERIFY_ADMIN_PIN' | 'VERIFY_SUPER_ADMIN_PIN',
+    tier: AdminTier,
+    pin: string,
+    label: string
+  ): Promise<void> {
+    const trimmed = pin.trim();
+    if (!trimmed) {
+      throw new Error(`${label} PIN을 입력해주세요.`);
+    }
+
+    let result: Awaited<ReturnType<SheetsService['sendToGoogleSheet']>>;
+    try {
+      result = await this.sendToGoogleSheet(action, { pin: trimmed });
+    } catch (err) {
+      console.warn(`[SheetsService] ${label} PIN verification request failed:`, err);
+      throw new Error(`서버에 연결할 수 없어 ${label} 인증을 할 수 없습니다. 네트워크를 확인해 주세요.`);
+    }
+
+    if (!result.success) {
+      throw new Error(result.message || `${label} PIN 번호가 일치하지 않습니다.`);
+    }
+
+    if (this.backend.kind === 'supabase') {
+      const issued = extractIssuedToken(result.data);
+      if (!issued || issued.tier !== tier) {
+        throw new Error(`${label} 세션을 발급받지 못했습니다. 서버 보안 업데이트가 적용됐는지 확인해 주세요.`);
+      }
+      setAdminToken(tier, issued.token);
+    }
+  }
+
+  /** Supabase 백엔드에서는 관리자 화면에 서버 발급 토큰이 필요하다. */
+  public requiresAdminToken(): boolean {
+    return this.backend.kind === 'supabase';
+  }
+
+  /** 서버 쪽 세션도 함께 폐기한다(실패해도 로컬 토큰은 지운다). */
+  public logoutAdminSession(tier: AdminTier): void {
+    const token = getAdminToken(tier);
+    setAdminToken(tier, null);
+    if (token && this.backend.kind === 'supabase') {
+      void this.backend.callAction('ADMIN_LOGOUT', { token }).catch((err) => {
+        console.warn('[SheetsService] Admin logout request failed:', err);
+      });
+    }
+  }
+
+  /**
+   * 서버에 저장된 PIN을 읽는다. 운영진 세션은 현장 PIN만, 최고 관리자 세션은 전부 받는다.
+   * 알 수 없는 값은 빈 문자열로 둔다(기본 PIN 값을 화면에 지어내지 않는다).
+   */
+  public async getAdminSecrets(): Promise<{ adminPin: string; activeOnSitePin: string; superAdminPin: string }> {
     if (this.backend.kind === 'supabase') {
       try {
         const res = await this.backend.callAction('GET_ADMIN_SECRETS', {});
         if (res.success && res.data && typeof res.data === 'object') {
           const secrets = res.data as { adminPin?: string; activeOnSitePin?: string; superAdminPin?: string };
-          if (secrets.adminPin || secrets.activeOnSitePin) {
-            this.config = {
-              ...this.config,
-              adminPin: secrets.adminPin || this.config.adminPin,
-              activeOnSitePin: secrets.activeOnSitePin || this.config.activeOnSitePin,
-            };
-            saveToStorage(STORAGE_KEYS.CONFIG, this.config);
-            return {
-              adminPin: secrets.adminPin || this.config.adminPin || '1004',
-              activeOnSitePin: secrets.activeOnSitePin || this.config.activeOnSitePin || '5027',
-              superAdminPin: secrets.superAdminPin || '2315',
-            };
+          if (secrets.activeOnSitePin) {
+            this.config = { ...this.config, activeOnSitePin: secrets.activeOnSitePin };
           }
+          if (secrets.adminPin) {
+            this.config = { ...this.config, adminPin: secrets.adminPin };
+          }
+          saveToStorage(STORAGE_KEYS.CONFIG, this.config);
+          return {
+            adminPin: secrets.adminPin ?? '',
+            activeOnSitePin: secrets.activeOnSitePin ?? '',
+            superAdminPin: secrets.superAdminPin ?? '',
+          };
         }
       } catch (err) {
-        console.warn('[Sheets] Failed to fetch server secrets, falling back to cached config:', err);
+        console.warn('[Sheets] Failed to fetch server secrets:', err);
       }
+      return { adminPin: '', activeOnSitePin: this.config.activeOnSitePin ?? '', superAdminPin: '' };
     }
     return {
-      adminPin: this.config.adminPin || '1004',
-      activeOnSitePin: this.config.activeOnSitePin || '5027',
-      superAdminPin: '2315',
+      adminPin: this.config.adminPin ?? '',
+      activeOnSitePin: this.config.activeOnSitePin ?? '',
+      superAdminPin: '',
     };
   }
 
@@ -1439,7 +1439,7 @@ export class SheetsService {
   }
 
   public getActiveOnSitePin(): string {
-    return this.config.activeOnSitePin || '5027';
+    return this.config.activeOnSitePin ?? '';
   }
 
   public async refreshActiveOnSitePin(): Promise<string> {
@@ -2007,7 +2007,7 @@ export class SheetsService {
     action: string,
     payload: unknown,
     endpointUrl?: string
-  ): Promise<{ success: boolean; message?: string; existingMemberId?: string; boundDeviceId?: string }> {
+  ): Promise<{ success: boolean; message?: string; existingMemberId?: string; boundDeviceId?: string; data?: unknown }> {
     const targetUrl = endpointUrl || this.config.sheetsWebAppUrl;
     if (this.backend.kind === 'gas' && !targetUrl) {
       return Promise.resolve({
@@ -2038,7 +2038,7 @@ export class SheetsService {
     action: string,
     payload: unknown,
     endpointUrl?: string
-  ): Promise<{ success: boolean; message?: string; existingMemberId?: string; boundDeviceId?: string }> {
+  ): Promise<{ success: boolean; message?: string; existingMemberId?: string; boundDeviceId?: string; data?: unknown }> {
     return this.backend.callAction(action, payload, endpointUrl || this.config.sheetsWebAppUrl);
   }
 }
