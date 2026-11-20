@@ -149,4 +149,74 @@ describe('SupabaseBackend', () => {
       expect(getAdminToken('super')).toBeNull();
     });
   });
+
+  describe('practice catalog actions', () => {
+    const okResponse = () =>
+      new Response(JSON.stringify({ success: true, message: 'ok', data: {} }), { status: 200 });
+
+    it('formats GET_PRACTICE_CATALOG body with p_include_archived and p_token', async () => {
+      const backend = new SupabaseBackend(mockConfig);
+      setAdminToken('admin', 'tok_practice_admin');
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(okResponse());
+
+      await backend.callAction('GET_PRACTICE_CATALOG', { includeArchived: true });
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_get_practice_catalog',
+        expect.objectContaining({
+          body: JSON.stringify({
+            p_include_archived: true,
+            p_token: 'tok_practice_admin',
+          }),
+        })
+      );
+    });
+
+    it('maps all 6 write practice actions with admin token attached', async () => {
+      const backend = new SupabaseBackend(mockConfig);
+      setAdminToken('admin', 'tok_practice_admin');
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(okResponse());
+
+      await backend.callAction('SAVE_PRACTICE_PIECE', { id: 'p1', title: '아리랑' });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_save_practice_piece',
+        expect.objectContaining({
+          body: JSON.stringify({
+            p_payload: { id: 'p1', title: '아리랑', adminToken: 'tok_practice_admin' },
+          }),
+        })
+      );
+
+      await backend.callAction('SET_PRACTICE_PIECE_ARCHIVED', { id: 'p1', isArchived: true });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_set_practice_piece_archived',
+        expect.anything()
+      );
+
+      await backend.callAction('SAVE_PRACTICE_TRACK', { id: 't1', label: '합창 MR' });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_save_practice_track',
+        expect.anything()
+      );
+
+      await backend.callAction('SET_PRACTICE_TRACK_ARCHIVED', { id: 't1', isArchived: true });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_set_practice_track_archived',
+        expect.anything()
+      );
+
+      await backend.callAction('SET_PROGRAM_PIECES', { programId: 'card1', pieceIds: ['p1'] });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_set_program_pieces',
+        expect.anything()
+      );
+
+      await backend.callAction('REORDER_PRACTICE_TRACKS', { pieceId: 'p1', trackIds: ['t1'] });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_reorder_practice_tracks',
+        expect.anything()
+      );
+    });
+  });
 });
+

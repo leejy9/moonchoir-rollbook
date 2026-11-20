@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   LOCATIONS: 'moonchoir_locations_v3',
   PROGRAM_CARDS: 'moonchoir_program_cards_v3',
   COMMENTS: 'moonchoir_comments_v3',
+  PRACTICE_CATALOG: 'moonchoir_practice_catalog_v1',
 } as const;
 
 class MemoryStorage {

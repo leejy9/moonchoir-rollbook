@@ -153,6 +153,20 @@ export class SupabaseBackend implements RemoteBackend {
         return 'fn_delete_program_card';
       case 'SAVE_CONFIG':
         return 'fn_save_config';
+      case 'GET_PRACTICE_CATALOG':
+        return 'fn_get_practice_catalog';
+      case 'SAVE_PRACTICE_PIECE':
+        return 'fn_save_practice_piece';
+      case 'SET_PRACTICE_PIECE_ARCHIVED':
+        return 'fn_set_practice_piece_archived';
+      case 'SAVE_PRACTICE_TRACK':
+        return 'fn_save_practice_track';
+      case 'SET_PRACTICE_TRACK_ARCHIVED':
+        return 'fn_set_practice_track_archived';
+      case 'SET_PROGRAM_PIECES':
+        return 'fn_set_program_pieces';
+      case 'REORDER_PRACTICE_TRACKS':
+        return 'fn_reorder_practice_tracks';
       default:
         return null;
     }
@@ -186,6 +200,24 @@ export class SupabaseBackend implements RemoteBackend {
           ? (payload as { config: Record<string, unknown> }).config
           : payload;
       return { p_payload: this.withAdminToken(configObj ?? {}) };
+    }
+    if (action === 'GET_PRACTICE_CATALOG') {
+      const includeArchived =
+        typeof payload === 'boolean'
+          ? payload
+          : Boolean(
+              payload &&
+                typeof payload === 'object' &&
+                ('includeArchived' in payload
+                  ? (payload as { includeArchived?: boolean }).includeArchived
+                  : 'p_include_archived' in payload
+                    ? (payload as { p_include_archived?: boolean }).p_include_archived
+                    : false)
+            );
+      return {
+        p_include_archived: includeArchived,
+        p_token: getActiveAdminToken() ?? null,
+      };
     }
     return { p_payload: this.withAdminToken(payload ?? {}) };
   }

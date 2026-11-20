@@ -302,6 +302,8 @@ export interface AppConfig {
   qrPrintSubtitle?: string;
   qrPrintNotice?: string;
   emergencyGpsBypassUntil?: string; // ISO 8601 timestamp until which GPS boundary check is bypassed
+  mediaPublicBaseUrl?: string; // Worker base URL (e.g. https://media.example.com)
+  practiceTrackKinds?: string[]; // Configurable track kinds taxonomy
 }
 
 /**
@@ -315,3 +317,62 @@ export interface BoundDeviceProfile {
   boundAt: string; // ISO 8601
   deviceId?: string; // Client Unique Device UUID
 }
+
+/**
+ * 11. Practice Catalog & Studio Models (MEMBER_UX_AUDIO_SPEC.md §4-4)
+ */
+export type PracticeTrackKind = '가이드' | 'MR' | '참고영상' | (string & {});
+export type PracticeMediaSource = 'r2' | 'drive' | 'youtube' | 'external_url' | (string & {});
+
+export interface PracticePiece {
+  id: string;
+  title: string;
+  composer?: string;
+  arranger?: string;
+  scoreUrl?: string;
+  notes?: string;
+  isArchived: boolean;
+  archivedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PracticeTrack {
+  id: string;
+  pieceId: string;
+  label: string;
+  kind: PracticeTrackKind;
+  source: PracticeMediaSource;
+  url?: string;
+  storageKey?: string;
+  mimeType?: string;
+  durationSeconds?: number;
+  orderIndex: number;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PracticeProgramPiece { // v1의 자유 텍스트 season 대체
+  programId: string;
+  pieceId: string;
+  orderIndex: number;
+  isArchived: boolean;
+}
+
+export interface PracticeCatalog {
+  pieces: PracticePiece[];
+  tracks: PracticeTrack[];
+  programPieces: PracticeProgramPiece[];
+}
+
+export type TrackPlaybackMode = 'audio' | 'external_link' | 'unavailable';
+
+export interface TrackPlayback {
+  mode: TrackPlaybackMode;
+  src?: string;
+  canPrefetch: boolean;
+  supportsBackground: boolean;
+  reason?: string;
+}
+
