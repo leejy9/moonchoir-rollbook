@@ -39,7 +39,7 @@
 | 5 | `P1-05` | 지도 링크, D-Day, 출석 인원 집계 등 순수 함수 묶음 | `src/utils/kakaoMaps.ts`, `src/utils/date.ts`, `src/utils/rsvpTally.ts`, `src/utils/calendar.ts` 및 각 `.test.ts` | P1-01 | 아니오 | 완료 (f4f92af) |
 | 6 | `P1-06` | 앱 셸, 헤더(`AppHeader`), 하단 탭(`BottomNav`), 라우팅 연결 | `src/App.tsx`, `src/components/AppHeader.tsx`(신규), `src/components/BottomNav.tsx`(신규), `src/hooks/useMasterEntryGesture.ts`(신규), `src/hooks/useHashRoute.ts`(신규), `src/components/HomeView.tsx`, `src/index.css` | P1-02, P1-05 | 아니오 | 완료 (110398f) |
 | 7 | `P1-07` | 오늘 탭(`TodayTab`) 구현 및 카드 경량화 | `src/components/TodayTab.tsx`(신규), `src/components/home/HomeActiveScheduleCard.tsx`, `src/components/TodayTab.test.tsx` | P1-03, P1-04, P1-06 | 뷰포트 확인 | 완료 (84a1ee7) |
-| 8 | `P1-08` | 일정 상세 바텀시트(`ScheduleDetailSheet`, `ScheduleDetailBody`) | `src/components/ScheduleDetailSheet.tsx`(신규), `src/components/ScheduleDetailBody.tsx`(신규) 및 테스트 | P1-06 | 아니오 | 대기 |
+| 8 | `P1-08` | 일정 상세 바텀시트(`ScheduleDetailSheet`, `ScheduleDetailBody`) | `src/components/ScheduleDetailSheet.tsx`(신규), `src/components/ScheduleDetailBody.tsx`(신규) 및 테스트 | P1-06 | 아니오 | 완료 (e7133c1) |
 | 9 | `P1-09` | 일정 탭(`CalendarTab`) 구현 및 기존 `CalendarView.tsx` 폐기 | `src/components/MonthCalendarGrid.tsx`(승격), `src/components/CalendarTab.tsx`(신규), `src/components/CalendarView.tsx`(삭제), `src/App.tsx` 등 | P1-08 | 아니오 | 대기 |
 | 10 | `P1-10` | QR 대상 일정 명시(`scheduleId`) 및 RSVP `alert()` 인라인화 | `src/App.tsx`, `src/components/RSVPModal.tsx` | P1-07 | 아니오 | 대기 |
 | 11 | `P1-11` | Supabase 백그라운드 새로고침 비용 최적화 (실시간 중 5분) | `src/App.tsx`, `src/services/realtime/supabaseRealtime.ts` | P1-06 | **질문 필수** (A/B 선택) | 대기 |
