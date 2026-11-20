@@ -6,7 +6,8 @@ import {
   calculateCumulativeAttendanceWithLifecycle,
   getGamifiedAttendanceLevel,
 } from '../utils/attendanceStats';
-import { formatShortDate, getKSTClock, getKSTDateString, normalizeToKSTTimestamp } from '../utils/date';
+import { formatShortDate, getKSTDateString } from '../utils/date';
+import { buildMemberScheduleRecords } from '../utils/memberRecords';
 import { InstallAppCard } from './InstallAppCard';
 
 interface MemberPortalModalProps {
@@ -119,48 +120,15 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
   // 3. 탭 1용: 회차별 통합 리스트 데이터 조립 [연습명칭 / 연습일 / 투표 상태 / 출결 시간]
   const scheduleRecords = useMemo(() => {
-    // 최신 연습일정이 상단에 오도록 내림차순 정렬 (취소된 일정 제외)
-    const sortedSchedules = [...schedules]
-      .filter((s) => !s.isCancelled)
-      .sort((a, b) => b.date.localeCompare(a.date));
-
-    return sortedSchedules.map((s) => {
-      const rec = sheetsService.reconcileMemberAttendance(profile.memberId, s.id, profile.name);
-      const isPast = s.date < todayStr;
-      const isToday = s.date === todayStr;
-      // 정단원/준단원의 출결 상태가 joinedAt 하드코딩으로 무단 미참 처리되지 않도록 reconcile 결과 존중
-      const isExempt = rec?.finalStatus === '미참' || rec?.finalStatus === '모수제외';
-
-      let checkInTime = '-';
-      const isAttended = rec?.finalStatus === '출석' || rec?.finalStatus === '수동인정' || rec?.finalStatus === '지각';
-
-      if (rec?.checkInTime) {
-        checkInTime = getKSTClock(rec.checkInTime) || rec.checkInTime;
-      } else if (rec?.finalStatus === '수동인정') {
-        checkInTime = '수동인정';
-      }
-
-      const myVote = allRsvpVotes.find((v) => v.scheduleId === s.id && v.memberId === profile.memberId);
-      const voteTimestamp = myVote?.timestamp ? normalizeToKSTTimestamp(myVote.timestamp) : '';
-
-      return {
-        id: s.id,
-        schedule: s,
-        title: s.title,
-        date: s.date,
-        category: s.category || '정기연습',
-        voteStatus: rec?.rsvpStatus && rec.rsvpStatus !== 'UNVOTED' ? rec.rsvpStatus : null,
-        voteReason: rec?.rsvpReason || '',
-        voteTimestamp,
-        isAttended,
-        finalStatus: rec?.finalStatus || (isPast ? '결석' : '대기'),
-        checkInTime,
-        isPast,
-        isToday,
-        isExempt,
-      };
+    return buildMemberScheduleRecords({
+      member: currentMember,
+      members: allMembersWithMerged,
+      schedules,
+      logs: allLogs,
+      rsvpVotes: allRsvpVotes,
+      lateGraceMinutes,
     });
-  }, [schedules, profile.memberId, profile.name, todayStr, allRsvpVotes]);
+  }, [currentMember, allMembersWithMerged, schedules, allLogs, allRsvpVotes, lateGraceMinutes]);
 
   // 4. 시트 동기화 핸들러
   const handleSyncRemote = async () => {
