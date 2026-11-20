@@ -45,7 +45,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     adminPin: string;
     activeOnSitePin: string;
     superAdminPin?: string;
-  }>({ adminPin: '1004', activeOnSitePin: '5027', superAdminPin: '2315' });
+  }>({ adminPin: '', activeOnSitePin: '', superAdminPin: '' });
 
   // Cloud Integration State
   const [sheetsUrlInput, setSheetsUrlInput] = useState(() => sheetsService.getConfig().sheetsWebAppUrl || '');
@@ -103,7 +103,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       if (mounted) {
         setCurrentSecrets(secrets);
         setAdminPinInput(secrets.adminPin);
-        setSuperAdminPinInput(secrets.superAdminPin || '2315');
+        setSuperAdminPinInput(secrets.superAdminPin);
       }
     });
     return () => {
@@ -257,8 +257,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
   const handleUpdateAdminPin = async () => {
     const val = adminPinInput.trim();
-    if (!val || val.length < 4 || val.length > 8) {
-      showError('운영진 PIN은 4~8자리 숫자여야 합니다.');
+    if (!val || val.length < 6 || val.length > 8) {
+      showError('운영진 PIN은 6~8자리 숫자여야 합니다.');
       return;
     }
     setIsProcessing(true);
@@ -276,8 +276,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
   const handleUpdateSuperAdminPin = async () => {
     const val = superAdminPinInput.trim();
-    if (!val || val.length < 4 || val.length > 8) {
-      showError('최고 관리자 PIN은 4~8자리 숫자여야 합니다.');
+    if (!val || val.length < 6 || val.length > 8) {
+      showError('최고 관리자 PIN은 6~8자리 숫자여야 합니다.');
       return;
     }
     setIsProcessing(true);
@@ -1637,7 +1637,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
         {/* ================================================================ */}
         {activeTab === 'SECURITY' && (
           <div style={{ maxWidth: '520px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {/* PIN 1: 일반 운영진 PIN (1004) */}
+            {/* PIN 1: 일반 운영진 PIN */}
             <div
               style={{
                 background: 'rgba(15, 23, 42, 0.8)',
@@ -1651,7 +1651,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   일반 운영진 관리자 PIN {currentSecrets.adminPin ? `(현재: ${currentSecrets.adminPin})` : ''}
                 </h3>
                 <span style={{ fontSize: '11px', color: '#94a3b8', background: 'rgba(255, 255, 255, 0.06)', padding: '2px 6px', borderRadius: '4px' }}>
-                  4~8자리 숫자
+                  6~8자리 숫자
                 </span>
               </div>
               <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#94A3B8' }}>
@@ -1720,7 +1720,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* PIN 2: 최고 시스템 관리자 PIN (2315) */}
+            {/* PIN 2: 최고 시스템 관리자 PIN */}
             <div
               style={{
                 background: 'rgba(15, 23, 42, 0.8)',
@@ -1734,7 +1734,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   최고 관리자 마스터 PIN {currentSecrets.superAdminPin ? `(현재: ${currentSecrets.superAdminPin})` : ''}
                 </h3>
                 <span style={{ fontSize: '11px', color: '#94a3b8', background: 'rgba(255, 255, 255, 0.06)', padding: '2px 6px', borderRadius: '4px' }}>
-                  마스터 전용 (4~8자리)
+                  마스터 전용 (6~8자리)
                 </span>
               </div>
               <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#94A3B8' }}>

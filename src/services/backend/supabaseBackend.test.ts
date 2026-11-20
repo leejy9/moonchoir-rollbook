@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { SupabaseBackend } from './supabaseBackend';
+import { clearAllAdminTokens, getAdminToken, setAdminToken } from '../adminSession';
 
 describe('SupabaseBackend', () => {
   beforeEach(() => {
@@ -81,5 +82,71 @@ describe('SupabaseBackend', () => {
     const result = await backend.callAction('UNKNOWN_ACTION', {});
     expect(result.success).toBe(false);
     expect(result.message).toContain('지원되지 않는 작업입니다');
+  });
+
+  describe('admin session tokens', () => {
+    beforeEach(() => {
+      clearAllAdminTokens();
+    });
+
+    const okResponse = () =>
+      new Response(JSON.stringify({ success: true, message: 'ok' }), { status: 200 });
+
+    it('sends no adminToken when nobody is logged in as admin', async () => {
+      const backend = new SupabaseBackend(mockConfig);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(okResponse());
+
+      await backend.callAction('SUBMIT_RSVP', { scheduleId: 's1', memberId: 'm1' });
+      const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+      expect(body.p_payload.adminToken).toBeUndefined();
+    });
+
+    it('attaches the active admin token to write payloads, preferring the super token', async () => {
+      const backend = new SupabaseBackend(mockConfig);
+      setAdminToken('admin', 'a'.repeat(64));
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(okResponse());
+
+      await backend.callAction('DELETE_SCHEDULE', { id: 's1' });
+      expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body)).p_payload).toEqual({
+        id: 's1',
+        adminToken: 'a'.repeat(64),
+      });
+
+      setAdminToken('super', 's'.repeat(64));
+      await backend.callAction('SAVE_CONFIG', { config: { adminPin: '123456' } });
+      expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body)).p_payload).toEqual({
+        adminPin: '123456',
+        adminToken: 's'.repeat(64),
+      });
+    });
+
+    it('sends the token as p_token when reading admin secrets', async () => {
+      const backend = new SupabaseBackend(mockConfig);
+      setAdminToken('admin', 'a'.repeat(64));
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(okResponse());
+
+      await backend.callAction('GET_ADMIN_SECRETS', {});
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_get_admin_secrets',
+        expect.objectContaining({ body: JSON.stringify({ p_token: 'a'.repeat(64) }) })
+      );
+    });
+
+    it('clears stored tokens when the server reports ADMIN_AUTH_REQUIRED', async () => {
+      const backend = new SupabaseBackend(mockConfig);
+      setAdminToken('admin', 'a'.repeat(64));
+      setAdminToken('super', 's'.repeat(64));
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ success: false, code: 'ADMIN_AUTH_REQUIRED', message: '관리자 인증이 필요합니다.' }),
+          { status: 200 }
+        )
+      );
+
+      const result = await backend.callAction('UPDATE_SCHEDULE', { id: 's1' });
+      expect(result.success).toBe(false);
+      expect(getAdminToken('admin')).toBeNull();
+      expect(getAdminToken('super')).toBeNull();
+    });
   });
 });

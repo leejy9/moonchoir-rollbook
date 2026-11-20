@@ -1,5 +1,6 @@
 import type { BoundDeviceProfile, PartType } from '../types/rollbook';
 import { sheetsService } from './sheets';
+import { getAdminToken, type AdminTier } from './adminSession';
 import { getKSTTimestampString } from '../utils/date';
 
 const AUTH_KEYS = {
@@ -8,6 +9,15 @@ const AUTH_KEYS = {
   SUPER_ADMIN_SESSION: 'moonchoir_super_admin_session_v1',
 };
 const ADMIN_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+
+/**
+ * Supabase 백엔드에서는 서버가 발급한 토큰이 있어야 관리자 화면을 유지한다.
+ * 토큰이 없거나 서버가 만료를 알려 지워졌으면 관리자 모드에서 나간다.
+ */
+function hasServerSession(tier: AdminTier): boolean {
+  if (!sheetsService.requiresAdminToken()) return true;
+  return getAdminToken(tier) !== null;
+}
 
 class MemoryStorage {
   private store: Record<string, string> = {};
@@ -111,13 +121,6 @@ export function clearDeviceProfile(): void {
   }
 }
 
-export function validateAdminPin(inputPin: string): boolean {
-  const config = sheetsService.getConfig();
-  const validPin = config.adminPin;
-  if (!validPin) return false;
-  return inputPin.trim() === validPin.trim();
-}
-
 export function isAdminLoggedIn(): boolean {
   const storage = getStorage();
   if (!storage) return false;
@@ -130,6 +133,11 @@ export function isAdminLoggedIn(): boolean {
       typeof session.lastActivityAt !== 'number' ||
       Date.now() - session.lastActivityAt >= ADMIN_IDLE_TIMEOUT_MS
     ) {
+      storage.removeItem(AUTH_KEYS.ADMIN_SESSION);
+      sheetsService.logoutAdminSession('admin');
+      return false;
+    }
+    if (!hasServerSession('admin')) {
       storage.removeItem(AUTH_KEYS.ADMIN_SESSION);
       return false;
     }
@@ -151,6 +159,7 @@ export function setAdminLoggedIn(loggedIn: boolean): void {
       );
     } else {
       storage.removeItem(AUTH_KEYS.ADMIN_SESSION);
+      sheetsService.logoutAdminSession('admin');
     }
   }
 }
@@ -177,6 +186,11 @@ export function isSuperAdminLoggedIn(): boolean {
       Date.now() - session.lastActivityAt >= ADMIN_IDLE_TIMEOUT_MS
     ) {
       storage.removeItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
+      sheetsService.logoutAdminSession('super');
+      return false;
+    }
+    if (!hasServerSession('super')) {
+      storage.removeItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
       return false;
     }
     return true;
@@ -197,6 +211,7 @@ export function setSuperAdminLoggedIn(loggedIn: boolean): void {
       );
     } else {
       storage.removeItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
+      sheetsService.logoutAdminSession('super');
     }
   }
 }

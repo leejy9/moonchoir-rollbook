@@ -11,6 +11,27 @@
 - **두 가지는 따로 배포됩니다.** 서버를 먼저, 화면을 나중에 올립니다. 새 서버는 옛 화면과 호환되지만, 새 화면이 옛 서버를 만나면 새 기능이 오류를 낼 수 있습니다.
 - **`npm run deploy`는 커밋이 아니라 로컬 폴더에 저장된 파일 그대로 빌드해서 올립니다.** 커밋·푸시하지 않은 변경도, 오래된 `main`도 그대로 라이브에 올라갑니다.
 
+## 0. Supabase 보안 강화 배포 (Phase 0, 1회성)
+마이그레이션 `supabase/migrations/20261121000000_security_hardening.sql`과 같은 시점의 화면 코드는 **한 묶음**입니다.
+- 새 화면 + 옛 DB: 관리자 로그인이 "세션을 발급받지 못했습니다"로 실패합니다.
+- 옛 화면 + 새 DB: 관리자 화면의 저장이 모두 "관리자 인증이 필요합니다"로 실패합니다.
+- 단원 기능(출석, 투표, 가입·연동, 댓글)은 어느 조합에서도 그대로 동작합니다.
+
+따라서 아래 순서로 **연달아** 진행합니다. 관리자 기능이 잠시 멈추는 시간을 최소화하기 위해서입니다.
+
+1. **PIN 교체 (Supabase 대시보드 → SQL Editor).** 예전 PIN은 저장소에 공개되어 있었으므로 모두 새 값으로 바꿉니다. 운영진·최고 관리자 PIN은 **6~8자리**여야 하며, 6자리보다 짧으면 새 DB가 로그인을 거부합니다. 새 값은 이 문서나 저장소, 채팅에 적지 않습니다.
+   ```sql
+   update app_secrets set value = '<새 운영진 PIN 6~8자리>', updated_at = now() where key = 'adminPin';
+   update app_secrets set value = '<새 최고관리자 PIN 6~8자리>', updated_at = now() where key = 'superAdminPin';
+   update app_secrets set value = '<새 현장 PIN>', updated_at = now() where key = 'activeOnSitePin';
+   ```
+2. **마이그레이션 적용.** SQL Editor에 `20261121000000_security_hardening.sql` 전체를 붙여넣고 실행합니다. 여러 번 실행해도 안전합니다.
+3. **화면 배포.** 아래 2장 절차대로 `npm run deploy`를 실행합니다.
+4. **검증.** SQL Editor에서 `supabase/tests/security_hardening_check.sql`을 실행해 모든 줄이 `PASS`인지 확인합니다. 이 스크립트는 데이터를 바꾸지 않습니다. 이어서 앱에서 운영진 로그인 → 일정 하나 수정, 최고 관리자 로그인 → 보안 탭 PIN 조회가 되는지 확인합니다.
+5. **이후 주의.**
+   - 예전 마이그레이션 파일이나 `all_in_one_setup.sql`을 다시 실행하면 보호되지 않은 원래 함수가 되살아납니다. 그런 경우 보안 강화 파일을 **반드시 다시 실행**합니다.
+   - 시트→Supabase 이관 스크립트(`scripts/migrate-sheets-to-supabase.ts`)는 이제 service_role 키가 있어야 동작합니다. 키는 환경변수 `SUPABASE_SERVICE_ROLE_KEY`로만 넘기고, 저장소에 넣지 않습니다.
+
 ## 1. 서버(Apps Script) 배포
 1. 저장소의 `google-apps-script.js` 전체를 복사합니다(`docs/google_apps_script.js`는 같은 내용의 사본이며 두 파일은 항상 일치해야 합니다).
 2. 구글 시트 → 확장 프로그램 → Apps Script에서 **기존 코드를 전부 지우고 붙여넣은 뒤 저장**합니다. 저장 후 구문 오류(예: `Unexpected end of input`)가 없어야 합니다. 있으면 코드가 중간에 잘려 붙은 것이므로 전체를 다시 복사합니다.

@@ -1,4 +1,8 @@
 import type { BackendActionResult, RemoteBackend, RemoteSnapshot } from './types';
+import { clearAllAdminTokens, getActiveAdminToken } from '../adminSession';
+
+/** 서버가 관리자 토큰이 없거나 만료되었다고 알릴 때 쓰는 코드(보안 강화 마이그레이션). */
+export const ADMIN_AUTH_REQUIRED_CODE = 'ADMIN_AUTH_REQUIRED';
 
 export interface SupabaseConfig {
   url: string;
@@ -65,7 +69,11 @@ export class SupabaseBackend implements RemoteBackend {
         return { success: false, message: `Supabase 통신 오류 (HTTP ${res.status})` };
       }
 
-      const json = (await res.json()) as BackendActionResult;
+      const json = (await res.json()) as BackendActionResult & { code?: string };
+      if (json.code === ADMIN_AUTH_REQUIRED_CODE) {
+        // 서버 세션이 끝났다: 저장된 토큰을 지워 화면이 관리자 모드에서 나가게 한다.
+        clearAllAdminTokens();
+      }
       return {
         success: json.success === true,
         message:
@@ -92,6 +100,8 @@ export class SupabaseBackend implements RemoteBackend {
         return 'fn_verify_super_admin_pin';
       case 'GET_ADMIN_SECRETS':
         return 'fn_get_admin_secrets';
+      case 'ADMIN_LOGOUT':
+        return 'fn_admin_logout';
       case 'RECORD_ATTENDANCE':
       case 'SUBMIT_CHECKIN':
         return 'fn_record_attendance';
@@ -161,15 +171,34 @@ export class SupabaseBackend implements RemoteBackend {
       return { p_pin: pinObj.pin };
     }
     if (action === 'GET_ADMIN_SECRETS') {
-      return {};
+      return { p_token: getActiveAdminToken() ?? '' };
+    }
+    if (action === 'ADMIN_LOGOUT') {
+      const tokenObj =
+        payload && typeof payload === 'object' && 'token' in payload
+          ? (payload as { token: string })
+          : { token: '' };
+      return { p_token: tokenObj.token };
     }
     if (action === 'SAVE_CONFIG') {
       const configObj =
         payload && typeof payload === 'object' && 'config' in payload
           ? (payload as { config: Record<string, unknown> }).config
           : payload;
-      return { p_payload: configObj ?? {} };
+      return { p_payload: this.withAdminToken(configObj ?? {}) };
     }
-    return { p_payload: payload ?? {} };
+    return { p_payload: this.withAdminToken(payload ?? {}) };
+  }
+
+  /**
+   * 관리자로 로그인한 기기에서는 모든 쓰기 요청에 서버 발급 토큰을 싣는다.
+   * 서버는 토큰을 확인한 뒤 본문에서 제거하므로 데이터에는 저장되지 않는다.
+   */
+  private withAdminToken(payload: unknown): unknown {
+    const token = getActiveAdminToken();
+    if (!token || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return payload;
+    }
+    return { ...(payload as Record<string, unknown>), adminToken: token };
   }
 }

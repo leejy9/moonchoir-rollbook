@@ -6,8 +6,11 @@ import {
   isAdminLoggedIn,
   setAdminLoggedIn,
   touchAdminSession,
-  validateAdminPin,
 } from './auth';
+import { sheetsService } from './sheets';
+import { SupabaseBackend } from './backend/supabaseBackend';
+import { GasBackend } from './backend/gasBackend';
+import { getAdminToken, setAdminToken } from './adminSession';
 
 describe('Device Binding & Authentication Service', () => {
   beforeEach(() => {
@@ -31,11 +34,42 @@ describe('Device Binding & Authentication Service', () => {
     expect(retrieved?.phoneLast4).toBe('1234');
   });
 
-  it('validates admin master PIN correctly', () => {
-    // Default PIN is 1234
-    expect(validateAdminPin('1234')).toBe(true);
-    expect(validateAdminPin('0000')).toBe(false);
-    expect(validateAdminPin(' 1234 ')).toBe(true); // Trimming support
+  describe('with the Supabase backend (server-issued admin tokens)', () => {
+    beforeEach(() => {
+      sheetsService.setBackend(new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'k' }));
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({ success: true }), { status: 200 })
+      );
+    });
+
+    afterEach(() => {
+      setAdminLoggedIn(false);
+      sheetsService.setBackend(new GasBackend(() => sheetsService.getConfig().sheetsWebAppUrl));
+      vi.restoreAllMocks();
+    });
+
+    it('does not keep an admin session without a server token', () => {
+      setAdminLoggedIn(true);
+      expect(isAdminLoggedIn()).toBe(false);
+    });
+
+    it('keeps the admin session while a server token exists', () => {
+      setAdminToken('admin', 'b'.repeat(64));
+      setAdminLoggedIn(true);
+      expect(isAdminLoggedIn()).toBe(true);
+    });
+
+    it('clears the token and asks the server to revoke it on logout', () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      setAdminToken('admin', 'c'.repeat(64));
+      setAdminLoggedIn(true);
+      setAdminLoggedIn(false);
+      expect(getAdminToken('admin')).toBeNull();
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_admin_logout',
+        expect.objectContaining({ body: JSON.stringify({ p_token: 'c'.repeat(64) }) })
+      );
+    });
   });
 
   it('manages admin session state', () => {
