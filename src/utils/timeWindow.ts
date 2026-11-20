@@ -1,5 +1,8 @@
 import type { Schedule } from '../types/rollbook';
-import { getKSTDateString } from './date';
+import { getKSTDateString, getKSTTimestampString } from './date';
+
+export const CHECKIN_OPEN_BEFORE_MIN = 60;
+export const RSVP_CUTOFF_BEFORE_MIN = CHECKIN_OPEN_BEFORE_MIN;
 
 export type WindowStatus = 'UPCOMING_DATE' | 'TODAY_BEFORE_WINDOW' | 'WINDOW_OPEN' | 'WINDOW_CLOSED';
 
@@ -12,8 +15,26 @@ export interface CheckInWindowState {
 }
 
 export interface CheckInWindowOptions {
-  openBeforeMinutes?: number; // default: 60 (1 hour)
+  openBeforeMinutes?: number; // default: 60 (CHECKIN_OPEN_BEFORE_MIN)
   forceBypassForTesting?: boolean; // default: false
+}
+
+/**
+ * 일정 날짜(YYYY-MM-DD)와 시각(HH:mm)을 한국 표준시(KST, UTC+09:00) 기준 Date로 파싱합니다.
+ * 형식이 올바르지 않거나 유효하지 않은 숫자면 null을 반환합니다.
+ */
+function parseScheduleKST(dateStr: string, timeStr: string): Date | null {
+  if (!dateStr || !timeStr) return null;
+  const match = /^(\d{1,2}):(\d{2})$/.exec(timeStr.trim());
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+
+  const isoStr = `${dateStr}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00+09:00`;
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return null;
+  return d;
 }
 
 /**
@@ -27,10 +48,10 @@ export function getCheckInWindowState(
 ): CheckInWindowState {
   const options: CheckInWindowOptions =
     typeof optionsOrBypass === 'boolean'
-      ? { forceBypassForTesting: optionsOrBypass, openBeforeMinutes: 60 }
-      : { openBeforeMinutes: 60, ...optionsOrBypass };
+      ? { forceBypassForTesting: optionsOrBypass, openBeforeMinutes: CHECKIN_OPEN_BEFORE_MIN }
+      : { openBeforeMinutes: CHECKIN_OPEN_BEFORE_MIN, ...optionsOrBypass };
 
-  const { openBeforeMinutes = 60, forceBypassForTesting = false } = options;
+  const { openBeforeMinutes = CHECKIN_OPEN_BEFORE_MIN, forceBypassForTesting = false } = options;
 
   if (forceBypassForTesting) {
     return {
@@ -42,74 +63,68 @@ export function getCheckInWindowState(
     };
   }
 
-  try {
-    const [startH, startM] = schedule.startTime.split(':').map(Number);
-    const [endH, endM] = schedule.endTime.split(':').map(Number);
+  const scheduleStart = parseScheduleKST(schedule.date, schedule.startTime);
+  const scheduleEnd = parseScheduleKST(schedule.date, schedule.endTime);
 
-    // Rehearsal start date-time
-    const scheduleStart = new Date(`${schedule.date}T${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}:00`);
-    
-    // Window opens N minutes (default 60m = 1 hour) before rehearsal start
-    const windowStart = new Date(scheduleStart.getTime() - openBeforeMinutes * 60 * 1000);
-    const windowEnd = new Date(`${schedule.date}T${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}:00`);
-
-    // Handle cross-midnight rehearsals if endTime <= startTime
-    if (windowEnd.getTime() <= scheduleStart.getTime()) {
-      windowEnd.setDate(windowEnd.getDate() + 1);
-    }
-
-    const openTimeHour = String(windowStart.getHours()).padStart(2, '0');
-    const openTimeMin = String(windowStart.getMinutes()).padStart(2, '0');
-    const windowStartTimeStr = `${openTimeHour}:${openTimeMin}`;
-
-    const nowTime = currentDate.getTime();
-    if (nowTime < windowStart.getTime()) {
-      const todayYMD = getKSTDateString(currentDate);
-      if (todayYMD < schedule.date) {
-        return {
-          isOpen: false,
-          status: 'UPCOMING_DATE',
-          message: `${windowStartTimeStr}부터`,
-          badgeLabel: `연습 당일 ${windowStartTimeStr} 오픈`,
-          windowStartTimeStr,
-        };
-      }
-      return {
-        isOpen: false,
-        status: 'TODAY_BEFORE_WINDOW',
-        message: `${windowStartTimeStr}부터`,
-        badgeLabel: `오늘 ${windowStartTimeStr} 오픈 예정`,
-        windowStartTimeStr,
-      };
-    }
-
-    if (nowTime > windowEnd.getTime()) {
-      return {
-        isOpen: false,
-        status: 'WINDOW_CLOSED',
-        message: '금일 연습 출석 체크가 마감되었습니다.',
-        badgeLabel: '출석 마감',
-        windowStartTimeStr,
-      };
-    }
-
+  if (!scheduleStart || !scheduleEnd) {
     return {
-      isOpen: true,
-      status: 'WINDOW_OPEN',
-      message: '현재 연습실 QR 출석 체크가 진행 중입니다.',
-      badgeLabel: 'QR 출석 진행 중',
-      windowStartTimeStr,
-    };
-  } catch (err) {
-    console.error('[TimeWindow] Date parsing error, defaulting to open:', err);
-    return {
-      isOpen: true,
-      status: 'WINDOW_OPEN',
-      message: 'QR 출석 체크 가능',
-      badgeLabel: 'QR 출석 가능',
-      windowStartTimeStr: schedule.startTime,
+      isOpen: false,
+      status: 'WINDOW_CLOSED',
+      message: '일정 시간 오류, 운영진에게 문의해 주세요.',
+      badgeLabel: '시간 오류',
+      windowStartTimeStr: schedule.startTime || '',
     };
   }
+
+  // Window opens N minutes (default 60m = 1 hour) before rehearsal start
+  const windowStart = new Date(scheduleStart.getTime() - openBeforeMinutes * 60 * 1000);
+  const windowEnd = new Date(scheduleEnd.getTime());
+
+  // Handle cross-midnight rehearsals if endTime <= startTime
+  if (windowEnd.getTime() <= scheduleStart.getTime()) {
+    windowEnd.setTime(windowEnd.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  const windowStartTimeStr = getKSTTimestampString(windowStart).slice(11, 16);
+
+  const nowTime = currentDate.getTime();
+  if (nowTime < windowStart.getTime()) {
+    const todayYMD = getKSTDateString(currentDate);
+    if (todayYMD < schedule.date) {
+      return {
+        isOpen: false,
+        status: 'UPCOMING_DATE',
+        message: `${windowStartTimeStr}부터`,
+        badgeLabel: `연습 당일 ${windowStartTimeStr} 오픈`,
+        windowStartTimeStr,
+      };
+    }
+    return {
+      isOpen: false,
+      status: 'TODAY_BEFORE_WINDOW',
+      message: `${windowStartTimeStr}부터`,
+      badgeLabel: `오늘 ${windowStartTimeStr} 오픈 예정`,
+      windowStartTimeStr,
+    };
+  }
+
+  if (nowTime > windowEnd.getTime()) {
+    return {
+      isOpen: false,
+      status: 'WINDOW_CLOSED',
+      message: '금일 연습 출석 체크가 마감되었습니다.',
+      badgeLabel: '출석 마감',
+      windowStartTimeStr,
+    };
+  }
+
+  return {
+    isOpen: true,
+    status: 'WINDOW_OPEN',
+    message: '현재 연습실 QR 출석 체크가 진행 중입니다.',
+    badgeLabel: 'QR 출석 진행 중',
+    windowStartTimeStr,
+  };
 }
 
 /**
@@ -120,17 +135,11 @@ export function getCheckInWindowState(
 export function isRsvpOpenForSchedule(
   schedule: Schedule,
   currentDate: Date = new Date(),
-  closeBeforeMinutes: number = 60
+  closeBeforeMinutes: number = RSVP_CUTOFF_BEFORE_MIN
 ): boolean {
   if (schedule.isCancelled || schedule.isArchived) return false;
-  try {
-    const [startH, startM] = schedule.startTime.split(':').map(Number);
-    const scheduleStart = new Date(
-      `${schedule.date}T${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}:00`
-    );
-    const cutoffTime = scheduleStart.getTime() - closeBeforeMinutes * 60 * 1000;
-    return currentDate.getTime() < cutoffTime;
-  } catch {
-    return true;
-  }
+  const scheduleStart = parseScheduleKST(schedule.date, schedule.startTime);
+  if (!scheduleStart) return false;
+  const cutoffTime = scheduleStart.getTime() - closeBeforeMinutes * 60 * 1000;
+  return currentDate.getTime() < cutoffTime;
 }

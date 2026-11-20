@@ -12,6 +12,7 @@ import {
   startSupabaseRealtime,
   stopSupabaseRealtime,
   getActiveSupabaseRealtime,
+  getBackupPollingIntervalMs,
 } from './supabaseRealtime';
 import { SheetsService } from '../sheets';
 import { GasBackend } from '../backend/gasBackend';
@@ -879,6 +880,16 @@ describe('supabaseRealtime', () => {
 
       stopSupabaseRealtime();
       expect(getActiveSupabaseRealtime()).toBeNull();
+    });
+  });
+
+  describe('P1-11: Background Polling Throttle based on Realtime Connection', () => {
+    it('returns 5 minutes (300000ms) when realtime is connected', () => {
+      expect(getBackupPollingIntervalMs(true)).toBe(300000);
+    });
+
+    it('returns 30 seconds (30000ms) when realtime is disconnected', () => {
+      expect(getBackupPollingIntervalMs(false)).toBe(30000);
     });
   });
 });

@@ -96,3 +96,33 @@ export function loadKakaoServices(): Promise<void> {
 
   return loadPromise;
 }
+
+export interface BuildKakaoMapLinkInput {
+  name?: string | null;
+  lat?: number | null;
+  lon?: number | null;
+}
+
+/**
+ * 카카오맵 길찾기(좌표 있을 때) 또는 장소 검색(좌표 없을 때) 웹 링크를 생성합니다.
+ * - 좌표가 둘 다 유한한 숫자면 https://map.kakao.com/link/to/{name},{lat},{lon}
+ * - 좌표가 없거나 유효하지 않으면 https://map.kakao.com/link/search/{name}
+ * - 이름이 비어 있으면 null
+ */
+export function buildKakaoMapLink(input: BuildKakaoMapLinkInput): string | null {
+  const trimmed = input.name?.trim();
+  if (!trimmed) return null;
+
+  const { lat, lon } = input;
+  const hasValidCoords =
+    typeof lat === 'number' &&
+    Number.isFinite(lat) &&
+    typeof lon === 'number' &&
+    Number.isFinite(lon);
+
+  if (hasValidCoords) {
+    return `https://map.kakao.com/link/to/${encodeURIComponent(trimmed)},${lat},${lon}`;
+  }
+  return `https://map.kakao.com/link/search/${encodeURIComponent(trimmed)}`;
+}
+
