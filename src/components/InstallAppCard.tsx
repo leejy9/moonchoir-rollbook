@@ -49,7 +49,7 @@ export const InstallAppCard: React.FC<InstallAppCardProps> = ({ compact = false 
   return (
     <section className={`install-app-card ${compact ? 'compact' : ''}`}>
       <div className="install-app-text">
-        <strong>📲 앱처럼 설치하기</strong>
+        <strong>앱처럼 설치하기</strong>
         <span>
           {environment === 'KAKAO_INAPP'
             ? '카카오톡 안에서는 설치할 수 없어요. 기본 브라우저로 먼저 열어 주세요.'

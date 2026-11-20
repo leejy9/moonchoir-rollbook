@@ -8,7 +8,7 @@ import { BottomNav } from './components/BottomNav';
 import { CalendarTab } from './components/CalendarTab';
 import { HomeView } from './components/HomeView';
 import { ScheduleDetailSheet } from './components/ScheduleDetailSheet';
-import { MemberPortalModal } from './components/MemberPortalModal';
+import { ProfileTab } from './components/ProfileTab';
 import { QRScannerModal } from './components/QRScannerModal';
 import { RSVPModal } from './components/RSVPModal';
 import { SyncStatus } from './components/SyncStatus';
@@ -44,7 +44,6 @@ export function App() {
   const [profile, setProfile] = useState<BoundDeviceProfile | null>(() => getBoundDeviceProfile());
   const [hasConfirmedRosterSync, setHasConfirmedRosterSync] = useState(false);
   const [showBindingModal, setShowBindingModal] = useState(false);
-  const [showMemberPortalModal, setShowMemberPortalModal] = useState(false);
 
   // Hash-based routing state
   const { route, navigate } = useHashRoute();
@@ -147,10 +146,10 @@ export function App() {
   const isManagementArea = route.area === 'admin' || route.area === 'superAdmin';
 
   useEffect(() => {
-    if (isManagementArea || overlayKind || showMemberPortalModal || showQRScanner || isRsvpOpen) {
+    if (isManagementArea || overlayKind || showQRScanner || isRsvpOpen) {
       void sheetsService.refreshRemoteData();
     }
-  }, [isManagementArea, overlayKind, showMemberPortalModal, showQRScanner, isRsvpOpen]);
+  }, [isManagementArea, overlayKind, showQRScanner, isRsvpOpen]);
 
   const activeSchedules = sheetsService.getSchedulesForMember(profile?.memberId);
 
@@ -209,7 +208,6 @@ export function App() {
     if (!current) {
       clearDeviceProfile();
       queueMicrotask(() => {
-        setShowMemberPortalModal(false);
         navigate({ type: 'RESET' });
         setProfile(null);
       });
@@ -267,10 +265,6 @@ export function App() {
   };
 
   const handleSelectTab = (tab: MemberTab) => {
-    if (tab === 'profile') {
-      setShowMemberPortalModal(true);
-      return;
-    }
     navigate({ type: 'TAB', tab });
   };
 
@@ -323,7 +317,7 @@ export function App() {
               onOpenAdmin={handleOpenAdmin}
               onOpenSuperAdmin={handleOpenSuperAdmin}
               onChangeProfile={() => setShowBindingModal(true)}
-              onOpenProfilePortal={() => setShowMemberPortalModal(true)}
+              onOpenProfilePortal={() => navigate({ type: 'TAB', tab: 'profile' })}
               onOpenDetail={(sch) =>
                 navigate({
                   type: 'OPEN',
@@ -342,6 +336,36 @@ export function App() {
               selectedDate={route.overlay?.kind === 'scheduleSheet' ? route.overlay.date : undefined}
               onNavigate={navigate}
               onOpenRSVP={(sch) => setRsvSchedule(sch)}
+              refreshTrigger={refreshKey}
+            />
+          )}
+
+          {route.tab === 'profile' && profile && (
+            <ProfileTab
+              profile={profile}
+              displayMode={displayMode}
+              isDarkMode={isDarkMode}
+              onChangeDisplayMode={handleDisplayModeChange}
+              onChangeDarkMode={handleDarkModeChange}
+              onChangeBinding={() => setShowBindingModal(true)}
+              onLogout={async () => {
+                clearDeviceProfile();
+                setProfile(null);
+                navigate({ type: 'RESET' });
+              }}
+              onRefreshData={triggerRefresh}
+              onOpenRSVP={(sch) => setRsvSchedule(sch)}
+              onOpenQRScanner={(sch) => {
+                if (sch) {
+                  setQrTargetSchedule(sch);
+                  setShowQRScanner(true);
+                } else {
+                  setQrTargetSchedule(null);
+                  setShowQRScanner(false);
+                  navigate({ type: 'TAB', tab: 'today' });
+                }
+              }}
+              onOpenAdmin={handleOpenAdmin}
               refreshTrigger={refreshKey}
             />
           )}
@@ -411,43 +435,7 @@ export function App() {
         />
       )}
 
-      {showMemberPortalModal && profile && (
-        <MemberPortalModal
-          profile={profile}
-          onClose={() => setShowMemberPortalModal(false)}
-          onChangeBinding={() => {
-            setShowMemberPortalModal(false);
-            setShowBindingModal(true);
-          }}
-          onOpenRSVP={(sch) => {
-            setShowMemberPortalModal(false);
-            setRsvSchedule(sch);
-          }}
-          onOpenQRScanner={(sch) => {
-            setShowMemberPortalModal(false);
-            if (sch) {
-              setQrTargetSchedule(sch);
-              setShowQRScanner(true);
-            } else {
-              setQrTargetSchedule(null);
-              setShowQRScanner(false);
-              navigate({ type: 'TAB', tab: 'today' });
-            }
-          }}
-          onOpenAdmin={handleOpenAdmin}
-          displayMode={displayMode}
-          isDarkMode={isDarkMode}
-          onChangeDisplayMode={handleDisplayModeChange}
-          onChangeDarkMode={handleDarkModeChange}
-          onLogout={async () => {
-            clearDeviceProfile();
-            setProfile(null);
-            setShowMemberPortalModal(false);
-            navigate({ type: 'RESET' });
-          }}
-          onRefreshData={triggerRefresh}
-        />
-      )}
+
 
       {showQRScanner && currentSchedule && profile && (
         <QRScannerModal
