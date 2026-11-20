@@ -51,18 +51,18 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
           <div
             className="modal-badge"
             style={{
-              background: isSuperAdminMode ? '#4338CA' : undefined,
-              color: isSuperAdminMode ? '#EEF2FF' : undefined,
+              background: isSuperAdminMode ? '#1e293b' : undefined,
+              color: isSuperAdminMode ? '#f8fafc' : undefined,
             }}
           >
-            {isSuperAdminMode ? '🔒 최고 시스템 관리자' : '운영진 전용'}
+            {isSuperAdminMode ? '최고 관리자' : '운영진 전용'}
           </div>
           <h2 className="modal-title">
-            {isSuperAdminMode ? '최고 관리자 인증 (Master)' : '운영진 관리자 인증'}
+            {isSuperAdminMode ? '최고 관리자 인증' : '운영진 관리자 인증'}
           </h2>
           <p className="modal-desc">
             {isSuperAdminMode
-              ? '원천 감사 로그 조회, 시트/클라우드 연동 제어, 시스템 보안 설정을 위해 최고 관리자 PIN을 입력하세요.'
+              ? '원천 감사 로그, 시트/클라우드 연동 제어, 시스템 보안 설정을 위해 최고 관리자 PIN을 입력하세요.'
               : '단원 명부 관리, 연습 일정 등록, 출결 통계 대시보드 접근을 위해 운영진 PIN을 입력하세요.'}
           </p>
         </div>
@@ -79,7 +79,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
             inputMode="numeric"
             maxLength={8}
             className="input-text"
-            placeholder={isSuperAdminMode ? '최고 관리자 PIN 번호 (기본: 2315)' : '운영진 PIN 번호 (기본: 1004)'}
+            placeholder="PIN 번호를 입력하세요"
             value={pin}
             onChange={(e) => setPin(e.target.value)}
             disabled={isChecking}
@@ -92,11 +92,11 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
               className="btn-primary-large"
               disabled={isChecking}
               style={{
-                background: isSuperAdminMode ? 'linear-gradient(135deg, #4338CA, #6366F1)' : undefined,
+                background: isSuperAdminMode ? '#1e293b' : undefined,
               }}
             >
               {isChecking
-                ? '최신 설정 확인 중...'
+                ? '확인 중...'
                 : isSuperAdminMode
                 ? '최고 관리자 모드 진입'
                 : '운영진 모드 진입'}
