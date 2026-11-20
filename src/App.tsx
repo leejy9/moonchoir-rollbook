@@ -38,8 +38,10 @@ import {
 } from './services/displayMode';
 import type { BoundDeviceProfile, Schedule } from './types/rollbook';
 import { parseRoute, type MemberTab } from './utils/route';
+import { AudioPlayerProvider } from './components/audio/AudioPlayerProvider';
+import { MiniPlayer } from './components/audio/MiniPlayer';
 
-export function App() {
+function MainApp() {
   // Device binding state
   const [profile, setProfile] = useState<BoundDeviceProfile | null>(() => getBoundDeviceProfile());
   const [hasConfirmedRosterSync, setHasConfirmedRosterSync] = useState(false);
@@ -395,6 +397,9 @@ export function App() {
         />
       )}
 
+      {/* Mini Audio Player (Fixed above BottomNav) */}
+      {isBound && route.area === 'member' && <MiniPlayer />}
+
       {/* Member Bottom Navigation (Only visible when bound in member area) */}
       {isBound && route.area === 'member' && (
         <BottomNav
@@ -487,6 +492,14 @@ export function App() {
         />
       )}
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <AudioPlayerProvider>
+      <MainApp />
+    </AudioPlayerProvider>
   );
 }
 
