@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseRemoteCommentEvents, parseRemoteMembers, parseRemoteSchedules } from './sheetsParser';
+import {
+  parsePracticeCatalog,
+  parseRemoteCommentEvents,
+  parseRemoteMembers,
+  parseRemoteSchedules,
+} from './sheetsParser';
 
 const baseSchedule = {
     title: '경찰의날 녹음',
@@ -136,3 +141,122 @@ describe('parseRemoteCommentEvents', () => {
     expect(events[0].action).toBe('EDIT');
   });
 });
+
+describe('parsePracticeCatalog', () => {
+  it('returns an empty catalog when given invalid or empty input', () => {
+    expect(parsePracticeCatalog(null)).toEqual({ pieces: [], tracks: [], programPieces: [] });
+    expect(parsePracticeCatalog(undefined)).toEqual({ pieces: [], tracks: [], programPieces: [] });
+    expect(parsePracticeCatalog('invalid')).toEqual({ pieces: [], tracks: [], programPieces: [] });
+    expect(parsePracticeCatalog({})).toEqual({ pieces: [], tracks: [], programPieces: [] });
+  });
+
+  it('parses camelCase catalog input with defaults', () => {
+    const raw = {
+      pieces: [
+        {
+          id: 'p1',
+          title: '아리랑',
+          composer: '민요',
+          scoreUrl: 'https://example.com/score.pdf',
+          isArchived: false,
+          createdAt: '2026-11-20T00:00:00Z',
+          updatedAt: '2026-11-20T00:00:00Z',
+        },
+      ],
+      tracks: [
+        {
+          id: 't1',
+          pieceId: 'p1',
+          label: '전체 합창 MR',
+          kind: 'MR',
+          source: 'r2',
+          storageKey: 'audio/arirang.mp3',
+          orderIndex: 0,
+          isArchived: false,
+          createdAt: '2026-11-20T00:00:00Z',
+          updatedAt: '2026-11-20T00:00:00Z',
+        },
+      ],
+      programPieces: [
+        {
+          programId: 'card1',
+          pieceId: 'p1',
+          orderIndex: 0,
+          isArchived: false,
+        },
+      ],
+    };
+
+    const parsed = parsePracticeCatalog(raw);
+    expect(parsed.pieces).toHaveLength(1);
+    expect(parsed.pieces[0].title).toBe('아리랑');
+    expect(parsed.pieces[0].scoreUrl).toBe('https://example.com/score.pdf');
+    expect(parsed.tracks).toHaveLength(1);
+    expect(parsed.tracks[0].kind).toBe('MR');
+    expect(parsed.tracks[0].source).toBe('r2');
+    expect(parsed.programPieces[0].programId).toBe('card1');
+  });
+
+  it('parses snake_case DB format and converts archived_at to isArchived', () => {
+    const raw = {
+      data: {
+        pieces: [
+          {
+            id: 'p2',
+            title: '도라지 타령',
+            score_url: 'https://example.com/doraji.pdf',
+            archived_at: '2026-11-20T10:00:00Z',
+            created_at: '2026-11-20T00:00:00Z',
+            updated_at: '2026-11-20T10:00:00Z',
+          },
+        ],
+        tracks: [
+          {
+            id: 't2',
+            piece_id: 'p2',
+            label: '소프라노 가이드',
+            kind: '가이드',
+            source_type: 'drive',
+            url: 'https://drive.google.com/file/d/xyz/view',
+            duration_seconds: 180,
+            order_index: 1,
+            created_at: '2026-11-20T00:00:00Z',
+            updated_at: '2026-11-20T00:00:00Z',
+          },
+        ],
+        program_pieces: [
+          {
+            program_id: 'card2',
+            piece_id: 'p2',
+            order_index: 1,
+            archived_at: null,
+          },
+        ],
+      },
+    };
+
+    const parsed = parsePracticeCatalog(raw);
+    expect(parsed.pieces[0].isArchived).toBe(true);
+    expect(parsed.pieces[0].scoreUrl).toBe('https://example.com/doraji.pdf');
+    expect(parsed.tracks[0].durationSeconds).toBe(180);
+    expect(parsed.tracks[0].source).toBe('drive');
+    expect(parsed.programPieces[0].programId).toBe('card2');
+    expect(parsed.programPieces[0].isArchived).toBe(false);
+  });
+
+  it('preserves rows without id by assigning orphan IDs and preserves custom kinds and sources', () => {
+    const raw = {
+      pieces: [{ title: '이름 없는 곡' }],
+      tracks: [{ pieceId: 'p1', label: '특수 트랙', kind: '베이스 특훈', source: 'vimeo' }],
+      programPieces: [{ programId: 'card1', pieceId: 'p1' }],
+    };
+
+    const parsed = parsePracticeCatalog(raw);
+    expect(parsed.pieces[0].id).toBe('orphan_piece_0');
+    expect(parsed.pieces[0].title).toBe('이름 없는 곡');
+    expect(parsed.tracks[0].id).toBe('orphan_track_0');
+    expect(parsed.tracks[0].kind).toBe('베이스 특훈');
+    expect(parsed.tracks[0].source).toBe('vimeo');
+  });
+});
+
