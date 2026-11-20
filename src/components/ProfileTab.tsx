@@ -110,7 +110,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     );
   }, [currentMember, schedules, allLogs, todayStr, allRsvpVotes, lateGraceMinutes, members]);
 
-  // Per-session records assembly
+  // Per-session records assembly (include archived schedules so past semesters remain visible in records)
   const scheduleRecords = useMemo(() => {
     return buildMemberScheduleRecords({
       member: currentMember,
@@ -119,7 +119,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       logs: allLogs,
       rsvpVotes: allRsvpVotes,
       lateGraceMinutes,
-      includeArchived: false,
+      includeArchived: true,
     });
   }, [currentMember, members, schedules, allLogs, allRsvpVotes, lateGraceMinutes]);
 

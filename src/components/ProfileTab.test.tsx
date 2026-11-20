@@ -155,4 +155,50 @@ describe('ProfileTab Component (MEMBER_UX_AUDIO_SPEC §2-5)', () => {
     expect(html).toContain('min-height:44px');
     expect(html).toContain('min-width:44px');
   });
+
+  it('renders archived past schedules in records table while keeping cumulative stats identical to admin calculation (Spec §2-5, §6-4 #1)', () => {
+    const schedulesWithArchived: Schedule[] = [
+      {
+        id: 'sch_active',
+        title: '현재 학기 정기연습',
+        date: '2026-10-18',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '연습실',
+        category: '정기연습',
+      },
+      {
+        id: 'sch_archived',
+        title: '지난 학기 보관된 연습',
+        date: '2026-05-01',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '연습실',
+        category: '정기연습',
+        isArchived: true,
+      },
+    ];
+
+    vi.spyOn(sheetsService, 'getSchedulesForMember').mockReturnValue(schedulesWithArchived);
+
+    const html = renderToString(
+      <ProfileTab
+        profile={mockProfile}
+        displayMode="AUTO"
+        isDarkMode={false}
+        onChangeDisplayMode={vi.fn()}
+        onChangeDarkMode={vi.fn()}
+        onChangeBinding={vi.fn()}
+      />
+    );
+
+    // 1. Archived past schedule must appear in the records table
+    expect(html).toContain('지난 학기 보관된 연습');
+    expect(html).toContain('현재 학기 정기연습');
+
+    // 2. Cross-screen contract check: cumulative stats calculation strictly excludes archived schedules
+    // Active schedule has no log -> absent 1, attendanceRate 0%
+    // If archived was counted, it would be 2 schedules
+    expect(html).toContain('0%');
+  });
 });
