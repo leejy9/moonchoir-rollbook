@@ -25,6 +25,7 @@ import {
 import { sheetsService } from './services/sheets';
 import {
   getActiveSupabaseRealtime,
+  getBackupPollingIntervalMs,
   startSupabaseRealtime,
   stopSupabaseRealtime,
 } from './services/realtime/supabaseRealtime';
@@ -119,12 +120,19 @@ export function App() {
     document.addEventListener('visibilitychange', refreshWhenVisible);
     window.addEventListener('online', refreshWhenOnline);
 
-    // Supabase 환경: 화면이 켜져 있을 때 30초마다 자동 백업 동기화 (모바일 웹소켓 절전 대비 2중 안전망)
+    // Supabase 환경: 실시간 웹소켓 연결 시 5분, 연결 끊김 시 30초 간격으로 백업 동기화
+    let lastBackupFetchAt = Date.now();
     const backupTimer = setInterval(() => {
-      if (document.visibilityState === 'visible' && sheetsService.getBackendKind() === 'supabase') {
+      if (document.visibilityState !== 'visible' || sheetsService.getBackendKind() !== 'supabase') {
+        return;
+      }
+      const isConnected = getActiveSupabaseRealtime()?.getIsConnected() ?? false;
+      const intervalMs = getBackupPollingIntervalMs(isConnected);
+      if (Date.now() - lastBackupFetchAt >= intervalMs) {
+        lastBackupFetchAt = Date.now();
         void sheetsService.refreshRemoteData({ force: true });
       }
-    }, 30000);
+    }, 10000);
 
     return () => {
       document.removeEventListener('visibilitychange', refreshWhenVisible);
@@ -133,11 +141,16 @@ export function App() {
     };
   }, []);
 
-  // 화면 전환·주요 창을 열 때 최신 데이터를 받아온다
+  // 관리자 진입 또는 모달/오버레이 오픈 시에만 최신 데이터를 동기화합니다 (단순 탭 전환은 로컬 캐시 사용).
   const isRsvpOpen = rsvpSchedule !== null;
+  const overlayKind = route.area === 'member' ? route.overlay?.kind : undefined;
+  const isManagementArea = route.area === 'admin' || route.area === 'superAdmin';
+
   useEffect(() => {
-    void sheetsService.refreshRemoteData();
-  }, [route, showMemberPortalModal, showQRScanner, isRsvpOpen]);
+    if (isManagementArea || overlayKind || showMemberPortalModal || showQRScanner || isRsvpOpen) {
+      void sheetsService.refreshRemoteData();
+    }
+  }, [isManagementArea, overlayKind, showMemberPortalModal, showQRScanner, isRsvpOpen]);
 
   const activeSchedules = sheetsService.getSchedulesForMember(profile?.memberId);
 
