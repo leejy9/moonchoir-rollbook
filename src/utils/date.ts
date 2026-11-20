@@ -226,3 +226,17 @@ export function formatShortDate(dateStr: string): string {
   if (!match) return dateStr;
   return `${match[1].slice(2)}-${match[2]}-${match[3]}`;
 }
+
+/**
+ * targetDate('YYYY-MM-DD')와 now(Date) 사이의 KST 기준 D-Day 차이를 계산합니다.
+ * targetDate > now 이면 양수 (예: 3일 후면 3, 오늘이면 0, 어제면 -1).
+ */
+export function computeDDay(targetDate: string, now: Date = new Date()): number {
+  const todayStr = getKSTDateString(now);
+  const [ty, tm, td] = targetDate.split('-').map(Number);
+  const [by, bm, bd] = todayStr.split('-').map(Number);
+  const tUtc = Date.UTC(ty, tm - 1, td);
+  const bUtc = Date.UTC(by, bm - 1, bd);
+  return Math.round((tUtc - bUtc) / (24 * 60 * 60 * 1000));
+}
+
