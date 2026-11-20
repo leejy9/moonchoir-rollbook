@@ -36,7 +36,6 @@ import {
   type DisplayMode,
 } from './services/displayMode';
 import type { BoundDeviceProfile, Schedule } from './types/rollbook';
-import { getKSTDateString } from './utils/date';
 import { parseRoute, type MemberTab } from './utils/route';
 
 export function App() {
@@ -141,15 +140,6 @@ export function App() {
   }, [route, showMemberPortalModal, showQRScanner, isRsvpOpen]);
 
   const activeSchedules = sheetsService.getSchedulesForMember(profile?.memberId);
-  const [todayStr, setTodayStr] = useState(() => getKSTDateString());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const currentKst = getKSTDateString();
-      setTodayStr((prev) => (prev !== currentKst ? currentKst : prev));
-    }, 10000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (route.area !== 'admin' && route.area !== 'superAdmin') return;
@@ -225,10 +215,7 @@ export function App() {
     }
   }, [hasConfirmedRosterSync, navigate, profile, refreshKey]);
 
-  const currentSchedule =
-    qrTargetSchedule ||
-    activeSchedules.find((s) => !s.isCancelled && !s.isArchived && s.date === todayStr) ||
-    activeSchedules.find((s) => !s.isCancelled && !s.isArchived && s.date >= todayStr);
+  const currentSchedule = qrTargetSchedule;
 
   // If user has not bound a device yet, show binding prompt
   const isBound = profile !== null;
@@ -310,8 +297,14 @@ export function App() {
             <HomeView
               profile={profile}
               onOpenQRScanner={(sch) => {
-                if (sch) setQrTargetSchedule(sch);
-                setShowQRScanner(true);
+                if (sch) {
+                  setQrTargetSchedule(sch);
+                  setShowQRScanner(true);
+                } else {
+                  setQrTargetSchedule(null);
+                  setShowQRScanner(false);
+                  navigate({ type: 'TAB', tab: 'today' });
+                }
               }}
               onOpenRSVP={(sch) => setRsvSchedule(sch)}
               onOpenAdmin={handleOpenAdmin}
@@ -419,8 +412,14 @@ export function App() {
           }}
           onOpenQRScanner={(sch) => {
             setShowMemberPortalModal(false);
-            if (sch) setQrTargetSchedule(sch);
-            setShowQRScanner(true);
+            if (sch) {
+              setQrTargetSchedule(sch);
+              setShowQRScanner(true);
+            } else {
+              setQrTargetSchedule(null);
+              setShowQRScanner(false);
+              navigate({ type: 'TAB', tab: 'today' });
+            }
           }}
           onOpenAdmin={handleOpenAdmin}
           displayMode={displayMode}
