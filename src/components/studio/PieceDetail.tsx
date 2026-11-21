@@ -3,6 +3,7 @@ import type { AppConfig, PracticePiece, PracticeTrack, ProgramCard } from '../..
 import { useAudioPlayer } from '../audio/audioPlayerContext';
 import { buildAudioQueue } from '../../utils/audioQueue';
 import { resolveTrackPlayback } from '../../utils/practiceMedia';
+import { isVideoTrack } from '../../utils/youtubeUrl';
 
 export interface PieceDetailProps {
   piece: PracticePiece;
@@ -28,8 +29,8 @@ export const PieceDetail: React.FC<PieceDetailProps> = ({
   const { playTrack, currentTrack, isPlaying, togglePlay } = useAudioPlayer();
 
   const activeTracks = tracks.filter((t) => !t.isArchived);
-  const audioTracks = activeTracks.filter((t) => t.source === 'r2' || (t.source !== 'youtube' && !t.url?.includes('youtube')));
-  const videoTracks = activeTracks.filter((t) => t.source === 'youtube' || t.url?.includes('youtube'));
+  const audioTracks = activeTracks.filter((t) => !isVideoTrack(t));
+  const videoTracks = activeTracks.filter((t) => isVideoTrack(t));
 
   // Program name line
   const connectedCard = programCards.find((c) => connectedProgramIds.includes(c.id));

@@ -1,6 +1,7 @@
 import React from 'react';
 import type { PracticePiece, PracticeTrack } from '../../types/rollbook';
 import { addDaysKST } from '../../utils/date';
+import { isVideoTrack } from '../../utils/youtubeUrl';
 
 export interface PieceListItemProps {
   piece: PracticePiece;
@@ -19,9 +20,9 @@ export const PieceListItem: React.FC<PieceListItemProps> = ({
 }) => {
   const activeTracks = tracks.filter((t) => !t.isArchived);
 
-  // Audio tracks (r2 / audio) vs video tracks (youtube)
-  const audioTracks = activeTracks.filter((t) => t.source === 'r2' || (t.source !== 'youtube' && !t.url?.includes('youtube')));
-  const videoTracks = activeTracks.filter((t) => t.source === 'youtube' || t.url?.includes('youtube'));
+  // Audio tracks vs video tracks
+  const audioTracks = activeTracks.filter((t) => !isVideoTrack(t));
+  const videoTracks = activeTracks.filter((t) => isVideoTrack(t));
 
   const hasScore = Boolean(piece.scoreStorageKey || piece.scoreUrl);
 

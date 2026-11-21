@@ -3,6 +3,7 @@ import type { AppConfig, PracticeCatalog, PracticePiece, ProgramCard, Schedule }
 import { ProgramScopeMenu } from '../../studio/ProgramScopeMenu';
 import { buildProgramScopes, filterPiecesByScope, searchPieces } from '../../../utils/practiceScope';
 import { getKSTDateString } from '../../../utils/date';
+import { isVideoTrack } from '../../../utils/youtubeUrl';
 import { useUploadQueue } from '../../../services/media/uploadQueue';
 
 interface PieceListSectionProps {
@@ -130,8 +131,8 @@ export const PieceListSection: React.FC<PieceListSectionProps> = ({
           filteredPieces.map(({ piece, orderNumber }) => {
             const isUnassigned = unassignedPieceIds.has(piece.id);
             const pieceTracks = catalog.tracks.filter((t) => t.pieceId === piece.id && !t.isArchived);
-            const audioCount = pieceTracks.filter((t) => t.source === 'r2' || t.kind !== '참고영상').length;
-            const videoCount = pieceTracks.filter((t) => t.source === 'youtube' || t.kind === '참고영상').length;
+            const audioCount = pieceTracks.filter((t) => !isVideoTrack(t)).length;
+            const videoCount = pieceTracks.filter(isVideoTrack).length;
             const hasScore = Boolean(piece.scoreStorageKey || piece.scoreUrl);
 
             return (

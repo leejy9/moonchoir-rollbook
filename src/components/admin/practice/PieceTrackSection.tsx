@@ -3,6 +3,7 @@ import type { PracticeTrack } from '../../../types/rollbook';
 import type { UploadJob } from '../../../services/media/uploadQueue';
 import { TrackEditModal } from './TrackEditModal';
 import { TrackRow } from './TrackRow';
+import { isVideoTrack } from '../../../utils/youtubeUrl';
 
 interface PieceTrackSectionProps {
   tracks: PracticeTrack[];
@@ -36,8 +37,8 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
     mode: 'label' | 'kind';
   } | null>(null);
 
-  const audioTracks = tracks.filter((t) => t.source === 'r2' || t.kind !== '참고영상');
-  const youtubeTracks = tracks.filter((t) => t.source === 'youtube' || t.kind === '참고영상');
+  const audioTracks = tracks.filter((t) => !isVideoTrack(t));
+  const youtubeTracks = tracks.filter((t) => isVideoTrack(t));
 
   return (
     <>
