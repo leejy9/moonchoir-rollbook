@@ -3,9 +3,12 @@ import {
   clearDataCache,
   DATA_CACHE_KEYS,
   loadFromStorage,
+  PREFERENCE_KEYS,
+  readPreference,
   resetStorage,
   saveToStorage,
   STORAGE_KEYS,
+  writePreference,
 } from './sheetsStorage';
 
 describe('sheetsStorage', () => {
@@ -64,5 +67,70 @@ describe('sheetsStorage', () => {
     for (const [key, expectedValue] of Object.entries(preservedKeys)) {
       expect(window.localStorage.getItem(key)).toBe(expectedValue);
     }
+  });
+
+  it('reads preference with validator and handles invalid format by returning fallback', () => {
+    writePreference(PREFERENCE_KEYS.HOME_CALENDAR_VIEW, 'invalid_view');
+    const result = readPreference(
+      PREFERENCE_KEYS.HOME_CALENDAR_VIEW,
+      (val): val is 'week' | 'month' => val === 'week' || val === 'month',
+      'week'
+    );
+    expect(result).toBe('week');
+
+    writePreference(PREFERENCE_KEYS.HOME_CALENDAR_VIEW, 'month');
+    const validResult = readPreference(
+      PREFERENCE_KEYS.HOME_CALENDAR_VIEW,
+      (val): val is 'week' | 'month' => val === 'week' || val === 'month',
+      'week'
+    );
+    expect(validResult).toBe('month');
+  });
+
+  it('returns fallback when localStorage throws an error', () => {
+    const errorStorage = {
+      getItem: () => {
+        throw new Error('SecurityError: access denied');
+      },
+      setItem: () => {
+        throw new Error('QuotaExceededError');
+      },
+      removeItem: () => {},
+      clear: () => {},
+    };
+    vi.stubGlobal('window', { localStorage: errorStorage });
+    vi.stubGlobal('localStorage', errorStorage);
+
+    const result = readPreference(
+      PREFERENCE_KEYS.PLAYBACK_RATE,
+      (val): val is number => typeof val === 'number',
+      1
+    );
+    expect(result).toBe(1);
+
+    expect(() => writePreference(PREFERENCE_KEYS.PLAYBACK_RATE, 1.5)).not.toThrow();
+  });
+
+  it('preserves preferences when clearDataCache is executed', () => {
+    writePreference(PREFERENCE_KEYS.HOME_CALENDAR_VIEW, 'month');
+    writePreference(PREFERENCE_KEYS.PLAYBACK_RATE, 1.25);
+    writePreference(PREFERENCE_KEYS.STUDIO_SCOPE, 'all');
+
+    clearDataCache();
+
+    expect(
+      readPreference(
+        PREFERENCE_KEYS.HOME_CALENDAR_VIEW,
+        (val): val is 'week' | 'month' => val === 'week' || val === 'month',
+        'week'
+      )
+    ).toBe('month');
+    expect(
+      readPreference(
+        PREFERENCE_KEYS.PLAYBACK_RATE,
+        (val): val is number => typeof val === 'number',
+        1
+      )
+    ).toBe(1.25);
   });
 });

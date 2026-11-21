@@ -10,6 +10,14 @@ export const STORAGE_KEYS = {
   PRACTICE_CATALOG: 'moonchoir_practice_catalog_v1',
 } as const;
 
+export const PREFERENCE_KEYS = {
+  HOME_CALENDAR_VIEW: 'moonchoir_pref_home_view_v1',
+  STUDIO_SCOPE: 'moonchoir_pref_studio_scope_v1',
+  PLAYBACK_RATE: 'moonchoir_pref_playback_rate_v1',
+  SEEN_STICKERS: 'moonchoir_pref_seen_stickers_v1',
+  UPLOAD_JOBS: 'moonchoir_pref_upload_jobs_v1',
+} as const;
+
 export const DATA_CACHE_KEYS: readonly string[] = Object.values(STORAGE_KEYS);
 
 class MemoryStorage {
@@ -70,5 +78,41 @@ export function saveToStorage<T>(key: string, data: T): void {
     getStorage().setItem(key, JSON.stringify(data));
   } catch (err) {
     console.error(`[Storage] Failed to save key ${key}:`, err);
+  }
+}
+
+/**
+ * 기기 선호값 읽기 헬퍼 (v3 / V3-02)
+ * localStorage 접근 및 JSON 파싱 실패 시 fallback을 반환하며,
+ * validate 검증을 통과하지 못하면 fallback을 반환한다.
+ */
+export function readPreference<T>(
+  key: string,
+  validate: (val: unknown) => val is T,
+  fallback: T
+): T {
+  try {
+    const raw = getStorage().getItem(key);
+    if (raw === null || raw === undefined) return fallback;
+    const parsed: unknown = JSON.parse(raw);
+    if (validate(parsed)) {
+      return parsed;
+    }
+    return fallback;
+  } catch (err) {
+    console.warn(`[Storage] Failed to read preference key ${key}, falling back:`, err);
+    return fallback;
+  }
+}
+
+/**
+ * 기기 선호값 쓰기 헬퍼 (v3 / V3-02)
+ * try/catch로 안전하게 감싸서 QuotaExceededError 등 예외 발생 시 에러를 로깅하고 앱 크래시를 방지한다.
+ */
+export function writePreference<T>(key: string, value: T): void {
+  try {
+    getStorage().setItem(key, JSON.stringify(value));
+  } catch (err) {
+    console.error(`[Storage] Failed to write preference key ${key}:`, err);
   }
 }
