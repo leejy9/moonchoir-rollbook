@@ -73,10 +73,13 @@ export function useHashRoute(): UseHashRouteResult {
     }
 
     const { route: next, history: historyAction } = navReducer(routeRef.current, action);
+    if (historyAction === 'none') {
+      return;
+    }
     const nextHash = formatRoute(next);
 
     if (typeof window !== 'undefined') {
-      if (action.type === 'OPEN') {
+      if (action.type === 'OPEN' && historyAction === 'push') {
         window.history.pushState({ mcOverlay: true }, '', nextHash);
       } else if (historyAction === 'push') {
         window.history.pushState(null, '', nextHash);

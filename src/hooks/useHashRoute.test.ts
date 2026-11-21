@@ -325,4 +325,24 @@ describe('useHashRoute & History Management (C8)', () => {
 
     unmount();
   });
+
+  it('does not push history or change route when OPEN is dispatched in admin area (N4)', () => {
+    window.location.hash = '#/admin';
+    const { result, unmount } = renderHook(() => useHashRoute());
+
+    expect(result.current.route).toEqual({ area: 'admin' });
+    pushStateSpy.mockClear();
+
+    act(() => {
+      result.current.navigate({
+        type: 'OPEN',
+        overlay: { kind: 'scheduleSheet', date: '2026-11-20', scheduleId: 'sch-1' },
+      });
+    });
+
+    expect(pushStateSpy).not.toHaveBeenCalled();
+    expect(result.current.route).toEqual({ area: 'admin' });
+
+    unmount();
+  });
 });
