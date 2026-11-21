@@ -143,4 +143,58 @@ describe('MediaUploadSheet Component', () => {
       );
     });
   });
+
+  describe('F5: new track orderIndex is maxOrderIndex + 1', () => {
+    it('sets orderIndex to max active track orderIndex + 1 for new tracks', async () => {
+      const track1 = {
+        id: 'track_1',
+        pieceId: 'p1',
+        label: '트랙 1',
+        kind: '가이드',
+        source: 'r2',
+        orderIndex: 0,
+        isArchived: false,
+      } as any;
+
+      const track2 = {
+        id: 'track_2',
+        pieceId: 'p1',
+        label: '트랙 2',
+        kind: 'MR',
+        source: 'r2',
+        orderIndex: 2,
+        isArchived: false,
+      } as any;
+
+      const archivedTrack = {
+        id: 'track_archived',
+        pieceId: 'p1',
+        label: '보관 트랙',
+        kind: '가이드',
+        source: 'r2',
+        orderIndex: 10,
+        isArchived: true,
+      } as any;
+
+      vi.spyOn(sheetsService, 'getPracticeCatalog').mockReturnValue({
+        pieces: [],
+        tracks: [track1, track2, archivedTrack],
+        programPieces: [],
+      });
+
+      const saveTrackSpy = vi.spyOn(sheetsService, 'savePracticeTrack').mockResolvedValue(track1);
+
+      const saveFn = createUploadSaveFn('audio', 'p1', '새 트랙', '가이드');
+      await saveFn('2026/audio/new_track.m4a', 1024);
+
+      expect(saveTrackSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pieceId: 'p1',
+          label: '새 트랙',
+          kind: '가이드',
+          orderIndex: 3, // max active is 2, so 2 + 1 = 3 (archived track with orderIndex 10 is ignored)
+        })
+      );
+    });
+  });
 });

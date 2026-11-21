@@ -42,6 +42,16 @@ export function createUploadSaveFn(
           sizeBytes: size,
         });
       } else {
+        const currentCatalog = sheetsService.getPracticeCatalog();
+        const activeTracks = currentCatalog.tracks.filter(
+          (t) => t.pieceId === pieceId && !t.isArchived
+        );
+        const maxOrderIndex = activeTracks.reduce(
+          (max, t) => (t.orderIndex !== undefined && t.orderIndex > max ? t.orderIndex : max),
+          -1
+        );
+        const orderIndex = maxOrderIndex + 1;
+
         await sheetsService.savePracticeTrack({
           pieceId,
           label: finalTitle,
@@ -49,7 +59,7 @@ export function createUploadSaveFn(
           source: 'r2',
           storageKey: key,
           sizeBytes: size,
-          orderIndex: 0,
+          orderIndex,
         });
       }
     }
