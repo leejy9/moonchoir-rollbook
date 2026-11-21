@@ -74,7 +74,7 @@
 |---|---|---|---|---|---|
 | 1 | V3-01 | 디자인 토큰 3색 + 다크 모드 + 가드 테스트 | §6 | `src/index.css`, `src/styles/cssVariables.test.ts` | — |
 | 2 | V3-02 | 기기 선호값 저장 헬퍼 | §9 | `src/services/sheetsStorage.ts`(+테스트) | — |
-| 3 | V3-07 | DB 마이그레이션 + 검증 스크립트 | §7 | `supabase/migrations/20261123000000_v3_activity_and_media.sql`, `supabase/tests/v3_activity_media_check.sql` | — |
+| 3 | V3-07 | DB 마이그레이션 + 검증 스크립트 (묶음별 2개, §1-2) | §7 | `supabase/migrations/20261123000000_v3_media.sql`, `20261124000000_v3_activity.sql`, `supabase/tests/v3_*_check.sql` | — |
 | 4 | V3-07b | 타입·파서·서비스·백엔드 매핑 | §7-5 | `src/types/rollbook.ts`, 파서, `src/services/sheets.ts`, `src/services/backend/supabaseBackend.ts` | V3-07 |
 | 5 | V3-03 | 홈 탭 통합 + 옛 주소 호환 | §2 | `src/utils/route.ts`, `src/hooks/useHashRoute.ts`, `src/App.tsx`, 새 `src/components/HomeTab.tsx`, `TodayTab.tsx`, `CalendarTab.tsx` | V3-01, V3-02 |
 | 6 | V3-04 | 연습실 목록: 공연 드롭다운·검색·정렬 | §3-1 | `src/components/StudioTab.tsx`, 새 `src/components/studio/ProgramScopeMenu.tsx`, 새 `src/utils/practiceScope.ts` | V3-07b |
@@ -120,7 +120,7 @@
 - 기존 함수 3개(`fn_save_practice_piece`, `fn_save_practice_track`, `fn_get_practice_catalog`)는 **R3 절차를 따른다.** 명세에 적힌 최신 정의 위치가 실제와 다르면 멈추고 보고한다.
 - **권한:** 새 테이블은 `revoke all ... from public, anon, authenticated`. 새 함수는 `security definer`, `set search_path = public`. `grant execute`는 명세 권한 열 그대로.
 - `fn_authorize_media_upload`는 `fn_check_admin_token`을 감싸기만 한다. 토큰 검증 로직을 새로 만들지 않는다.
-- **검증 스크립트**(`supabase/tests/v3_activity_media_check.sql`)는 트랜잭션 안에서 실행하고 마지막에 `rollback`한다. 각 확인은 `raise exception`으로 실패를 알린다. 포함할 것:
+- **검증 스크립트**(`supabase/tests/v3_media_check.sql`, `supabase/tests/v3_activity_check.sql`, 묶음별)는 트랜잭션 안에서 실행하고 마지막에 `rollback`한다. 각 확인은 `raise exception`으로 실패를 알린다. 포함할 것:
   1. rsvp insert / 상태 변경 update / 같은 상태 update / delete → 이벤트 1 / 1 / 0 / 1
   2. `rsvp_events` update·delete 거부
   3. 백필 중복 없음(마이그레이션 본문의 백필 구문을 한 번 더 실행해도 행 수 동일)
