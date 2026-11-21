@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { setSuperAdminLoggedIn } from '../../services/auth';
 import { sheetsService } from '../../services/sheets';
+import { clearDataCache } from '../../services/sheetsStorage';
 import type {
   Member,
   RSVPVote,
@@ -183,8 +184,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       return;
     }
     try {
-      const keys = ['moonchoir_schedules', 'moonchoir_members_v1', 'moonchoir_logs_v1', 'moonchoir_rsvp_votes_v1'];
-      keys.forEach((k) => localStorage.removeItem(k));
+      clearDataCache();
       window.location.reload();
     } catch {
       window.location.reload();

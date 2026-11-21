@@ -10,6 +10,8 @@ export const STORAGE_KEYS = {
   PRACTICE_CATALOG: 'moonchoir_practice_catalog_v1',
 } as const;
 
+export const DATA_CACHE_KEYS: readonly string[] = Object.values(STORAGE_KEYS);
+
 class MemoryStorage {
   private store: Record<string, string> = {};
   getItem(key: string): string | null {
@@ -37,6 +39,18 @@ function getStorage() {
 
 export function resetStorage(): void {
   getStorage().clear();
+}
+
+/**
+ * 데이터 캐시만 안전하게 삭제한다.
+ * 기기 바인딩(moonchoir_bound_device_v1), 관리자 세션 토큰(moonchoir_admin_token_v1 등),
+ * 화면 설정 등 인증/식별 관련 키는 절대 삭제하지 않는다.
+ */
+export function clearDataCache(): void {
+  const storage = getStorage();
+  for (const key of DATA_CACHE_KEYS) {
+    storage.removeItem(key);
+  }
 }
 
 // Safe JSON parser with fallback (Schema Evolution invariant)

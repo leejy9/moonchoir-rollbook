@@ -44,6 +44,7 @@ import {
   STORAGE_KEYS,
   loadFromStorage,
   resetStorage,
+  clearDataCache,
   saveToStorage,
 } from './sheetsStorage';
 import type { RemoteBackend, RemoteSnapshot } from './backend/types';
@@ -51,7 +52,7 @@ import { GasBackend } from './backend/gasBackend';
 import { SupabaseBackend, type SupabaseConfig } from './backend/supabaseBackend';
 import { extractIssuedToken, getAdminToken, setAdminToken, type AdminTier } from './adminSession';
 
-export { resetStorage };
+export { resetStorage, clearDataCache };
 export type { RemoteBackend, RemoteSnapshot, SupabaseConfig };
 
 function createDefaultBackend(getUrl: () => string | undefined): RemoteBackend {
