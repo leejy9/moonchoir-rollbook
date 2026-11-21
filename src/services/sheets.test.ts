@@ -1985,6 +1985,61 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       expect(tracks.find((t) => t.id === 't1')?.orderIndex).toBe(0);
       expect(tracks.find((t) => t.id === 't2')?.orderIndex).toBe(1);
     });
+
+    it('savePracticePiece passes scoreStorageKey and scoreSizeBytes, savePracticeTrack passes sizeBytes', async () => {
+      const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+
+      await service.savePracticePiece({
+        id: 'p_media',
+        title: '미디어 곡',
+        scoreStorageKey: '2026/score/media1.pdf',
+        scoreSizeBytes: 2048,
+      });
+      expect(sendSpy).toHaveBeenCalledWith(
+        'SAVE_PRACTICE_PIECE',
+        expect.objectContaining({
+          scoreStorageKey: '2026/score/media1.pdf',
+          scoreSizeBytes: 2048,
+        })
+      );
+
+      await service.savePracticeTrack({
+        id: 't_media',
+        pieceId: 'p_media',
+        label: '트랙1',
+        sizeBytes: 10485760,
+      });
+      expect(sendSpy).toHaveBeenCalledWith(
+        'SAVE_PRACTICE_TRACK',
+        expect.objectContaining({
+          sizeBytes: 10485760,
+        })
+      );
+    });
+
+    it('getMediaUsage parses usage stats on Supabase and returns null on gas backend', async () => {
+      const gasBackend = new GasBackend(() => 'https://script.google.com/test');
+      const gasService = new SheetsService(gasBackend);
+      expect(await gasService.getMediaUsage()).toBeNull();
+
+      const supaBackend = new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' });
+      const supaService = new SheetsService(supaBackend);
+      vi.spyOn(supaService, 'sendToGoogleSheet').mockResolvedValue({
+        success: true,
+        data: {
+          tracksBytes: 5000000,
+          scoresBytes: 2000000,
+          totalBytes: 7000000,
+        },
+      });
+
+      const usage = await supaService.getMediaUsage();
+      expect(usage).toEqual({
+        tracksBytes: 5000000,
+        scoresBytes: 2000000,
+        totalBytes: 7000000,
+      });
+    });
   });
 });
 

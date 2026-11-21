@@ -304,6 +304,7 @@ export interface AppConfig {
   emergencyGpsBypassUntil?: string; // ISO 8601 timestamp until which GPS boundary check is bypassed
   mediaPublicBaseUrl?: string; // Worker base URL (e.g. https://media.example.com)
   practiceTrackKinds?: string[]; // Configurable track kinds taxonomy
+  performanceCategories?: string[]; // v3: 일정 중 공연에 해당하는 category 목록 (기본: ['연주'])
 }
 
 /**
@@ -330,6 +331,8 @@ export interface PracticePiece {
   composer?: string;
   arranger?: string;
   scoreUrl?: string;
+  scoreStorageKey?: string;
+  scoreSizeBytes?: number;
   notes?: string;
   isArchived: boolean;
   archivedAt?: string;
@@ -347,6 +350,7 @@ export interface PracticeTrack {
   storageKey?: string;
   mimeType?: string;
   durationSeconds?: number;
+  sizeBytes?: number;
   orderIndex: number;
   isArchived: boolean;
   createdAt: string;
@@ -374,5 +378,14 @@ export interface TrackPlayback {
   canPrefetch: boolean;
   supportsBackground: boolean;
   reason?: string;
+}
+
+/**
+ * 12. v3 Media Storage Types (MEMBER_UX_V3_SPEC.md §7-3, §7-4)
+ */
+export interface MediaUsage {
+  tracksBytes: number;
+  scoresBytes: number;
+  totalBytes: number;
 }
 

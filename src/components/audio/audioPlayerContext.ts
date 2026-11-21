@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from 'react';
-import type { PlaybackSpeed, PlayableTrackItem } from '../../utils/audioQueue';
+import type { PlayableTrackItem } from '../../utils/audioQueue';
 
 export interface AudioPlayerContextValue {
   currentTrack: PlayableTrackItem | null;
@@ -7,7 +7,7 @@ export interface AudioPlayerContextValue {
   currentIndex: number;
   isPlaying: boolean;
   isBlocked: boolean;
-  playbackSpeed: PlaybackSpeed;
+  playbackSpeed: number;
   repeatOne: boolean;
   autoNext: boolean;
   playTrack: (item: PlayableTrackItem, newQueue?: PlayableTrackItem[]) => void;
@@ -16,10 +16,11 @@ export interface AudioPlayerContextValue {
   resume: () => void;
   seekTo: (timeSeconds: number) => void;
   seekRelative: (offsetSeconds: number) => void;
-  setSpeed: (speed: PlaybackSpeed) => void;
+  setSpeed: (speed: number) => void;
   cycleSpeed: () => void;
   toggleRepeatOne: () => void;
   toggleAutoNext: () => void;
+  nextTrack: () => void;
   closePlayer: () => void;
   audioElementRef: React.RefObject<HTMLAudioElement | null>;
 }

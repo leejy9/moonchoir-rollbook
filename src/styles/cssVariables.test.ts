@@ -41,37 +41,34 @@ function getAllSourceFiles(dir: string, fileList: string[] = []): string[] {
   return fileList;
 }
 
-interface UndefinedVarOccurrence {
+export interface UndefinedVarOccurrence {
   file: string;
   variable: string;
   line: number;
 }
 
-function findUndefinedVariables(
-  sourceFiles: string[],
+export function findUndefinedVariablesInContent(
+  content: string,
+  filePath: string,
   definedVars: Set<string>
 ): UndefinedVarOccurrence[] {
   const occurrences: UndefinedVarOccurrence[] = [];
   const varRegex = /var\((--[a-z0-9-]+)/g;
+  const lines = content.split('\n');
 
-  for (const file of sourceFiles) {
-    const content = fs.readFileSync(file, 'utf-8');
-    const lines = content.split('\n');
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const lineText = lines[lineIndex];
+    let match: RegExpExecArray | null;
+    varRegex.lastIndex = 0;
 
-    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-      const lineText = lines[lineIndex];
-      let match: RegExpExecArray | null;
-      varRegex.lastIndex = 0;
-
-      while ((match = varRegex.exec(lineText)) !== null) {
-        const varName = match[1];
-        if (!definedVars.has(varName) && !ALLOWED_EXCEPTIONS.has(varName)) {
-          occurrences.push({
-            file: path.relative(process.cwd(), file),
-            variable: varName,
-            line: lineIndex + 1,
-          });
-        }
+    while ((match = varRegex.exec(lineText)) !== null) {
+      const varName = match[1];
+      if (!definedVars.has(varName) && !ALLOWED_EXCEPTIONS.has(varName)) {
+        occurrences.push({
+          file: filePath,
+          variable: varName,
+          line: lineIndex + 1,
+        });
       }
     }
   }
@@ -79,7 +76,22 @@ function findUndefinedVariables(
   return occurrences;
 }
 
-describe('CSS Variable Design Tokens (D2)', () => {
+function findUndefinedVariables(
+  sourceFiles: string[],
+  definedVars: Set<string>
+): UndefinedVarOccurrence[] {
+  const occurrences: UndefinedVarOccurrence[] = [];
+
+  for (const file of sourceFiles) {
+    const content = fs.readFileSync(file, 'utf-8');
+    const relativePath = path.relative(process.cwd(), file);
+    occurrences.push(...findUndefinedVariablesInContent(content, relativePath, definedVars));
+  }
+
+  return occurrences;
+}
+
+describe('CSS Variable Design Tokens (D2 / V3-01)', () => {
   it('enforces all var(--...) references are defined in src/index.css', () => {
     const rootDir = process.cwd();
     const indexCssPath = path.join(rootDir, 'src', 'index.css');
@@ -102,5 +114,65 @@ describe('CSS Variable Design Tokens (D2)', () => {
     }
 
     expect(undefinedOccurrences).toHaveLength(0);
+  });
+
+  it('fails and reports occurrences when undefined CSS variables are present', () => {
+    const mockContent = `
+      .card {
+        background: var(--bg-card);
+        color: var(--undefined-color);
+        border: 1px solid var(--another-missing);
+      }
+    `;
+    const definedVars = new Set<string>(['--bg-card']);
+    const issues = findUndefinedVariablesInContent(mockContent, 'src/components/Sample.tsx', definedVars);
+
+    expect(issues).toHaveLength(2);
+    expect(issues[0]).toEqual({
+      file: 'src/components/Sample.tsx',
+      variable: '--undefined-color',
+      line: 4,
+    });
+    expect(issues[1]).toEqual({
+      file: 'src/components/Sample.tsx',
+      variable: '--another-missing',
+      line: 5,
+    });
+  });
+
+  it('guarantees v3 color tokens (§6) are defined in src/index.css in both root and dark themes', () => {
+    const rootDir = process.cwd();
+    const indexCssPath = path.join(rootDir, 'src', 'index.css');
+    const content = fs.readFileSync(indexCssPath, 'utf-8');
+
+    const requiredV3Tokens = [
+      '--brand-lavender',
+      '--brand-lavender-tint',
+      '--brand-lavender-text',
+      '--brand-apricot',
+      '--brand-apricot-tint',
+      '--brand-apricot-text',
+      '--sticker-bronze',
+      '--sticker-silver',
+      '--sticker-gold',
+      '--sticker-stage-tint',
+      '--player-surface',
+      '--player-surface-full',
+    ];
+
+    const definedVars = getDefinedCssVariables(indexCssPath);
+    for (const token of requiredV3Tokens) {
+      expect(definedVars.has(token), `Token ${token} must be defined in src/index.css`).toBe(true);
+    }
+
+    // Verify dark mode block also has them
+    const darkModeMatch = content.match(/\.app-shell\[data-theme=['"]dark['"]\]\s*\{([^}]+)\}/);
+    expect(darkModeMatch, 'Dark mode block (.app-shell[data-theme="dark"]) must exist').toBeTruthy();
+    const darkModeContent = darkModeMatch ? darkModeMatch[1] : '';
+
+    for (const token of requiredV3Tokens) {
+      const hasTokenInDark = new RegExp(`${token}\\s*:`).test(darkModeContent);
+      expect(hasTokenInDark, `Token ${token} must also be defined in .app-shell[data-theme='dark']`).toBe(true);
+    }
   });
 });

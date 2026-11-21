@@ -194,7 +194,7 @@ describe('SupabaseBackend', () => {
     it('maps all 6 write practice actions with admin token attached', async () => {
       const backend = new SupabaseBackend(mockConfig);
       setAdminToken('admin', 'tok_practice_admin');
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(okResponse());
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(okResponse()));
 
       await backend.callAction('SAVE_PRACTICE_PIECE', { id: 'p1', title: '아리랑' });
       expect(fetchSpy).toHaveBeenLastCalledWith(
@@ -234,6 +234,20 @@ describe('SupabaseBackend', () => {
       expect(fetchSpy).toHaveBeenLastCalledWith(
         'https://test.supabase.co/rest/v1/rpc/fn_reorder_practice_tracks',
         expect.anything()
+      );
+    });
+
+    it('maps GET_MEDIA_USAGE to fn_get_media_usage with admin token attached', async () => {
+      const backend = new SupabaseBackend(mockConfig);
+      setAdminToken('admin', 'tok_admin_media');
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(okResponse()));
+
+      await backend.callAction('GET_MEDIA_USAGE', {});
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_get_media_usage',
+        expect.objectContaining({
+          body: JSON.stringify({ p_token: 'tok_admin_media' }),
+        })
       );
     });
   });

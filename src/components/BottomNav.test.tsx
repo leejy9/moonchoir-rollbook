@@ -3,42 +3,38 @@ import { renderToString } from 'react-dom/server';
 import { BottomNav } from './BottomNav';
 
 describe('BottomNav Component', () => {
-  it('renders exactly 4 buttons with expected labels', () => {
+  it('renders exactly 3 buttons with expected labels (홈, 연습실, 내 활동)', () => {
     const html = renderToString(
-      <BottomNav currentTab="today" onSelectTab={() => {}} />
+      <BottomNav currentTab="home" onSelectTab={() => {}} />
     );
 
-    expect(html).toContain('오늘');
-    expect(html).toContain('일정');
+    expect(html).toContain('홈');
     expect(html).toContain('연습실');
     expect(html).toContain('내 활동');
+    expect(html).not.toContain('오늘');
+    expect(html).not.toContain('일정');
   });
 
   it('assigns aria-current="page" to active tab', () => {
-    const todayHtml = renderToString(
-      <BottomNav currentTab="today" onSelectTab={() => {}} />
+    const homeHtml = renderToString(
+      <BottomNav currentTab="home" onSelectTab={() => {}} />
     );
-    expect(todayHtml).toMatch(/aria-current="page"[^>]*><span[^>]*>오늘/);
-
-    const calendarHtml = renderToString(
-      <BottomNav currentTab="calendar" onSelectTab={() => {}} />
-    );
-    expect(calendarHtml).toMatch(/aria-current="page"[^>]*><span[^>]*>일정/);
+    expect(homeHtml).toMatch(/aria-current="page"[^>]*>[\s\S]*홈/);
 
     const studioHtml = renderToString(
       <BottomNav currentTab="studio" onSelectTab={() => {}} />
     );
-    expect(studioHtml).toMatch(/aria-current="page"[^>]*><span[^>]*>연습실/);
+    expect(studioHtml).toMatch(/aria-current="page"[^>]*>[\s\S]*연습실/);
 
     const profileHtml = renderToString(
       <BottomNav currentTab="profile" onSelectTab={() => {}} />
     );
-    expect(profileHtml).toMatch(/aria-current="page"[^>]*><span[^>]*>내 활동/);
+    expect(profileHtml).toMatch(/aria-current="page"[^>]*>[\s\S]*내 활동/);
   });
 
   it('contains NO emoji characters in navigation text (Anti-slop constraint)', () => {
     const html = renderToString(
-      <BottomNav currentTab="today" onSelectTab={() => {}} />
+      <BottomNav currentTab="home" onSelectTab={() => {}} />
     );
     // Unicode Extended_Pictographic check
     const emojiRegex = /\p{Extended_Pictographic}/u;
@@ -47,7 +43,7 @@ describe('BottomNav Component', () => {
 
   it('nav element has proper accessibility label', () => {
     const html = renderToString(
-      <BottomNav currentTab="today" onSelectTab={() => {}} />
+      <BottomNav currentTab="home" onSelectTab={() => {}} />
     );
     expect(html).toContain('aria-label="주요 메뉴"');
   });

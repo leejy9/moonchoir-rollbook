@@ -5,8 +5,7 @@ import { AdminPinModal } from './components/AdminPinModal';
 import { AppHeader } from './components/AppHeader';
 import { BindingModal } from './components/BindingModal';
 import { BottomNav } from './components/BottomNav';
-import { CalendarTab } from './components/CalendarTab';
-import { HomeView } from './components/HomeView';
+import { HomeTab } from './components/HomeTab';
 import { ScheduleDetailSheet } from './components/ScheduleDetailSheet';
 import { ProfileTab } from './components/ProfileTab';
 import { StudioTab } from './components/StudioTab';
@@ -42,9 +41,10 @@ import { parseRoute, type MemberTab } from './utils/route';
 import { AudioPlayerProvider } from './components/audio/AudioPlayerProvider';
 import { useAudioPlayer } from './components/audio/audioPlayerContext';
 import { MiniPlayer } from './components/audio/MiniPlayer';
+import { FullPlayer } from './components/audio/FullPlayer';
 
 function MainApp() {
-  const { closePlayer } = useAudioPlayer();
+  const { closePlayer, currentTrack } = useAudioPlayer();
 
   // Device binding state
   const [profile, setProfile] = useState<BoundDeviceProfile | null>(() => getBoundDeviceProfile());
@@ -58,7 +58,7 @@ function MainApp() {
   useEffect(() => {
     if (profile === null && typeof window !== 'undefined') {
       const raw = window.location.hash.trim().replace(/^#\/?/, '');
-      if (raw && raw !== 'today') {
+      if (raw && raw !== 'home' && raw !== 'today') {
         pendingHashRef.current = window.location.hash;
       }
     }
@@ -241,14 +241,16 @@ function MainApp() {
     }
   }, [hasConfirmedRosterSync, navigate, profile, refreshKey]);
 
+  const memberOverlay = route.area === 'member' ? route.overlay : undefined;
+
   const qrSchedule =
-    route.area === 'member' && route.overlay?.kind === 'qr'
-      ? activeSchedules.find((s) => s.id === route.overlay?.scheduleId) ?? null
+    memberOverlay?.kind === 'qr'
+      ? activeSchedules.find((s) => s.id === memberOverlay.scheduleId) ?? null
       : null;
 
   const targetRsvpSchedule =
-    route.area === 'member' && route.overlay?.kind === 'rsvp'
-      ? activeSchedules.find((s) => s.id === route.overlay?.scheduleId) ?? null
+    memberOverlay?.kind === 'rsvp'
+      ? activeSchedules.find((s) => s.id === memberOverlay.scheduleId) ?? null
       : null;
 
   // If user has not bound a device yet, show binding prompt
@@ -323,43 +325,24 @@ function MainApp() {
       {/* Member Content wrapped in main */}
       {isBound && route.area === 'member' && (
         <main className="app-member-main">
-          {route.tab === 'today' && (
-            <HomeView
+          {route.tab === 'home' && profile && (
+            <HomeTab
               profile={profile}
-              onOpenQRScanner={(sch) => {
-                if (sch) {
-                  navigate({ type: 'OPEN', overlay: { kind: 'qr', scheduleId: sch.id } });
-                } else {
-                  navigate({ type: 'TAB', tab: 'today' });
-                }
+              month={route.month}
+              selectedDate={route.overlay?.kind === 'scheduleSheet' ? route.overlay.date : undefined}
+              onNavigate={navigate}
+              onOpenQRScanner={(scheduleId) => {
+                navigate({ type: 'OPEN', overlay: { kind: 'qr', scheduleId } });
               }}
               onOpenRSVP={(sch) => {
                 navigate({ type: 'OPEN', overlay: { kind: 'rsvp', scheduleId: sch.id } });
               }}
-              onOpenAdmin={handleOpenAdmin}
-              onOpenSuperAdmin={handleOpenSuperAdmin}
-              onChangeProfile={() => setShowBindingModal(true)}
-              onOpenProfilePortal={() => navigate({ type: 'TAB', tab: 'profile' })}
               onOpenDetail={(sch) =>
                 navigate({
                   type: 'OPEN',
                   overlay: { kind: 'scheduleSheet', date: sch.date, scheduleId: sch.id },
                 })
               }
-              onViewCalendar={() => navigate({ type: 'TAB', tab: 'calendar' })}
-              refreshTrigger={refreshKey}
-            />
-          )}
-
-          {route.tab === 'calendar' && (
-            <CalendarTab
-              profile={profile}
-              month={route.month}
-              selectedDate={route.overlay?.kind === 'scheduleSheet' ? route.overlay.date : undefined}
-              onNavigate={navigate}
-              onOpenRSVP={(sch) => {
-                navigate({ type: 'OPEN', overlay: { kind: 'rsvp', scheduleId: sch.id } });
-              }}
               refreshTrigger={refreshKey}
             />
           )}
@@ -392,7 +375,7 @@ function MainApp() {
                 if (sch) {
                   navigate({ type: 'OPEN', overlay: { kind: 'qr', scheduleId: sch.id } });
                 } else {
-                  navigate({ type: 'TAB', tab: 'today' });
+                  navigate({ type: 'TAB', tab: 'home' });
                 }
               }}
               onOpenAdmin={handleOpenAdmin}
@@ -426,7 +409,38 @@ function MainApp() {
       )}
 
       {/* Mini Audio Player (Fixed above BottomNav) */}
-      {isBound && route.area === 'member' && <MiniPlayer />}
+      {isBound && route.area === 'member' && (
+        <MiniPlayer
+          onOpenFullPlayer={() => {
+            navigate({ type: 'OPEN', overlay: { kind: 'player' } });
+          }}
+        />
+      )}
+
+      {/* Full Screen Audio Player Overlay */}
+      {isBound && route.area === 'member' && route.overlay?.kind === 'player' && (
+        <FullPlayer
+          piece={
+            currentTrack
+              ? sheetsService.getPracticeCatalog().pieces.find((p) => p.id === currentTrack.track.pieceId) || null
+              : null
+          }
+          siblingTracks={
+            currentTrack
+              ? sheetsService.getPracticeCatalog().tracks.filter((t) => t.pieceId === currentTrack.track.pieceId)
+              : []
+          }
+          onClose={() => navigate({ type: 'CLOSE' })}
+          onOpenScore={(piece) => {
+            const scoreUrl = piece.scoreStorageKey
+              ? `${sheetsService.getConfig().mediaPublicBaseUrl || ''}/${piece.scoreStorageKey}`
+              : piece.scoreUrl;
+            if (scoreUrl) {
+              window.open(scoreUrl, '_blank', 'noopener,noreferrer');
+            }
+          }}
+        />
+      )}
 
       {/* Member Bottom Navigation (Only visible when bound in member area) */}
       {isBound && route.area === 'member' && (

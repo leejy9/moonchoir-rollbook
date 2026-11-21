@@ -1,9 +1,10 @@
-export type MemberTab = 'today' | 'calendar' | 'studio' | 'profile';
+export type MemberTab = 'home' | 'studio' | 'profile';
 
 export type Overlay =
   | { kind: 'scheduleSheet'; date: string; scheduleId?: string }
   | { kind: 'qr'; scheduleId: string }
-  | { kind: 'rsvp'; scheduleId: string };
+  | { kind: 'rsvp'; scheduleId: string }
+  | { kind: 'player' };
 
 export type Route =
   | { area: 'member'; tab: MemberTab; month?: string; overlay?: Overlay }
@@ -37,10 +38,11 @@ function isValidDate(d: string): boolean {
 
 /**
  * 해시 문자열을 파싱하여 Route 객체로 변환합니다.
- * 모르는 형식, 빈 문자열은 '#/today'로 안전 폴백합니다.
+ * 모르는 형식, 빈 문자열은 '#/home'으로 안전 폴백합니다.
+ * v2 옛 주소(#/today, #/calendar)는 #/home으로 호환 해석합니다.
  */
 export function parseRoute(hash: string): Route {
-  const fallback: Route = { area: 'member', tab: 'today' };
+  const fallback: Route = { area: 'member', tab: 'home' };
   const raw = (hash || '').trim().replace(/^#\/?/, '');
   if (!raw) return fallback;
 
@@ -53,14 +55,24 @@ export function parseRoute(hash: string): Route {
   const params = new URLSearchParams(queryPart || '');
 
   if (path === 'profile') {
-    return { area: 'member', tab: 'profile' };
+    const isPlayer = params.get('player') === '1';
+    return {
+      area: 'member',
+      tab: 'profile',
+      overlay: isPlayer ? { kind: 'player' } : undefined,
+    };
   }
 
   if (path === 'studio') {
-    return { area: 'member', tab: 'studio' };
+    const isPlayer = params.get('player') === '1';
+    return {
+      area: 'member',
+      tab: 'studio',
+      overlay: isPlayer ? { kind: 'player' } : undefined,
+    };
   }
 
-  if (path === 'calendar') {
+  if (path === 'home' || path === 'calendar' || path === 'today') {
     const rawM = params.get('m');
     const month = rawM && isValidMonth(rawM) ? rawM : undefined;
     const rawD = params.get('d');
@@ -75,23 +87,13 @@ export function parseRoute(hash: string): Route {
       overlay = { kind: 'qr', scheduleId: sid };
     } else if (params.get('rsvp') === '1' && sid) {
       overlay = { kind: 'rsvp', scheduleId: sid };
+    } else if (params.get('player') === '1') {
+      overlay = { kind: 'player' };
     }
 
-    return { area: 'member', tab: 'calendar', month, overlay };
+    return { area: 'member', tab: 'home', month, overlay };
   }
 
-  if (path === 'today') {
-    const sid = params.get('sid') || undefined;
-    let overlay: Overlay | undefined;
-    if (params.get('qr') === '1' && sid) {
-      overlay = { kind: 'qr', scheduleId: sid };
-    } else if (params.get('rsvp') === '1' && sid) {
-      overlay = { kind: 'rsvp', scheduleId: sid };
-    }
-    return { area: 'member', tab: 'today', overlay };
-  }
-
-  // Phase 2 전 #/studio 및 알 수 없는 경로는 today로 폴백
   return fallback;
 }
 
@@ -112,7 +114,7 @@ export function formatRoute(route: Route): string {
       q.set('sheet', '1');
       if (route.overlay.scheduleId) q.set('sid', route.overlay.scheduleId);
       if (route.month) q.set('m', route.month);
-      return `#/calendar?${q.toString()}`;
+      return `#/home?${q.toString()}`;
     }
     if (route.overlay.kind === 'qr') {
       const q = new URLSearchParams();
@@ -126,13 +128,19 @@ export function formatRoute(route: Route): string {
       q.set('sid', route.overlay.scheduleId);
       return `#/${tab}?${q.toString()}`;
     }
+    if (route.overlay.kind === 'player') {
+      const q = new URLSearchParams();
+      q.set('player', '1');
+      if (route.month) q.set('m', route.month);
+      return `#/${tab}?${q.toString()}`;
+    }
   }
 
-  if (tab === 'calendar') {
+  if (tab === 'home') {
     if (route.month) {
-      return `#/calendar?m=${encodeURIComponent(route.month)}`;
+      return `#/home?m=${encodeURIComponent(route.month)}`;
     }
-    return '#/calendar';
+    return '#/home';
   }
 
   if (tab === 'profile') {
@@ -143,7 +151,7 @@ export function formatRoute(route: Route): string {
     return '#/studio';
   }
 
-  return '#/today';
+  return '#/home';
 }
 
 /**
@@ -167,8 +175,8 @@ export function navReducer(currentRoute: Route, action: NavAction): NavResult {
       ) {
         return { route: currentRoute, history: 'none' };
       }
-      const isFromToday = currentRoute.area === 'member' && currentRoute.tab === 'today';
-      const isInitialPush = isFromToday && action.tab !== 'today';
+      const isFromHome = currentRoute.area === 'member' && currentRoute.tab === 'home';
+      const isInitialPush = isFromHome && action.tab !== 'home';
 
       const nextRoute: Route = {
         area: 'member',
@@ -223,7 +231,7 @@ export function navReducer(currentRoute: Route, action: NavAction): NavResult {
 
     case 'RESET': {
       return {
-        route: { area: 'member', tab: 'today' },
+        route: { area: 'member', tab: 'home' },
         history: 'replace',
       };
     }

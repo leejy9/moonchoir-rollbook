@@ -51,4 +51,15 @@ describe('GasBackend', () => {
     expect(result.success).toBe(false);
     expect(result.message).toBe('시트 전송 실패');
   });
+
+  it('returns UNSUPPORTED_BACKEND for v3 media usage action', async () => {
+    const backend = new GasBackend(() => 'https://script.google.com/macros/s/TEST/exec');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const a1 = await backend.callAction('GET_MEDIA_USAGE', {});
+    expect(a1.success).toBe(false);
+    expect(a1.code).toBe('UNSUPPORTED_BACKEND');
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });

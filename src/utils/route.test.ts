@@ -7,12 +7,38 @@ import {
 } from './route';
 
 describe('Route Pure Functions & navReducer', () => {
-  it('parses empty, root hash, and unknown hash as today tab fallback', () => {
-    expect(parseRoute('')).toEqual({ area: 'member', tab: 'today' });
-    expect(parseRoute('#')).toEqual({ area: 'member', tab: 'today' });
-    expect(parseRoute('#/')).toEqual({ area: 'member', tab: 'today' });
-    expect(parseRoute('#/unknown_route')).toEqual({ area: 'member', tab: 'today' });
+  it('parses empty, root hash, and unknown hash as home tab fallback', () => {
+    expect(parseRoute('')).toEqual({ area: 'member', tab: 'home' });
+    expect(parseRoute('#')).toEqual({ area: 'member', tab: 'home' });
+    expect(parseRoute('#/')).toEqual({ area: 'member', tab: 'home' });
+    expect(parseRoute('#/unknown_route')).toEqual({ area: 'member', tab: 'home' });
     expect(parseRoute('#/studio')).toEqual({ area: 'member', tab: 'studio' });
+  });
+
+  it('parses v3 home tab and legacy #/today, #/calendar routes to home tab', () => {
+    expect(parseRoute('#/home')).toEqual({ area: 'member', tab: 'home' });
+    expect(parseRoute('#/today')).toEqual({ area: 'member', tab: 'home' });
+    expect(parseRoute('#/calendar')).toEqual({ area: 'member', tab: 'home' });
+
+    expect(parseRoute('#/calendar?m=2026-11&d=2026-11-24&sheet=1&sid=sch_99')).toEqual({
+      area: 'member',
+      tab: 'home',
+      month: '2026-11',
+      overlay: {
+        kind: 'scheduleSheet',
+        date: '2026-11-24',
+        scheduleId: 'sch_99',
+      },
+    });
+
+    expect(parseRoute('#/today?qr=1&sid=sch_today_qr')).toEqual({
+      area: 'member',
+      tab: 'home',
+      overlay: {
+        kind: 'qr',
+        scheduleId: 'sch_today_qr',
+      },
+    });
   });
 
   it('parses admin and super admin routes', () => {
@@ -22,20 +48,19 @@ describe('Route Pure Functions & navReducer', () => {
   });
 
   it('parses member tabs and query parameters', () => {
-    expect(parseRoute('#/today')).toEqual({ area: 'member', tab: 'today' });
+    expect(parseRoute('#/home')).toEqual({ area: 'member', tab: 'home' });
     expect(parseRoute('#/studio')).toEqual({ area: 'member', tab: 'studio' });
     expect(parseRoute('#/profile')).toEqual({ area: 'member', tab: 'profile' });
-    expect(parseRoute('#/calendar')).toEqual({ area: 'member', tab: 'calendar' });
 
-    expect(parseRoute('#/calendar?m=2026-11')).toEqual({
+    expect(parseRoute('#/home?m=2026-11')).toEqual({
       area: 'member',
-      tab: 'calendar',
+      tab: 'home',
       month: '2026-11',
     });
 
-    expect(parseRoute('#/calendar?m=2026-11&d=2026-11-20&sheet=1&sid=sch_1')).toEqual({
+    expect(parseRoute('#/home?m=2026-11&d=2026-11-20&sheet=1&sid=sch_1')).toEqual({
       area: 'member',
-      tab: 'calendar',
+      tab: 'home',
       month: '2026-11',
       overlay: {
         kind: 'scheduleSheet',
@@ -44,18 +69,18 @@ describe('Route Pure Functions & navReducer', () => {
       },
     });
 
-    expect(parseRoute('#/today?qr=1&sid=sch_today')).toEqual({
+    expect(parseRoute('#/home?qr=1&sid=sch_today')).toEqual({
       area: 'member',
-      tab: 'today',
+      tab: 'home',
       overlay: {
         kind: 'qr',
         scheduleId: 'sch_today',
       },
     });
 
-    expect(parseRoute('#/today?rsvp=1&sid=sch_vote')).toEqual({
+    expect(parseRoute('#/home?rsvp=1&sid=sch_vote')).toEqual({
       area: 'member',
-      tab: 'today',
+      tab: 'home',
       overlay: {
         kind: 'rsvp',
         scheduleId: 'sch_vote',
@@ -65,17 +90,17 @@ describe('Route Pure Functions & navReducer', () => {
 
   it('ignores invalid dates and invalid month query formats', () => {
     // Invalid month
-    expect(parseRoute('#/calendar?m=abc')).toEqual({ area: 'member', tab: 'calendar' });
-    expect(parseRoute('#/calendar?m=2026-13')).toEqual({ area: 'member', tab: 'calendar' });
+    expect(parseRoute('#/home?m=abc')).toEqual({ area: 'member', tab: 'home' });
+    expect(parseRoute('#/home?m=2026-13')).toEqual({ area: 'member', tab: 'home' });
 
     // Invalid date for scheduleSheet
-    expect(parseRoute('#/calendar?d=2026-13-40&sheet=1&sid=sch_1')).toEqual({
+    expect(parseRoute('#/home?d=2026-13-40&sheet=1&sid=sch_1')).toEqual({
       area: 'member',
-      tab: 'calendar',
+      tab: 'home',
     });
-    expect(parseRoute('#/calendar?d=2026-02-30&sheet=1')).toEqual({
+    expect(parseRoute('#/home?d=2026-02-30&sheet=1')).toEqual({
       area: 'member',
-      tab: 'calendar',
+      tab: 'home',
     });
   });
 
@@ -83,25 +108,24 @@ describe('Route Pure Functions & navReducer', () => {
     const testRoutes: Route[] = [
       { area: 'admin' },
       { area: 'superAdmin' },
-      { area: 'member', tab: 'today' },
+      { area: 'member', tab: 'home' },
       { area: 'member', tab: 'studio' },
       { area: 'member', tab: 'profile' },
-      { area: 'member', tab: 'calendar' },
-      { area: 'member', tab: 'calendar', month: '2026-11' },
+      { area: 'member', tab: 'home', month: '2026-11' },
       {
         area: 'member',
-        tab: 'calendar',
+        tab: 'home',
         month: '2026-11',
         overlay: { kind: 'scheduleSheet', date: '2026-11-20', scheduleId: 'sch_1' },
       },
       {
         area: 'member',
-        tab: 'today',
+        tab: 'home',
         overlay: { kind: 'qr', scheduleId: 'sch_qr' },
       },
       {
         area: 'member',
-        tab: 'today',
+        tab: 'home',
         overlay: { kind: 'rsvp', scheduleId: 'sch_rsvp' },
       },
     ];
@@ -113,17 +137,17 @@ describe('Route Pure Functions & navReducer', () => {
     }
   });
 
-  it('reproduces spec §6-1 sequence 5 navigation reducer transitions', () => {
-    // 1) Starts at today
-    let state: Route = { area: 'member', tab: 'today' };
+  it('reproduces spec navigation reducer transitions', () => {
+    // 1) Starts at home
+    let state: Route = { area: 'member', tab: 'home' };
 
-    // 2) Move to calendar tab: first navigation from today pushes history
-    const toCal = navReducer(state, { type: 'TAB', tab: 'calendar' });
-    expect(toCal.history).toBe('push');
-    expect(toCal.route).toEqual({ area: 'member', tab: 'calendar' });
-    state = toCal.route;
+    // 2) Move to studio tab: first navigation from home pushes history
+    const toStudio = navReducer(state, { type: 'TAB', tab: 'studio' });
+    expect(toStudio.history).toBe('push');
+    expect(toStudio.route).toEqual({ area: 'member', tab: 'studio' });
+    state = toStudio.route;
 
-    // 3) Open scheduleSheet overlay -> pushes history
+    // 3) Back to home with overlay -> pushes history
     const openSheet = navReducer(state, {
       type: 'OPEN',
       overlay: { kind: 'scheduleSheet', date: '2026-11-20', scheduleId: 'sch_1' },
@@ -131,7 +155,7 @@ describe('Route Pure Functions & navReducer', () => {
     expect(openSheet.history).toBe('push');
     expect(openSheet.route).toEqual({
       area: 'member',
-      tab: 'calendar',
+      tab: 'studio',
       overlay: {
         kind: 'scheduleSheet',
         date: '2026-11-20',
@@ -145,23 +169,23 @@ describe('Route Pure Functions & navReducer', () => {
     expect(closeSheet.history).toBe('replace');
     expect(closeSheet.route).toEqual({
       area: 'member',
-      tab: 'calendar',
+      tab: 'studio',
     });
     state = closeSheet.route;
 
-    // 5) Tab navigation between non-today tabs uses replace
+    // 5) Tab navigation between non-home tabs uses replace
     const toProfile = navReducer(state, { type: 'TAB', tab: 'profile' });
     expect(toProfile.history).toBe('replace');
     expect(toProfile.route).toEqual({ area: 'member', tab: 'profile' });
 
-    // 6) Tab navigation back to today uses replace
-    const backToToday = navReducer(toProfile.route, { type: 'TAB', tab: 'today' });
-    expect(backToToday.history).toBe('replace');
-    expect(backToToday.route).toEqual({ area: 'member', tab: 'today' });
+    // 6) Tab navigation back to home uses replace
+    const backToHome = navReducer(toProfile.route, { type: 'TAB', tab: 'home' });
+    expect(backToHome.history).toBe('replace');
+    expect(backToHome.route).toEqual({ area: 'member', tab: 'home' });
 
-    // 7) RESET action returns to #/today with replace
+    // 7) RESET action returns to #/home with replace
     const reset = navReducer({ area: 'admin' }, { type: 'RESET' });
     expect(reset.history).toBe('replace');
-    expect(reset.route).toEqual({ area: 'member', tab: 'today' });
+    expect(reset.route).toEqual({ area: 'member', tab: 'home' });
   });
 });
