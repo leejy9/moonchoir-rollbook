@@ -1,98 +1,128 @@
-# check.md — 다크 모드 색상 버그 수정 작업 지시서 (D1~D2)
+# check.md — v3-A(PR #27) 검수 후속 작업 지시서
 
-> **이 문서를 읽는 개발 에이전트에게**
-> 사용자가 로컬에서 화면을 확인하다 발견한 다크 모드 버그의 수정 계획입니다. 이 문서의 순서와 규칙대로만 작업합니다.
-> 기본 규칙은 [구현 작업 지시서](docs/plans/16_member_ux_studio_implementation_guide.md) §0·§6과 [AGENTS.md](AGENTS.md)를 따릅니다.
->
-> - 작성: 2026-11-21 (리뷰어)
-> - 이전 작업(N1~N4)은 리뷰어 검수를 통과했습니다.
-> - **이 문서는 작업이 모두 끝나면 마지막 커밋에서 삭제합니다**(§5).
-> - 이번 범위는 **색상 버그 수정만**입니다. 홈 구조 변경(탭 3개), 레벨·열정 온도, 연습실 업로드는 사용자와 기획 중이므로 **손대지 않습니다.**
+> 대상: 개발 에이전트 · 작성: 리뷰어(Claude), 2026-11-21
+> 기본 규칙은 [v3 개발 지시서](docs/plans/17_v3_implementation_guide.md) §1·§2(R1~R21)를 그대로 따른다.
+> **이 문서는 작업이 모두 끝나면 마지막 커밋에서 삭제한다**(§4).
 
 ---
 
-## 0. 문제 (리뷰어 확인 완료)
+## 0. 검수 결과 요약
 
-다크 모드에서 흰 카드 위에 검은 버튼이 놓이고, 일부 글자(예: 내 활동의 "화면 표시 모드", "다크 모드", "구글 시트 최신 데이터와 동기화")가 보이지 않습니다.
+**리뷰어가 직접 확인해서 통과한 것**
 
-**원인**: 일부 컴포넌트가 `src/index.css`에 **정의되지 않은 CSS 변수**(`--color-…`)를 씁니다. 정의되지 않은 변수는 항상 대체값(`#ffffff` 등)으로 표시되므로, 카드 배경은 다크 모드에서도 흰색으로 고정됩니다. 반면 글자와 버튼은 실제 토큰(`--text-main` 등)을 써서 다크 색으로 바뀌므로 대비가 깨집니다.
+| 항목 | 결과 |
+|---|---|
+| Green Bar | typecheck / lint 0 / test 600 통과 / build 통과 |
+| 마이그레이션 `20261123000000_v3_media.sql` | 로컬 PostgreSQL 16에 전체 마이그레이션 순서대로 적용 성공. 두 번 실행해도 오류 없음. `v3_media_check.sql` 통과 |
+| R3 (기존 함수 복사) | 3개 함수 모두 최신 정의 원본 대비 필요한 줄만 추가된 것 확인. 잘했다 |
+| R7·R20·R21 | 정의 안 된 변수 0, 새 파일 400줄 이하, `index.css`는 토큰만 +29줄, `sheets.ts` +21줄 |
+| Worker | 인증·형식·크기·키 형식·DELETE 정규식 구현과 테스트 확인 |
 
-현재 `fix/review-followups` 브랜치 기준 사용 현황:
-
-| 정의되지 않은 변수 | 사용 횟수 | 바꿀 실제 토큰 |
-|---|---|---|
-| `--color-border` | 16 | `--border-subtle` |
-| `--color-primary` | 15 | `--brand-primary` |
-| `--color-text-muted` | 10 | `--text-muted` |
-| `--color-text` | 7 | `--text-main` |
-| `--color-bg-subtle` | 5 | `--bg-subtle` |
-| `--color-bg-card` | 3 | `--bg-card` |
-| `--color-primary-subtle` | 1 | `--brand-primary-light` |
-
-주요 파일은 `src/components/ProfileTab.tsx`(약 44곳)와 `src/components/admin/AdminPracticeTab.tsx`(약 13곳)입니다. **다른 파일에도 있으면 함께 고칩니다**(§3 검증 명령으로 찾기).
+**반려 사유:** 운영진 연습곡 탭의 **저장 경로 버그 3개(데이터 손상 포함)**와 **기존 기능 회귀**가 있다. 단위 테스트는 통과하지만 실제 저장 결과를 검사하지 않아 못 잡았다(R10 위반).
 
 ---
 
 ## 1. 작업 환경
-1. **브랜치**: 기존 `fix/review-followups`에서 이어서 작업합니다. 커밋을 푸시하면 PR #20에 반영됩니다.
-2. **먼저 `main`을 합칩니다**(이 문서를 가져오기 위해):
-   ```bash
-   git fetch origin
-   git switch fix/review-followups
-   git merge origin/main
-   ```
-   - `check.md` 충돌이 나면 main 쪽 새 문서를 남깁니다: `git checkout origin/main -- check.md && git add check.md && git commit --no-edit`
-   - 다른 파일에서 충돌이 나면 **멈추고 보고**합니다.
-   - 합친 뒤 Green Bar(`npm run typecheck && npm run lint && npm test && npm run build`) 결과를 먼저 보고합니다.
-3. **커밋**: 항목 하나 = 커밋 하나. 메시지에 항목 ID(D1, D2)를 넣습니다. 커밋할 때마다 바로 푸시합니다(머지 금지).
-4. **금지**: `supabase/` 아래 파일 수정·추가, SQL 실행·실행 요청·채팅에 SQL 작성, 새 CSS 변수 이름 만들기, 레이아웃·간격·문구 변경, `package.json`·설정 파일 수정, 린트 비활성화 주석, 테스트 삭제·skip, PR 머지, 배포.
+
+1. 브랜치: 기존 `feat/v3-member-ux`에서 이어서 작업한다. 푸시하면 PR #27에 반영된다.
+2. 먼저 `git merge origin/main`으로 이 문서를 가져온다.
+3. 커밋은 항목 하나에 하나. 메시지에 F번호를 넣는다.
+4. **로컬에만 있는 `feat/v3-activity` 브랜치를 지금 원격에 푸시한다**(`git push -u origin feat/v3-activity`). 원격에 없으면 기기 문제로 v3-C 작업이 사라질 수 있다. 이 브랜치의 내용은 고치지 않는다.
 
 ---
 
 ## 2. 작업 목록
 
-### D1. 정의되지 않은 CSS 변수를 실제 토큰으로 교체
-- §0 표의 대응대로 바꿉니다. 대체값이 붙은 형태(`var(--color-bg-card, #ffffff)`)는 **대체값까지 지우고** `var(--bg-card)`처럼 바꿉니다. 실제 토큰은 항상 정의되어 있으므로 대체값이 필요 없습니다.
-- 표에 없는 `--color-…` 변수나 그 밖의 정의되지 않은 변수가 나오면, 의미가 맞는 기존 토큰(`src/index.css` `:root` 목록)으로 바꿉니다. **맞는 토큰이 없으면 새로 만들지 말고 파일·줄·변수명을 보고**합니다.
-- 색만 바꿉니다. 크기·여백·배치·문구는 그대로 둡니다.
+### F1. 악보 업로드가 항상 실패하고, 실패하지 않더라도 곡 정보를 지움 — P1
 
-**화면 확인 (필수, 보고에 기록)**: `npm run dev`에서 라이트·다크 모드를 각각 켜고 아래 화면을 확인합니다. 확인하지 못했으면 "확인 못 함"이라고 씁니다.
-- 내 활동: 카드 배경이 다크 모드에서 어두운색인지, "화면 표시 모드"·"다크 모드" 라벨과 동기화 버튼 글자가 보이는지
-- 관리자 → 연습곡: 곡 목록, 트랙 편집 창
-- 연습실, 미니 플레이어, 오늘 탭, 일정 상세 시트
-- `--brand-primary`(진한 남색)를 배경으로 쓰는 버튼이나 글자가 다크 배경에서 **잘 보이지 않는 곳이 있으면 고치지 말고 위치를 보고**합니다. 이 토큰은 다크 모드용 값이 따로 없어서, 고치려면 디자인 결정이 필요합니다.
+- **위치:** `src/components/admin/practice/MediaUploadSheet.tsx` 86행 근처 `saveFn`의 `kind === 'score'` 분기
+- **현상:** `savePracticePiece({ id, title: '', scoreStorageKey, scoreSizeBytes })`를 보낸다.
+  - `fn_save_practice_piece`는 빈 제목을 거부한다(`곡 제목은 필수입니다`). 그래서 저장이 항상 실패하고, 큐는 방금 올린 R2 객체를 지운다. 결과적으로 악보 업로드는 한 번도 성공할 수 없다.
+  - 제목 검사가 없었다면 upsert가 `composer`, `arranger`, `score_url`, `notes`를 빈 값으로 덮어썼을 것이다.
+- **수정:**
+  - 저장 시점에 `sheetsService.getPracticeCatalog()`에서 해당 곡의 **최신 값**을 찾는다. 찾은 값을 펼친 뒤 `scoreStorageKey`, `scoreSizeBytes`만 바꿔서 보낸다.
+  - 곡을 찾지 못하면 저장하지 않고 실패로 처리한다(새 키 삭제는 기존 큐 로직이 한다).
+- **테스트:** 제목·작곡·편곡·`scoreUrl`·메모가 있는 곡에 악보를 올리면 `savePracticePiece`에 그 값들이 그대로 전달되는지 검사한다. 수정 전 코드에서 실패하는 것을 확인한다(R10).
 
-### D2. 재발 방지 테스트
-정의되지 않은 CSS 변수가 다시 들어오면 테스트가 실패하도록 만듭니다.
+### F2. 음원 "교체"가 새 트랙을 만들고 기존 트랙의 파일을 지움 — P1
 
-- 신규 파일: `src/styles/cssVariables.test.ts`(폴더가 없으면 만듭니다)
-- 내용:
-  1. `src/index.css`를 읽어 정의된 변수 이름(`--이름:` 형태) 목록을 만듭니다.
-  2. `src/` 아래 `.ts`·`.tsx`·`.css` 파일(테스트 파일 제외)에서 `var(--이름` 형태로 쓰인 변수를 모두 찾습니다.
-  3. 정의되지 않은 변수가 하나라도 있으면 실패하고, **파일 경로와 변수명을 메시지에 출력**합니다.
-- 브라우저나 런타임이 넣어 주는 변수가 있다면(예: `env()`는 변수가 아니므로 해당 없음) 예외 목록으로 두되, 예외마다 이유를 주석으로 적습니다. 예외가 0개면 그대로 둡니다.
-- 파일 읽기는 Node의 `fs`·`path`를 씁니다(새 패키지 금지). vitest 환경에서 동작하는지 확인합니다.
-- **확인**: D1을 적용하기 전 코드(예: `git stash`로 D1 변경을 잠시 빼고)에서 이 테스트가 **실패하는 것**을 한 번 확인하고 그 결과를 보고합니다. 테스트가 실제로 버그를 잡는다는 증거입니다.
+- **위치:** `PieceTrackSection.tsx` 88행(`onOpenUpload(t.storageKey)`), `PieceEditModal.tsx`의 `uploadSheetTarget`, `MediaUploadSheet.tsx`의 audio `saveFn`
+- **현상:** 교체 시 `previousStorageKey`만 넘기고 트랙 id는 넘기지 않는다. 그래서 `saveFn`이 id 없는 **새 트랙**을 만든다. 이어서 큐가 이전 키를 삭제하므로 기존 트랙은 지워진 파일을 가리키게 된다. 단원 화면에서 재생이 실패한다.
+- **수정:**
+  - 교체일 때는 `replaceTrackId`를 함께 넘긴다.
+  - `saveFn`은 카탈로그에서 그 트랙의 최신 값을 펼친 뒤 `storageKey`, `sizeBytes`, `source: 'r2'`, (알 수 있으면) `durationSeconds`, `mimeType`만 바꿔 같은 id로 저장한다.
+  - 이름과 종류는 사용자가 시트에서 바꾼 경우에만 바꾼다.
+- **테스트:** 교체 후 `savePracticeTrack` 호출의 `id`가 기존 트랙 id와 같은지 검사한다. 새 트랙이 생기지 않는지, 저장 성공 후에만 이전 키 DELETE가 호출되는지도 검사한다.
+
+### F3. 트랙 "보관"이 서버에 반영되지 않음 — P1
+
+- **위치:** `PieceEditModal.tsx` 107행 `handleArchiveTrack`, `PieceTrackSection.tsx` 98·168행
+- **현상:** `savePracticeTrack({...track, isArchived: true})`를 부른다. 하지만 `fn_save_practice_track`은 보관 여부를 저장하지 않는다(보관은 `fn_set_practice_track_archived` 담당). 화면에서는 잠깐 사라졌다가 새로고침하면 다시 나타난다.
+- **수정:** 기존 `sheetsService.setPracticeTrackArchived(trackId, true)`를 쓴다. 이전 `AdminPracticeTab.tsx`(리뷰 기준 브랜치 188행)가 쓰던 방식이다.
+- **테스트:** 보관 버튼이 `setPracticeTrackArchived`를 부르고 `savePracticeTrack`은 부르지 않는지 검사한다.
+
+### F4. 기존 기능 회귀 복구 — P1
+
+개편 전 `AdminPracticeTab.tsx`에 있던 기능 중 아래가 사라졌다. 명세 §4-1·§4-2에도 있는 기능이다.
+
+| 기능 | 이전 코드(`origin/fix/review-followups` 기준) | 복구 위치 |
+|---|---|---|
+| 곡 보관 / 복원 | 109행 `setPracticePieceArchived` | 곡 편집 화면 하단 "보관" 버튼, 보관함 목록에서는 "복원" |
+| 트랙 보관 해제(복원) | 188행 `setPracticeTrackArchived(id, !isArchived)` | 보관된 트랙은 곡 편집의 "보관된 트랙" 접힘 영역에 표시하고 "복원" 버튼 |
+| 트랙 순서 바꾸기 | 212행 `reorderPracticeTracks` | 트랙 행의 ↑ 버튼과 ⋯ 메뉴 "아래로" (명세 §4-2) |
+| 트랙 이름·종류 바꾸기 | 트랙 편집 폼 | ⋯ 메뉴 "이름 바꾸기", "종류 바꾸기". 저장은 F2처럼 최신 값을 펼쳐서 |
+
+- **테스트:** 각 기능이 위 서비스 메서드를 올바른 인자로 부르는지 검사한다. 순서 바꾸기는 맨 위의 ↑, 맨 아래의 "아래로"가 비활성인지도 본다.
+
+### F5. 새 트랙의 `orderIndex`가 항상 0 — P2
+
+- **위치:** `MediaUploadSheet.tsx` audio `saveFn` (`orderIndex: 0`)
+- **수정:** 같은 곡의 보관되지 않은 트랙 `orderIndex` 최댓값 + 1(없으면 0). 저장 시점의 최신 카탈로그 기준이다.
+
+### F6. `youtu.be` 링크가 영상으로 분류되지 않음 — P2
+
+- **위치:** `src/components/studio/PieceDetail.tsx` 31~32행, 운영진 목록의 음원·영상 개수 계산
+- **현상:** `url.includes('youtube')`로 판별해서 `https://youtu.be/...` 링크(source가 youtube가 아닌 기존 데이터)는 음원 목록에 들어간다.
+- **수정:** `src/utils/youtubeUrl.ts`의 검증 함수로 판별한다. `source === 'youtube'` 또는 URL이 유튜브 호스트면 영상이다. 같은 판별 함수를 단원 화면과 운영진 화면이 함께 쓴다.
+- **테스트:** `youtu.be`, `m.youtube.com`, 구글 드라이브 링크 분류.
+
+### F7. 쓰지 않는 컴포넌트 정리 — P2
+
+- `src/components/TodayTab.tsx`, `CalendarTab.tsx`, `HomeView.tsx`가 이제 `App.tsx`에서 쓰이지 않는다(테스트에서만 import).
+- **먼저 `grep -rn`으로 운영 코드에서 import하는 곳이 정말 없는지 확인한다.** 없으면 컴포넌트와 그 컴포넌트 전용 테스트 파일을 지운다. 이 경우에 한해 테스트 삭제를 허용한다(R9 예외).
+- 그 안에서만 쓰이던 하위 컴포넌트·유틸이 있으면 같이 지우되, `HomeTab`이나 다른 곳이 쓰는 것은 남긴다.
+- 지운 파일 목록과 확인한 grep 결과를 보고한다.
+
+### F8. 원본 업로드 시 길이(`durationSeconds`) 저장 — P2
+
+- 압축이 꺼져 있어(Q1 대기) 원본을 그대로 올리므로 트랙 길이가 비어 있다. 단원 화면에 `종류 · 길이`가 표시되지 않는다.
+- **수정:** 업로드 전에 `URL.createObjectURL(file)`을 `new Audio()`에 넣고 `loadedmetadata`에서 `duration`을 읽는다. 끝나면 `URL.revokeObjectURL`.
+  - 5초 안에 못 읽거나 `NaN` / `Infinity`면 비워 둔다.
+  - 이 처리는 `src/services/media/audioMetadata.ts`(신규)에 둔다.
+- **테스트:** 정상값, 시간 초과, `Infinity` 세 경우(오디오 요소는 가짜로 대체).
 
 ---
 
-## 3. 검증 명령 (보고에 결과 첨부)
-```bash
-# 정의된 변수 목록
-grep -oE "^\s*--[a-z0-9-]+:" src/index.css | tr -d ' :' | sort -u > /tmp/defined.txt
-# 쓰인 변수 중 정의되지 않은 것 (결과가 0줄이어야 함)
-grep -rhoE "var\(--[a-z0-9-]+" src --include=*.ts --include=*.tsx --include=*.css \
-  | sed 's/var(//' | sort -u | while read v; do grep -qx -- "$v" /tmp/defined.txt || echo "$v"; done
-```
+## 3. 보고 형식 보완
 
-## 4. 하지 말 것 (이번 작업 한정)
-- 홈 탭 구조, 하단 탭, 레벨·열정 온도, 연습실 업로드 등 **기획 중인 변경**
-- 새 CSS 변수 정의, `--brand-primary`의 다크 모드 값 추가(디자인 결정 필요)
-- `supabase/` 변경, SQL 관련 일체
+이번 PR 보고에는 V3-08·V3-09만 지시서 §5 형식으로 적혀 있다. 아래 내용을 이번 보고에 **V3-01·02·07·07b·03·04·05·06** 각각에 대해 추가한다.
+
+- 사용한 기존 식별자 → 정의 위치(R1)
+- 새 한글 문구 목록(R16)
+- 수정 전 실패 출력 요약(R10)
+- 새·수정 파일 줄 수(R20)
+
+---
+
+## 4. 마무리 (마지막 커밋)
+
+1. `docs/DEV_LOG.md`에 F1~F8 요약(문제와 해결 한 줄씩)을 쓴다.
+2. **이 파일 `check.md`를 삭제한다**(`git rm check.md`). 커밋 메시지: `docs: record v3-A review fixes (F1-F8) and remove check.md`
+3. 푸시한다(PR #27에 반영). **머지하지 않는다.** 그 뒤 멈추고 보고한다.
+
+## 5. 하지 말 것
+
+- v3-B·v3-C 작업 시작
+- `supabase/` 파일 수정(이번 수정은 DB 변경이 필요 없다. 필요하다고 판단되면 멈추고 보고)
+- 운영 DB 실행·실행 요청, PR 머지, 배포
 - 이 문서에 없는 리팩터링
-
-## 5. 마무리 (마지막 커밋)
-1. `docs/DEV_LOG.md`에 D1·D2 요약(문제와 해결 한 줄씩)을 추가합니다.
-2. **`check.md`를 삭제합니다**(`git rm check.md`). 커밋 메시지: `docs: record dark mode fixes (D1-D2) and remove check.md`
-3. 푸시합니다(PR #20에 반영). **머지하지 않습니다.**
-4. 보고: D1·D2 결과 표, §3 검증 명령 결과(0줄), D2 테스트가 수정 전 코드에서 실패했던 출력, 화면 확인 결과, `--brand-primary` 대비 문제 위치(있으면).
