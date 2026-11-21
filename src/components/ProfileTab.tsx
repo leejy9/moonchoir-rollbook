@@ -180,10 +180,10 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       {/* 1. Member Profile & Status Header */}
       <section
         style={{
-          border: '1px solid var(--color-border, #e2e8f0)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '12px',
           padding: '16px',
-          backgroundColor: 'var(--color-bg-card, #ffffff)',
+          backgroundColor: 'var(--bg-card)',
           display: 'flex',
           flexDirection: 'column',
           gap: '12px',
@@ -191,7 +191,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
           <div>
-            <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--color-text, #1e293b)' }}>
+            <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-main)' }}>
               {memberName}
             </div>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
@@ -201,18 +201,18 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                   fontWeight: 600,
                   padding: '2px 8px',
                   borderRadius: '4px',
-                  backgroundColor: 'var(--color-primary-subtle, #e0e7ff)',
-                  color: 'var(--color-primary, #4338ca)',
+                  backgroundColor: 'var(--brand-primary-light)',
+                  color: 'var(--brand-primary)',
                 }}
               >
                 {memberPart}
               </span>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-muted, #64748b)' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 {currentMember.memberStatus || '정단원'}
               </span>
             </div>
             {profile.phoneLast4 && (
-              <div style={{ fontSize: '12px', color: 'var(--color-text-muted, #64748b)', marginTop: '4px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
                 전화번호 뒷자리: {profile.phoneLast4}
                 <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-muted, #94a3b8)' }}>
                   (연락처 수정은 운영진에게 요청해 주세요)
@@ -231,7 +231,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                 minHeight: '44px',
                 minWidth: '44px',
                 padding: '8px 16px',
-                backgroundColor: 'var(--color-primary, #0047ff)',
+                backgroundColor: 'var(--brand-primary)',
                 color: 'var(--text-white, #ffffff)',
                 border: 'none',
                 borderRadius: '6px',
@@ -248,28 +248,28 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         {/* 2. Cumulative Attendance Summary */}
         <div
           style={{
-            borderTop: '1px solid var(--color-border, #e2e8f0)',
+            borderTop: '1px solid var(--border-subtle)',
             paddingTop: '12px',
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
             gap: '8px',
           }}
         >
-          <div style={{ padding: '8px', background: 'var(--color-bg-subtle, #f8fafc)', borderRadius: '6px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--color-text-muted, #64748b)' }}>이번 시즌 출석</div>
-            <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--color-text, #1e293b)' }}>
+          <div style={{ padding: '8px', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>이번 시즌 출석</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)' }}>
               {memberSummary.attended}회
             </div>
           </div>
-          <div style={{ padding: '8px', background: 'var(--color-bg-subtle, #f8fafc)', borderRadius: '6px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--color-text-muted, #64748b)' }}>누적 출석률</div>
-            <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--color-primary, #0047ff)' }}>
+          <div style={{ padding: '8px', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>누적 출석률</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--brand-primary)' }}>
               {memberSummary.attendanceRate}%
             </div>
           </div>
-          <div style={{ padding: '8px', background: 'var(--color-bg-subtle, #f8fafc)', borderRadius: '6px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--color-text-muted, #64748b)' }}>진행 회차</div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text, #1e293b)' }}>
+          <div style={{ padding: '8px', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>진행 회차</div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>
               총 {memberSummary.totalSessions}회
             </div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted, #94a3b8)' }}>
@@ -299,25 +299,25 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       {/* 3. Section: 회차별 출결 기록 */}
       <section
         style={{
-          border: '1px solid var(--color-border, #e2e8f0)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '12px',
           overflow: 'hidden',
-          backgroundColor: 'var(--color-bg-card, #ffffff)',
+          backgroundColor: 'var(--bg-card)',
         }}
       >
         <div
           style={{
             padding: '12px 16px',
-            borderBottom: '1px solid var(--color-border, #e2e8f0)',
+            borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
           }}
         >
-          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--color-text, #1e293b)' }}>
+          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
             회차별 출결 기록
           </h3>
-          <span style={{ fontSize: '12px', color: 'var(--color-text-muted, #64748b)' }}>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             총 {scheduleRecords.length}개 일정
           </span>
         </div>
@@ -327,12 +327,12 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           style={{
             display: 'grid',
             gridTemplateColumns: 'minmax(120px, 1.8fr) 70px 85px 85px',
-            background: 'var(--color-bg-subtle, #f1f5f9)',
+            background: 'var(--bg-subtle)',
             padding: '10px 12px',
             fontSize: '12px',
             fontWeight: 700,
-            color: 'var(--color-text-muted, #475569)',
-            borderBottom: '1px solid var(--color-border, #e2e8f0)',
+            color: 'var(--text-muted)',
+            borderBottom: '1px solid var(--border-subtle)',
           }}
         >
           <span>연습명칭</span>
@@ -356,20 +356,20 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                   gridTemplateColumns: 'minmax(120px, 1.8fr) 70px 85px 85px',
                   alignItems: 'center',
                   padding: '10px 12px',
-                  borderBottom: '1px solid var(--color-border, #f1f5f9)',
+                  borderBottom: '1px solid var(--border-subtle)',
                   fontSize: '13px',
                 }}
               >
                 {/* 1. 연습명칭 */}
                 <div>
-                  <div style={{ fontWeight: 600, color: 'var(--color-text, #1e293b)' }}>{r.title}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--color-text-muted, #64748b)', marginTop: '2px' }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{r.title}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
                     {r.category}
                   </div>
                 </div>
 
                 {/* 2. 연습일 */}
-                <div style={{ fontSize: '12px', color: 'var(--color-text-muted, #475569)' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                   {formatShortDate(r.date)}
                 </div>
 
@@ -479,7 +479,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                       type="button"
                       onClick={() => onOpenQRScanner(r.schedule)}
                       style={{
-                        background: 'var(--color-primary, #0047ff)',
+                        background: 'var(--brand-primary)',
                         color: 'var(--text-white, #ffffff)',
                         border: 'none',
                         borderRadius: '6px',
@@ -510,16 +510,16 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       {/* 4. Section: 환경 설정 및 계정 관리 */}
       <section
         style={{
-          border: '1px solid var(--color-border, #e2e8f0)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '12px',
           padding: '16px',
-          backgroundColor: 'var(--color-bg-card, #ffffff)',
+          backgroundColor: 'var(--bg-card)',
           display: 'flex',
           flexDirection: 'column',
           gap: '14px',
         }}
       >
-        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--color-text, #1e293b)' }}>
+        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
           화면 설정 및 데이터 관리
         </h3>
 
@@ -540,7 +540,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                   minWidth: '44px',
                   padding: '8px 12px',
                   borderRadius: '6px',
-                  border: `1px solid ${displayMode === mode ? 'var(--color-primary, #0047ff)' : 'var(--color-border, #cbd5e1)'}`,
+                  border: `1px solid ${displayMode === mode ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
                   backgroundColor: displayMode === mode ? 'var(--brand-primary-light, #e0e7ff)' : 'var(--bg-card, #ffffff)',
                   color: displayMode === mode ? 'var(--brand-primary, #0047ff)' : 'var(--text-sub, #334155)',
                   fontWeight: displayMode === mode ? 700 : 500,
@@ -555,7 +555,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         </div>
 
         {/* Dark Mode Toggle */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid var(--color-border, #f1f5f9)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
           <span style={{ fontSize: '13px', fontWeight: 600 }}>다크 모드</span>
           <button
             type="button"
@@ -565,7 +565,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
               minWidth: '44px',
               padding: '8px 16px',
               borderRadius: '6px',
-              border: '1px solid var(--color-border, #cbd5e1)',
+              border: '1px solid var(--border-subtle)',
               backgroundColor: isDarkMode ? 'var(--bg-subtle, #1e293b)' : 'var(--bg-card, #f8fafc)',
               color: isDarkMode ? 'var(--text-white, #ffffff)' : 'var(--text-main, #1e293b)',
               fontWeight: 600,
@@ -578,7 +578,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         </div>
 
         {/* Google Sheets Sync Button */}
-        <div style={{ paddingTop: '8px', borderTop: '1px solid var(--color-border, #f1f5f9)' }}>
+        <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
           <button
             type="button"
             onClick={() => void handleSyncRemote()}
@@ -588,9 +588,9 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
               minHeight: '44px',
               padding: '10px 16px',
               borderRadius: '6px',
-              border: '1px solid var(--color-border, #cbd5e1)',
+              border: '1px solid var(--border-subtle)',
               backgroundColor: 'var(--bg-card, #f8fafc)',
-              color: 'var(--color-text, #1e293b)',
+              color: 'var(--text-main)',
               fontWeight: 600,
               fontSize: '13px',
               cursor: isSyncing ? 'not-allowed' : 'pointer',
@@ -601,7 +601,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         </div>
 
         {/* Install PWA App Card */}
-        <div style={{ paddingTop: '8px', borderTop: '1px solid var(--color-border, #f1f5f9)' }}>
+        <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
           <InstallAppCard />
         </div>
 
@@ -612,7 +612,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
             flexDirection: 'column',
             gap: '8px',
             paddingTop: '8px',
-            borderTop: '1px solid var(--color-border, #f1f5f9)',
+            borderTop: '1px solid var(--border-subtle)',
           }}
         >
           <button
@@ -623,7 +623,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
               minHeight: '44px',
               padding: '10px 16px',
               borderRadius: '6px',
-              border: '1px solid var(--color-border, #cbd5e1)',
+              border: '1px solid var(--border-subtle)',
               backgroundColor: 'var(--bg-card, #ffffff)',
               color: 'var(--text-main, #334155)',
               fontSize: '13px',

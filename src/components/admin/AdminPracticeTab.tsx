@@ -285,12 +285,12 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
         className="admin-practice-notice"
         style={{
           padding: '12px 14px',
-          background: 'var(--color-bg-subtle, #f5f5f5)',
+          background: 'var(--bg-subtle)',
           borderRadius: '8px',
           fontSize: '13px',
           lineHeight: 1.5,
-          color: 'var(--color-text-muted, #666)',
-          borderLeft: '4px solid var(--color-primary, #0047ff)',
+          color: 'var(--text-muted)',
+          borderLeft: '4px solid var(--brand-primary)',
         }}
       >
         음원 파일은 Cloudflare R2에 직접 업로드한 뒤 파일 키를 입력해 주세요. 시판 음원은 유튜브 링크로 등록하세요.
@@ -312,7 +312,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
       )}
 
       {/* Sub-navigation */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--color-border, #eee)', paddingBottom: '8px' }}>
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
         <button
           type="button"
           onClick={() => setSubSection('PIECES')}
@@ -322,7 +322,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
             padding: '8px 16px',
             borderRadius: '6px',
             fontWeight: subSection === 'PIECES' ? 'bold' : 'normal',
-            backgroundColor: subSection === 'PIECES' ? 'var(--color-primary, #0047ff)' : 'var(--bg-subtle, #eee)',
+            backgroundColor: subSection === 'PIECES' ? 'var(--brand-primary)' : 'var(--bg-subtle, #eee)',
             color: subSection === 'PIECES' ? 'var(--text-white, #fff)' : 'var(--text-main, #333)',
             border: 'none',
             cursor: 'pointer',
@@ -339,7 +339,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
             padding: '8px 16px',
             borderRadius: '6px',
             fontWeight: subSection === 'PROGRAMS' ? 'bold' : 'normal',
-            backgroundColor: subSection === 'PROGRAMS' ? 'var(--color-primary, #0047ff)' : 'var(--bg-subtle, #eee)',
+            backgroundColor: subSection === 'PROGRAMS' ? 'var(--brand-primary)' : 'var(--bg-subtle, #eee)',
             color: subSection === 'PROGRAMS' ? 'var(--text-white, #fff)' : 'var(--text-main, #333)',
             border: 'none',
             cursor: 'pointer',
@@ -374,7 +374,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                 minHeight: '44px',
                 minWidth: '44px',
                 padding: '8px 16px',
-                backgroundColor: 'var(--color-primary, #0047ff)',
+                backgroundColor: 'var(--brand-primary)',
                 color: 'var(--text-white, #fff)',
                 borderRadius: '6px',
                 border: 'none',
@@ -400,7 +400,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                   <div
                     key={piece.id}
                     style={{
-                      border: isSelected ? '2px solid var(--color-primary, #0047ff)' : '1px solid var(--border-subtle, #ddd)',
+                      border: isSelected ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
                       borderRadius: '8px',
                       padding: '12px',
                       backgroundColor: piece.isArchived ? 'var(--bg-subtle, #f9f9f9)' : 'var(--bg-card, #fff)',
@@ -431,7 +431,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
 
                     {piece.scoreUrl && (
                       <div style={{ fontSize: '13px' }}>
-                        <a href={piece.scoreUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary, #0047ff)' }}>
+                        <a href={piece.scoreUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-primary)' }}>
                           악보 링크 열기 ↗
                         </a>
                       </div>
@@ -498,7 +498,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
           {selectedPiece && (
             <div
               style={{
-                border: '2px solid var(--color-primary, #0047ff)',
+                border: '2px solid var(--brand-primary)',
                 borderRadius: '8px',
                 padding: '16px',
                 backgroundColor: 'var(--bg-subtle, #fafafa)',
@@ -516,7 +516,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                     minHeight: '44px',
                     minWidth: '44px',
                     padding: '8px 14px',
-                    backgroundColor: 'var(--color-primary, #0047ff)',
+                    backgroundColor: 'var(--brand-primary)',
                     color: 'var(--text-white, #fff)',
                     borderRadius: '6px',
                     border: 'none',
@@ -916,7 +916,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                     minHeight: '44px',
                     minWidth: '44px',
                     padding: '8px 16px',
-                    backgroundColor: 'var(--color-primary, #0047ff)',
+                    backgroundColor: 'var(--brand-primary)',
                     color: 'var(--text-white, #fff)',
                     border: 'none',
                     borderRadius: '4px',
@@ -1162,7 +1162,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                           minHeight: '44px',
                           minWidth: '44px',
                           padding: '8px 16px',
-                          backgroundColor: hasInsecureScheme ? 'var(--border-subtle, #ccc)' : 'var(--color-primary, #0047ff)',
+                          backgroundColor: hasInsecureScheme ? 'var(--border-subtle)' : 'var(--brand-primary)',
                           color: 'var(--text-white, #fff)',
                           border: 'none',
                           borderRadius: '4px',
