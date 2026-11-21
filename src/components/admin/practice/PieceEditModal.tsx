@@ -5,6 +5,8 @@ import { useUploadQueue } from '../../../services/media/uploadQueue';
 import { MediaUploadSheet } from './MediaUploadSheet';
 import { YoutubeLinkModal } from './YoutubeLinkModal';
 import { PieceTrackSection } from './PieceTrackSection';
+import { AddProgramModal } from './AddProgramModal';
+import { PieceScoreSection } from './PieceScoreSection';
 
 interface PieceEditModalProps {
   piece: Partial<PracticePiece>;
@@ -104,10 +106,58 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
       .sort((a, b) => a.orderIndex - b.orderIndex);
   }, [piece.id, catalog.tracks]);
 
+  const archivedTracks = React.useMemo(() => {
+    if (!piece.id) return [];
+    return catalog.tracks
+      .filter((t) => t.pieceId === piece.id && t.isArchived)
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+  }, [piece.id, catalog.tracks]);
+
   const handleArchiveTrack = async (track: PracticeTrack) => {
     if (!track.id) return;
     await sheetsService.setPracticeTrackArchived(track.id, true);
     onSaved();
+  };
+
+  const handleRestoreTrack = async (track: PracticeTrack) => {
+    if (!track.id) return;
+    await sheetsService.setPracticeTrackArchived(track.id, false);
+    onSaved();
+  };
+
+  const handleMoveTrackOrder = async (trackId: string, direction: 'UP' | 'DOWN') => {
+    if (!piece.id) return;
+    const idx = pieceTracks.findIndex((t) => t.id === trackId);
+    if (idx < 0) return;
+    const targetIdx = direction === 'UP' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= pieceTracks.length) return;
+
+    const reordered = [...pieceTracks];
+    const [moved] = reordered.splice(idx, 1);
+    reordered.splice(targetIdx, 0, moved);
+
+    await sheetsService.reorderPracticeTracks(
+      piece.id,
+      reordered.map((t) => t.id)
+    );
+    onSaved();
+  };
+
+  const handleEditTrack = async (track: PracticeTrack, updates: { label?: string; kind?: string }) => {
+    const latestTrack = catalog.tracks.find((t) => t.id === track.id);
+    if (!latestTrack) return;
+    await sheetsService.savePracticeTrack({
+      ...latestTrack,
+      ...updates,
+    });
+    onSaved();
+  };
+
+  const handleToggleArchivePiece = async () => {
+    if (!piece.id) return;
+    await sheetsService.setPracticePieceArchived(piece.id, !piece.isArchived);
+    onSaved();
+    onClose();
   };
 
   return (
@@ -220,95 +270,62 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
               </div>
             )}
 
-            <hr className="admin-section-divider" />
-
-            {/* 악보 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <label className="admin-field-label" style={{ margin: 0 }}>악보 (PDF)</label>
-              <button
-                type="button"
-                onClick={() => setUploadSheetTarget({ kind: 'score', previousStorageKey: piece.scoreStorageKey })}
-                style={{
-                  minHeight: '44px',
-                  padding: '4px 10px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-subtle)',
-                  background: 'var(--bg-card)',
-                  color: 'var(--brand-primary)',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                {piece.scoreStorageKey || piece.scoreUrl ? '교체' : '+ 악보 올리기'}
-              </button>
-            </div>
-            {piece.scoreStorageKey ? (
-              <div style={{ padding: '8px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '12px' }}>
-                <span>{piece.scoreStorageKey.split('/').pop()}</span>
-                {piece.scoreSizeBytes && (
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
-                    ({(piece.scoreSizeBytes / (1024 * 1024)).toFixed(1)}MB)
-                  </span>
-                )}
-              </div>
-            ) : piece.scoreUrl ? (
-              <div style={{ padding: '8px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '12px' }}>
-                <span>외부 링크: {piece.scoreUrl}</span>
-              </div>
-            ) : (
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                등록된 악보가 없습니다.
-              </div>
-            )}
+            {/* 악보 섹션 */}
+            <PieceScoreSection
+              piece={piece}
+              onOpenUpload={(prevKey) =>
+                setUploadSheetTarget({ kind: 'score', previousStorageKey: prevKey })
+              }
+            />
 
             {/* 음원 및 영상 트랙 섹션 */}
             <PieceTrackSection
               tracks={pieceTracks}
+              archivedTracks={archivedTracks}
               activeJob={activeJob}
               pieceId={piece.id}
+              availableKinds={config.practiceTrackKinds}
               onOpenUpload={(prevKey, trackId) =>
                 setUploadSheetTarget({ kind: 'audio', previousStorageKey: prevKey, replaceTrackId: trackId })
               }
               onArchiveTrack={handleArchiveTrack}
+              onRestoreTrack={handleRestoreTrack}
+              onMoveTrackOrder={handleMoveTrackOrder}
+              onEditTrack={handleEditTrack}
               onOpenYoutubeModal={(yt) => setYoutubeModal(yt ? { id: yt.id, title: yt.label, url: yt.url || '' } : { title: '', url: '' })}
             />
+
+            {/* 곡 보관 / 복원 버튼 */}
+            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={handleToggleArchivePiece}
+                style={{
+                  minHeight: '44px',
+                  padding: '8px 16px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'transparent',
+                  color: piece.isArchived ? 'var(--brand-primary)' : 'var(--text-muted)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {piece.isArchived ? '곡 복원' : '곡 보관'}
+              </button>
+            </div>
           </>
         )}
       </div>
 
       {/* 공연 선택 팝업 */}
       {showAddProgramModal && (
-        <div className="admin-modal-backdrop" onClick={() => setShowAddProgramModal(false)}>
-          <div className="admin-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
-            <h4 style={{ margin: '0 0 12px 0' }}>공연에 추가</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {programCards
-                .filter((p) => !p.isArchived)
-                .map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => handleAddToProgram(p.id)}
-                    style={{
-                      width: '100%',
-                      minHeight: '44px',
-                      padding: '10px 14px',
-                      textAlign: 'left',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--border-subtle)',
-                      background: 'var(--bg-card)',
-                      color: 'var(--text-main)',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {p.title}
-                  </button>
-                ))}
-            </div>
-          </div>
-        </div>
+        <AddProgramModal
+          programCards={programCards}
+          onClose={() => setShowAddProgramModal(false)}
+          onSelect={handleAddToProgram}
+        />
       )}
 
       {/* 유튜브 링크 모달 */}

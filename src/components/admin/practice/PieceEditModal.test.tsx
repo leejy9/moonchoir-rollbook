@@ -89,4 +89,150 @@ describe('PieceEditModal Component', () => {
       expect(saveTrackSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('F4: piece and track archive, restore, reorder, edit', () => {
+    it('shows archive button for active piece in HTML', async () => {
+      const html = renderToString(
+        <PieceEditModal
+          piece={dummyPiece}
+          catalog={{
+            pieces: [dummyPiece],
+            tracks: [dummyTrack],
+            programPieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      // Should render archive button in footer
+      expect(html).toContain('곡 보관');
+    });
+
+    it('shows restore button for archived piece in HTML', async () => {
+      const archivedPiece: PracticePiece = {
+        ...dummyPiece,
+        isArchived: true,
+      };
+
+      const html = renderToString(
+        <PieceEditModal
+          piece={archivedPiece}
+          catalog={{
+            pieces: [archivedPiece],
+            tracks: [dummyTrack],
+            programPieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      expect(html).toContain('곡 복원');
+    });
+
+    it('passes archived tracks to PieceTrackSection and restores track when onRestoreTrack is called', async () => {
+      const archivedTrack: PracticeTrack = {
+        id: 't_archived',
+        pieceId: 'p1',
+        label: '과거 가이드',
+        kind: '가이드',
+        source: 'r2',
+        storageKey: 'audio/old.m4a',
+        orderIndex: 0,
+        isArchived: true,
+        createdAt: '2025-01-01',
+        updatedAt: '2025-01-01',
+      };
+
+      const setTrackArchivedSpy = vi
+        .spyOn(sheetsService, 'setPracticeTrackArchived')
+        .mockResolvedValue(undefined);
+
+      renderToString(
+        <PieceEditModal
+          piece={dummyPiece}
+          catalog={{
+            pieces: [dummyPiece],
+            tracks: [dummyTrack, archivedTrack],
+            programPieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      expect(capturedTrackSectionProps.archivedTracks).toHaveLength(1);
+      expect(capturedTrackSectionProps.archivedTracks[0].id).toBe('t_archived');
+
+      await capturedTrackSectionProps.onRestoreTrack(archivedTrack);
+      expect(setTrackArchivedSpy).toHaveBeenCalledWith('t_archived', false);
+    });
+
+    it('calls reorderPracticeTracks when onMoveTrackOrder is triggered', async () => {
+      const track1 = { ...dummyTrack, id: 't1', orderIndex: 0 };
+      const track2 = { ...dummyTrack, id: 't2', orderIndex: 1 };
+      const track3 = { ...dummyTrack, id: 't3', orderIndex: 2 };
+
+      const reorderSpy = vi
+        .spyOn(sheetsService, 'reorderPracticeTracks')
+        .mockResolvedValue(undefined);
+
+      renderToString(
+        <PieceEditModal
+          piece={dummyPiece}
+          catalog={{
+            pieces: [dummyPiece],
+            tracks: [track1, track2, track3],
+            programPieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      await capturedTrackSectionProps.onMoveTrackOrder('t2', 'UP');
+      expect(reorderSpy).toHaveBeenCalledWith('p1', ['t2', 't1', 't3']);
+    });
+
+    it('calls savePracticeTrack with preserved metadata when onEditTrack is triggered', async () => {
+      const saveTrackSpy = vi
+        .spyOn(sheetsService, 'savePracticeTrack')
+        .mockResolvedValue(dummyTrack);
+
+      renderToString(
+        <PieceEditModal
+          piece={dummyPiece}
+          catalog={{
+            pieces: [dummyPiece],
+            tracks: [dummyTrack],
+            programPieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      await capturedTrackSectionProps.onEditTrack(dummyTrack, { label: '수정된 라벨' });
+      expect(saveTrackSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 't1',
+          pieceId: 'p1',
+          label: '수정된 라벨',
+          kind: '가이드',
+          storageKey: 'audio/t1.m4a',
+        })
+      );
+    });
+  });
 });
