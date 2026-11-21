@@ -9,6 +9,7 @@ interface MediaUploadSheetProps {
   pieceId: string;
   kind: 'audio' | 'score';
   previousStorageKey?: string;
+  replaceTrackId?: string;
   config: AppConfig;
   onClose: () => void;
   onJobEnqueued?: () => void;
@@ -18,15 +19,36 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
   pieceId,
   kind,
   previousStorageKey,
+  replaceTrackId,
   config,
   onClose,
   onJobEnqueued,
 }) => {
+  const kinds = config.practiceTrackKinds?.length ? config.practiceTrackKinds : ['가이드', 'MR', '참고영상'];
+
+  const existingTrack = React.useMemo(() => {
+    if (!replaceTrackId) return undefined;
+    const catalog = sheetsService.getPracticeCatalog();
+    return catalog.tracks.find((t) => t.id === replaceTrackId);
+  }, [replaceTrackId]);
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [title, setTitle] = useState('');
-  const [trackKind, setTrackKind] = useState('가이드');
-  const [customKind, setCustomKind] = useState('');
-  const [isCustomKind, setIsCustomKind] = useState(false);
+  const [title, setTitle] = useState(() => existingTrack?.label || '');
+  const [trackKind, setTrackKind] = useState(() => {
+    if (existingTrack && kinds.includes(existingTrack.kind)) {
+      return existingTrack.kind;
+    }
+    return '가이드';
+  });
+  const [customKind, setCustomKind] = useState(() => {
+    if (existingTrack && !kinds.includes(existingTrack.kind)) {
+      return existingTrack.kind;
+    }
+    return '';
+  });
+  const [isCustomKind, setIsCustomKind] = useState(() => {
+    return Boolean(existingTrack && !kinds.includes(existingTrack.kind));
+  });
   const [mediaUsage, setMediaUsage] = useState<MediaUsage | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
 
@@ -63,7 +85,6 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
 
   const totalGB = (mediaUsage?.totalBytes ?? 0) / (1024 * 1024 * 1024);
   const isOverQuota = totalGB >= 9.5;
-  const kinds = config.practiceTrackKinds?.length ? config.practiceTrackKinds : ['가이드', 'MR', '참고영상'];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +103,7 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
       file: selectedFile,
       previousStorageKey,
       baseUrl,
-      saveFn: createUploadSaveFn(kind, pieceId, finalTitle, finalKind),
+      saveFn: createUploadSaveFn(kind, pieceId, finalTitle, finalKind, replaceTrackId),
     });
 
     if (onJobEnqueued) onJobEnqueued();

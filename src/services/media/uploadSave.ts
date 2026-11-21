@@ -25,16 +25,33 @@ export function createUploadSaveFn(
         scoreSizeBytes: size,
       });
     } else {
-      await sheetsService.savePracticeTrack({
-        id: replaceTrackId,
-        pieceId,
-        label: finalTitle,
-        kind: finalKind,
-        source: 'r2',
-        storageKey: key,
-        sizeBytes: size,
-        orderIndex: 0,
-      });
+      if (replaceTrackId) {
+        const currentCatalog = sheetsService.getPracticeCatalog();
+        const existingTrack = currentCatalog.tracks.find((t) => t.id === replaceTrackId);
+        if (!existingTrack) {
+          throw new Error(`Track not found in catalog: ${replaceTrackId}`);
+        }
+        await sheetsService.savePracticeTrack({
+          ...existingTrack,
+          id: replaceTrackId,
+          pieceId,
+          label: finalTitle || existingTrack.label,
+          kind: finalKind || existingTrack.kind,
+          source: 'r2',
+          storageKey: key,
+          sizeBytes: size,
+        });
+      } else {
+        await sheetsService.savePracticeTrack({
+          pieceId,
+          label: finalTitle,
+          kind: finalKind,
+          source: 'r2',
+          storageKey: key,
+          sizeBytes: size,
+          orderIndex: 0,
+        });
+      }
     }
   };
 }

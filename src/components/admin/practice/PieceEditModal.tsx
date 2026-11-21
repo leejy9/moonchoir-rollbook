@@ -31,6 +31,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
   const [uploadSheetTarget, setUploadSheetTarget] = useState<{
     kind: 'audio' | 'score';
     previousStorageKey?: string;
+    replaceTrackId?: string;
   } | null>(null);
 
   const [showAddProgramModal, setShowAddProgramModal] = useState(false);
@@ -268,7 +269,9 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
               tracks={pieceTracks}
               activeJob={activeJob}
               pieceId={piece.id}
-              onOpenUpload={(prevKey) => setUploadSheetTarget({ kind: 'audio', previousStorageKey: prevKey })}
+              onOpenUpload={(prevKey, trackId) =>
+                setUploadSheetTarget({ kind: 'audio', previousStorageKey: prevKey, replaceTrackId: trackId })
+              }
               onArchiveTrack={handleArchiveTrack}
               onOpenYoutubeModal={(yt) => setYoutubeModal(yt ? { id: yt.id, title: yt.label, url: yt.url || '' } : { title: '', url: '' })}
             />
@@ -338,6 +341,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
           pieceId={piece.id}
           kind={uploadSheetTarget.kind}
           previousStorageKey={uploadSheetTarget.previousStorageKey}
+          replaceTrackId={uploadSheetTarget.replaceTrackId}
           config={config}
           onClose={() => setUploadSheetTarget(null)}
           onJobEnqueued={onSaved}

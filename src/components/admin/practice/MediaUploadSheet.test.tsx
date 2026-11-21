@@ -102,4 +102,45 @@ describe('MediaUploadSheet Component', () => {
       );
     });
   });
+
+  describe('F2: audio replace saveFn preserves track id and metadata', () => {
+    it('updates existing track with same id and preserves track metadata', async () => {
+      const existingTrack = {
+        id: 'track_123',
+        pieceId: 'p1',
+        label: '소프라노 가이드',
+        kind: '파트음원',
+        source: 'r2',
+        storageKey: '2025/audio/old.m4a',
+        orderIndex: 2,
+        isArchived: false,
+        createdAt: '2025-01-01',
+        updatedAt: '2025-01-01',
+      } as any;
+
+      vi.spyOn(sheetsService, 'getPracticeCatalog').mockReturnValue({
+        pieces: [],
+        tracks: [existingTrack],
+        programPieces: [],
+      });
+
+      const saveTrackSpy = vi.spyOn(sheetsService, 'savePracticeTrack').mockResolvedValue(existingTrack);
+
+      const saveFn = createUploadSaveFn('audio', 'p1', '소프라노 가이드 수정', '파트음원', 'track_123');
+      await saveFn('2026/audio/new.m4a', 2048);
+
+      expect(saveTrackSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'track_123',
+          pieceId: 'p1',
+          label: '소프라노 가이드 수정',
+          kind: '파트음원',
+          source: 'r2',
+          storageKey: '2026/audio/new.m4a',
+          sizeBytes: 2048,
+          orderIndex: 2,
+        })
+      );
+    });
+  });
 });

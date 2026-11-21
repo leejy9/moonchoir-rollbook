@@ -6,7 +6,7 @@ interface PieceTrackSectionProps {
   tracks: PracticeTrack[];
   activeJob: UploadJob | null;
   pieceId: string;
-  onOpenUpload: (previousStorageKey?: string) => void;
+  onOpenUpload: (previousStorageKey?: string, replaceTrackId?: string) => void;
   onArchiveTrack: (track: PracticeTrack) => void;
   onOpenYoutubeModal: (track?: PracticeTrack) => void;
 }
@@ -85,7 +85,7 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
               <div style={{ display: 'flex', gap: '4px' }}>
                 <button
                   type="button"
-                  onClick={() => onOpenUpload(t.storageKey)}
+                  onClick={() => onOpenUpload(t.storageKey, t.id)}
                   style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--brand-primary)', minWidth: '44px', minHeight: '44px', fontSize: '12px' }}
                 >
                   교체
