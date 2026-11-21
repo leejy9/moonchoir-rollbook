@@ -27,6 +27,20 @@
   --brand-purple-soft: #F6F5FB;
   --brand-purple-tint: #EBE9F5;
 
+  /* v3 Key Color Palette (§6) */
+  --brand-lavender: #7C74C9;
+  --brand-lavender-tint: #EFEDFA;
+  --brand-lavender-text: #4A448A;
+  --brand-apricot: #E8864F;
+  --brand-apricot-tint: #FDF0E7;
+  --brand-apricot-text: #B24A15;
+  --sticker-bronze: #C98A5A;
+  --sticker-silver: #A9AFBF;
+  --sticker-gold: #E2B33C;
+  --sticker-stage-tint: #FFF4D6;
+  --player-surface: #2E3352;
+  --player-surface-full: #23273F;
+
   --status-success: #059669;
   --status-success-light: #ecfdf5;
   --status-warning: #d97706;
@@ -264,6 +278,21 @@ a {
   --text-muted: #9ba7b4;
   --border-subtle: rgba(255, 255, 255, 0.1);
   --border-default: rgba(255, 255, 255, 0.16);
+
+  /* v3 Key Color Palette (§6 Dark Mode) */
+  --brand-lavender: #9B94E0;
+  --brand-lavender-tint: rgba(155, 148, 224, 0.16);
+  --brand-lavender-text: #C9C4F2;
+  --brand-apricot: #F0A070;
+  --brand-apricot-tint: rgba(240, 160, 112, 0.16);
+  --brand-apricot-text: #F5B48C;
+  --sticker-bronze: #C98A5A;
+  --sticker-silver: #A9AFBF;
+  --sticker-gold: #E2B33C;
+  --sticker-stage-tint: rgba(226, 179, 60, 0.16);
+  --player-surface: #2E3352;
+  --player-surface-full: #1A1D2E;
+
   background-color: var(--bg-app);
   color: var(--text-main);
 }
