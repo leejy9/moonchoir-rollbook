@@ -1301,3 +1301,36 @@
 2. **D2 (`test(style): D2 add regression test for undefined css variables`)**:
    - **문제**: 개발 과정에서 정의되지 않은 CSS 변수나 잘못된 변수명이 다시 유입될 경우 컴파일 단계에서 검출되지 않아 런타임에 다크 모드 색상 결함이 재발할 위험 존재.
    - **해결**: `src/styles/cssVariables.test.ts`를 작성하여 `src/index.css`에 선언된 변수 목록을 추출하고 `src/` 내 모든 `.ts`/`.tsx`/`.css`에서 사용된 `var(--...)` 참조가 실제 선언된 토큰인지 자동 검사하는 정적 회귀 방지 테스트를 구축함 (D1 적용 전 74건 검출 실패 확인, 런타임 인라인 변수 `--gauge-size` 예외 사유 문서화).
+
+---
+
+## [2026-11-22] v3-A(PR #27) 검수 후속 수정 (F1~F8)
+
+v3-A(PR #27) 검수 후속 작업 지시서(`check.md`)에 따라 운영진 연습곡 저장 경로 버그 및 기능 회귀를 수정하고 미사용 레거시 컴포넌트를 정리함.
+
+### 작업 요약 (항목별 문제 및 해결 내용)
+1. **F1 (`fix(admin): F1 preserve piece fields when saving uploaded score`)**:
+   - **문제**: 악보 업로드 시 `title: ''`로 전송되어 필수값 검증으로 저장이 실패하고 악보가 삭제되며, 성공하더라도 작곡/편곡/메모 등의 기존 곡 정보가 빈 값으로 손상되는 결함.
+   - **해결**: 악보 저장 시점에 최신 카탈로그에서 대상 곡의 메타데이터를 조회하여 기존 필드를 보존한 채 `scoreStorageKey`, `scoreSizeBytes`만 업데이트하도록 수정.
+2. **F2 (`fix(admin): F2 audio replace preserves track id and metadata`)**:
+   - **문제**: 음원 교체 시 기존 트랙 ID가 누락되어 새 트랙이 생성되고, 큐에서 이전 키가 삭제되어 기존 트랙이 깨진 파일을 가리키는 결함.
+   - **해결**: 교체 시 `replaceTrackId`를 전달받아 최신 카탈로그의 기존 트랙 ID/orderIndex/종류/이름을 유지한 채 스토리지 키와 크기, 미디어 타입, 길이를 갱신하도록 수정.
+3. **F3 (`fix(admin): F3 track archive uses setPracticeTrackArchived`)**:
+   - **문제**: 트랙 보관 시 `savePracticeTrack`을 호출하여 서버 DB 프로시저(`fn_save_practice_track`)가 보관 여부를 반영하지 못해 새로고침 시 복구되는 결함.
+   - **해결**: 트랙 보관 시 전용 API인 `sheetsService.setPracticeTrackArchived(trackId, true)`를 호출하도록 수정.
+4. **F4 (`fix(admin): F4 restore piece and track archive restore reorder and edit actions`)**:
+   - **문제**: 운영진 연습곡 개편 중 곡 보관/복원, 보관된 트랙 접힘/복원, 트랙 순서 변경(↑/아래로), 트랙 이름·종류 변경 기능이 누락된 회귀.
+   - **해결**: 곡 보관/복원 버튼, 보관된 트랙 접힘 목록 및 복원 액션, 트랙 순서 이동(`reorderPracticeTracks`), 트랙 편집 모달(`TrackEditModal`)을 복구하고 400줄 제한 준수를 위해 컴포넌트를 분리 모듈화함.
+5. **F5 (`fix(admin): F5 assign incremental orderIndex to new practice tracks`)**:
+   - **문제**: 새 음원 트랙 업로드 시 `orderIndex`가 항상 0으로 하드코딩되어 트랙 간 순서가 보장되지 않는 문제.
+   - **해결**: 저장 시점에 해당 곡의 활성 트랙 중 `orderIndex` 최댓값 + 1을 계산하여 신규 트랙에 부여하도록 수정.
+6. **F6 (`fix(studio): F6 classify youtu.be and youtube host urls as video`)**:
+   - **문제**: `url.includes('youtube')` 단순 비교로 인해 `youtu.be` 단축 링크가 영상이 아닌 음원으로 잘못 분류되는 문제.
+   - **해결**: `src/utils/youtubeUrl.ts`에 호스트명 기반 판별 유틸 `isVideoTrack`을 구현하고 단원 화면과 운영진 화면에서 공통 사용하도록 통일함.
+7. **F7 (`refactor: F7 remove deprecated TodayTab CalendarTab and HomeView`)**:
+   - **문제**: v3 홈 화면 개편으로 프로덕션 코드에서 더 이상 사용되지 않는 레거시 컴포넌트(`TodayTab`, `CalendarTab`, `HomeView`) 및 테스트 코드가 잔존함.
+   - **해결**: `grep -rn`으로 운영 코드 미참조를 전수 검증한 뒤 해당 파일들을 안전하게 삭제하고, `MonthCalendarGrid` 독립 테스트를 보존함.
+8. **F8 (`feat(media): F8 extract and save audio duration on upload`)**:
+   - **문제**: 압축 파이프라인 비활성화 상태에서 원본 업로드 시 오디오 재생 시간(`durationSeconds`)이 누락되어 단원 화면에 트랙 길이가 표시되지 않던 문제.
+   - **해결**: `src/services/media/audioMetadata.ts`를 신설하여 클라이언트 업로드 전 `Audio` 객체와 5초 타임아웃을 통해 길이를 안전하게 추출해 저장하도록 구현함.
+
