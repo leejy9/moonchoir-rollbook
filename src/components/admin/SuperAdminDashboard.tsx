@@ -10,7 +10,7 @@ import type {
   ScheduleCommentEvent,
 } from '../../types/rollbook';
 import { getActiveSupabaseRealtime } from '../../services/realtime/supabaseRealtime';
-import { getKSTDateString, parseKSTDate, getKSTTimestampString } from '../../utils/date';
+import { getKSTDateString, getKSTTimestampString, addDaysKST, getWeekdayOfDate } from '../../utils/date';
 
 interface SuperAdminDashboardProps {
   onBackToHome: () => void;
@@ -299,17 +299,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     if (timeRangePreset === 'ALL') return { start: '', end: '' };
     if (timeRangePreset === 'TODAY') return { start: todayStr, end: todayStr };
     if (timeRangePreset === 'THIS_WEEK') {
-      const d = parseKSTDate(todayStr);
-      const day = d.getDay();
-      const diffToMonday = (day + 6) % 7;
-      const mon = new Date(d);
-      mon.setDate(d.getDate() - diffToMonday);
-      const sun = new Date(mon);
-      sun.setDate(mon.getDate() + 6);
-      return {
-        start: mon.toISOString().slice(0, 10),
-        end: sun.toISOString().slice(0, 10),
-      };
+      const weekday = getWeekdayOfDate(todayStr);
+      const diffToMonday = (weekday + 6) % 7;
+      const start = addDaysKST(todayStr, -diffToMonday);
+      const end = addDaysKST(start, 6);
+      return { start, end };
     }
     if (timeRangePreset === 'THIS_MONTH') {
       const yearMonth = todayStr.slice(0, 7);
