@@ -1197,6 +1197,66 @@
 - **60개 테스트 파일, 447개 단위 테스트 전원 통과 (Green Bar)**.
 - `npm run typecheck`, `npm run lint`, `npm run build` 무결성 검증 완료.
 
+---
+
+## [2026-11-21] 코드 리뷰 후속 수정 (C2~C16)
+
+코드 리뷰 분석 문서(`check.md`)에 따라 15개 후속 작업(C8, C2, C3, C9, C15, C6, C4, C5, C10, C11, C7, C14, C16, C13, C12)을 엄격한 순서와 규칙(1 작업 = 1 커밋)에 맞춰 완료함.
+
+### 작업 요약 (항목별 문제 및 해결 내용)
+1. **C8 (`fix(route): C8 pop overlay history on close`)**:
+   - **문제**: `useHashRoute`가 React StrictMode에서 중복 push를 발생시키고, 오버레이를 닫을 때 `replaceState`를 호출하여 이전 히스토리가 남음.
+   - **해결**: `routeRef`를 도입하여 `history` 조작을 갱신 함수 밖으로 분리하고, 오버레이 열 때 `mcOverlay: true` 상태를 남겨 닫을 때 `history.back()`으로 히스토리를 깔끔히 되돌리도록 수정.
+2. **C2 (`fix(route): C2 connect QR and RSVP modals to hash route`)**:
+   - **문제**: QR 스캐너와 RSVP 모달이 URL 라우트에 연결되지 않아 모바일 시스템 뒤로 가기 시 모달이 닫히지 않고 카메라가 계속 켜져 있음.
+   - **해결**: `#/today?qr=SCHEDULE_ID`, `#/today?rsvp=SCHEDULE_ID` 라우트를 연결하여 브라우저 뒤로 가기 시 모달이 닫히고 카메라 스트림이 즉시 정지되도록 구현.
+3. **C3 (`fix(db): C3 refuse card deletion if pieces ever linked`)**:
+   - **문제**: 곡이 한 번이라도 연결되었던 시즌 카드를 삭제할 때 외래키 제약조건(`fk_program_pieces_card`)에 걸려 클라이언트에 원시 DB 에러가 노출됨.
+   - **해결**: `fn_delete_practice_program_card` RPC에 `practice_program_pieces` 연결 이력 검사 로직을 추가하여 연결된 적이 있는 카드는 400 에러와 함께 명확한 안내 메시지를 반환하도록 수정 (`20261122010000_review_followups.sql`).
+4. **C9 (`fix(db): C9 verify distinct track IDs on track reorder`)**:
+   - **문제**: 트랙 순서 변경 RPC `fn_reorder_practice_tracks`에서 중복된 트랙 ID가 전달될 경우 유효성 검증 없이 처리됨.
+   - **해결**: 입력된 `trackIds` 배열 길이와 유니크 ID 집합 크기를 비교하여 중복 ID 전달 시 400 에러로 거절하는 방어 로직 추가.
+5. **C15 (`fix(db): C15 validate catalog RPC inputs and optimize response keys`)**:
+   - **문제**: 카탈로그 RPC의 JSON 키와 TS 파서 간 미세한 불일치(camelCase/snake_case) 및 배열 길이/타입 미검증으로 응답 페이로드가 비효율적임.
+   - **해결**: RPC 입력 파라미터 유효성 검증 강화 및 응답 키 표준화, TS 파서(`sheetsParser.ts`) 방어 로직 보강.
+6. **C6 (`fix(backend): C6 implement fn_unbind_member_device for supabase`)**:
+   - **문제**: Supabase 모드에서 기기 연동 해제(`UNBIND_DEVICE`) 액션에 대응하는 Stored Procedure가 없어 항상 실패함.
+   - **해결**: `fn_unbind_member_device(p_payload jsonb)` RPC를 작성하여 관리자 세션 토큰 검증 후 `members.bound_device_id`와 `bound_device_at`을 `NULL`로 초기화하도록 구현하고, `supabaseBackend.ts`에 액션 매핑 추가.
+7. **C4 (`fix(worker): C4 handle 304 not modified and vary origin in media worker`)**:
+   - **문제**: Cloudflare Media Worker에서 304 Not Modified 처리 부재, CORS 응답에 `Vary: Origin` 헤더 누락, 잘못된 URL 인코딩 시 처리 미흡.
+   - **해결**: 50줄 이내 규칙을 준수하며 R2 조건부 요청(`!('body' in object)`) 시 304 반환, `Vary: Origin` 헤더 추가, `decodeURIComponent` try/catch로 400 Bad Request 처리.
+8. **C5 (`fix(admin): C5 clear only data cache in emergency cache reset`)**:
+   - **문제**: 비상 캐시 초기화 시 브라우저 로컬스토리지의 `DATA_CACHE_KEYS`가 아닌 전체 키를 무차별 삭제하거나 아무것도 지우지 못함.
+   - **해결**: `DATA_CACHE_KEYS` 목록을 엄밀히 정의하고 `clearDataCache()` 함수를 구현하여 명부/일정/출석 데이터 캐시만 선택적으로 삭제하고 기기 바인딩 및 관리자 세션 토큰은 보존하도록 수정.
+9. **C10 (`fix(date): C10 calendar-based date calculations for this-week stats`)**:
+   - **문제**: "이번 주" 날짜 계산 시 UTC 기준 밀림 현상과 `addDaysKST`의 시간대 의존성 버그로 자정 부근에서 날짜가 하루 어긋남.
+   - **해결**: UTC 기반 순수 캘린더 연산 함수 `shiftCalendarDate(dateStr, days)` 및 `getWeekdayOfDate(dateStr)`를 구현하여 어떤 타임존 환경에서도 일관되게 월요일~일요일 주간을 계산하도록 수정.
+10. **C11 (`fix(gesture): C11 cancel logo longpress on scroll and enforce 44px touch target`)**:
+    - **문제**: 로고 롱프레스 제스처가 페이지 스크롤 도중에도 취소되지 않고 오발동되며, 마스터 진입 버튼 크기가 36px로 모바일 접근성 미달.
+    - **해결**: `useMasterEntryGesture`에 터치 이동 거리(10px) 및 `touchcancel` 이벤트 감지 시 타이머를 취소하는 방어 로직을 추가하고, "Get in" 버튼을 최소 44px 이상으로 확대.
+11. **C7 (`fix(sheet): C7 derive selected schedule during render to preserve user selection`)**:
+    - **문제**: 일정 상세 바텀시트에서 실시간 데이터 갱신 시 `useEffect`에 의해 사용자가 선택한 복수 일정 중 특정 일정이 첫 번째 일정으로 강제 초기화됨.
+    - **해결**: `useEffect` 기반 동기화를 렌더 단계 파생 상태(`effectiveScheduleId = scheduleId ?? userPickedId ?? ...`)로 리팩터링하여 실시간 데이터 재전송 시에도 사용자 선택이 유지되도록 개선.
+12. **C14 (`fix(lint): C14 eliminate all lint warnings and respect reduced motion`)**:
+    - **문제**: oxlint 경고 8개 잔존 및 바텀시트 애니메이션에 `prefers-reduced-motion` 미적용.
+    - **해결**: 모든 린트 경고를 해결하여 **0 errors, 0 warnings** 달성, 바텀시트에 `useReducedMotion`을 적용하여 애니메이션 전환 부드러움 제어.
+13. **C16 (`perf(audio): C16 split position context, clean media session, and stop on logout`)**:
+    - **문제**: 재생 위치(`currentTime`)가 초당 4회 갱신되면서 `useAudioPlayer()` 컨텍스트를 구독하는 모든 컴포넌트가 불필요하게 리렌더링됨. 플레이어 종료 시 MediaSession 메타데이터 미정리.
+    - **해결**: 위치 정보를 `AudioPositionContext`(`useAudioPosition()`)로 분리하여 미니플레이어의 시간 표시부만 국소 렌더링되도록 최적화, 플레이어 닫기 시 MediaSession 메타데이터 및 5대 액션 핸들러 해제, 로그아웃 시 오디오 즉시 정지.
+14. **C13 (`fix(studio): C13 update studio description and hide empty season cards`)**:
+    - **문제**: 연습실 상단 설명에 "파트 음원"이라는 문구가 남아있고, 곡이 하나도 없는 빈 시즌 카드가 화면에 빈 박스로 노출됨.
+    - **해결**: 문구를 "시즌별 연습곡을 듣고 악보를 확인합니다."로 수정하고, `buildStudioView`에서 곡이 없는 시즌 카드를 화면 렌더 단계에서 필터링.
+15. **C12 (`style: C12 replace raw hex color values with css variables`)**:
+    - **문제**: `AdminPracticeTab.tsx`, `ProfileTab.tsx`, `StudioTab.tsx`, `MiniPlayer.tsx`, `AppHeader.tsx`에 raw hex 색상값이 남아 다크모드 대응 불완전.
+    - **해결**: 5개 컴포넌트의 모든 raw hex 색상을 CSS 변수(`var(--..., #fallback)`)로 100% 전환 (검증 결과 5개 파일 모두 맨 hex 0개 달성).
+
+### 불변식 및 보안 기준 확인
+- 관리자 PIN 길이 규칙 6~8자리 유지 확정 (4자리 완화 절대 금지 준수).
+- 운영 DB 적용 완료된 `fn_record_attendance` 건드리지 않음.
+- 신규 마이그레이션 `20261122010000_review_followups.sql` 1개에 모든 DB 변경사항 집중.
+- 단위 테스트 70개 파일 542개 테스트 100% 통과, 린트 경고 0건 유지.
+
+
 
 
 

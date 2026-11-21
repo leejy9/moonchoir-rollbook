@@ -109,3 +109,25 @@
    - `attendanceStats.ts`의 `finalStatus`(`'출석'`, `'지각'`, `'결석'`, `'사유결석'`, `'미참'`) 및 `isManualOverride` 플래그와 명세 §2-3의 CTA 판별 유니언(`ATTENDED`, `LATE`, `MANUAL_OK`, `MANUAL_ABSENT`, `EXCUSED`, `CLOSED_ABSENT`, `CLOSED_EXEMPT` 등)이 1:1로 정확히 대응됨을 확인했습니다.
 4. **Phase 0 보안 기반 선반영 상태 확인**:
    - 최근 main 브랜치 pull(`dba3a56`)을 통해 Phase 0 보안 강화(`adminSession.ts`, `20261121000000_security_hardening.sql`, `supabaseBackend.ts` 토큰 자동 주입)가 이미 완료되어 있으며 52개 테스트 파일 362개 테스트가 100% 통과(Green Bar) 상태임을 확인했습니다.
+
+---
+
+## 5. 코드 리뷰 후속 수정 (C2~C16) 이행 내역
+
+| 순서 | ID | 내용 | 심각도 | 상태 | 주요 커밋 / 파일 |
+|---|---|---|---|---|---|
+| 1 | **C8** | 해시 라우팅: 닫기 시 기록 정리, StrictMode 중복 push 제거 | P1 | 완료 | `c675d47` (`useHashRoute.ts`, `route.ts`) |
+| 2 | **C2** | QR·투표 모달을 라우트에 연결(뒤로 가기 → 닫기 + 카메라 정지) | P1 | 완료 | `42a03f2` (`App.tsx`, `QRScannerModal.tsx`) |
+| 3 | **C3** | 사용 이력 있는 시즌 카드 삭제 시 DB 오류 방어 | P1 | 완료 | `42f159a` (`20261122010000_review_followups.sql`) |
+| 4 | **C9** | 트랙 순서 변경에 중복 ID 허용 방어 | P2 | 완료 | `1616db0` (`20261122010000_review_followups.sql`) |
+| 5 | **C15** | 카탈로그 RPC 입력 방어·응답 키 정규화 | P2 | 완료 | `90be011` (`review_followups.sql`, `sheetsParser.ts`) |
+| 6 | **C6** | Supabase 기기 연동 해제 RPC 부재 해결 | P1 | 완료 | `4bbd928` (`review_followups.sql`, `supabaseBackend.ts`) |
+| 7 | **C4** | Media Worker 304·Vary·잘못된 경로 처리 (50줄 이내) | P1 | 완료 | `03bbd7a` (`workers/media/index.js`, `README.md`) |
+| 8 | **C5** | 비상 캐시 초기화가 데이터 캐시만 선택 삭제하도록 수정 | P1 | 완료 | `e5f6f54` (`sheetsStorage.ts`, `SuperAdminDashboard.tsx`) |
+| 9 | **C10** | "이번 주" 날짜 계산 UTC 밀림 및 시간대 버그 수정 | P2 | 완료 | `6679301` (`date.ts`, `SuperAdminDashboard.tsx`) |
+| 10 | **C11** | 로고 롱프레스 스크롤 오발동 취소 및 44px 터치 타깃 준수 | P2 | 완료 | `61a5010` (`useMasterEntryGesture.ts`, `AppHeader.tsx`) |
+| 11 | **C7** | 상세 시트 선택이 실시간 갱신 시 초기화되지 않도록 렌더 단계 파생 | P2 | 완료 | `1006d08` (`ScheduleDetailSheet.tsx`) |
+| 12 | **C14** | 린트 경고 0개 달성 및 바텀시트 reduced-motion 대응 | P2 | 완료 | `f8a11ed` (`ScheduleDetailSheet.tsx`, 기타 컴포넌트) |
+| 13 | **C16** | 재생 위치 컨텍스트 분리, MediaSession 정리, 로그아웃 시 오디오 정지 | P2 | 완료 | `a2dd5c0` (`AudioPlayerProvider.tsx`, `MiniPlayer.tsx`, `App.tsx`) |
+| 14 | **C13** | 연습실 파트 음원 문구 수정 및 빈 시즌 카드 숨김 | P2 | 완료 | `c872981` (`StudioTab.tsx`) |
+| 15 | **C12** | 새 컴포넌트의 맨 hex 색상 → CSS 변수 100% 전환 | P2 | 완료 | `1c02960` (`AdminPracticeTab`, `ProfileTab`, `StudioTab`, 등) |
