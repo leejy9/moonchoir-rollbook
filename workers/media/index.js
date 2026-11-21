@@ -1,5 +1,22 @@
 const ALLOWED_ORIGINS = ['https://leejy9.github.io', 'http://localhost:5173', 'http://localhost:4173'];
 
+/** R2 range와 전체 크기로 응답 범위를 계산한다. 계산할 수 없으면 null. */
+export function computeContentRange(range, size) {
+  if (!range || !Number.isFinite(size) || size <= 0) return null;
+  let start;
+  let end;
+  if (range.suffix !== undefined) {
+    start = Math.max(size - range.suffix, 0);
+    end = size - 1;
+  } else {
+    start = range.offset ?? 0;
+    end = range.length !== undefined ? start + range.length - 1 : size - 1;
+  }
+  end = Math.min(end, size - 1);
+  if (start > end) return null;
+  return { start, end, header: `bytes ${start}-${end}/${size}`, length: end - start + 1 };
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin');
@@ -37,10 +54,15 @@ export default {
 
     if (!('body' in object)) return new Response(null, { status: 304, headers });
     if (object.range) {
-      headers.set('Content-Range', `bytes ${object.range.offset}-${object.range.offset + object.range.length - 1}/${object.size}`);
+      const cr = computeContentRange(object.range, object.size);
+      if (!cr) {
+        headers.set('Content-Range', `bytes */${object.size}`);
+        return new Response(null, { status: 416, headers });
+      }
+      headers.set('Content-Range', cr.header);
+      headers.set('Content-Length', String(cr.length));
+      return new Response(request.method === 'HEAD' ? null : object.body, { status: 206, headers });
     }
-
-    const status = object.range ? 206 : 200;
-    return new Response(request.method === 'HEAD' ? null : object.body, { status, headers });
+    return new Response(request.method === 'HEAD' ? null : object.body, { status: 200, headers });
   },
 };

@@ -40,7 +40,32 @@ Moonchoir Rollbook 연습실 음원 스트리밍을 제공하는 Cloudflare Work
 ## 4. 스트리밍, Range(206), 캐싱(304) 및 에러 검증
 R2 버킷에 테스트용 파일(예: `test.m4a`)을 하나 업로드한 뒤, 터미널에서 다음 curl 명령어로 스트리밍과 헤더를 검증합니다:
 
-### 1) Range 요청 (206 Partial Content) 및 Vary 헤더 확인
+### 1) Range 구간 요청 (206 Partial Content / 416 Range Not Satisfiable) 검증
+1. 앞부분 2바이트 프로브 요청 (iOS Safari 최초 요청):
+```bash
+curl -sI -H 'Range: bytes=0-1' https://<내-워커-주소>.workers.dev/test.m4a
+```
+**정상 응답**: `HTTP/2 206`, `Content-Range: bytes 0-1/<크기>`
+
+2. 열린 구간 요청 (0바이트부터 끝까지 스트리밍):
+```bash
+curl -sI -H 'Range: bytes=0-' https://<내-워커-주소>.workers.dev/test.m4a
+```
+**정상 응답**: `HTTP/2 206`, `Content-Range: bytes 0-<크기-1>/<크기>`
+
+3. 끝 구간 요청 (마지막 100바이트):
+```bash
+curl -sI -H 'Range: bytes=-100' https://<내-워커-주소>.workers.dev/test.m4a
+```
+**정상 응답**: `HTTP/2 206`, `Content-Range: bytes <크기-100>-<크기-1>/<크기>`
+
+4. 범위를 벗어난 잘못된 요청:
+```bash
+curl -sI -H 'Range: bytes=999999999-' https://<내-워커-주소>.workers.dev/test.m4a
+```
+**정상 응답**: `HTTP/2 416 Range Not Satisfiable`, `Content-Range: bytes */<크기>`
+
+### 2) 전체 Range 요청 예시 및 CORS/Vary 헤더 확인
 ```bash
 curl -I -H "Range: bytes=0-1023" -H "Origin: https://leejy9.github.io" https://<내-워커-주소>.workers.dev/test.m4a
 ```
@@ -57,7 +82,7 @@ access-control-expose-headers: Content-Range, Content-Length, ETag, Accept-Range
 vary: Origin
 ```
 
-### 2) 조건부 캐시 요청 (304 Not Modified) 확인
+### 3) 조건부 캐시 요청 (304 Not Modified) 확인
 위 응답에서 확인한 ETag 값을 전달하여 본문 없는 304 응답이 오는지 확인합니다:
 ```bash
 curl -I -H 'If-None-Match: "<ETag값>"' https://<내-워커-주소>.workers.dev/test.m4a
