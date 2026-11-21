@@ -5,12 +5,16 @@ import React, {
   useCallback,
   useMemo,
 } from 'react';
-import type { PlaybackSpeed, PlayableTrackItem } from '../../utils/audioQueue';
+import type { PlayableTrackItem } from '../../utils/audioQueue';
 import {
-  getNextTrackIndex,
-  getNextPlaybackSpeed,
   clampSeekTime,
+  snapPlaybackSpeed,
 } from '../../utils/audioQueue';
+import {
+  PREFERENCE_KEYS,
+  readPreference,
+  writePreference,
+} from '../../services/sheetsStorage';
 import {
   AudioPlayerContext,
   AudioPositionContext,
@@ -45,7 +49,13 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
   const [isBlocked, setIsBlocked] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
-  const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1.0);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(() => {
+    return readPreference<number>(
+      PREFERENCE_KEYS.PLAYBACK_RATE,
+      (v): v is number => typeof v === 'number' && v >= 0.5 && v <= 2.0,
+      1.0
+    );
+  });
   const [repeatOne, setRepeatOne] = useState<boolean>(true);
   const [autoNext, setAutoNext] = useState<boolean>(false);
 
@@ -151,17 +161,23 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
     setCurrentTime(safeTime);
   }, []);
 
-  const setSpeed = useCallback((speed: PlaybackSpeed) => {
-    setPlaybackSpeed(speed);
+  const setSpeed = useCallback((speed: number) => {
+    const snapped = snapPlaybackSpeed(speed);
+    setPlaybackSpeed(snapped);
+    writePreference(PREFERENCE_KEYS.PLAYBACK_RATE, snapped);
     const audio = audioRef.current;
     if (audio) {
-      audio.playbackRate = speed;
+      audio.playbackRate = snapped;
       audio.preservesPitch = true;
     }
   }, []);
 
   const cycleSpeed = useCallback(() => {
-    setSpeed(getNextPlaybackSpeed(playbackSpeed));
+    const presets = [0.75, 1.0, 1.25, 1.5];
+    const currentRounded = Math.round(playbackSpeed * 100) / 100;
+    const idx = presets.findIndex((p) => Math.abs(p - currentRounded) < 0.05);
+    const nextPreset = presets[(idx + 1) % presets.length];
+    setSpeed(nextPreset);
   }, [playbackSpeed, setSpeed]);
 
   const toggleRepeatOne = useCallback(() => {
@@ -171,6 +187,12 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
   const toggleAutoNext = useCallback(() => {
     setAutoNext((prev) => !prev);
   }, []);
+
+  const nextTrack = useCallback(() => {
+    if (queue.length > 0 && currentIndex + 1 < queue.length) {
+      playTrack(queue[currentIndex + 1], queue);
+    }
+  }, [queue, currentIndex, playTrack]);
 
   const closePlayer = useCallback(() => {
     pause();
@@ -203,22 +225,19 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
     const audio = audioRef.current;
     if (!audio) return;
 
-    const nextIdx = getNextTrackIndex(currentIndex, queue.length, repeatOne, autoNext);
-    if (nextIdx === currentIndex && currentTrack) {
+    if (repeatOne && currentTrack) {
       audio.currentTime = 0;
       const p = audio.play();
       if (p !== undefined) {
         p.catch(() => setIsBlocked(true));
       }
-    } else if (nextIdx >= 0 && nextIdx < queue.length) {
-      const nextItem = queue[nextIdx];
-      playTrack(nextItem, queue);
     } else {
+      // Repeat is OFF: stop at track end (no automatic next per §3-3)
       setIsPlaying(false);
       audio.currentTime = 0;
       setCurrentTime(0);
     }
-  }, [currentIndex, queue, repeatOne, autoNext, currentTrack, playTrack]);
+  }, [repeatOne, currentTrack]);
 
   const handleTimeUpdate = useCallback(() => {
     const audio = audioRef.current;
@@ -278,10 +297,10 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
         pause();
       });
       navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-        seekRelative(-(details?.seekOffset || 10));
+        seekRelative(-(details?.seekOffset || 5));
       });
       navigator.mediaSession.setActionHandler('seekforward', (details) => {
-        seekRelative(details?.seekOffset || 10);
+        seekRelative(details?.seekOffset || 5);
       });
       navigator.mediaSession.setActionHandler('seekto', (details) => {
         if (details?.seekTime !== undefined) {
@@ -335,6 +354,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
       cycleSpeed,
       toggleRepeatOne,
       toggleAutoNext,
+      nextTrack,
       closePlayer,
       audioElementRef: audioRef,
     }),
@@ -357,6 +377,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
       cycleSpeed,
       toggleRepeatOne,
       toggleAutoNext,
+      nextTrack,
       closePlayer,
     ]
   );

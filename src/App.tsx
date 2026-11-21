@@ -41,9 +41,10 @@ import { parseRoute, type MemberTab } from './utils/route';
 import { AudioPlayerProvider } from './components/audio/AudioPlayerProvider';
 import { useAudioPlayer } from './components/audio/audioPlayerContext';
 import { MiniPlayer } from './components/audio/MiniPlayer';
+import { FullPlayer } from './components/audio/FullPlayer';
 
 function MainApp() {
-  const { closePlayer } = useAudioPlayer();
+  const { closePlayer, currentTrack } = useAudioPlayer();
 
   // Device binding state
   const [profile, setProfile] = useState<BoundDeviceProfile | null>(() => getBoundDeviceProfile());
@@ -240,14 +241,16 @@ function MainApp() {
     }
   }, [hasConfirmedRosterSync, navigate, profile, refreshKey]);
 
+  const memberOverlay = route.area === 'member' ? route.overlay : undefined;
+
   const qrSchedule =
-    route.area === 'member' && route.overlay?.kind === 'qr'
-      ? activeSchedules.find((s) => s.id === route.overlay?.scheduleId) ?? null
+    memberOverlay?.kind === 'qr'
+      ? activeSchedules.find((s) => s.id === memberOverlay.scheduleId) ?? null
       : null;
 
   const targetRsvpSchedule =
-    route.area === 'member' && route.overlay?.kind === 'rsvp'
-      ? activeSchedules.find((s) => s.id === route.overlay?.scheduleId) ?? null
+    memberOverlay?.kind === 'rsvp'
+      ? activeSchedules.find((s) => s.id === memberOverlay.scheduleId) ?? null
       : null;
 
   // If user has not bound a device yet, show binding prompt
@@ -406,7 +409,38 @@ function MainApp() {
       )}
 
       {/* Mini Audio Player (Fixed above BottomNav) */}
-      {isBound && route.area === 'member' && <MiniPlayer />}
+      {isBound && route.area === 'member' && (
+        <MiniPlayer
+          onOpenFullPlayer={() => {
+            navigate({ type: 'OPEN', overlay: { kind: 'player' } });
+          }}
+        />
+      )}
+
+      {/* Full Screen Audio Player Overlay */}
+      {isBound && route.area === 'member' && route.overlay?.kind === 'player' && (
+        <FullPlayer
+          piece={
+            currentTrack
+              ? sheetsService.getPracticeCatalog().pieces.find((p) => p.id === currentTrack.track.pieceId) || null
+              : null
+          }
+          siblingTracks={
+            currentTrack
+              ? sheetsService.getPracticeCatalog().tracks.filter((t) => t.pieceId === currentTrack.track.pieceId)
+              : []
+          }
+          onClose={() => navigate({ type: 'CLOSE' })}
+          onOpenScore={(piece) => {
+            const scoreUrl = piece.scoreStorageKey
+              ? `${sheetsService.getConfig().mediaPublicBaseUrl || ''}/${piece.scoreStorageKey}`
+              : piece.scoreUrl;
+            if (scoreUrl) {
+              window.open(scoreUrl, '_blank', 'noopener,noreferrer');
+            }
+          }}
+        />
+      )}
 
       {/* Member Bottom Navigation (Only visible when bound in member area) */}
       {isBound && route.area === 'member' && (

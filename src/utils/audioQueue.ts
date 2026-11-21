@@ -85,6 +85,18 @@ export function getNextPlaybackSpeed(currentSpeed: PlaybackSpeed): PlaybackSpeed
 }
 
 /**
+ * Snap playback speed to 1.0 if within ±0.03 range, clamped between 0.5 and 2.0 (MEMBER_UX_V3_SPEC §3-3).
+ */
+export function snapPlaybackSpeed(speed: number): number {
+  const rounded = Math.round(speed * 100) / 100;
+  const clamped = Math.max(0.5, Math.min(2.0, rounded));
+  if (Math.abs(clamped - 1.0) <= 0.0301) {
+    return 1.0;
+  }
+  return clamped;
+}
+
+/**
  * Calculate seeked time clamped between 0 and duration.
  */
 export function clampSeekTime(currentTime: number, offsetSeconds: number, duration: number): number {

@@ -3,7 +3,8 @@ export type MemberTab = 'home' | 'studio' | 'profile';
 export type Overlay =
   | { kind: 'scheduleSheet'; date: string; scheduleId?: string }
   | { kind: 'qr'; scheduleId: string }
-  | { kind: 'rsvp'; scheduleId: string };
+  | { kind: 'rsvp'; scheduleId: string }
+  | { kind: 'player' };
 
 export type Route =
   | { area: 'member'; tab: MemberTab; month?: string; overlay?: Overlay }
@@ -54,11 +55,21 @@ export function parseRoute(hash: string): Route {
   const params = new URLSearchParams(queryPart || '');
 
   if (path === 'profile') {
-    return { area: 'member', tab: 'profile' };
+    const isPlayer = params.get('player') === '1';
+    return {
+      area: 'member',
+      tab: 'profile',
+      overlay: isPlayer ? { kind: 'player' } : undefined,
+    };
   }
 
   if (path === 'studio') {
-    return { area: 'member', tab: 'studio' };
+    const isPlayer = params.get('player') === '1';
+    return {
+      area: 'member',
+      tab: 'studio',
+      overlay: isPlayer ? { kind: 'player' } : undefined,
+    };
   }
 
   if (path === 'home' || path === 'calendar' || path === 'today') {
@@ -76,6 +87,8 @@ export function parseRoute(hash: string): Route {
       overlay = { kind: 'qr', scheduleId: sid };
     } else if (params.get('rsvp') === '1' && sid) {
       overlay = { kind: 'rsvp', scheduleId: sid };
+    } else if (params.get('player') === '1') {
+      overlay = { kind: 'player' };
     }
 
     return { area: 'member', tab: 'home', month, overlay };
@@ -113,6 +126,12 @@ export function formatRoute(route: Route): string {
       const q = new URLSearchParams();
       q.set('rsvp', '1');
       q.set('sid', route.overlay.scheduleId);
+      return `#/${tab}?${q.toString()}`;
+    }
+    if (route.overlay.kind === 'player') {
+      const q = new URLSearchParams();
+      q.set('player', '1');
+      if (route.month) q.set('m', route.month);
       return `#/${tab}?${q.toString()}`;
     }
   }

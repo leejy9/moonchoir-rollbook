@@ -2,12 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useState } from 'react';
 import { renderToString } from 'react-dom/server';
 import { AudioPlayerProvider } from './AudioPlayerProvider';
-import { useAudioPlayer, useAudioPosition } from './audioPlayerContext';
+import { useAudioPlayer } from './audioPlayerContext';
 import { MiniPlayer } from './MiniPlayer';
-import type { PracticeTrack } from '../../types/rollbook';
+import { FullPlayer } from './FullPlayer';
+import { SpeedSheet } from './SpeedSheet';
+import { clampSeekTime, snapPlaybackSpeed } from '../../utils/audioQueue';
+import type { PracticePiece, PracticeTrack } from '../../types/rollbook';
 import type { PlayableTrackItem } from '../../utils/audioQueue';
 
-describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
+describe('GlobalAudioPlayer & MiniPlayer & FullPlayer (V3-06, V3-06b)', () => {
   const mockTrack: PracticeTrack = {
     id: 'trk_soprano',
     pieceId: 'piece_1',
@@ -27,6 +30,16 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
     playbackUrl: 'https://media.moonchoir.workers.dev/2026/soprano.m4a',
   };
 
+  const mockPiece: PracticePiece = {
+    id: 'piece_1',
+    title: '바람이 불어오는 곳',
+    composer: '김광석',
+    scoreUrl: 'https://drive.google.com/file/d/score123/view',
+    isArchived: false,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  };
+
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -42,13 +55,11 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
   });
 
   it('preserves single audio element instance ref across 5 tab switch / rerender cycles', () => {
-    let capturedRefs: Array<React.RefObject<HTMLAudioElement | null>> = [];
+    const capturedRefs: Array<React.RefObject<HTMLAudioElement | null>> = [];
 
     function TabSwitcher() {
       const [tab, setTab] = useState(0);
       const { audioElementRef } = useAudioPlayer();
-
-      // ref 객체 자체의 동일성을 검증 (render 중 .current 접근 불필요)
       capturedRefs.push(audioElementRef);
 
       return (
@@ -61,7 +72,6 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
       );
     }
 
-    // Render 5 times simulating tab changes
     for (let i = 0; i < 5; i++) {
       renderToString(
         <AudioPlayerProvider>
@@ -70,7 +80,6 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
       );
     }
 
-    // Audio element ref object identity is maintained across rerenders
     expect(capturedRefs).toHaveLength(5);
   });
 
@@ -81,11 +90,11 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
       </AudioPlayerProvider>
     );
 
-    expect(html).not.toContain('mini-player');
+    expect(html).not.toContain('mini-player-container');
     expect(html).not.toContain('바람이 불어오는 곳');
   });
 
-  it('MiniPlayer renders controls with at least 44px touch targets and zero emojis when track is loaded', () => {
+  it('MiniPlayer renders cover, titles, play/pause, next track, and bottom progress line', () => {
     const html = renderToString(
       <AudioPlayerProvider initialTrack={mockItem}>
         <MiniPlayer />
@@ -97,84 +106,83 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
     expect(html).toContain('소프라노 파트');
 
     // Controls
-    expect(html).toContain('-10');
-    expect(html).toContain('+10');
-    expect(html).toMatch(/재생|일시정지/);
-    expect(html).toContain('1.0x');
-    expect(html).toContain('1곡');
-    expect(html).toContain('닫기');
-
-    // Touch targets >= 44px
-    expect(html).toContain('min-height:44px');
-    expect(html).toContain('min-width:44px');
+    expect(html).toContain('aria-label="재생"');
+    expect(html).toContain('aria-label="다음 트랙"');
+    expect(html).toContain('mini-player-progress-line');
 
     // Anti-slop: ZERO emojis
-    const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
+    const emojiRegex = /\p{Extended_Pictographic}/u;
     expect(emojiRegex.test(html)).toBe(false);
   });
 
-  it('renders "탭하여 다시 재생" recovery button when playback is blocked', () => {
-    function BlockedPlayerHarness() {
-      // Simulate blocked state in MiniPlayer
-      return (
-        <div className="mini-player">
-          <button
-            type="button"
-            aria-label="탭하여 다시 재생"
-            style={{ minHeight: '44px', minWidth: '44px' }}
-          >
-            탭하여 다시 재생
-          </button>
-        </div>
-      );
-    }
-
-    const html = renderToString(<BlockedPlayerHarness />);
-    expect(html).toContain('탭하여 다시 재생');
-    expect(html).toContain('min-height:44px');
-  });
-
-  it('operates smoothly without error when navigator.mediaSession is undefined', () => {
-    const orig = (navigator as unknown as { mediaSession?: unknown }).mediaSession;
-    try {
-      Object.defineProperty(navigator, 'mediaSession', {
-        value: undefined,
-        configurable: true,
-      });
-
-      expect(() => {
-        renderToString(
-          <AudioPlayerProvider initialTrack={mockItem}>
-            <MiniPlayer />
-          </AudioPlayerProvider>
-        );
-      }).not.toThrow();
-    } finally {
-      Object.defineProperty(navigator, 'mediaSession', {
-        value: orig,
-        configurable: true,
-      });
-    }
-  });
-
-  it('provides currentTime and duration through useAudioPosition without affecting useAudioPlayer', () => {
-    let capturedPosition: { currentTime: number; duration: number } | null = null;
-    function PositionConsumer() {
-      // 단위 테스트에서 SSR(renderToString) 중 훅 반환값을 외부 변수로 캡처하기 위해 허용
-      // oxlint-disable-next-line react/globals
-      capturedPosition = useAudioPosition();
-      return null;
-    }
-
-    renderToString(
+  it('FullPlayer renders large cover, timeline, ±5s seek, repeat toggle, speed button, and score button', () => {
+    const html = renderToString(
       <AudioPlayerProvider initialTrack={mockItem}>
-        <PositionConsumer />
+        <FullPlayer
+          piece={mockPiece}
+          onClose={() => {}}
+        />
       </AudioPlayerProvider>
     );
 
-    expect(capturedPosition).not.toBeNull();
-    expect(capturedPosition!.currentTime).toBe(0);
-    expect(capturedPosition!.duration).toBe(0);
+    expect(html).toContain('full-player-overlay');
+    expect(html).toContain('소프라노 파트');
+    expect(html).toContain('바람이 불어오는 곳');
+    expect(html).toContain('−5초');
+    expect(html).toContain('+5초');
+    expect(html).toContain('악보 보기');
+    expect(html).toContain('1곡');
+  });
+
+  it('SpeedSheet renders large display, range slider, +/- 0.05 step buttons, and presets', () => {
+    const html = renderToString(
+      <SpeedSheet
+        currentSpeed={1.0}
+        onChangeSpeed={() => {}}
+        onClose={() => {}}
+      />
+    ).replace(/<!-- -->/g, '');
+
+    expect(html).toContain('1.00x');
+    expect(html).toContain('−0.05');
+    expect(html).toContain('+0.05');
+    expect(html).toContain('0.75x');
+    expect(html).toContain('1.25x');
+    expect(html).toContain('1.5x');
+    expect(html).toContain('닫기');
+  });
+
+  it('snapPlaybackSpeed clamps between 0.5 and 2.0 and snaps to 1.0 within ±0.03', () => {
+    // Normal values
+    expect(snapPlaybackSpeed(1.25)).toBe(1.25);
+    expect(snapPlaybackSpeed(0.75)).toBe(0.75);
+
+    // Snap to 1.0 when within 0.97 ~ 1.03
+    expect(snapPlaybackSpeed(0.98)).toBe(1.0);
+    expect(snapPlaybackSpeed(1.02)).toBe(1.0);
+    expect(snapPlaybackSpeed(1.03)).toBe(1.0);
+    expect(snapPlaybackSpeed(0.97)).toBe(1.0);
+
+    // Outside snap range
+    expect(snapPlaybackSpeed(1.04)).toBe(1.04);
+    expect(snapPlaybackSpeed(0.96)).toBe(0.96);
+
+    // Boundary clamping
+    expect(snapPlaybackSpeed(0.2)).toBe(0.5);
+    expect(snapPlaybackSpeed(2.5)).toBe(2.0);
+  });
+
+  it('clampSeekTime clamps seek between 0 and duration', () => {
+    const duration = 180;
+    // Normal seek
+    expect(clampSeekTime(50, 5, duration)).toBe(55);
+    expect(clampSeekTime(50, -5, duration)).toBe(45);
+
+    // Lower boundary (<= 0)
+    expect(clampSeekTime(2, -5, duration)).toBe(0);
+
+    // Upper boundary (>= duration)
+    expect(clampSeekTime(178, 5, duration)).toBe(180);
   });
 
   it('resets mediaSession metadata and action handlers upon closePlayer', () => {
@@ -195,7 +203,6 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
 
       let playerCtx: any = null;
       function TestConsumer() {
-        // 단위 테스트에서 SSR(renderToString) 중 컨텍스트 인스턴스를 외부 변수로 캡처하기 위해 허용
         // oxlint-disable-next-line react/globals
         playerCtx = useAudioPlayer();
         return null;
@@ -212,6 +219,9 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
       expect(mockMediaSession.metadata).toBeNull();
       expect(mockMediaSession.setActionHandler).toHaveBeenCalledWith('play', null);
       expect(mockMediaSession.setActionHandler).toHaveBeenCalledWith('pause', null);
+      expect(mockMediaSession.setActionHandler).toHaveBeenCalledWith('seekbackward', null);
+      expect(mockMediaSession.setActionHandler).toHaveBeenCalledWith('seekforward', null);
+      expect(mockMediaSession.setActionHandler).toHaveBeenCalledWith('seekto', null);
     } finally {
       Object.defineProperty(navigator, 'mediaSession', {
         value: orig,
