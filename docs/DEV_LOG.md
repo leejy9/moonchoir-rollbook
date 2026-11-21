@@ -1256,6 +1256,33 @@
 - 신규 마이그레이션 `20261122010000_review_followups.sql` 1개에 모든 DB 변경사항 집중.
 - 단위 테스트 70개 파일 542개 테스트 100% 통과, 린트 경고 0건 유지.
 
+---
+
+## [2026-11-21] 2차 코드 리뷰 후속 수정 (N1~N4)
+
+코드 리뷰 후속 분석 문서(`check.md`)에 따라 4개 후속 과제(N1, N4, N3, N2)를 순서대로 완료함.
+
+### 작업 요약 (항목별 문제 및 해결 내용)
+1. **N1 (`fix(worker): N1 compute content range for open and suffix ranges`)**:
+   - **문제**: Cloudflare Media Worker의 Range 파싱이 Safari 오디오 스트리밍의 오픈 레인지(`0-`) 및 서픽스 레인지(`-500`)를 지원하지 못해 오디오 재생 및 탐색 실패 가능성 존재.
+   - **해결**: 순수 함수 `computeContentRange(range, size)`를 구현하여 오픈/서픽스 레인지에 대해 206 및 정확한 `Content-Range`/`Content-Length`를 계산하고, 유효하지 않은 범위는 416(`Range Not Satisfiable`)을 반환하도록 수정 (60줄 이내 규칙 준수, 단위 테스트 8종 및 README curl 검증 절차 추가).
+2. **N4 (`fix(route): N4 ignore OPEN action in non-member areas`)**:
+   - **문제**: 관리자 영역(`#/admin`)에서 OPEN 액션 디스패치 시 `navReducer`는 무시하여 라우트 변화가 없는데 `useHashRoute.navigate`가 불필요하게 `pushState`를 호출하여 뒤로 가기 기록만 쌓임.
+   - **해결**: `useHashRoute.ts`에서 `historyAction === 'none'`이면 히스토리 조작과 상태 갱신을 모두 건너뛰고, OPEN 액션은 `historyAction === 'push'`일 때만 `pushState`를 호출하도록 수정.
+3. **N3 (`test(sheet): N3 add multi-schedule rerender selection preservation tests`)**:
+   - **문제**: `ScheduleDetailSheet.test.tsx`의 기존 테스트가 `renderToString`을 두 번 호출하는 독립 첫 렌더 방식이라 사용자가 고른 일정이 실시간 배열 갱신 시 유지되는지(C7) 실제 인터랙션을 검증하지 못함.
+   - **해결**: `createRoot` + `act` 환경에서 동일 일자 2개 일정 중 사용자가 선택한 일정이 새 배열 레퍼런스로 재전송되어도 유지되는 테스트와, 선택한 일정이 사라졌을 때 남은 단일 일정 상세로 전환되는 테스트 2종 추가.
+4. **N2 (`refactor(lint): N2 eliminate lint-disable comments in production code`)**:
+   - **문제**: PR #20에서 린트 경고 끄기 주석(`eslint-disable`, `oxlint-disable`)을 운영 코드에 10곳 추가함.
+   - **해결**:
+     - `QRScannerModal.tsx`: `pausedOnceRef = useRef(false)`로 마운트 1회 정지 구현 후 의존성 `[audioPlayer]` 명시.
+     - `CalendarTab.tsx`: 라우트 동기화 effect 제거, 렌더 중 파생 계산 및 `onNavigate({ type: 'TAB', tab: 'calendar', month })` 통일.
+     - `StudioTab.tsx`: `isLoading`을 `() => typeof window !== 'undefined' && backendKind !== 'gas'`로 초기화하여 effect 내 동기 `setIsLoading(true)` 제거.
+     - `AudioPlayerProvider.tsx`: 컨텍스트와 훅(`useAudioPlayer`, `useOptionalAudioPlayer`, `useAudioPosition`)을 `audioPlayerContext.ts`로 분리하여 컴포넌트/훅 혼합 내보내기 해소.
+     - `LocationPickerMap.tsx` / `AdminPracticeTab.tsx`: 불필요한 disable 제거 및 ref/effect 패턴으로 린트 경고 원천 해결.
+     - 검증 결과 운영 코드 내 린트 끄기 주석 **0줄** 달성.
+
+
 
 
 

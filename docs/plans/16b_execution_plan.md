@@ -131,3 +131,14 @@
 | 13 | **C16** | 재생 위치 컨텍스트 분리, MediaSession 정리, 로그아웃 시 오디오 정지 | P2 | 완료 | `a2dd5c0` (`AudioPlayerProvider.tsx`, `MiniPlayer.tsx`, `App.tsx`) |
 | 14 | **C13** | 연습실 파트 음원 문구 수정 및 빈 시즌 카드 숨김 | P2 | 완료 | `c872981` (`StudioTab.tsx`) |
 | 15 | **C12** | 새 컴포넌트의 맨 hex 색상 → CSS 변수 100% 전환 | P2 | 완료 | `1c02960` (`AdminPracticeTab`, `ProfileTab`, `StudioTab`, 등) |
+
+---
+
+## 6. 2차 코드 리뷰 후속 수정 (N1~N4) 이행 내역
+
+| 순서 | ID | 내용 | 심각도 | 상태 | 주요 커밋 / 파일 |
+|---|---|---|---|---|---|
+| 1 | **N1** | Media Worker Range 요청 오픈/서픽스 범위 지원 및 416 반환 | P1 | 완료 | `41db53d` (`workers/media/index.js`, `index.test.js`, `README.md`) |
+| 2 | **N4** | 관리자 영역 무시된 OPEN 액션의 불필요 히스토리 push 방어 | P3 | 완료 | `a0be345` (`useHashRoute.ts`, `useHashRoute.test.ts`) |
+| 3 | **N3** | 일정 상세 시트 복수 일정 사용자 선택 유지 인터랙션 테스트 2종 추가 | P2 | 완료 | `ead75bc` (`ScheduleDetailSheet.test.tsx`) |
+| 4 | **N2** | 운영 코드 내 린트 경고 끄기 주석 0개 달성 및 audioPlayerContext 분리 | P2 | 완료 | `5d3c26a` (`audioPlayerContext.ts`, `AudioPlayerProvider.tsx`, `QRScannerModal.tsx`, `CalendarTab.tsx`, `StudioTab.tsx` 등) |
