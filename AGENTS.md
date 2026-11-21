@@ -76,5 +76,5 @@ Moonchoir_rollbook/
 ## 6. 구조 복구 작업 시 필수 참고 문서
 - 데이터 저장, Google Sheets 동기화, 회원 병합, 출석 기록을 조사하거나 수정하기 전 [구조 복구 기록](docs/ARCHITECTURE_RECOVERY.md)을 읽는다.
 - 해당 기록은 확인된 현재 동작과 사용자 합의 사항을 구분한다. 새 사실이나 결정이 확인되면 함께 갱신한다.
-- 단원 UX 개편·연습실 작업은 [명세](docs/MEMBER_UX_AUDIO_SPEC.md)와 [구현 작업 지시서](docs/plans/16_member_ux_studio_implementation_guide.md)를 먼저 읽고, 지시서의 티켓 순서와 규칙을 따른다.
+- 단원 UX v3(홈·연습실·내 활동·운영진 연습곡) 작업은 [v3 명세](docs/MEMBER_UX_V3_SPEC.md)와 [v3 개발 지시서](docs/plans/17_v3_implementation_guide.md)를 먼저 읽고, 지시서의 티켓 순서와 §2 반복 실수 방지 규칙을 따른다. v3와 다른 부분이 없는 내용은 [v2 명세](docs/MEMBER_UX_AUDIO_SPEC.md)와 [v2 지시서](docs/plans/16_member_ux_studio_implementation_guide.md)를 따른다.
 - PRD는 원하는 제품 동작을 정의하고, 구조 복구 기록은 현재 코드와의 차이 및 변경 근거를 기록한다. 둘이 다르면 임의로 추정하지 말고 차이를 사용자와 확인한다.
