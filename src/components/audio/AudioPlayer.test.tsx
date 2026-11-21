@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useState } from 'react';
 import { renderToString } from 'react-dom/server';
-import { AudioPlayerProvider, useAudioPlayer } from './AudioPlayerProvider';
+import { AudioPlayerProvider, useAudioPlayer, useAudioPosition } from './AudioPlayerProvider';
 import { MiniPlayer } from './MiniPlayer';
 import type { PracticeTrack } from '../../types/rollbook';
 import type { PlayableTrackItem } from '../../utils/audioQueue';
@@ -148,6 +148,67 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
           </AudioPlayerProvider>
         );
       }).not.toThrow();
+    } finally {
+      Object.defineProperty(navigator, 'mediaSession', {
+        value: orig,
+        configurable: true,
+      });
+    }
+  });
+
+  it('provides currentTime and duration through useAudioPosition without affecting useAudioPlayer', () => {
+    let capturedPosition: { currentTime: number; duration: number } | null = null;
+    function PositionConsumer() {
+      // oxlint-disable-next-line react/globals
+      capturedPosition = useAudioPosition();
+      return null;
+    }
+
+    renderToString(
+      <AudioPlayerProvider initialTrack={mockItem}>
+        <PositionConsumer />
+      </AudioPlayerProvider>
+    );
+
+    expect(capturedPosition).not.toBeNull();
+    expect(capturedPosition!.currentTime).toBe(0);
+    expect(capturedPosition!.duration).toBe(0);
+  });
+
+  it('resets mediaSession metadata and action handlers upon closePlayer', () => {
+    const actionHandlers = new Map<string, any>();
+    const mockMediaSession = {
+      metadata: { title: 'old' } as any,
+      setActionHandler: vi.fn((action, handler) => {
+        actionHandlers.set(action, handler);
+      }),
+    };
+    const orig = (navigator as unknown as { mediaSession?: unknown }).mediaSession;
+
+    try {
+      Object.defineProperty(navigator, 'mediaSession', {
+        value: mockMediaSession,
+        configurable: true,
+      });
+
+      let playerCtx: any = null;
+      function TestConsumer() {
+        // oxlint-disable-next-line react/globals
+        playerCtx = useAudioPlayer();
+        return null;
+      }
+
+      renderToString(
+        <AudioPlayerProvider initialTrack={mockItem}>
+          <TestConsumer />
+        </AudioPlayerProvider>
+      );
+
+      playerCtx.closePlayer();
+
+      expect(mockMediaSession.metadata).toBeNull();
+      expect(mockMediaSession.setActionHandler).toHaveBeenCalledWith('play', null);
+      expect(mockMediaSession.setActionHandler).toHaveBeenCalledWith('pause', null);
     } finally {
       Object.defineProperty(navigator, 'mediaSession', {
         value: orig,

@@ -33,10 +33,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 }) => {
   const audioPlayer = useOptionalAudioPlayer();
 
-  // QR 스캐너가 열릴 때 오디오 재생 일시정지 (닫혀도 자동 재생하지 않음, Spec §3-4)
+  // QR 스캐너가 열릴 때 오디오 재생 일시정지 (마운트 시 1회만, Spec §3-4)
   useEffect(() => {
     audioPlayer?.pause();
-  }, [audioPlayer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [activeTab, setActiveTab] = useState<'QR' | 'PIN'>('QR');
   const [inputPin, setInputPin] = useState('');

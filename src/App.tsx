@@ -39,10 +39,12 @@ import {
 } from './services/displayMode';
 import type { BoundDeviceProfile } from './types/rollbook';
 import { parseRoute, type MemberTab } from './utils/route';
-import { AudioPlayerProvider } from './components/audio/AudioPlayerProvider';
+import { AudioPlayerProvider, useAudioPlayer } from './components/audio/AudioPlayerProvider';
 import { MiniPlayer } from './components/audio/MiniPlayer';
 
 function MainApp() {
+  const { closePlayer } = useAudioPlayer();
+
   // Device binding state
   const [profile, setProfile] = useState<BoundDeviceProfile | null>(() => getBoundDeviceProfile());
   const [hasConfirmedRosterSync, setHasConfirmedRosterSync] = useState(false);
@@ -376,6 +378,7 @@ function MainApp() {
               onChangeDarkMode={handleDarkModeChange}
               onChangeBinding={() => setShowBindingModal(true)}
               onLogout={async () => {
+                closePlayer();
                 clearDeviceProfile();
                 setProfile(null);
                 navigate({ type: 'RESET' });

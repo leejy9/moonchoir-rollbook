@@ -20,8 +20,6 @@ export interface AudioPlayerContextValue {
   currentIndex: number;
   isPlaying: boolean;
   isBlocked: boolean;
-  currentTime: number;
-  duration: number;
   playbackSpeed: PlaybackSpeed;
   repeatOne: boolean;
   autoNext: boolean;
@@ -39,7 +37,16 @@ export interface AudioPlayerContextValue {
   audioElementRef: React.RefObject<HTMLAudioElement | null>;
 }
 
+export interface AudioPositionContextValue {
+  currentTime: number;
+  duration: number;
+}
+
 const AudioPlayerContext = createContext<AudioPlayerContextValue | null>(null);
+const AudioPositionContext = createContext<AudioPositionContextValue>({
+  currentTime: 0,
+  duration: 0,
+});
 
 // oxlint-disable-next-line react/only-export-components
 export const useAudioPlayer = (): AudioPlayerContextValue => {
@@ -48,6 +55,11 @@ export const useAudioPlayer = (): AudioPlayerContextValue => {
     throw new Error('useAudioPlayer must be used within an AudioPlayerProvider');
   }
   return ctx;
+};
+
+// oxlint-disable-next-line react/only-export-components
+export const useAudioPosition = (): AudioPositionContextValue => {
+  return useContext(AudioPositionContext);
 };
 
 // oxlint-disable-next-line react/only-export-components
@@ -222,6 +234,18 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
       audio.removeAttribute('src');
       audio.load();
     }
+    if (typeof navigator !== 'undefined' && 'mediaSession' in navigator && navigator.mediaSession) {
+      try {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.setActionHandler('play', null);
+        navigator.mediaSession.setActionHandler('pause', null);
+        navigator.mediaSession.setActionHandler('seekbackward', null);
+        navigator.mediaSession.setActionHandler('seekforward', null);
+        navigator.mediaSession.setActionHandler('seekto', null);
+      } catch {
+        // ignore
+      }
+    }
   }, [pause]);
 
   const handleEnded = useCallback(() => {
@@ -347,8 +371,6 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
       currentIndex,
       isPlaying,
       isBlocked,
-      currentTime,
-      duration,
       playbackSpeed,
       repeatOne,
       autoNext,
@@ -371,8 +393,6 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
       currentIndex,
       isPlaying,
       isBlocked,
-      currentTime,
-      duration,
       playbackSpeed,
       repeatOne,
       autoNext,
@@ -390,20 +410,30 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
     ]
   );
 
+  const positionValue = useMemo<AudioPositionContextValue>(
+    () => ({
+      currentTime,
+      duration,
+    }),
+    [currentTime, duration]
+  );
+
   return (
     <AudioPlayerContext.Provider value={contextValue}>
-      {children}
-      <audio
-        ref={audioRef}
-        preload="metadata"
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleLoadedMetadata}
-        onPlay={handleAudioPlay}
-        onPause={handleAudioPause}
-        onEnded={handleEnded}
-        onError={handleAudioError}
-        style={{ display: 'none' }}
-      />
+      <AudioPositionContext.Provider value={positionValue}>
+        {children}
+        <audio
+          ref={audioRef}
+          preload="metadata"
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleLoadedMetadata}
+          onPlay={handleAudioPlay}
+          onPause={handleAudioPause}
+          onEnded={handleEnded}
+          onError={handleAudioError}
+          style={{ display: 'none' }}
+        />
+      </AudioPositionContext.Provider>
     </AudioPlayerContext.Provider>
   );
 };

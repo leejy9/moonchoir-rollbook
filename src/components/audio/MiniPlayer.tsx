@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAudioPlayer } from './AudioPlayerProvider';
+import { useAudioPlayer, useAudioPosition } from './AudioPlayerProvider';
 
 function formatSeconds(sec: number): string {
   if (Number.isNaN(sec) || sec < 0) return '0:00';
@@ -8,6 +8,15 @@ function formatSeconds(sec: number): string {
   const s = total % 60;
   return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
+
+const MiniPlayerTimeDisplay: React.FC<{ label: string }> = ({ label }) => {
+  const { currentTime, duration } = useAudioPosition();
+  return (
+    <>
+      {label} · {formatSeconds(currentTime)} / {formatSeconds(duration)}
+    </>
+  );
+};
 
 /**
  * 56px 높이의 모바일 최적화 미니 오디오 플레이어 (MEMBER_UX_AUDIO_SPEC.md §3-4).
@@ -21,8 +30,6 @@ export const MiniPlayer: React.FC = () => {
     currentTrack,
     isPlaying,
     isBlocked,
-    currentTime,
-    duration,
     playbackSpeed,
     repeatOne,
     togglePlay,
@@ -113,7 +120,7 @@ export const MiniPlayer: React.FC = () => {
                 whiteSpace: 'nowrap',
               }}
             >
-              {currentTrack.track.label} · {formatSeconds(currentTime)} / {formatSeconds(duration)}
+              <MiniPlayerTimeDisplay label={currentTrack.track.label} />
             </div>
           </div>
 
