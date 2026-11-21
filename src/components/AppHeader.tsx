@@ -24,7 +24,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           className="brand-logo-img"
           draggable={false}
           onTouchStart={logoHandlers.onTouchStart}
+          onTouchMove={logoHandlers.onTouchMove}
           onTouchEnd={logoHandlers.onTouchEnd}
+          onTouchCancel={logoHandlers.onTouchCancel}
           onContextMenu={logoHandlers.onContextMenu}
           title="우클릭(PC) 또는 3연타(모바일) 시 최고 관리자 메뉴를 엽니다"
           style={{
@@ -82,7 +84,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 fontSize: '12.5px',
                 fontWeight: 500,
                 cursor: 'pointer',
-                minHeight: '36px',
+                minHeight: '44px',
+                minWidth: '44px',
                 textAlign: 'left',
               }}
               onMouseEnter={(e) =>
