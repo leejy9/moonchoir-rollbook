@@ -9,12 +9,14 @@ import {
 } from '../utils/qr';
 import {
   IconCalendar,
+  IconMusic,
   IconUsers,
 } from './Icons';
 import { LocationPickerModal } from './LocationPickerModal';
 import { BatchScheduleEditModal } from './BatchScheduleEditModal';
 import { AdminAttendanceTab } from './admin/AdminAttendanceTab';
 import { AdminSchedulesTab } from './admin/AdminSchedulesTab';
+import { AdminPracticeTab } from './admin/AdminPracticeTab';
 import { AdminStatsTab } from './admin/AdminStatsTab';
 import { AdminSettingsTab } from './admin/AdminSettingsTab';
 import { ScheduleDeleteModal } from './admin/ScheduleDeleteModal';
@@ -31,7 +33,7 @@ interface AdminDashboardProps {
   refreshTrigger?: number;
 }
 
-type AdminTab = 'ROSTER' | 'SCHEDULES' | 'STATS' | 'SETTINGS';
+type AdminTab = 'ROSTER' | 'SCHEDULES' | 'PRACTICE' | 'STATS' | 'SETTINGS';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onBackToHome,
@@ -284,6 +286,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </button>
         <button
           type="button"
+          className={`subtab-btn ${adminTab === 'PRACTICE' ? 'active' : ''}`}
+          onClick={() => setAdminTab('PRACTICE')}
+          style={{ minHeight: '44px', minWidth: '44px' }}
+        >
+          <IconMusic size={16} />
+          <span>연습곡</span>
+        </button>
+        <button
+          type="button"
           className={`subtab-btn ${adminTab === 'STATS' ? 'active' : ''}`}
           onClick={() => setAdminTab('STATS')}
         >
@@ -390,6 +401,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           handleRefreshMasterQR={handleRefreshMasterQR}
           handleRegenSessionPin={handleRegenSessionPin}
           pinRegenMsg={pinRegenMsg}
+        />
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 2.5: [연습곡 관리] PRACTICE (Pieces, Tracks, Program)      */}
+      {/* ============================================================== */}
+      {adminTab === 'PRACTICE' && (
+        <AdminPracticeTab
+          config={config}
+          programCards={programCards}
+          onDataChanged={onDataChanged}
         />
       )}
 

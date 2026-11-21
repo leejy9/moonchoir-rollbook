@@ -21,6 +21,7 @@
 14. [2026-11-08: 외부 카메라 QR 딥링크·푸시 알림 검토 및 네이티브 앱 전환 판단](#2026-11-08-외부-카메라-qr-딥링크푸시-알림-검토-및-네이티브-앱-전환-판단)
 15. [2026-11-19: Phase 6 — Supabase PostgreSQL 백엔드 전면 전환, 비대상 일정 노출 방지 & 보안 이스터에그 구축](#2026-11-19-phase-6--supabase-postgresql-백엔드-전면-전환-비대상-일정-노출-방지--보안-이스터에그-구축)
 16. [2026-11-20: Phase 6.1 — Google Sheets 레거시 분리, Supabase Realtime 전 테이블 확장, 좀비 소켓 복구 & 모바일 최적화](#2026-11-20-phase-61--google-sheets-레거시-분리-supabase-realtime-전-테이블-확장-좀비-소켓-복구--모바일-최적화)
+17. [2026-11-20: Phase 6.2 — 단원 UX 개편 Phase 1 (앱 셸, 오늘 탭, 일정 상세 시트, 일정 탭)](#2026-11-20-phase-62--단원-ux-개편-phase-1-앱-셸-오늘-탭-일정-상세-시트-일정-탭)
 
 ---
 
@@ -1151,6 +1152,138 @@
   - `critic` 점수: **95/100 (PASS)**
   - 단위 테스트: **52개 파일, 352개 테스트 전원 통과 (Green Bar)**
   - 타입체크, 린트 0 errors. 프로덕션 빌드 및 GitHub Pages 배포 완료.
+
+---
+
+## 2026-11-20: Phase 6.2 — 단원 UX 개편 Phase 1 (앱 셸, 오늘 탭, 일정 상세 시트, 일정 탭)
+
+### 1. 배경 및 기획 의도
+- 기존 단원 홈 화면은 복잡한 월간 캘린더 그리드, 투표자 전체 명단, 댓글 창, 게이지가 한 화면에 길게 늘어서 있어 목요일 저녁 연습 현장에서 스마트폰으로 출석 체크를 하려면 수 차례 스크롤을 내려야 하는 불편이 존재함.
+- 출석 창(시작 60분 전)과 투표 마감 시간(시작 60분 전)의 분리 하드코딩, 기기 로컬 시간대 파싱 오류로 인한 해외 기기 시차 문제, QR 모달의 무차별 당일 첫 일정 대체 버그, 화면 전환 시 불필요한 전체 DB 재조회 등 구조적 데이터 흐름 결함을 해결함.
+- "오늘 출석 체크"에 집중하는 경량 1카드 오늘 탭(`TodayTab`), 모바일 네이티브 감각의 바텀시트(`ScheduleDetailSheet`), 월간 달력과 다가오는 일정이 통합된 일정 탭(`CalendarTab`)의 3탭 모바일 최적화 UX를 완성함.
+
+### 2. 주요 개발 및 복구 내용 (P1-01 ~ P1-12)
+- **KST 고정 및 출석/투표 윈도우 단일 상수화 (`timeWindow.ts`)**:
+  - `CHECKIN_OPEN_BEFORE_MIN = 60`, `RSVP_CUTOFF_BEFORE_MIN = 60` 통합.
+  - 날짜/시간 파싱에 `+09:00`을 강제하여 KST 기준 판정 확립, 파싱 실패 시 안전 닫힘 처리.
+- **해시 라우팅 순수 함수 & 리듀서 (`src/utils/route.ts`)**:
+  - `#/today`, `#/calendar?m=YYYY-MM`, `#/calendar?d=YYYY-MM-DD&sheet=1`, `#/profile`, `#/admin`, `#/super`.
+  - 브라우저 히스토리 스택 규칙 엄수: 탭 전환은 replace(첫 진입만 push), 시트/모달은 push, 뒤로 가기는 모달 닫기 지원.
+- **판정 엔진 순수 함수 분리**:
+  - `selectTodayFocus()`: 당일 복수 일정(파트연습 + 본연습) 중 우선순위 기반 집중 일정 자동 선택.
+  - `deriveTodayCta()`: 10개 상태(CANCELLED, RSVP_NEW, CHECKIN_OPEN, ATTENDED 등) 판별 유니언.
+  - `kakaoMaps.ts` 카카오맵 다이렉트 딥링크, `rsvpTally.ts` 실시간 출석 인원 집계.
+- **앱 셸 & 미니멀 3탭 UI**:
+  - 상단 44px 헤더(`AppHeader` - 마스터 진입 제스처 포함) 및 하단 44px 탭 바(`BottomNav`).
+  - 안티슬롭(Anti-slop) 규칙 100% 준수: UI 텍스트 내 이모지 전면 제거, 정돈된 SVG 아이콘 사용.
+- **오늘 탭(`TodayTab`) 경량화 & 뷰포트 최적화**:
+  - 상단 집중 카드 1장에 44px 당일 복수 일정 캐러셀 컨트롤, 카카오맵 링크, 확정 출석 인원 및 명확한 상태 버튼 배치.
+  - 출석 완료 후 "다시 출석 체크" 버튼 제거(불변식 준수). 긴 설명과 댓글/투표 명단은 상세 시트로 이동.
+- **일정 상세 바텀시트(`ScheduleDetailSheet`, `ScheduleDetailBody`)**:
+  - 모바일 터치 친화적 제스처 드래그 닫기(80px 임계치, Pointer Events), Esc, 닫기 버튼, 배경 탭 지원.
+  - 웹 접근성 `role="dialog"`, `aria-modal="true"`, 포커스 트래핑 및 복귀 구현.
+- **일정 탭(`CalendarTab`) 승격 & 레거시 `CalendarView.tsx` 폐기**:
+  - `HomeCalendarSection`을 `MonthCalendarGrid`로 승격하여 재사용.
+  - 하드코딩된 레거시 `CalendarView.tsx` 전면 삭제.
+  - 하단 다가오는 3개 일정 및 마감 여부 텍스트 표시.
+- **QR 대상 일정 강제 & RSVP 인라인 알림 (`RSVPModal.tsx`, `App.tsx`)**:
+  - `currentSchedule`의 "오늘 첫 일정으로 대체" 폴백 완전 제거 (`scheduleId` 명시 필수).
+  - 브라우저 `window.alert()` 차단 및 모달 내부 인라인 에러 배너 대체.
+- **Supabase 백그라운드 폴링 비용 최적화**:
+  - 실시간 웹소켓 정상 연결 중 백그라운드 풀 폴링 주기를 30초에서 5분으로 완화.
+  - 단순 탭 전환 시 원격 읽기 차단(로컬 캐시 사용).
+
+### 3. 결정론적 테스트 검증
+- **60개 테스트 파일, 447개 단위 테스트 전원 통과 (Green Bar)**.
+- `npm run typecheck`, `npm run lint`, `npm run build` 무결성 검증 완료.
+
+---
+
+## [2026-11-21] 코드 리뷰 후속 수정 (C2~C16)
+
+코드 리뷰 분석 문서(`check.md`)에 따라 15개 후속 작업(C8, C2, C3, C9, C15, C6, C4, C5, C10, C11, C7, C14, C16, C13, C12)을 엄격한 순서와 규칙(1 작업 = 1 커밋)에 맞춰 완료함.
+
+### 작업 요약 (항목별 문제 및 해결 내용)
+1. **C8 (`fix(route): C8 pop overlay history on close`)**:
+   - **문제**: `useHashRoute`가 React StrictMode에서 중복 push를 발생시키고, 오버레이를 닫을 때 `replaceState`를 호출하여 이전 히스토리가 남음.
+   - **해결**: `routeRef`를 도입하여 `history` 조작을 갱신 함수 밖으로 분리하고, 오버레이 열 때 `mcOverlay: true` 상태를 남겨 닫을 때 `history.back()`으로 히스토리를 깔끔히 되돌리도록 수정.
+2. **C2 (`fix(route): C2 connect QR and RSVP modals to hash route`)**:
+   - **문제**: QR 스캐너와 RSVP 모달이 URL 라우트에 연결되지 않아 모바일 시스템 뒤로 가기 시 모달이 닫히지 않고 카메라가 계속 켜져 있음.
+   - **해결**: `#/today?qr=SCHEDULE_ID`, `#/today?rsvp=SCHEDULE_ID` 라우트를 연결하여 브라우저 뒤로 가기 시 모달이 닫히고 카메라 스트림이 즉시 정지되도록 구현.
+3. **C3 (`fix(db): C3 refuse card deletion if pieces ever linked`)**:
+   - **문제**: 곡이 한 번이라도 연결되었던 시즌 카드를 삭제할 때 외래키 제약조건(`fk_program_pieces_card`)에 걸려 클라이언트에 원시 DB 에러가 노출됨.
+   - **해결**: `fn_delete_practice_program_card` RPC에 `practice_program_pieces` 연결 이력 검사 로직을 추가하여 연결된 적이 있는 카드는 400 에러와 함께 명확한 안내 메시지를 반환하도록 수정 (`20261122010000_review_followups.sql`).
+4. **C9 (`fix(db): C9 verify distinct track IDs on track reorder`)**:
+   - **문제**: 트랙 순서 변경 RPC `fn_reorder_practice_tracks`에서 중복된 트랙 ID가 전달될 경우 유효성 검증 없이 처리됨.
+   - **해결**: 입력된 `trackIds` 배열 길이와 유니크 ID 집합 크기를 비교하여 중복 ID 전달 시 400 에러로 거절하는 방어 로직 추가.
+5. **C15 (`fix(db): C15 validate catalog RPC inputs and optimize response keys`)**:
+   - **문제**: 카탈로그 RPC의 JSON 키와 TS 파서 간 미세한 불일치(camelCase/snake_case) 및 배열 길이/타입 미검증으로 응답 페이로드가 비효율적임.
+   - **해결**: RPC 입력 파라미터 유효성 검증 강화 및 응답 키 표준화, TS 파서(`sheetsParser.ts`) 방어 로직 보강.
+6. **C6 (`fix(backend): C6 implement fn_unbind_member_device for supabase`)**:
+   - **문제**: Supabase 모드에서 기기 연동 해제(`UNBIND_DEVICE`) 액션에 대응하는 Stored Procedure가 없어 항상 실패함.
+   - **해결**: `fn_unbind_member_device(p_payload jsonb)` RPC를 작성하여 관리자 세션 토큰 검증 후 `members.bound_device_id`와 `bound_device_at`을 `NULL`로 초기화하도록 구현하고, `supabaseBackend.ts`에 액션 매핑 추가.
+7. **C4 (`fix(worker): C4 handle 304 not modified and vary origin in media worker`)**:
+   - **문제**: Cloudflare Media Worker에서 304 Not Modified 처리 부재, CORS 응답에 `Vary: Origin` 헤더 누락, 잘못된 URL 인코딩 시 처리 미흡.
+   - **해결**: 50줄 이내 규칙을 준수하며 R2 조건부 요청(`!('body' in object)`) 시 304 반환, `Vary: Origin` 헤더 추가, `decodeURIComponent` try/catch로 400 Bad Request 처리.
+8. **C5 (`fix(admin): C5 clear only data cache in emergency cache reset`)**:
+   - **문제**: 비상 캐시 초기화 시 브라우저 로컬스토리지의 `DATA_CACHE_KEYS`가 아닌 전체 키를 무차별 삭제하거나 아무것도 지우지 못함.
+   - **해결**: `DATA_CACHE_KEYS` 목록을 엄밀히 정의하고 `clearDataCache()` 함수를 구현하여 명부/일정/출석 데이터 캐시만 선택적으로 삭제하고 기기 바인딩 및 관리자 세션 토큰은 보존하도록 수정.
+9. **C10 (`fix(date): C10 calendar-based date calculations for this-week stats`)**:
+   - **문제**: "이번 주" 날짜 계산 시 UTC 기준 밀림 현상과 `addDaysKST`의 시간대 의존성 버그로 자정 부근에서 날짜가 하루 어긋남.
+   - **해결**: UTC 기반 순수 캘린더 연산 함수 `shiftCalendarDate(dateStr, days)` 및 `getWeekdayOfDate(dateStr)`를 구현하여 어떤 타임존 환경에서도 일관되게 월요일~일요일 주간을 계산하도록 수정.
+10. **C11 (`fix(gesture): C11 cancel logo longpress on scroll and enforce 44px touch target`)**:
+    - **문제**: 로고 롱프레스 제스처가 페이지 스크롤 도중에도 취소되지 않고 오발동되며, 마스터 진입 버튼 크기가 36px로 모바일 접근성 미달.
+    - **해결**: `useMasterEntryGesture`에 터치 이동 거리(10px) 및 `touchcancel` 이벤트 감지 시 타이머를 취소하는 방어 로직을 추가하고, "Get in" 버튼을 최소 44px 이상으로 확대.
+11. **C7 (`fix(sheet): C7 derive selected schedule during render to preserve user selection`)**:
+    - **문제**: 일정 상세 바텀시트에서 실시간 데이터 갱신 시 `useEffect`에 의해 사용자가 선택한 복수 일정 중 특정 일정이 첫 번째 일정으로 강제 초기화됨.
+    - **해결**: `useEffect` 기반 동기화를 렌더 단계 파생 상태(`effectiveScheduleId = scheduleId ?? userPickedId ?? ...`)로 리팩터링하여 실시간 데이터 재전송 시에도 사용자 선택이 유지되도록 개선.
+12. **C14 (`fix(lint): C14 eliminate all lint warnings and respect reduced motion`)**:
+    - **문제**: oxlint 경고 8개 잔존 및 바텀시트 애니메이션에 `prefers-reduced-motion` 미적용.
+    - **해결**: 모든 린트 경고를 해결하여 **0 errors, 0 warnings** 달성, 바텀시트에 `useReducedMotion`을 적용하여 애니메이션 전환 부드러움 제어.
+13. **C16 (`perf(audio): C16 split position context, clean media session, and stop on logout`)**:
+    - **문제**: 재생 위치(`currentTime`)가 초당 4회 갱신되면서 `useAudioPlayer()` 컨텍스트를 구독하는 모든 컴포넌트가 불필요하게 리렌더링됨. 플레이어 종료 시 MediaSession 메타데이터 미정리.
+    - **해결**: 위치 정보를 `AudioPositionContext`(`useAudioPosition()`)로 분리하여 미니플레이어의 시간 표시부만 국소 렌더링되도록 최적화, 플레이어 닫기 시 MediaSession 메타데이터 및 5대 액션 핸들러 해제, 로그아웃 시 오디오 즉시 정지.
+14. **C13 (`fix(studio): C13 update studio description and hide empty season cards`)**:
+    - **문제**: 연습실 상단 설명에 "파트 음원"이라는 문구가 남아있고, 곡이 하나도 없는 빈 시즌 카드가 화면에 빈 박스로 노출됨.
+    - **해결**: 문구를 "시즌별 연습곡을 듣고 악보를 확인합니다."로 수정하고, `buildStudioView`에서 곡이 없는 시즌 카드를 화면 렌더 단계에서 필터링.
+15. **C12 (`style: C12 replace raw hex color values with css variables`)**:
+    - **문제**: `AdminPracticeTab.tsx`, `ProfileTab.tsx`, `StudioTab.tsx`, `MiniPlayer.tsx`, `AppHeader.tsx`에 raw hex 색상값이 남아 다크모드 대응 불완전.
+    - **해결**: 5개 컴포넌트의 모든 raw hex 색상을 CSS 변수(`var(--..., #fallback)`)로 100% 전환 (검증 결과 5개 파일 모두 맨 hex 0개 달성).
+
+### 불변식 및 보안 기준 확인
+- 관리자 PIN 길이 규칙 6~8자리 유지 확정 (4자리 완화 절대 금지 준수).
+- 운영 DB 적용 완료된 `fn_record_attendance` 건드리지 않음.
+- 신규 마이그레이션 `20261122010000_review_followups.sql` 1개에 모든 DB 변경사항 집중.
+- 단위 테스트 70개 파일 542개 테스트 100% 통과, 린트 경고 0건 유지.
+
+---
+
+## [2026-11-21] 2차 코드 리뷰 후속 수정 (N1~N4)
+
+코드 리뷰 후속 분석 문서(`check.md`)에 따라 4개 후속 과제(N1, N4, N3, N2)를 순서대로 완료함.
+
+### 작업 요약 (항목별 문제 및 해결 내용)
+1. **N1 (`fix(worker): N1 compute content range for open and suffix ranges`)**:
+   - **문제**: Cloudflare Media Worker의 Range 파싱이 Safari 오디오 스트리밍의 오픈 레인지(`0-`) 및 서픽스 레인지(`-500`)를 지원하지 못해 오디오 재생 및 탐색 실패 가능성 존재.
+   - **해결**: 순수 함수 `computeContentRange(range, size)`를 구현하여 오픈/서픽스 레인지에 대해 206 및 정확한 `Content-Range`/`Content-Length`를 계산하고, 유효하지 않은 범위는 416(`Range Not Satisfiable`)을 반환하도록 수정 (60줄 이내 규칙 준수, 단위 테스트 8종 및 README curl 검증 절차 추가).
+2. **N4 (`fix(route): N4 ignore OPEN action in non-member areas`)**:
+   - **문제**: 관리자 영역(`#/admin`)에서 OPEN 액션 디스패치 시 `navReducer`는 무시하여 라우트 변화가 없는데 `useHashRoute.navigate`가 불필요하게 `pushState`를 호출하여 뒤로 가기 기록만 쌓임.
+   - **해결**: `useHashRoute.ts`에서 `historyAction === 'none'`이면 히스토리 조작과 상태 갱신을 모두 건너뛰고, OPEN 액션은 `historyAction === 'push'`일 때만 `pushState`를 호출하도록 수정.
+3. **N3 (`test(sheet): N3 add multi-schedule rerender selection preservation tests`)**:
+   - **문제**: `ScheduleDetailSheet.test.tsx`의 기존 테스트가 `renderToString`을 두 번 호출하는 독립 첫 렌더 방식이라 사용자가 고른 일정이 실시간 배열 갱신 시 유지되는지(C7) 실제 인터랙션을 검증하지 못함.
+   - **해결**: `createRoot` + `act` 환경에서 동일 일자 2개 일정 중 사용자가 선택한 일정이 새 배열 레퍼런스로 재전송되어도 유지되는 테스트와, 선택한 일정이 사라졌을 때 남은 단일 일정 상세로 전환되는 테스트 2종 추가.
+4. **N2 (`refactor(lint): N2 eliminate lint-disable comments in production code`)**:
+   - **문제**: PR #20에서 린트 경고 끄기 주석(`eslint-disable`, `oxlint-disable`)을 운영 코드에 10곳 추가함.
+   - **해결**:
+     - `QRScannerModal.tsx`: `pausedOnceRef = useRef(false)`로 마운트 1회 정지 구현 후 의존성 `[audioPlayer]` 명시.
+     - `CalendarTab.tsx`: 라우트 동기화 effect 제거, 렌더 중 파생 계산 및 `onNavigate({ type: 'TAB', tab: 'calendar', month })` 통일.
+     - `StudioTab.tsx`: `isLoading`을 `() => typeof window !== 'undefined' && backendKind !== 'gas'`로 초기화하여 effect 내 동기 `setIsLoading(true)` 제거.
+     - `AudioPlayerProvider.tsx`: 컨텍스트와 훅(`useAudioPlayer`, `useOptionalAudioPlayer`, `useAudioPosition`)을 `audioPlayerContext.ts`로 분리하여 컴포넌트/훅 혼합 내보내기 해소.
+     - `LocationPickerMap.tsx` / `AdminPracticeTab.tsx`: 불필요한 disable 제거 및 ref/effect 패턴으로 린트 경고 원천 해결.
+     - 검증 결과 운영 코드 내 린트 끄기 주석 **0줄** 달성.
+
+
+
 
 
 

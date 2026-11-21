@@ -2,6 +2,7 @@
  * Calendar utilities for Moonchoir Rollbook
  */
 
+import type { Schedule } from '../types/rollbook';
 import { getKSTDateString } from './date';
 
 export interface CalendarDay {
@@ -430,3 +431,54 @@ export function createSchedulesMultiMode(
     };
   });
 }
+
+export type CategoryDotKind = 'concert' | 'event' | 'practice' | 'default';
+
+/**
+ * 카테고리 문자열에 대응하는 달력 표시 점(Dot) 종류를 반환합니다.
+ * - 연주, 공연, 콘서트 -> 'concert'
+ * - 행사, 합숙, 이벤트, MT, 기타 -> 'event'
+ * - 연습(정기연습, 추가연습, 파트연습 등) -> 'practice'
+ * - 모르는 값이나 직접 입력 값 -> 'default'
+ */
+export function getCategoryDotKind(category: string): CategoryDotKind {
+  const cat = String(category || '').trim();
+  if (!cat) return 'default';
+
+  if (cat.includes('연주') || cat.includes('공연') || cat.includes('콘서트')) {
+    return 'concert';
+  }
+  if (
+    cat.includes('행사') ||
+    cat.includes('합숙') ||
+    cat.includes('이벤트') ||
+    cat.includes('MT') ||
+    cat.includes('기타')
+  ) {
+    return 'event';
+  }
+  if (cat.includes('연습')) {
+    return 'practice';
+  }
+  return 'default';
+}
+
+/**
+ * 일정을 날짜(YYYY-MM-DD)별로 그룹화하고, 동일 날짜 내에서는 시작 시각(startTime) 오름차순으로 정렬합니다.
+ */
+export function groupSchedulesByDate(schedules: Schedule[]): Map<string, Schedule[]> {
+  const map = new Map<string, Schedule[]>();
+  for (const sch of schedules) {
+    const list = map.get(sch.date);
+    if (list) {
+      list.push(sch);
+    } else {
+      map.set(sch.date, [sch]);
+    }
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }
+  return map;
+}
+

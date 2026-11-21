@@ -95,12 +95,17 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
     };
   }, []);
 
+  const initCoordsRef = useRef({ lat, lon, radius, onChangeLocation });
+  useEffect(() => {
+    initCoordsRef.current = { lat, lon, radius, onChangeLocation };
+  });
+
   // 2. Initialize Leaflet Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    const initialLat = lat || 37.5665;
-    const initialLon = lon || 126.9780;
+    const initialLat = initCoordsRef.current.lat || 37.5665;
+    const initialLon = initCoordsRef.current.lon || 126.9780;
 
     const map = L.map(mapContainerRef.current, {
       center: [initialLat, initialLon],
@@ -122,7 +127,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
 
     // Attendance Radius Circle
     const circle = L.circle([initialLat, initialLon], {
-      radius: radius || 100,
+      radius: initCoordsRef.current.radius || 100,
       color: '#5B3E96',
       fillColor: '#8B5CF6',
       fillOpacity: 0.22,
@@ -133,7 +138,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
     marker.on('dragend', () => {
       const pos = marker.getLatLng();
       circle.setLatLng(pos);
-      onChangeLocation(Number(pos.lat.toFixed(6)), Number(pos.lng.toFixed(6)));
+      initCoordsRef.current.onChangeLocation(Number(pos.lat.toFixed(6)), Number(pos.lng.toFixed(6)));
       setSearchFeedback(`📍 지도 핀 드래그로 위치가 설정되었습니다 (${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)})`);
     });
 
@@ -142,7 +147,7 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
       const pos = e.latlng;
       marker.setLatLng(pos);
       circle.setLatLng(pos);
-      onChangeLocation(Number(pos.lat.toFixed(6)), Number(pos.lng.toFixed(6)));
+      initCoordsRef.current.onChangeLocation(Number(pos.lat.toFixed(6)), Number(pos.lng.toFixed(6)));
       setSearchFeedback(`📍 지도 클릭으로 위치가 설정되었습니다 (${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)})`);
     });
 
@@ -156,7 +161,6 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
       markerRef.current = null;
       circleRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sync coords from parent
@@ -204,7 +208,6 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
       await loadKakaoServices();
       setKakaoLoaded(true);
       setKakaoLoadError('');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const kakao = (window as any).kakao;
       const outcome = await searchPlacesByKeyword(
         { places: new kakao.maps.services.Places(), geocoder: new kakao.maps.services.Geocoder() },
@@ -246,11 +249,9 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
     const existingScript = document.getElementById(scriptId);
 
     const openPopup = () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const daum = (window as any).daum;
       if (daum && daum.Postcode) {
         new daum.Postcode({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           oncomplete: (data: any) => {
             const roadAddr = data.roadAddress || data.jibunAddress;
             if (!roadAddr) {
@@ -265,7 +266,6 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
               .then(() => {
                 setKakaoLoaded(true);
                 setKakaoLoadError('');
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const kakao = (window as any).kakao;
                 const geocoder = new kakao.maps.services.Geocoder();
                 return geocodeAddress(geocoder, roadAddr, kakao.maps.services.Status.OK).then((outcome) => {

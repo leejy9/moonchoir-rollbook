@@ -1,5 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { formatMatrixHeaderDate, normalizeDateToYYYYMMDD, getKSTTimestampString, parseKSTDate, getKSTDateString, addDaysKST, normalizeToKSTTimestamp, getKSTClock, formatShortDate } from './date';
+import {
+  formatMatrixHeaderDate,
+  normalizeDateToYYYYMMDD,
+  getKSTTimestampString,
+  parseKSTDate,
+  getKSTDateString,
+  addDaysKST,
+  shiftCalendarDate,
+  getWeekdayOfDate,
+  normalizeToKSTTimestamp,
+  getKSTClock,
+  formatShortDate,
+  computeDDay,
+} from './date';
 
 describe('formatMatrixHeaderDate', () => {
   it('YYYY-MM-DD 형식을 10/08 (목) 형식으로 올바르게 변환한다', () => {
@@ -108,3 +121,82 @@ describe('formatShortDate', () => {
     expect(formatShortDate('미정')).toBe('미정');
   });
 });
+
+describe('computeDDay Pure Function', () => {
+  it('동일한 날짜이면 0을 반환한다', () => {
+    const now = new Date('2026-10-15T14:00:00+09:00');
+    expect(computeDDay('2026-10-15', now)).toBe(0);
+  });
+
+  it('미래 날짜이면 양수 일수를 반환한다 (D-3, D-1)', () => {
+    const now = new Date('2026-10-15T14:00:00+09:00');
+    expect(computeDDay('2026-10-18', now)).toBe(3);
+    expect(computeDDay('2026-10-16', now)).toBe(1);
+  });
+
+  it('과거 날짜이면 음수 일수를 반환한다', () => {
+    const now = new Date('2026-10-15T14:00:00+09:00');
+    expect(computeDDay('2026-10-12', now)).toBe(-3);
+  });
+
+  it('월말/월초 경계를 정확히 계산한다', () => {
+    const endOfOct = new Date('2026-10-31T10:00:00+09:00');
+    expect(computeDDay('2026-11-01', endOfOct)).toBe(1);
+    expect(computeDDay('2026-11-03', endOfOct)).toBe(3);
+  });
+
+  it('KST 자정 직전(23:59:59)과 자정 직후(00:00:01)의 D-Day 변화를 정확히 반영한다', () => {
+    const target = '2026-10-18';
+    const justBeforeMidnight = new Date('2026-10-15T23:59:59+09:00'); // KST 15일 -> D-3
+    const justAfterMidnight = new Date('2026-10-16T00:00:01+09:00'); // KST 16일 -> D-2
+
+    expect(computeDDay(target, justBeforeMidnight)).toBe(3);
+    expect(computeDDay(target, justAfterMidnight)).toBe(2);
+  });
+});
+
+describe('shiftCalendarDate & getWeekdayOfDate (Timezone-Independent Calendar Math)', () => {
+  it('handles leap year transitions correctly', () => {
+    expect(shiftCalendarDate('2024-02-28', 1)).toBe('2024-02-29');
+    expect(shiftCalendarDate('2024-02-29', 1)).toBe('2024-03-01');
+    expect(shiftCalendarDate('2025-02-28', 1)).toBe('2025-03-01');
+  });
+
+  it('handles year-end and year-start boundaries with positive and negative shifts', () => {
+    expect(shiftCalendarDate('2026-12-31', 1)).toBe('2027-01-01');
+    expect(shiftCalendarDate('2026-01-01', -1)).toBe('2025-12-31');
+    expect(shiftCalendarDate('2026-10-15', -10)).toBe('2026-10-05');
+  });
+
+  it('returns exact weekday without timezone shift', () => {
+    // 2026-11-22 is Sunday (0), 2026-11-23 is Monday (1)
+    expect(getWeekdayOfDate('2026-11-22')).toBe(0);
+    expect(getWeekdayOfDate('2026-11-23')).toBe(1);
+    expect(getWeekdayOfDate('2026-11-24')).toBe(2);
+    expect(getWeekdayOfDate('2026-11-25')).toBe(3);
+    expect(getWeekdayOfDate('2026-11-26')).toBe(4);
+    expect(getWeekdayOfDate('2026-11-27')).toBe(5);
+    expect(getWeekdayOfDate('2026-11-28')).toBe(6);
+  });
+
+  it('calculates this-week Monday-Sunday bounds accurately regardless of execution timezone', () => {
+    const calcWeek = (date: string) => {
+      const weekday = getWeekdayOfDate(date);
+      const diffToMonday = (weekday + 6) % 7;
+      const start = addDaysKST(date, -diffToMonday);
+      const end = addDaysKST(start, 6);
+      return { start, end };
+    };
+
+    // Wednesday
+    expect(calcWeek('2026-11-25')).toEqual({ start: '2026-11-23', end: '2026-11-29' });
+    // Sunday
+    expect(calcWeek('2026-11-22')).toEqual({ start: '2026-11-16', end: '2026-11-22' });
+    // Monday
+    expect(calcWeek('2026-11-23')).toEqual({ start: '2026-11-23', end: '2026-11-29' });
+    // Saturday
+    expect(calcWeek('2026-11-28')).toEqual({ start: '2026-11-23', end: '2026-11-29' });
+  });
+});
+
+

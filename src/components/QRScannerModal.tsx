@@ -16,6 +16,7 @@ import { buildKakaoExternalBrowserUrl, detectInstallEnvironment, isStandaloneDis
 import { findActiveScheduleForMasterQR, parseQRPayload, playScanSuccessSound } from '../utils/qr';
 import { getKSTTimestampString } from '../utils/date';
 import { IconKeypad, IconQrScan } from './Icons';
+import { useOptionalAudioPlayer } from './audio/audioPlayerContext';
 
 interface QRScannerModalProps {
   schedule: Schedule;
@@ -30,6 +31,17 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const audioPlayer = useOptionalAudioPlayer();
+  const pausedOnceRef = useRef(false);
+
+  // QR 스캐너가 열릴 때 오디오 재생 일시정지 (마운트 시 1회만, Spec §3-4)
+  useEffect(() => {
+    if (!pausedOnceRef.current) {
+      pausedOnceRef.current = true;
+      audioPlayer?.pause();
+    }
+  }, [audioPlayer]);
+
   const [activeTab, setActiveTab] = useState<'QR' | 'PIN'>('QR');
   const [inputPin, setInputPin] = useState('');
   const [pinError, setPinError] = useState('');
@@ -299,10 +311,18 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     startCamera();
 
+    const currentVideoEl = videoRef.current;
     return () => {
       isCancelled = true;
       if (animId !== null) cancelAnimationFrame(animId);
       if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (currentVideoEl && currentVideoEl.srcObject) {
+        const s = currentVideoEl.srcObject as MediaStream;
+        if (s && typeof s.getTracks === 'function') {
+          s.getTracks().forEach((t) => t.stop());
+        }
+        currentVideoEl.srcObject = null;
+      }
     };
   }, [activeTab, scanResult]);
 

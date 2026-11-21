@@ -11,6 +11,9 @@ import type {
   Schedule,
   ScheduleComment,
   ScheduleCommentEvent,
+  PracticeCatalog,
+  PracticePiece,
+  PracticeTrack,
 } from '../types/rollbook';
 import {
   calculateCumulativeAttendanceWithLifecycle,
@@ -26,6 +29,7 @@ import {
   INITIAL_MEMBERS,
 } from './mockData';
 import {
+  parsePracticeCatalog,
   parseRemoteAttendanceLogs,
   parseRemoteCommentEvents,
   parseRemoteLocations,
@@ -40,6 +44,7 @@ import {
   STORAGE_KEYS,
   loadFromStorage,
   resetStorage,
+  clearDataCache,
   saveToStorage,
 } from './sheetsStorage';
 import type { RemoteBackend, RemoteSnapshot } from './backend/types';
@@ -47,7 +52,7 @@ import { GasBackend } from './backend/gasBackend';
 import { SupabaseBackend, type SupabaseConfig } from './backend/supabaseBackend';
 import { extractIssuedToken, getAdminToken, setAdminToken, type AdminTier } from './adminSession';
 
-export { resetStorage };
+export { resetStorage, clearDataCache };
 export type { RemoteBackend, RemoteSnapshot, SupabaseConfig };
 
 function createDefaultBackend(getUrl: () => string | undefined): RemoteBackend {
@@ -115,6 +120,12 @@ const WRITE_LABELS: Record<string, string> = {
   ADD_COMMENT: '댓글',
   EDIT_COMMENT: '댓글 수정',
   DELETE_COMMENT: '댓글 삭제',
+  SAVE_PRACTICE_PIECE: '연습곡 저장',
+  SET_PRACTICE_PIECE_ARCHIVED: '연습곡 보관',
+  SAVE_PRACTICE_TRACK: '트랙 저장',
+  SET_PRACTICE_TRACK_ARCHIVED: '트랙 보관',
+  SET_PROGRAM_PIECES: '시즌 곡 목록 저장',
+  REORDER_PRACTICE_TRACKS: '트랙 순서 변경',
 };
 
 /** 서버에서 읽기만 하는 요청: 성공해도 데이터가 바뀌지 않으므로 새로고침을 예약하지 않는다. */
@@ -122,6 +133,7 @@ const NON_MUTATING_ACTIONS = new Set([
   'VERIFY_ADMIN_PIN',
   'VERIFY_SUPER_ADMIN_PIN',
   'VERIFY_ON_SITE_PIN',
+  'GET_PRACTICE_CATALOG',
 ]);
 
 export class SheetsService {
@@ -133,6 +145,7 @@ export class SheetsService {
   private locations: LocationPreset[];
   private programCards: ProgramCard[];
   private commentEvents: ScheduleCommentEvent[];
+  private practiceCatalog: PracticeCatalog;
 
   // --- Sync state (refresh-on-navigation, write tracking, failure notices) ---
   private inFlightWrites = new Set<Promise<unknown>>();
@@ -161,6 +174,11 @@ export class SheetsService {
     this.locations = loadFromStorage(STORAGE_KEYS.LOCATIONS, []);
     this.programCards = loadFromStorage(STORAGE_KEYS.PROGRAM_CARDS, []);
     this.commentEvents = loadFromStorage(STORAGE_KEYS.COMMENTS, []);
+    this.practiceCatalog = loadFromStorage(STORAGE_KEYS.PRACTICE_CATALOG, {
+      pieces: [],
+      tracks: [],
+      programPieces: [],
+    });
   }
 
   public isBackendActive(): boolean {
@@ -515,6 +533,191 @@ export class SheetsService {
 
     this.programCards = this.programCards.filter((c) => c.id !== cardId);
     saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
+  }
+
+  // --- Practice Catalog Methods (MEMBER_UX_AUDIO_SPEC.md §4-3) ---
+
+  public getPracticeCatalog(): PracticeCatalog {
+    return {
+      pieces: [...this.practiceCatalog.pieces],
+      tracks: [...this.practiceCatalog.tracks],
+      programPieces: [...this.practiceCatalog.programPieces],
+    };
+  }
+
+  public async refreshPracticeCatalog(): Promise<PracticeCatalog> {
+    if (this.backend.kind === 'gas') {
+      return { pieces: [], tracks: [], programPieces: [] };
+    }
+
+    const result = await this.sendToGoogleSheet('GET_PRACTICE_CATALOG', { includeArchived: true });
+    if (!result.success) {
+      throw new Error(result.message || '연습곡 목록을 불러오지 못했습니다.');
+    }
+
+    this.practiceCatalog = parsePracticeCatalog(result.data);
+    saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+    return this.getPracticeCatalog();
+  }
+
+  public async savePracticePiece(
+    piece: Partial<PracticePiece> & { title: string }
+  ): Promise<PracticePiece> {
+    const id = piece.id || `piece_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const target: PracticePiece = {
+      id,
+      title: piece.title,
+      composer: piece.composer ?? '',
+      arranger: piece.arranger ?? '',
+      scoreUrl: piece.scoreUrl ?? '',
+      notes: piece.notes ?? '',
+      isArchived: piece.isArchived ?? false,
+      createdAt: piece.createdAt ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = await this.sendToGoogleSheet('SAVE_PRACTICE_PIECE', target);
+    if (!result.success) {
+      throw new Error(result.message || '연습곡 저장에 실패했습니다.');
+    }
+
+    const finalId = (result as { id?: string }).id || target.id;
+    target.id = finalId;
+
+    const idx = this.practiceCatalog.pieces.findIndex((p) => p.id === finalId);
+    if (idx >= 0) {
+      this.practiceCatalog.pieces[idx] = { ...this.practiceCatalog.pieces[idx], ...target };
+    } else {
+      this.practiceCatalog.pieces.push(target);
+    }
+    saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+    return target;
+  }
+
+  public async setPracticePieceArchived(pieceId: string, isArchived: boolean): Promise<void> {
+    const result = await this.sendToGoogleSheet('SET_PRACTICE_PIECE_ARCHIVED', {
+      id: pieceId,
+      isArchived,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '연습곡 보관 상태 변경에 실패했습니다.');
+    }
+
+    const piece = this.practiceCatalog.pieces.find((p) => p.id === pieceId);
+    if (piece) {
+      piece.isArchived = isArchived;
+      piece.updatedAt = new Date().toISOString();
+      saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+    }
+  }
+
+  public async savePracticeTrack(
+    track: Partial<PracticeTrack> & { pieceId: string; label: string }
+  ): Promise<PracticeTrack> {
+    const id = track.id || `track_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const target: PracticeTrack = {
+      id,
+      pieceId: track.pieceId,
+      label: track.label,
+      kind: track.kind ?? '',
+      source: track.source ?? '',
+      url: track.url ?? '',
+      storageKey: track.storageKey ?? '',
+      mimeType: track.mimeType ?? '',
+      durationSeconds: track.durationSeconds,
+      orderIndex:
+        track.orderIndex ??
+        this.practiceCatalog.tracks.filter((t) => t.pieceId === track.pieceId).length,
+      isArchived: track.isArchived ?? false,
+      createdAt: track.createdAt ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = await this.sendToGoogleSheet('SAVE_PRACTICE_TRACK', target);
+    if (!result.success) {
+      throw new Error(result.message || '트랙 저장에 실패했습니다.');
+    }
+
+    const finalId = (result as { id?: string }).id || target.id;
+    target.id = finalId;
+
+    const idx = this.practiceCatalog.tracks.findIndex((t) => t.id === finalId);
+    if (idx >= 0) {
+      this.practiceCatalog.tracks[idx] = { ...this.practiceCatalog.tracks[idx], ...target };
+    } else {
+      this.practiceCatalog.tracks.push(target);
+    }
+    saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+    return target;
+  }
+
+  public async setPracticeTrackArchived(trackId: string, isArchived: boolean): Promise<void> {
+    const result = await this.sendToGoogleSheet('SET_PRACTICE_TRACK_ARCHIVED', {
+      id: trackId,
+      isArchived,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '트랙 보관 상태 변경에 실패했습니다.');
+    }
+
+    const track = this.practiceCatalog.tracks.find((t) => t.id === trackId);
+    if (track) {
+      track.isArchived = isArchived;
+      track.updatedAt = new Date().toISOString();
+      saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+    }
+  }
+
+  public async setProgramPieces(programId: string, pieceIds: string[]): Promise<void> {
+    const result = await this.sendToGoogleSheet('SET_PROGRAM_PIECES', {
+      programId,
+      pieceIds,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '시즌 곡 목록 저장에 실패했습니다.');
+    }
+
+    for (const pp of this.practiceCatalog.programPieces) {
+      if (pp.programId === programId && !pieceIds.includes(pp.pieceId)) {
+        pp.isArchived = true;
+      }
+    }
+    pieceIds.forEach((pieceId, idx) => {
+      const existing = this.practiceCatalog.programPieces.find(
+        (pp) => pp.programId === programId && pp.pieceId === pieceId
+      );
+      if (existing) {
+        existing.orderIndex = idx;
+        existing.isArchived = false;
+      } else {
+        this.practiceCatalog.programPieces.push({
+          programId,
+          pieceId,
+          orderIndex: idx,
+          isArchived: false,
+        });
+      }
+    });
+    saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+  }
+
+  public async reorderPracticeTracks(pieceId: string, trackIds: string[]): Promise<void> {
+    const result = await this.sendToGoogleSheet('REORDER_PRACTICE_TRACKS', {
+      pieceId,
+      trackIds,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '트랙 순서 변경에 실패했습니다.');
+    }
+
+    trackIds.forEach((trackId, idx) => {
+      const track = this.practiceCatalog.tracks.find((t) => t.id === trackId);
+      if (track) {
+        track.orderIndex = idx;
+        track.updatedAt = new Date().toISOString();
+      }
+    });
+    saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
   }
 
   // --- Append-Only Write Operations (Idempotent by log.id) ---
