@@ -41,6 +41,7 @@ export interface AudioPlayerContextValue {
 
 const AudioPlayerContext = createContext<AudioPlayerContextValue | null>(null);
 
+// oxlint-disable-next-line react/only-export-components
 export const useAudioPlayer = (): AudioPlayerContextValue => {
   const ctx = useContext(AudioPlayerContext);
   if (!ctx) {
@@ -49,6 +50,7 @@ export const useAudioPlayer = (): AudioPlayerContextValue => {
   return ctx;
 };
 
+// oxlint-disable-next-line react/only-export-components
 export const useOptionalAudioPlayer = (): AudioPlayerContextValue | null => {
   return useContext(AudioPlayerContext);
 };

@@ -25,7 +25,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
   refreshTrigger,
 }) => {
   const todayStr = useMemo(() => getKSTDateString(), []);
-  const now = useMemo(() => new Date(), []);
+  const [now] = useState(() => new Date());
 
   // Determine initial year and monthIndex from routeMonth (YYYY-MM) or today
   const initialYear = useMemo(() => {
@@ -50,6 +50,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
     if (routeMonth && /^\d{4}-\d{2}$/.test(routeMonth)) {
       const y = parseInt(routeMonth.slice(0, 4), 10);
       const m = parseInt(routeMonth.slice(5, 7), 10) - 1;
+      // oxlint-disable-next-line react/set-state-in-effect
       setCurrentYear(y);
       setCurrentMonthIndex(m);
     }

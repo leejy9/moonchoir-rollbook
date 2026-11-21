@@ -20,12 +20,17 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
   onClose,
 }) => {
   const [dragOffsetY, setDragOffsetY] = useState(0);
-  const isDraggingRef = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
   const dragStartYRef = useRef(0);
 
   const sheetRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
+
+  const prefersReducedMotion = useMemo(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }, []);
 
   // Filter schedules on this date
   const daySchedules = useMemo(() => {
@@ -93,13 +98,13 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
 
   // Drag down to close gesture (Pointer Events)
   const handlePointerDown = (e: React.PointerEvent) => {
-    isDraggingRef.current = true;
+    setIsDragging(true);
     dragStartYRef.current = e.clientY;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDraggingRef.current) return;
+    if (!isDragging) return;
     const delta = e.clientY - dragStartYRef.current;
     if (delta > 0) {
       setDragOffsetY(delta);
@@ -107,8 +112,8 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    if (!isDraggingRef.current) return;
-    isDraggingRef.current = false;
+    if (!isDragging) return;
+    setIsDragging(false);
     (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
 
     if (dragOffsetY >= 80) {
@@ -163,7 +168,7 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
           display: 'flex',
           flexDirection: 'column',
           transform: `translateY(${dragOffsetY}px)`,
-          transition: isDraggingRef.current ? 'none' : 'transform 0.2s ease-out',
+          transition: prefersReducedMotion || isDragging ? 'none' : 'transform 0.2s ease-out',
           overflow: 'hidden',
         }}
       >

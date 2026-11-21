@@ -47,6 +47,7 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
       const [tab, setTab] = useState(0);
       const { audioElementRef } = useAudioPlayer();
 
+      // oxlint-disable-next-line react/refs
       capturedRefs.push(audioElementRef.current);
 
       return (

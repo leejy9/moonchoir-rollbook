@@ -35,6 +35,7 @@ export const StudioTab: React.FC<StudioTabProps> = () => {
       return;
     }
     let isCancelled = false;
+    // oxlint-disable-next-line react/set-state-in-effect
     setIsLoading(true);
     sheetsService
       .refreshPracticeCatalog()
