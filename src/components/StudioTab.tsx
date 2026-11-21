@@ -168,7 +168,7 @@ export const StudioTab: React.FC<StudioTabProps> = () => {
               justifyContent: 'center',
               padding: '0 12px',
               backgroundColor: 'var(--brand-accent, #3b82f6)',
-              color: '#ffffff',
+              color: 'var(--text-white, #ffffff)',
               borderRadius: '6px',
               fontSize: '12px',
               fontWeight: 600,
@@ -293,7 +293,7 @@ export const StudioTab: React.FC<StudioTabProps> = () => {
                   </div>
 
                   {piece.notes && (
-                    <p style={{ fontSize: '12px', color: 'var(--text-secondary, #475569)', margin: '0 0 10px 0' }}>
+                    <p style={{ fontSize: '12px', color: 'var(--text-sub, #475569)', margin: '0 0 10px 0' }}>
                       {piece.notes}
                     </p>
                   )}
@@ -339,7 +339,7 @@ export const StudioTab: React.FC<StudioTabProps> = () => {
                                   backgroundColor: isCurrentPlaying
                                     ? 'var(--brand-accent, #3b82f6)'
                                     : 'var(--bg-subtle, #f1f5f9)',
-                                  color: isCurrentPlaying ? '#ffffff' : 'var(--text-main, #0f172a)',
+                                  color: isCurrentPlaying ? 'var(--text-white, #ffffff)' : 'var(--text-main, #0f172a)',
                                   border: '1px solid var(--border-subtle, #cbd5e1)',
                                   borderRadius: '6px',
                                   fontSize: '12px',
@@ -364,7 +364,7 @@ export const StudioTab: React.FC<StudioTabProps> = () => {
                                   justifyContent: 'center',
                                   padding: '0 12px',
                                   backgroundColor: 'var(--bg-subtle, #f1f5f9)',
-                                  color: 'var(--text-secondary, #334155)',
+                                  color: 'var(--text-sub, #334155)',
                                   border: '1px solid var(--border-subtle, #cbd5e1)',
                                   borderRadius: '6px',
                                   fontSize: '12px',

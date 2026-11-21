@@ -288,8 +288,8 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
             padding: '10px 14px',
             borderRadius: '6px',
             fontSize: '14px',
-            backgroundColor: actionMsg.kind === 'error' ? '#fee2e2' : '#dcfce7',
-            color: actionMsg.kind === 'error' ? '#b91c1c' : '#15803d',
+            backgroundColor: actionMsg.kind === 'error' ? 'var(--status-danger-light, #fee2e2)' : 'var(--status-success-light, #dcfce7)',
+            color: actionMsg.kind === 'error' ? 'var(--status-danger, #b91c1c)' : 'var(--status-success, #15803d)',
           }}
         >
           {actionMsg.text}
@@ -307,8 +307,8 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
             padding: '8px 16px',
             borderRadius: '6px',
             fontWeight: subSection === 'PIECES' ? 'bold' : 'normal',
-            backgroundColor: subSection === 'PIECES' ? 'var(--color-primary, #0047ff)' : '#eee',
-            color: subSection === 'PIECES' ? '#fff' : '#333',
+            backgroundColor: subSection === 'PIECES' ? 'var(--color-primary, #0047ff)' : 'var(--bg-subtle, #eee)',
+            color: subSection === 'PIECES' ? 'var(--text-white, #fff)' : 'var(--text-main, #333)',
             border: 'none',
             cursor: 'pointer',
           }}
@@ -324,15 +324,15 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
             padding: '8px 16px',
             borderRadius: '6px',
             fontWeight: subSection === 'PROGRAMS' ? 'bold' : 'normal',
-            backgroundColor: subSection === 'PROGRAMS' ? 'var(--color-primary, #0047ff)' : '#eee',
-            color: subSection === 'PROGRAMS' ? '#fff' : '#333',
+            backgroundColor: subSection === 'PROGRAMS' ? 'var(--color-primary, #0047ff)' : 'var(--bg-subtle, #eee)',
+            color: subSection === 'PROGRAMS' ? 'var(--text-white, #fff)' : 'var(--text-main, #333)',
             border: 'none',
             cursor: 'pointer',
           }}
         >
           시즌별 곡 순서
         </button>
-        {loading && <span style={{ alignSelf: 'center', fontSize: '13px', color: '#666' }}>동기화 중...</span>}
+        {loading && <span style={{ alignSelf: 'center', fontSize: '13px', color: 'var(--text-sub, #666)' }}>동기화 중...</span>}
       </div>
 
       {/* ============================================================== */}
@@ -360,7 +360,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                 minWidth: '44px',
                 padding: '8px 16px',
                 backgroundColor: 'var(--color-primary, #0047ff)',
-                color: '#fff',
+                color: 'var(--text-white, #fff)',
                 borderRadius: '6px',
                 border: 'none',
                 fontWeight: 'bold',
@@ -374,7 +374,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
           {/* Piece List Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
             {displayedPieces.length === 0 ? (
-              <div style={{ padding: '24px', textAlign: 'center', color: '#888', gridColumn: '1 / -1' }}>
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted, #888)', gridColumn: '1 / -1' }}>
                 등록된 연습곡이 없습니다.
               </div>
             ) : (
@@ -385,10 +385,10 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                   <div
                     key={piece.id}
                     style={{
-                      border: isSelected ? '2px solid var(--color-primary, #0047ff)' : '1px solid #ddd',
+                      border: isSelected ? '2px solid var(--color-primary, #0047ff)' : '1px solid var(--border-subtle, #ddd)',
                       borderRadius: '8px',
                       padding: '12px',
-                      backgroundColor: piece.isArchived ? '#f9f9f9' : '#fff',
+                      backgroundColor: piece.isArchived ? 'var(--bg-subtle, #f9f9f9)' : 'var(--bg-card, #fff)',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '8px',
@@ -399,13 +399,13 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                         <div style={{ fontWeight: 'bold', fontSize: '16px' }}>
                           {piece.title}
                           {piece.isArchived && (
-                            <span style={{ marginLeft: '6px', fontSize: '11px', color: '#888', background: '#eee', padding: '2px 6px', borderRadius: '4px' }}>
+                            <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-muted, #888)', background: 'var(--bg-subtle, #eee)', padding: '2px 6px', borderRadius: '4px' }}>
                               보관됨
                             </span>
                           )}
                         </div>
                         {(piece.composer || piece.arranger) && (
-                          <div style={{ fontSize: '13px', color: '#666', marginTop: '2px' }}>
+                          <div style={{ fontSize: '13px', color: 'var(--text-sub, #666)', marginTop: '2px' }}>
                             {[piece.composer && `작곡: ${piece.composer}`, piece.arranger && `편곡: ${piece.arranger}`]
                               .filter(Boolean)
                               .join(' / ')}
@@ -422,7 +422,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', gap: '6px', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #eee' }}>
+                    <div style={{ display: 'flex', gap: '6px', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid var(--border-subtle, #eee)' }}>
                       <button
                         type="button"
                         onClick={() => setSelectedPieceId(isSelected ? null : piece.id)}
@@ -430,8 +430,8 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                           minHeight: '44px',
                           minWidth: '44px',
                           flex: 1,
-                          backgroundColor: isSelected ? '#333' : '#eee',
-                          color: isSelected ? '#fff' : '#000',
+                          backgroundColor: isSelected ? 'var(--brand-primary, #333)' : 'var(--bg-subtle, #eee)',
+                          color: isSelected ? 'var(--text-white, #fff)' : 'var(--text-main, #000)',
                           border: 'none',
                           borderRadius: '4px',
                           cursor: 'pointer',
@@ -447,7 +447,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                           minHeight: '44px',
                           minWidth: '44px',
                           padding: '0 12px',
-                          backgroundColor: '#eee',
+                          backgroundColor: 'var(--bg-subtle, #eee)',
                           border: 'none',
                           borderRadius: '4px',
                           cursor: 'pointer',
@@ -463,7 +463,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                           minHeight: '44px',
                           minWidth: '44px',
                           padding: '0 12px',
-                          backgroundColor: '#eee',
+                          backgroundColor: 'var(--bg-subtle, #eee)',
                           border: 'none',
                           borderRadius: '4px',
                           cursor: 'pointer',
@@ -486,7 +486,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                 border: '2px solid var(--color-primary, #0047ff)',
                 borderRadius: '8px',
                 padding: '16px',
-                backgroundColor: '#fafafa',
+                backgroundColor: 'var(--bg-subtle, #fafafa)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px',
@@ -502,7 +502,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                     minWidth: '44px',
                     padding: '8px 14px',
                     backgroundColor: 'var(--color-primary, #0047ff)',
-                    color: '#fff',
+                    color: 'var(--text-white, #fff)',
                     borderRadius: '6px',
                     border: 'none',
                     fontWeight: 'bold',
@@ -514,7 +514,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
               </div>
 
               {selectedPieceTracks.length === 0 ? (
-                <div style={{ padding: '16px', textAlign: 'center', color: '#888' }}>
+                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted, #888)' }}>
                   등록된 음원 트랙이 없습니다.
                 </div>
               ) : (
@@ -525,10 +525,10 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                       <div
                         key={track.id}
                         style={{
-                          border: '1px solid #ddd',
+                          border: '1px solid var(--border-subtle, #ddd)',
                           borderRadius: '6px',
                           padding: '10px 12px',
-                          backgroundColor: track.isArchived ? '#f3f3f3' : '#fff',
+                          backgroundColor: track.isArchived ? 'var(--bg-subtle, #f3f3f3)' : 'var(--bg-card, #fff)',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '10px',
@@ -546,7 +546,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                               minHeight: '44px',
                               minWidth: '44px',
                               padding: '4px',
-                              backgroundColor: '#eee',
+                              backgroundColor: 'var(--bg-subtle, #eee)',
                               border: 'none',
                               borderRadius: '4px',
                               cursor: idx === 0 || track.isArchived ? 'not-allowed' : 'pointer',
@@ -563,7 +563,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                               minHeight: '44px',
                               minWidth: '44px',
                               padding: '4px',
-                              backgroundColor: '#eee',
+                              backgroundColor: 'var(--bg-subtle, #eee)',
                               border: 'none',
                               borderRadius: '4px',
                               cursor: idx === selectedPieceTracks.length - 1 || track.isArchived ? 'not-allowed' : 'pointer',
@@ -578,17 +578,17 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                           <div style={{ fontWeight: 'bold', fontSize: '14px' }}>
                             {track.label}
                             {track.isArchived && (
-                              <span style={{ marginLeft: '6px', fontSize: '11px', color: '#888', background: '#eee', padding: '1px 5px', borderRadius: '3px' }}>
+                              <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-muted, #888)', background: 'var(--bg-subtle, #eee)', padding: '1px 5px', borderRadius: '3px' }}>
                                 보관됨
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: '12px', color: '#666', marginTop: '2px', display: 'flex', gap: '6px' }}>
+                          <div style={{ fontSize: '12px', color: 'var(--text-sub, #666)', marginTop: '2px', display: 'flex', gap: '6px' }}>
                             <span>종류: {track.kind || '미지정'}</span>
                             <span>•</span>
                             <span>출처: {track.source}</span>
                           </div>
-                          <div style={{ fontSize: '11px', color: '#888', wordBreak: 'break-all', marginTop: '2px' }}>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted, #888)', wordBreak: 'break-all', marginTop: '2px' }}>
                             {track.storageKey ? `키: ${track.storageKey}` : `주소: ${track.url || '없음'}`}
                           </div>
                         </div>
@@ -596,17 +596,17 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                         {/* Playback Badge */}
                         <div>
                           {playback.mode === 'audio' && (
-                            <span style={{ fontSize: '12px', color: '#166534', backgroundColor: '#dcfce7', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--status-success, #166534)', backgroundColor: 'var(--status-success-light, #dcfce7)', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
                               인앱 재생 가능
                             </span>
                           )}
                           {playback.mode === 'external_link' && (
-                            <span style={{ fontSize: '12px', color: '#1e40af', backgroundColor: '#dbeafe', padding: '4px 8px', borderRadius: '4px' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--status-info, #1e40af)', backgroundColor: 'var(--status-info-light, #dbeafe)', padding: '4px 8px', borderRadius: '4px' }}>
                               외부 링크
                             </span>
                           )}
                           {playback.mode === 'unavailable' && (
-                            <span style={{ fontSize: '12px', color: '#991b1b', backgroundColor: '#fee2e2', padding: '4px 8px', borderRadius: '4px' }} title={playback.reason}>
+                            <span style={{ fontSize: '12px', color: 'var(--status-danger, #991b1b)', backgroundColor: 'var(--status-danger-light, #fee2e2)', padding: '4px 8px', borderRadius: '4px' }} title={playback.reason}>
                               재생 불가
                             </span>
                           )}
@@ -621,7 +621,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                               minHeight: '44px',
                               minWidth: '44px',
                               padding: '0 10px',
-                              backgroundColor: '#eee',
+                              backgroundColor: 'var(--bg-subtle, #eee)',
                               border: 'none',
                               borderRadius: '4px',
                               cursor: 'pointer',
@@ -637,7 +637,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                               minHeight: '44px',
                               minWidth: '44px',
                               padding: '0 10px',
-                              backgroundColor: '#eee',
+                              backgroundColor: 'var(--bg-subtle, #eee)',
                               border: 'none',
                               borderRadius: '4px',
                               cursor: 'pointer',
@@ -671,7 +671,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                 minHeight: '44px',
                 padding: '8px 12px',
                 borderRadius: '6px',
-                border: '1px solid #ccc',
+                border: '1px solid var(--border-subtle, #ccc)',
                 fontSize: '15px',
                 width: '100%',
                 maxWidth: '400px',
@@ -688,10 +688,10 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
           {selectedProgramId && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
               {/* Left: Ordered list for this season */}
-              <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '14px', backgroundColor: '#fff' }}>
+              <div style={{ border: '1px solid var(--border-subtle, #ddd)', borderRadius: '8px', padding: '14px', backgroundColor: 'var(--bg-card, #fff)' }}>
                 <h4 style={{ margin: '0 0 10px 0' }}>시즌 편성 곡 목록 (순서대로)</h4>
                 {selectedProgramLinks.length === 0 ? (
-                  <div style={{ color: '#888', fontSize: '13px' }}>선택된 곡이 없습니다. 오른쪽에서 곡을 추가하세요.</div>
+                  <div style={{ color: 'var(--text-muted, #888)', fontSize: '13px' }}>선택된 곡이 없습니다. 오른쪽에서 곡을 추가하세요.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {selectedProgramLinks.map((link, idx) => {
@@ -705,9 +705,9 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             padding: '8px 10px',
-                            background: '#f9f9f9',
+                            background: 'var(--bg-subtle, #f9f9f9)',
                             borderRadius: '6px',
-                            border: '1px solid #eee',
+                            border: '1px solid var(--border-subtle, #eee)',
                           }}
                         >
                           <div>
@@ -723,7 +723,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                               style={{
                                 minHeight: '44px',
                                 minWidth: '44px',
-                                backgroundColor: '#eee',
+                                backgroundColor: 'var(--bg-subtle, #eee)',
                                 border: 'none',
                                 borderRadius: '4px',
                                 cursor: idx === 0 ? 'not-allowed' : 'pointer',
@@ -739,7 +739,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                               style={{
                                 minHeight: '44px',
                                 minWidth: '44px',
-                                backgroundColor: '#eee',
+                                backgroundColor: 'var(--bg-subtle, #eee)',
                                 border: 'none',
                                 borderRadius: '4px',
                                 cursor: idx === selectedProgramLinks.length - 1 ? 'not-allowed' : 'pointer',
@@ -756,7 +756,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
               </div>
 
               {/* Right: Checkbox list of all active pieces */}
-              <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '14px', backgroundColor: '#fff' }}>
+              <div style={{ border: '1px solid var(--border-subtle, #ddd)', borderRadius: '8px', padding: '14px', backgroundColor: 'var(--bg-card, #fff)' }}>
                 <h4 style={{ margin: '0 0 10px 0' }}>곡 포함 여부 선택</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '360px', overflowY: 'auto' }}>
                   {catalog.pieces
@@ -812,7 +812,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
         >
           <div
             style={{
-              backgroundColor: '#fff',
+              backgroundColor: 'var(--bg-card, #fff)',
               borderRadius: '8px',
               padding: '20px',
               width: '100%',
@@ -887,7 +887,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                     minHeight: '44px',
                     minWidth: '44px',
                     padding: '8px 16px',
-                    backgroundColor: '#eee',
+                    backgroundColor: 'var(--bg-subtle, #eee)',
                     border: 'none',
                     borderRadius: '4px',
                     cursor: 'pointer',
@@ -902,7 +902,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                     minWidth: '44px',
                     padding: '8px 16px',
                     backgroundColor: 'var(--color-primary, #0047ff)',
-                    color: '#fff',
+                    color: 'var(--text-white, #fff)',
                     border: 'none',
                     borderRadius: '4px',
                     fontWeight: 'bold',
@@ -937,7 +937,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
         >
           <div
             style={{
-              backgroundColor: '#fff',
+              backgroundColor: 'var(--bg-card, #fff)',
               borderRadius: '8px',
               padding: '20px',
               width: '100%',
@@ -1075,13 +1075,13 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                         minHeight: '44px',
                         padding: '8px',
                         boxSizing: 'border-box',
-                        borderColor: hasInsecureScheme ? '#ef4444' : '#ccc',
+                        borderColor: hasInsecureScheme ? 'var(--status-danger, #ef4444)' : 'var(--border-subtle, #ccc)',
                       }}
                     />
 
                     {/* Security warning on http:// */}
                     {hasInsecureScheme && (
-                      <div style={{ color: '#b91c1c', fontSize: '12px', marginTop: '4px' }}>
+                      <div style={{ color: 'var(--status-danger, #b91c1c)', fontSize: '12px', marginTop: '4px' }}>
                         https:// 주소만 저장할 수 있습니다. (http:// 및 javascript: 불가)
                       </div>
                     )}
@@ -1098,16 +1098,16 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                         gap: '4px',
                         backgroundColor:
                           playback.mode === 'audio'
-                            ? '#dcfce7'
+                            ? 'var(--status-success-light, #dcfce7)'
                             : playback.mode === 'external_link'
-                              ? '#dbeafe'
-                              : '#fee2e2',
+                              ? 'var(--status-info-light, #dbeafe)'
+                              : 'var(--status-danger-light, #fee2e2)',
                         color:
                           playback.mode === 'audio'
-                            ? '#166534'
+                            ? 'var(--status-success, #166534)'
                             : playback.mode === 'external_link'
-                              ? '#1e40af'
-                              : '#991b1b',
+                              ? 'var(--status-info, #1e40af)'
+                              : 'var(--status-danger, #991b1b)',
                       }}
                     >
                       <div style={{ fontWeight: 'bold' }}>
@@ -1132,7 +1132,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                           minHeight: '44px',
                           minWidth: '44px',
                           padding: '8px 16px',
-                          backgroundColor: '#eee',
+                          backgroundColor: 'var(--bg-subtle, #eee)',
                           border: 'none',
                           borderRadius: '4px',
                           cursor: 'pointer',
@@ -1147,8 +1147,8 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
                           minHeight: '44px',
                           minWidth: '44px',
                           padding: '8px 16px',
-                          backgroundColor: hasInsecureScheme ? '#ccc' : 'var(--color-primary, #0047ff)',
-                          color: '#fff',
+                          backgroundColor: hasInsecureScheme ? 'var(--border-subtle, #ccc)' : 'var(--color-primary, #0047ff)',
+                          color: 'var(--text-white, #fff)',
                           border: 'none',
                           borderRadius: '4px',
                           fontWeight: 'bold',

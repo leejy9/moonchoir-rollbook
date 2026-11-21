@@ -214,7 +214,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
             {profile.phoneLast4 && (
               <div style={{ fontSize: '12px', color: 'var(--color-text-muted, #64748b)', marginTop: '4px' }}>
                 전화번호 뒷자리: {profile.phoneLast4}
-                <span style={{ marginLeft: '6px', fontSize: '11px', color: '#94a3b8' }}>
+                <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-muted, #94a3b8)' }}>
                   (연락처 수정은 운영진에게 요청해 주세요)
                 </span>
               </div>
@@ -232,7 +232,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                 minWidth: '44px',
                 padding: '8px 16px',
                 backgroundColor: 'var(--color-primary, #0047ff)',
-                color: '#ffffff',
+                color: 'var(--text-white, #ffffff)',
                 border: 'none',
                 borderRadius: '6px',
                 fontSize: '13px',
@@ -272,7 +272,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
             <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text, #1e293b)' }}>
               총 {memberSummary.totalSessions}회
             </div>
-            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted, #94a3b8)' }}>
               지각 {memberSummary.late} / 사유 {memberSummary.excused} / 결석 {memberSummary.absent}
             </div>
           </div>
@@ -287,9 +287,9 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
             borderRadius: '8px',
             fontSize: '13px',
             fontWeight: 600,
-            backgroundColor: syncFeedback.type === 'success' ? '#ecfdf5' : '#fff1f2',
-            color: syncFeedback.type === 'success' ? '#065f46' : '#9f1239',
-            border: `1px solid ${syncFeedback.type === 'success' ? '#a7f3d0' : '#fecdd3'}`,
+            backgroundColor: syncFeedback.type === 'success' ? 'var(--status-success-light, #ecfdf5)' : 'var(--status-danger-light, #fff1f2)',
+            color: syncFeedback.type === 'success' ? 'var(--status-success, #065f46)' : 'var(--status-danger, #9f1239)',
+            border: `1px solid ${syncFeedback.type === 'success' ? 'var(--status-success, #a7f3d0)' : 'var(--status-danger, #fecdd3)'}`,
           }}
         >
           {syncFeedback.text}
@@ -344,7 +344,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         {/* Rows */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {scheduleRecords.length === 0 ? (
-            <div style={{ padding: '32px 16px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+            <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted, #94a3b8)', fontSize: '13px' }}>
               등록된 연습 일정이 없습니다.
             </div>
           ) : (
@@ -393,8 +393,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                     {r.voteStatus === 'ATTEND' ? (
                       <span
                         style={{
-                          background: '#dcfce7',
-                          color: '#15803d',
+                          background: 'var(--status-success-light, #dcfce7)',
+                          color: 'var(--status-success, #15803d)',
                           padding: '3px 8px',
                           borderRadius: '6px',
                           fontWeight: 700,
@@ -406,8 +406,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                     ) : r.voteStatus === 'ABSENT' ? (
                       <span
                         style={{
-                          background: '#ffedd5',
-                          color: '#c2410c',
+                          background: 'var(--status-warning-light, #ffedd5)',
+                          color: 'var(--status-warning, #c2410c)',
                           padding: '3px 8px',
                           borderRadius: '6px',
                           fontWeight: 700,
@@ -420,8 +420,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                     ) : r.voteStatus === 'LATE' ? (
                       <span
                         style={{
-                          background: '#fef3c7',
-                          color: '#b45309',
+                          background: 'var(--status-warning-light, #fef3c7)',
+                          color: 'var(--status-warning, #b45309)',
                           padding: '3px 8px',
                           borderRadius: '6px',
                           fontWeight: 700,
@@ -433,8 +433,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                     ) : (
                       <span
                         style={{
-                          background: !r.isPast ? '#e0e7ff' : '#f1f5f9',
-                          color: !r.isPast ? '#4338ca' : '#94a3b8',
+                          background: !r.isPast ? 'var(--status-info-light, #e0e7ff)' : 'var(--bg-subtle, #f1f5f9)',
+                          color: !r.isPast ? 'var(--status-info, #4338ca)' : 'var(--text-muted, #94a3b8)',
                           padding: '3px 7px',
                           borderRadius: '6px',
                           fontSize: '11px',
@@ -449,7 +449,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                     <span
                       style={{
                         fontSize: '10px',
-                        color: '#64748b',
+                        color: 'var(--text-muted, #64748b)',
                         marginTop: '2px',
                         display: 'block',
                         whiteSpace: 'nowrap',
@@ -466,7 +466,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                   {r.isAttended ? (
                     <span
                       style={{
-                        color: '#16a34a',
+                        color: 'var(--status-success, #16a34a)',
                         fontWeight: 700,
                         fontSize: '12px',
                         fontFamily: 'monospace',
@@ -480,7 +480,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                       onClick={() => onOpenQRScanner(r.schedule)}
                       style={{
                         background: 'var(--color-primary, #0047ff)',
-                        color: '#ffffff',
+                        color: 'var(--text-white, #ffffff)',
                         border: 'none',
                         borderRadius: '6px',
                         padding: '6px 10px',
@@ -494,11 +494,11 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                       QR 출석
                     </button>
                   ) : r.isExempt ? (
-                    <span style={{ color: '#94a3b8', fontSize: '11px' }}>미참</span>
+                    <span style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '11px' }}>미참</span>
                   ) : r.isPast ? (
-                    <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '11.5px' }}>결석 (-)</span>
+                    <span style={{ color: 'var(--status-danger, #dc2626)', fontWeight: 600, fontSize: '11.5px' }}>결석 (-)</span>
                   ) : (
-                    <span style={{ color: '#94a3b8', fontSize: '11.5px' }}>대기</span>
+                    <span style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '11.5px' }}>대기</span>
                   )}
                 </div>
               </div>
@@ -541,8 +541,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                   padding: '8px 12px',
                   borderRadius: '6px',
                   border: `1px solid ${displayMode === mode ? 'var(--color-primary, #0047ff)' : 'var(--color-border, #cbd5e1)'}`,
-                  backgroundColor: displayMode === mode ? 'var(--color-primary-subtle, #e0e7ff)' : '#ffffff',
-                  color: displayMode === mode ? 'var(--color-primary, #0047ff)' : '#334155',
+                  backgroundColor: displayMode === mode ? 'var(--brand-primary-light, #e0e7ff)' : 'var(--bg-card, #ffffff)',
+                  color: displayMode === mode ? 'var(--brand-primary, #0047ff)' : 'var(--text-sub, #334155)',
                   fontWeight: displayMode === mode ? 700 : 500,
                   fontSize: '13px',
                   cursor: 'pointer',
@@ -566,8 +566,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
               padding: '8px 16px',
               borderRadius: '6px',
               border: '1px solid var(--color-border, #cbd5e1)',
-              backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
-              color: isDarkMode ? '#ffffff' : '#1e293b',
+              backgroundColor: isDarkMode ? 'var(--bg-subtle, #1e293b)' : 'var(--bg-card, #f8fafc)',
+              color: isDarkMode ? 'var(--text-white, #ffffff)' : 'var(--text-main, #1e293b)',
               fontWeight: 600,
               fontSize: '13px',
               cursor: 'pointer',
@@ -589,7 +589,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
               padding: '10px 16px',
               borderRadius: '6px',
               border: '1px solid var(--color-border, #cbd5e1)',
-              backgroundColor: '#f8fafc',
+              backgroundColor: 'var(--bg-card, #f8fafc)',
               color: 'var(--color-text, #1e293b)',
               fontWeight: 600,
               fontSize: '13px',
@@ -624,8 +624,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
               padding: '10px 16px',
               borderRadius: '6px',
               border: '1px solid var(--color-border, #cbd5e1)',
-              backgroundColor: '#ffffff',
-              color: '#334155',
+              backgroundColor: 'var(--bg-card, #ffffff)',
+              color: 'var(--text-main, #334155)',
               fontSize: '13px',
               fontWeight: 600,
               cursor: 'pointer',
@@ -644,9 +644,9 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                 minHeight: '44px',
                 padding: '10px 16px',
                 borderRadius: '6px',
-                border: '1px solid #fecdd3',
-                backgroundColor: '#fff1f2',
-                color: '#b91c1c',
+                border: '1px solid var(--status-danger-light, #fecdd3)',
+                backgroundColor: 'var(--status-danger-light, #fff1f2)',
+                color: 'var(--status-danger, #b91c1c)',
                 fontSize: '13px',
                 fontWeight: 600,
                 cursor: isLoggingOut ? 'not-allowed' : 'pointer',

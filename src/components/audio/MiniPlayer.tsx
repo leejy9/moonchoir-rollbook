@@ -76,7 +76,7 @@ export const MiniPlayer: React.FC = () => {
             minHeight: '44px',
             minWidth: '44px',
             backgroundColor: 'var(--brand-accent, #3b82f6)',
-            color: '#ffffff',
+            color: 'var(--text-white, #ffffff)',
             border: 'none',
             borderRadius: '6px',
             fontSize: '13px',
@@ -137,7 +137,7 @@ export const MiniPlayer: React.FC = () => {
                 background: 'transparent',
                 border: 'none',
                 fontSize: '11px',
-                color: 'var(--text-secondary, #334155)',
+                color: 'var(--text-sub, #334155)',
                 cursor: 'pointer',
               }}
             >
@@ -175,7 +175,7 @@ export const MiniPlayer: React.FC = () => {
                 background: 'transparent',
                 border: 'none',
                 fontSize: '11px',
-                color: 'var(--text-secondary, #334155)',
+                color: 'var(--text-sub, #334155)',
                 cursor: 'pointer',
               }}
             >
@@ -194,7 +194,7 @@ export const MiniPlayer: React.FC = () => {
                 border: 'none',
                 fontSize: '11px',
                 fontWeight: 600,
-                color: 'var(--text-secondary, #334155)',
+                color: 'var(--text-sub, #334155)',
                 cursor: 'pointer',
               }}
             >
