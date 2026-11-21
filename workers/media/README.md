@@ -37,14 +37,14 @@ Moonchoir Rollbook 연습실 음원 스트리밍을 제공하는 Cloudflare Work
 
 ---
 
-## 4. 스트리밍 및 Range 요청(206) 검증
-R2 버킷에 테스트용 파일(예: `test.m4a`)을 하나 업로드한 뒤, 터미널에서 다음 명령어로 206 Partial Content 응답과 CORS 헤더를 확인합니다:
+## 4. 스트리밍, Range(206), 캐싱(304) 및 에러 검증
+R2 버킷에 테스트용 파일(예: `test.m4a`)을 하나 업로드한 뒤, 터미널에서 다음 curl 명령어로 스트리밍과 헤더를 검증합니다:
 
+### 1) Range 요청 (206 Partial Content) 및 Vary 헤더 확인
 ```bash
-curl -I -H "Range: bytes=0-1023" https://<내-워커-주소>.workers.dev/test.m4a
+curl -I -H "Range: bytes=0-1023" -H "Origin: https://leejy9.github.io" https://<내-워커-주소>.workers.dev/test.m4a
 ```
-
-### 정상 응답 예시
+**정상 응답 예시**:
 ```http
 HTTP/2 206
 content-type: audio/mp4
@@ -54,7 +54,22 @@ content-range: bytes 0-1023/1234567
 cache-control: public, max-age=604800, immutable
 access-control-allow-origin: https://leejy9.github.io
 access-control-expose-headers: Content-Range, Content-Length, ETag, Accept-Ranges
+vary: Origin
 ```
+
+### 2) 조건부 캐시 요청 (304 Not Modified) 확인
+위 응답에서 확인한 ETag 값을 전달하여 본문 없는 304 응답이 오는지 확인합니다:
+```bash
+curl -I -H 'If-None-Match: "<ETag값>"' https://<내-워커-주소>.workers.dev/test.m4a
+```
+**정상 응답**: `HTTP/2 304` (본문 없음, 캐시 헤더 및 ETag 유지)
+
+### 3) 잘못된 URI 인코딩 요청 (400 Bad Request) 확인
+잘못된 퍼센트 인코딩 요청 시 500 서버 에러 대신 400 Bad Request가 오는지 확인합니다:
+```bash
+curl -I https://<내-워커-주소>.workers.dev/%E0%A4%A
+```
+**정상 응답**: `HTTP/2 400`
 
 ---
 
