@@ -16,7 +16,7 @@ import { buildKakaoExternalBrowserUrl, detectInstallEnvironment, isStandaloneDis
 import { findActiveScheduleForMasterQR, parseQRPayload, playScanSuccessSound } from '../utils/qr';
 import { getKSTTimestampString } from '../utils/date';
 import { IconKeypad, IconQrScan } from './Icons';
-import { useOptionalAudioPlayer } from './audio/AudioPlayerProvider';
+import { useOptionalAudioPlayer } from './audio/audioPlayerContext';
 
 interface QRScannerModalProps {
   schedule: Schedule;
@@ -32,12 +32,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   onSuccess,
 }) => {
   const audioPlayer = useOptionalAudioPlayer();
+  const pausedOnceRef = useRef(false);
 
   // QR 스캐너가 열릴 때 오디오 재생 일시정지 (마운트 시 1회만, Spec §3-4)
   useEffect(() => {
-    audioPlayer?.pause();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!pausedOnceRef.current) {
+      pausedOnceRef.current = true;
+      audioPlayer?.pause();
+    }
+  }, [audioPlayer]);
 
   const [activeTab, setActiveTab] = useState<'QR' | 'PIN'>('QR');
   const [inputPin, setInputPin] = useState('');

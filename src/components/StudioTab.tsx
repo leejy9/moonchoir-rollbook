@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { sheetsService } from '../services/sheets';
-import { useAudioPlayer } from './audio/AudioPlayerProvider';
+import { useAudioPlayer } from './audio/audioPlayerContext';
 import { buildStudioView, resolveTrackPlayback, type StudioViewSection } from '../utils/practiceMedia';
 import { buildAudioQueue } from '../utils/audioQueue';
 import { isStandaloneDisplay } from '../utils/pwaInstall';
@@ -25,7 +25,9 @@ export const StudioTab: React.FC<StudioTabProps> = () => {
   const programCards = sheetsService.getProgramCards();
   const config = sheetsService.getConfig();
   const backendKind = sheetsService.getBackendKind();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(
+    () => typeof window !== 'undefined' && backendKind !== 'gas'
+  );
 
   const { playTrack, currentTrack, isPlaying, togglePlay } = useAudioPlayer();
 
@@ -35,8 +37,6 @@ export const StudioTab: React.FC<StudioTabProps> = () => {
       return;
     }
     let isCancelled = false;
-    // oxlint-disable-next-line react/set-state-in-effect
-    setIsLoading(true);
     sheetsService
       .refreshPracticeCatalog()
       .then(() => {

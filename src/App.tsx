@@ -39,7 +39,8 @@ import {
 } from './services/displayMode';
 import type { BoundDeviceProfile } from './types/rollbook';
 import { parseRoute, type MemberTab } from './utils/route';
-import { AudioPlayerProvider, useAudioPlayer } from './components/audio/AudioPlayerProvider';
+import { AudioPlayerProvider } from './components/audio/AudioPlayerProvider';
+import { useAudioPlayer } from './components/audio/audioPlayerContext';
 import { MiniPlayer } from './components/audio/MiniPlayer';
 
 function MainApp() {

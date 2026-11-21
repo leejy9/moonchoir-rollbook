@@ -1,6 +1,4 @@
 import React, {
-  createContext,
-  useContext,
   useRef,
   useState,
   useEffect,
@@ -13,59 +11,12 @@ import {
   getNextPlaybackSpeed,
   clampSeekTime,
 } from '../../utils/audioQueue';
-
-export interface AudioPlayerContextValue {
-  currentTrack: PlayableTrackItem | null;
-  queue: PlayableTrackItem[];
-  currentIndex: number;
-  isPlaying: boolean;
-  isBlocked: boolean;
-  playbackSpeed: PlaybackSpeed;
-  repeatOne: boolean;
-  autoNext: boolean;
-  playTrack: (item: PlayableTrackItem, newQueue?: PlayableTrackItem[]) => void;
-  togglePlay: () => void;
-  pause: () => void;
-  resume: () => void;
-  seekTo: (timeSeconds: number) => void;
-  seekRelative: (offsetSeconds: number) => void;
-  setSpeed: (speed: PlaybackSpeed) => void;
-  cycleSpeed: () => void;
-  toggleRepeatOne: () => void;
-  toggleAutoNext: () => void;
-  closePlayer: () => void;
-  audioElementRef: React.RefObject<HTMLAudioElement | null>;
-}
-
-export interface AudioPositionContextValue {
-  currentTime: number;
-  duration: number;
-}
-
-const AudioPlayerContext = createContext<AudioPlayerContextValue | null>(null);
-const AudioPositionContext = createContext<AudioPositionContextValue>({
-  currentTime: 0,
-  duration: 0,
-});
-
-// oxlint-disable-next-line react/only-export-components
-export const useAudioPlayer = (): AudioPlayerContextValue => {
-  const ctx = useContext(AudioPlayerContext);
-  if (!ctx) {
-    throw new Error('useAudioPlayer must be used within an AudioPlayerProvider');
-  }
-  return ctx;
-};
-
-// oxlint-disable-next-line react/only-export-components
-export const useAudioPosition = (): AudioPositionContextValue => {
-  return useContext(AudioPositionContext);
-};
-
-// oxlint-disable-next-line react/only-export-components
-export const useOptionalAudioPlayer = (): AudioPlayerContextValue | null => {
-  return useContext(AudioPlayerContext);
-};
+import {
+  AudioPlayerContext,
+  AudioPositionContext,
+  type AudioPlayerContextValue,
+  type AudioPositionContextValue,
+} from './audioPlayerContext';
 
 export interface AudioPlayerProviderProps {
   children: React.ReactNode;

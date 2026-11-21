@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useState } from 'react';
 import { renderToString } from 'react-dom/server';
-import { AudioPlayerProvider, useAudioPlayer, useAudioPosition } from './AudioPlayerProvider';
+import { AudioPlayerProvider } from './AudioPlayerProvider';
+import { useAudioPlayer, useAudioPosition } from './audioPlayerContext';
 import { MiniPlayer } from './MiniPlayer';
 import type { PracticeTrack } from '../../types/rollbook';
 import type { PlayableTrackItem } from '../../utils/audioQueue';
@@ -41,14 +42,14 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
   });
 
   it('preserves single audio element instance ref across 5 tab switch / rerender cycles', () => {
-    let capturedRefs: Array<HTMLAudioElement | null> = [];
+    let capturedRefs: Array<React.RefObject<HTMLAudioElement | null>> = [];
 
     function TabSwitcher() {
       const [tab, setTab] = useState(0);
       const { audioElementRef } = useAudioPlayer();
 
-      // oxlint-disable-next-line react/refs
-      capturedRefs.push(audioElementRef.current);
+      // ref 객체 자체의 동일성을 검증 (render 중 .current 접근 불필요)
+      capturedRefs.push(audioElementRef);
 
       return (
         <div>
@@ -159,6 +160,7 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
   it('provides currentTime and duration through useAudioPosition without affecting useAudioPlayer', () => {
     let capturedPosition: { currentTime: number; duration: number } | null = null;
     function PositionConsumer() {
+      // 단위 테스트에서 SSR(renderToString) 중 훅 반환값을 외부 변수로 캡처하기 위해 허용
       // oxlint-disable-next-line react/globals
       capturedPosition = useAudioPosition();
       return null;
@@ -193,6 +195,7 @@ describe('GlobalAudioPlayer & MiniPlayer (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
 
       let playerCtx: any = null;
       function TestConsumer() {
+        // 단위 테스트에서 SSR(renderToString) 중 컨텍스트 인스턴스를 외부 변수로 캡처하기 위해 허용
         // oxlint-disable-next-line react/globals
         playerCtx = useAudioPlayer();
         return null;

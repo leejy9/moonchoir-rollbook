@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAudioPlayer, useAudioPosition } from './AudioPlayerProvider';
+import { useAudioPlayer, useAudioPosition } from './audioPlayerContext';
 
 function formatSeconds(sec: number): string {
   if (Number.isNaN(sec) || sec < 0) return '0:00';

@@ -39,6 +39,7 @@ describe('useMasterEntryGesture', () => {
   let currentResult: MasterEntryGestureResult;
 
   function TestComponent() {
+    // 단위 테스트에서 훅 반환값을 외부 변수에 할당하여 검증하기 위해 허용
     // oxlint-disable-next-line react/globals
     currentResult = useMasterEntryGesture();
     return React.createElement('div', { ref: currentResult.easterEggRef });

@@ -27,34 +27,17 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
   const todayStr = useMemo(() => getKSTDateString(), []);
   const [now] = useState(() => new Date());
 
-  // Determine initial year and monthIndex from routeMonth (YYYY-MM) or today
-  const initialYear = useMemo(() => {
-    if (routeMonth && /^\d{4}-\d{2}$/.test(routeMonth)) {
-      return parseInt(routeMonth.slice(0, 4), 10);
-    }
-    return parseInt(todayStr.slice(0, 4), 10);
-  }, [routeMonth, todayStr]);
+  // 표시할 연·월은 렌더 중 계산: routeMonth가 올바르면 그 값, 아니면 내부 state (N2)
+  const [internalYear, setInternalYear] = useState(() => parseInt(todayStr.slice(0, 4), 10));
+  const [internalMonthIndex, setInternalMonthIndex] = useState(() => parseInt(todayStr.slice(5, 7), 10) - 1);
 
-  const initialMonthIndex = useMemo(() => {
-    if (routeMonth && /^\d{4}-\d{2}$/.test(routeMonth)) {
-      return parseInt(routeMonth.slice(5, 7), 10) - 1;
-    }
-    return parseInt(todayStr.slice(5, 7), 10) - 1;
-  }, [routeMonth, todayStr]);
-
-  const [currentYear, setCurrentYear] = useState(initialYear);
-  const [currentMonthIndex, setCurrentMonthIndex] = useState(initialMonthIndex);
-
-  // If routeMonth changes externally, synchronize
-  React.useEffect(() => {
-    if (routeMonth && /^\d{4}-\d{2}$/.test(routeMonth)) {
-      const y = parseInt(routeMonth.slice(0, 4), 10);
-      const m = parseInt(routeMonth.slice(5, 7), 10) - 1;
-      // oxlint-disable-next-line react/set-state-in-effect
-      setCurrentYear(y);
-      setCurrentMonthIndex(m);
-    }
-  }, [routeMonth]);
+  const isValidRouteMonth = Boolean(routeMonth && /^\d{4}-\d{2}$/.test(routeMonth));
+  const currentYear = isValidRouteMonth
+    ? parseInt(routeMonth!.slice(0, 4), 10)
+    : internalYear;
+  const currentMonthIndex = isValidRouteMonth
+    ? parseInt(routeMonth!.slice(5, 7), 10) - 1
+    : internalMonthIndex;
 
   const schedules = useMemo(() => {
     void refreshTrigger;
@@ -92,8 +75,8 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
       nextM = 11;
       nextY -= 1;
     }
-    setCurrentYear(nextY);
-    setCurrentMonthIndex(nextM);
+    setInternalYear(nextY);
+    setInternalMonthIndex(nextM);
     const monthStr = `${nextY}-${String(nextM + 1).padStart(2, '0')}`;
     onNavigate({ type: 'TAB', tab: 'calendar', month: monthStr });
   };
@@ -105,8 +88,8 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
       nextM = 0;
       nextY += 1;
     }
-    setCurrentYear(nextY);
-    setCurrentMonthIndex(nextM);
+    setInternalYear(nextY);
+    setInternalMonthIndex(nextM);
     const monthStr = `${nextY}-${String(nextM + 1).padStart(2, '0')}`;
     onNavigate({ type: 'TAB', tab: 'calendar', month: monthStr });
   };
@@ -114,8 +97,8 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
   const handleJumpToToday = () => {
     const y = parseInt(todayStr.slice(0, 4), 10);
     const m = parseInt(todayStr.slice(5, 7), 10) - 1;
-    setCurrentYear(y);
-    setCurrentMonthIndex(m);
+    setInternalYear(y);
+    setInternalMonthIndex(m);
     const monthStr = `${y}-${String(m + 1).padStart(2, '0')}`;
     onNavigate({ type: 'TAB', tab: 'calendar', month: monthStr });
   };

@@ -58,8 +58,23 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
   };
 
   useEffect(() => {
-    void reloadCatalog();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    sheetsService
+      .refreshPracticeCatalog()
+      .then((refreshed) => {
+        if (!cancelled) setCatalog(refreshed);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setActionMsg({
+            kind: 'error',
+            text: err instanceof Error ? err.message : String(err),
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const showFeedback = (text: string, kind: 'success' | 'error' = 'success') => {
