@@ -64,9 +64,9 @@ export const StudioTab: React.FC<StudioTabProps> = () => {
     return isIos && isStandaloneDisplay();
   }, []);
 
-  // 시즌별 곡/트랙 뷰 모델 조립 (순수 함수)
+  // 시즌별 곡/트랙 뷰 모델 조립 (순수 함수: 등록된 곡이 있는 시즌 카드만 단원에 노출)
   const sections: StudioViewSection[] = useMemo(() => {
-    return buildStudioView(catalog, programCards);
+    return buildStudioView(catalog, programCards).filter((s) => s.pieces.length > 0);
   }, [catalog, programCards]);
 
   // 곡 제목 맵 (재생 큐 생성용)
@@ -132,7 +132,7 @@ export const StudioTab: React.FC<StudioTabProps> = () => {
           연습실
         </h2>
         <p style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)', marginTop: '4px', marginBottom: 0 }}>
-          시즌별 연습곡과 파트 음원을 재생하고 악보를 확인합니다.
+          시즌별 연습곡을 듣고 악보를 확인합니다.
         </p>
       </header>
 

@@ -107,6 +107,9 @@ describe('StudioTab Component (MEMBER_UX_AUDIO_SPEC §3-5)', () => {
       </AudioPlayerProvider>
     );
 
+    // Header copy
+    expect(html).toContain('시즌별 연습곡을 듣고 악보를 확인합니다.');
+
     // Season header
     expect(html).toContain('2026 봄 정기연주회');
     expect(html).toContain('봄 시즌 프로그램');
@@ -139,6 +142,56 @@ describe('StudioTab Component (MEMBER_UX_AUDIO_SPEC §3-5)', () => {
     );
 
     expect(html).not.toContain('어떤 시즌에도 없는 미연결 곡');
+  });
+
+  it('hides empty season cards that have 0 pieces linked', () => {
+    const cardsWithEmpty: ProgramCard[] = [
+      ...mockProgramCards,
+      {
+        id: 'prog_empty',
+        title: '빈 시즌 카드',
+        category: '기타',
+        defaultStartTime: '18:00',
+        defaultEndTime: '21:00',
+        targetAudienceType: 'ALL',
+        isArchived: false,
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ];
+    vi.spyOn(sheetsService, 'getProgramCards').mockReturnValue(cardsWithEmpty);
+
+    const html = renderToString(
+      <AudioPlayerProvider>
+        <StudioTab />
+      </AudioPlayerProvider>
+    );
+
+    expect(html).toContain('2026 봄 정기연주회');
+    expect(html).not.toContain('빈 시즌 카드');
+  });
+
+  it('renders "등록된 연습곡이 없습니다." when all cards have 0 pieces', () => {
+    vi.spyOn(sheetsService, 'getProgramCards').mockReturnValue([
+      {
+        id: 'prog_empty',
+        title: '빈 시즌 카드',
+        category: '기타',
+        defaultStartTime: '18:00',
+        defaultEndTime: '21:00',
+        targetAudienceType: 'ALL',
+        isArchived: false,
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ]);
+
+    const html = renderToString(
+      <AudioPlayerProvider>
+        <StudioTab />
+      </AudioPlayerProvider>
+    );
+
+    expect(html).toContain('등록된 연습곡이 없습니다.');
+    expect(html).not.toContain('빈 시즌 카드');
   });
 
   it('has ZERO part filter dropdowns, buttons, or controls (Spec D1, §6-2 #4)', () => {
