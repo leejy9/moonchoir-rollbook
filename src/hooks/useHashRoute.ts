@@ -44,10 +44,10 @@ export function useHashRoute(): UseHashRouteResult {
     window.addEventListener('hashchange', handleHashChange);
     window.addEventListener('popstate', handleHashChange);
 
-    // Initial check: if hash is empty or just '#/', normalize to #/today
+    // Initial check: if hash is empty or just '#/', normalize to #/home
     const current = window.location.hash.trim().replace(/^#\/?/, '');
     if (!current) {
-      window.history.replaceState(null, '', '#/today');
+      window.history.replaceState(null, '', '#/home');
     }
 
     return () => {

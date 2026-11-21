@@ -90,26 +90,26 @@ describe('CalendarTab and MonthCalendarGrid Component', () => {
   });
 
   it('preserves month when navigating between tabs and back via navReducer', () => {
-    // 1) Start at calendar with month 2026-12
-    const startRoute: Route = { area: 'member', tab: 'calendar', month: '2026-12' };
-    // 2) User switches to today tab
-    const toToday = navReducer(startRoute, { type: 'TAB', tab: 'today' });
-    expect(toToday.route).toEqual({ area: 'member', tab: 'today', month: '2026-12' });
-    // 3) User switches back to calendar tab without specifying month
-    const backToCalendar = navReducer(toToday.route, { type: 'TAB', tab: 'calendar' });
-    expect(backToCalendar.route).toEqual({ area: 'member', tab: 'calendar', month: '2026-12' });
+    // 1) Start at home with month 2026-12
+    const startRoute: Route = { area: 'member', tab: 'home', month: '2026-12' };
+    // 2) User switches to studio tab
+    const toStudio = navReducer(startRoute, { type: 'TAB', tab: 'studio' });
+    expect(toStudio.route).toEqual({ area: 'member', tab: 'studio', month: '2026-12' });
+    // 3) User switches back to home tab without specifying month
+    const backToHome = navReducer(toStudio.route, { type: 'TAB', tab: 'home' });
+    expect(backToHome.route).toEqual({ area: 'member', tab: 'home', month: '2026-12' });
   });
 
   it('opens scheduleSheet overlay when a day is selected via navReducer', () => {
-    const calendarRoute: Route = { area: 'member', tab: 'calendar', month: '2026-12' };
-    const res = navReducer(calendarRoute, {
+    const homeRoute: Route = { area: 'member', tab: 'home', month: '2026-12' };
+    const res = navReducer(homeRoute, {
       type: 'OPEN',
       overlay: { kind: 'scheduleSheet', date: '2026-12-01' },
     });
     expect(res.history).toBe('push');
     expect(res.route).toEqual({
       area: 'member',
-      tab: 'calendar',
+      tab: 'home',
       month: '2026-12',
       overlay: { kind: 'scheduleSheet', date: '2026-12-01' },
     });

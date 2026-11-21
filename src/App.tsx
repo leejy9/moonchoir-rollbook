@@ -5,8 +5,7 @@ import { AdminPinModal } from './components/AdminPinModal';
 import { AppHeader } from './components/AppHeader';
 import { BindingModal } from './components/BindingModal';
 import { BottomNav } from './components/BottomNav';
-import { CalendarTab } from './components/CalendarTab';
-import { HomeView } from './components/HomeView';
+import { HomeTab } from './components/HomeTab';
 import { ScheduleDetailSheet } from './components/ScheduleDetailSheet';
 import { ProfileTab } from './components/ProfileTab';
 import { StudioTab } from './components/StudioTab';
@@ -58,7 +57,7 @@ function MainApp() {
   useEffect(() => {
     if (profile === null && typeof window !== 'undefined') {
       const raw = window.location.hash.trim().replace(/^#\/?/, '');
-      if (raw && raw !== 'today') {
+      if (raw && raw !== 'home' && raw !== 'today') {
         pendingHashRef.current = window.location.hash;
       }
     }
@@ -323,43 +322,24 @@ function MainApp() {
       {/* Member Content wrapped in main */}
       {isBound && route.area === 'member' && (
         <main className="app-member-main">
-          {route.tab === 'today' && (
-            <HomeView
+          {route.tab === 'home' && profile && (
+            <HomeTab
               profile={profile}
-              onOpenQRScanner={(sch) => {
-                if (sch) {
-                  navigate({ type: 'OPEN', overlay: { kind: 'qr', scheduleId: sch.id } });
-                } else {
-                  navigate({ type: 'TAB', tab: 'today' });
-                }
+              month={route.month}
+              selectedDate={route.overlay?.kind === 'scheduleSheet' ? route.overlay.date : undefined}
+              onNavigate={navigate}
+              onOpenQRScanner={(scheduleId) => {
+                navigate({ type: 'OPEN', overlay: { kind: 'qr', scheduleId } });
               }}
               onOpenRSVP={(sch) => {
                 navigate({ type: 'OPEN', overlay: { kind: 'rsvp', scheduleId: sch.id } });
               }}
-              onOpenAdmin={handleOpenAdmin}
-              onOpenSuperAdmin={handleOpenSuperAdmin}
-              onChangeProfile={() => setShowBindingModal(true)}
-              onOpenProfilePortal={() => navigate({ type: 'TAB', tab: 'profile' })}
               onOpenDetail={(sch) =>
                 navigate({
                   type: 'OPEN',
                   overlay: { kind: 'scheduleSheet', date: sch.date, scheduleId: sch.id },
                 })
               }
-              onViewCalendar={() => navigate({ type: 'TAB', tab: 'calendar' })}
-              refreshTrigger={refreshKey}
-            />
-          )}
-
-          {route.tab === 'calendar' && (
-            <CalendarTab
-              profile={profile}
-              month={route.month}
-              selectedDate={route.overlay?.kind === 'scheduleSheet' ? route.overlay.date : undefined}
-              onNavigate={navigate}
-              onOpenRSVP={(sch) => {
-                navigate({ type: 'OPEN', overlay: { kind: 'rsvp', scheduleId: sch.id } });
-              }}
               refreshTrigger={refreshKey}
             />
           )}
@@ -392,7 +372,7 @@ function MainApp() {
                 if (sch) {
                   navigate({ type: 'OPEN', overlay: { kind: 'qr', scheduleId: sch.id } });
                 } else {
-                  navigate({ type: 'TAB', tab: 'today' });
+                  navigate({ type: 'TAB', tab: 'home' });
                 }
               }}
               onOpenAdmin={handleOpenAdmin}

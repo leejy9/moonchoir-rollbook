@@ -78,7 +78,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
     setInternalYear(nextY);
     setInternalMonthIndex(nextM);
     const monthStr = `${nextY}-${String(nextM + 1).padStart(2, '0')}`;
-    onNavigate({ type: 'TAB', tab: 'calendar', month: monthStr });
+    onNavigate({ type: 'TAB', tab: 'home', month: monthStr });
   };
 
   const handleNextMonth = () => {
@@ -91,7 +91,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
     setInternalYear(nextY);
     setInternalMonthIndex(nextM);
     const monthStr = `${nextY}-${String(nextM + 1).padStart(2, '0')}`;
-    onNavigate({ type: 'TAB', tab: 'calendar', month: monthStr });
+    onNavigate({ type: 'TAB', tab: 'home', month: monthStr });
   };
 
   const handleJumpToToday = () => {
@@ -100,7 +100,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
     setInternalYear(y);
     setInternalMonthIndex(m);
     const monthStr = `${y}-${String(m + 1).padStart(2, '0')}`;
-    onNavigate({ type: 'TAB', tab: 'calendar', month: monthStr });
+    onNavigate({ type: 'TAB', tab: 'home', month: monthStr });
   };
 
   const handleSelectDate = (dateStr: string) => {

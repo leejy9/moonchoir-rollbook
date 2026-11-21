@@ -95,7 +95,7 @@ describe('useHashRoute & History Management (C8)', () => {
     (globalThis as any).HTMLElement = MockElement;
     (globalThis as any).HTMLIFrameElement = MockHTMLIFrameElement;
 
-    historyStack = [{ state: null, title: '', url: '#/today' }];
+    historyStack = [{ state: null, title: '', url: '#/home' }];
     historyIndex = 0;
     listeners = {
       hashchange: new Set(),
@@ -113,7 +113,7 @@ describe('useHashRoute & History Management (C8)', () => {
       },
       pathname: '/',
       search: '',
-      href: 'http://localhost/#/today',
+      href: 'http://localhost/#/home',
     };
 
     const mockHistory = {
@@ -187,16 +187,17 @@ describe('useHashRoute & History Management (C8)', () => {
     vi.restoreAllMocks();
   });
 
-  it('parses empty or root hash as today tab', () => {
-    expect(parseRoute('')).toEqual({ area: 'member', tab: 'today' });
-    expect(parseRoute('#/')).toEqual({ area: 'member', tab: 'today' });
-    expect(parseRoute('#/today')).toEqual({ area: 'member', tab: 'today' });
+  it('parses empty, root hash, or legacy hashes as home tab', () => {
+    expect(parseRoute('')).toEqual({ area: 'member', tab: 'home' });
+    expect(parseRoute('#/')).toEqual({ area: 'member', tab: 'home' });
+    expect(parseRoute('#/home')).toEqual({ area: 'member', tab: 'home' });
+    expect(parseRoute('#/today')).toEqual({ area: 'member', tab: 'home' });
   });
 
-  it('parses calendar tab with month parameter', () => {
+  it('parses calendar tab with month parameter and normalizes to home', () => {
     expect(parseRoute('#/calendar?m=2026-11')).toEqual({
       area: 'member',
-      tab: 'calendar',
+      tab: 'home',
       month: '2026-11',
     });
   });
@@ -211,7 +212,7 @@ describe('useHashRoute & History Management (C8)', () => {
       wrapper: React.StrictMode,
     });
 
-    expect(result.current.route).toEqual({ area: 'member', tab: 'today' });
+    expect(result.current.route).toEqual({ area: 'member', tab: 'home' });
 
     // OPEN overlay
     act(() => {
@@ -225,7 +226,7 @@ describe('useHashRoute & History Management (C8)', () => {
     expect(pushStateSpy).toHaveBeenCalledWith(
       { mcOverlay: true },
       '',
-      '#/calendar?d=2026-11-20&sheet=1&sid=sch-1'
+      '#/home?d=2026-11-20&sheet=1&sid=sch-1'
     );
     expect(window.history.state).toEqual({ mcOverlay: true });
 
@@ -247,7 +248,7 @@ describe('useHashRoute & History Management (C8)', () => {
       {
         state: null,
         title: '',
-        url: '#/calendar?d=2026-11-20&sheet=1&sid=sch-1',
+        url: '#/home?d=2026-11-20&sheet=1&sid=sch-1',
       },
     ];
     historyIndex = 0;
@@ -256,7 +257,7 @@ describe('useHashRoute & History Management (C8)', () => {
 
     expect(result.current.route).toEqual({
       area: 'member',
-      tab: 'calendar',
+      tab: 'home',
       overlay: { kind: 'scheduleSheet', date: '2026-11-20', scheduleId: 'sch-1' },
     });
 
@@ -265,27 +266,27 @@ describe('useHashRoute & History Management (C8)', () => {
     });
 
     expect(backSpy).not.toHaveBeenCalled();
-    expect(replaceStateSpy).toHaveBeenCalledWith(null, '', '#/calendar');
+    expect(replaceStateSpy).toHaveBeenCalledWith(null, '', '#/home');
     expect(result.current.route).toEqual({
       area: 'member',
-      tab: 'calendar',
+      tab: 'home',
     });
 
     unmount();
   });
 
-  it('navigates sequence: today -> calendar(push) -> sheet OPEN(push) -> CLOSE(back) -> calendar -> back -> today', () => {
+  it('navigates sequence: home -> studio(push) -> sheet OPEN(push) -> CLOSE(back) -> studio -> back -> home', () => {
     const { result, unmount } = renderHook(() => useHashRoute());
 
-    expect(result.current.route).toEqual({ area: 'member', tab: 'today' });
+    expect(result.current.route).toEqual({ area: 'member', tab: 'home' });
 
-    // 1. Move to calendar (push)
+    // 1. Move to studio (push)
     act(() => {
-      result.current.navigate({ type: 'TAB', tab: 'calendar' });
+      result.current.navigate({ type: 'TAB', tab: 'studio' });
     });
-    expect(pushStateSpy).toHaveBeenCalledWith(null, '', '#/calendar');
+    expect(pushStateSpy).toHaveBeenCalledWith(null, '', '#/studio');
     expect(result.current.route.area).toBe('member');
-    expect((result.current.route as MemberRoute).tab).toBe('calendar');
+    expect((result.current.route as MemberRoute).tab).toBe('studio');
 
     // 2. Open sheet (push with mcOverlay)
     act(() => {
@@ -297,7 +298,7 @@ describe('useHashRoute & History Management (C8)', () => {
     expect(pushStateSpy).toHaveBeenCalledWith(
       { mcOverlay: true },
       '',
-      '#/calendar?d=2026-11-20&sheet=1&sid=sch-1'
+      '#/home?d=2026-11-20&sheet=1&sid=sch-1'
     );
     expect((result.current.route as MemberRoute).overlay).toEqual({
       kind: 'scheduleSheet',
@@ -305,23 +306,23 @@ describe('useHashRoute & History Management (C8)', () => {
       scheduleId: 'sch-1',
     });
 
-    // 3. Close sheet (back called, popstate restores calendar)
+    // 3. Close sheet (back called, popstate restores studio)
     act(() => {
       result.current.navigate({ type: 'CLOSE' });
     });
     expect(backSpy).toHaveBeenCalledTimes(1);
-    expect(window.location.hash).toBe('#/calendar');
+    expect(window.location.hash).toBe('#/studio');
     expect(result.current.route.area).toBe('member');
-    expect((result.current.route as MemberRoute).tab).toBe('calendar');
+    expect((result.current.route as MemberRoute).tab).toBe('studio');
     expect((result.current.route as MemberRoute).overlay).toBeUndefined();
 
-    // 4. Browser back returns to today
+    // 4. Browser back returns to home
     act(() => {
       window.history.back();
     });
-    expect(window.location.hash).toBe('#/today');
+    expect(window.location.hash).toBe('#/home');
     expect(result.current.route.area).toBe('member');
-    expect((result.current.route as MemberRoute).tab).toBe('today');
+    expect((result.current.route as MemberRoute).tab).toBe('home');
 
     unmount();
   });

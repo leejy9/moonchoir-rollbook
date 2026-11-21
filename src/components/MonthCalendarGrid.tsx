@@ -21,6 +21,7 @@ export interface MonthCalendarGridProps {
   onJumpToToday?: () => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
+  headerExtra?: React.ReactNode;
 }
 
 export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = ({
@@ -35,6 +36,7 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = ({
   onJumpToToday,
   onPrevMonth,
   onNextMonth,
+  headerExtra,
 }) => {
   return (
     <section
@@ -85,7 +87,8 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = ({
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {headerExtra}
           <button
             type="button"
             onClick={onPrevMonth}
