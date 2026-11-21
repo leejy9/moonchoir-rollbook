@@ -4,6 +4,7 @@ import { sheetsService } from '../../../services/sheets';
 import { uploadQueue } from '../../../services/media/uploadQueue';
 import { validateAudioFile, COMPRESSION_ERROR_MESSAGE } from '../../../services/media/audioCompress';
 import { createUploadSaveFn } from '../../../services/media/uploadSave';
+import { readAudioDuration } from '../../../services/media/audioMetadata';
 
 interface MediaUploadSheetProps {
   pieceId: string;
@@ -86,13 +87,15 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
   const totalGB = (mediaUsage?.totalBytes ?? 0) / (1024 * 1024 * 1024);
   const isOverQuota = totalGB >= 9.5;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile) return;
 
     const finalTitle = title.trim() || selectedFile.name;
     const finalKind = isCustomKind ? (customKind.trim() || '가이드') : trackKind;
     const baseUrl = config.mediaPublicBaseUrl || '';
+
+    const durationSeconds = kind === 'audio' ? await readAudioDuration(selectedFile) : undefined;
 
     uploadQueue.enqueue({
       pieceId,
@@ -103,7 +106,7 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
       file: selectedFile,
       previousStorageKey,
       baseUrl,
-      saveFn: createUploadSaveFn(kind, pieceId, finalTitle, finalKind, replaceTrackId),
+      saveFn: createUploadSaveFn(kind, pieceId, finalTitle, finalKind, replaceTrackId, durationSeconds),
     });
 
     if (onJobEnqueued) onJobEnqueued();

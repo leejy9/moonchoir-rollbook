@@ -10,7 +10,8 @@ export function createUploadSaveFn(
   pieceId: string,
   finalTitle: string,
   finalKind: string,
-  replaceTrackId?: string
+  replaceTrackId?: string,
+  durationSeconds?: number
 ): (key: string, size: number) => Promise<void> {
   return async (key: string, size: number) => {
     if (kind === 'score') {
@@ -40,6 +41,7 @@ export function createUploadSaveFn(
           source: 'r2',
           storageKey: key,
           sizeBytes: size,
+          durationSeconds: durationSeconds ?? existingTrack.durationSeconds,
         });
       } else {
         const currentCatalog = sheetsService.getPracticeCatalog();
@@ -60,6 +62,7 @@ export function createUploadSaveFn(
           storageKey: key,
           sizeBytes: size,
           orderIndex,
+          durationSeconds,
         });
       }
     }

@@ -197,4 +197,27 @@ describe('MediaUploadSheet Component', () => {
       );
     });
   });
+
+  describe('F8: saveFn persists durationSeconds', () => {
+    it('persists durationSeconds on new track upload', async () => {
+      vi.spyOn(sheetsService, 'getPracticeCatalog').mockReturnValue({
+        pieces: [],
+        tracks: [],
+        programPieces: [],
+      });
+
+      const saveTrackSpy = vi.spyOn(sheetsService, 'savePracticeTrack').mockResolvedValue({} as any);
+
+      const saveFn = createUploadSaveFn('audio', 'p1', '길이 있는 트랙', '가이드', undefined, 245);
+      await saveFn('2026/audio/track_dur.m4a', 2048);
+
+      expect(saveTrackSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pieceId: 'p1',
+          label: '길이 있는 트랙',
+          durationSeconds: 245,
+        })
+      );
+    });
+  });
 });
