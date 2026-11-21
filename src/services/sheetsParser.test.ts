@@ -324,5 +324,59 @@ describe('parsePracticeCatalog', () => {
     expect(parsed.tracks[0].kind).toBe('베이스 특훈');
     expect(parsed.tracks[0].source).toBe('vimeo');
   });
+
+  it('parses scoreStorageKey, scoreSizeBytes and sizeBytes with backward compatibility fallback', () => {
+    const rawWithNewFields = {
+      pieces: [
+        {
+          id: 'p_v3',
+          title: '새로운 곡',
+          scoreStorageKey: '2026/score/abcd1234efgh5678.pdf',
+          scoreSizeBytes: 1048576,
+        },
+        {
+          id: 'p_v3_snake',
+          title: '스네이크 곡',
+          score_storage_key: '2026/score/snake1234efgh5678.pdf',
+          score_size_bytes: 2097152,
+        },
+        {
+          id: 'p_v3_legacy',
+          title: '옛날 곡',
+        },
+      ],
+      tracks: [
+        {
+          id: 't_v3',
+          pieceId: 'p_v3',
+          label: '트랙',
+          sizeBytes: 5242880,
+        },
+        {
+          id: 't_v3_snake',
+          pieceId: 'p_v3',
+          label: '스네이크 트랙',
+          size_bytes: 4194304,
+        },
+        {
+          id: 't_v3_legacy',
+          pieceId: 'p_v3',
+          label: '옛날 트랙',
+        },
+      ],
+    };
+
+    const parsed = parsePracticeCatalog(rawWithNewFields);
+    expect(parsed.pieces[0].scoreStorageKey).toBe('2026/score/abcd1234efgh5678.pdf');
+    expect(parsed.pieces[0].scoreSizeBytes).toBe(1048576);
+    expect(parsed.pieces[1].scoreStorageKey).toBe('2026/score/snake1234efgh5678.pdf');
+    expect(parsed.pieces[1].scoreSizeBytes).toBe(2097152);
+    expect(parsed.pieces[2].scoreStorageKey).toBeUndefined();
+    expect(parsed.pieces[2].scoreSizeBytes).toBeUndefined();
+
+    expect(parsed.tracks[0].sizeBytes).toBe(5242880);
+    expect(parsed.tracks[1].sizeBytes).toBe(4194304);
+    expect(parsed.tracks[2].sizeBytes).toBeUndefined();
+  });
 });
 

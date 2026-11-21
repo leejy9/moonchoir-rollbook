@@ -304,6 +304,7 @@ export interface AppConfig {
   emergencyGpsBypassUntil?: string; // ISO 8601 timestamp until which GPS boundary check is bypassed
   mediaPublicBaseUrl?: string; // Worker base URL (e.g. https://media.example.com)
   practiceTrackKinds?: string[]; // Configurable track kinds taxonomy
+  performanceCategories?: string[]; // v3: 일정 중 공연에 해당하는 category 목록 (기본: ['연주'])
 }
 
 /**
@@ -330,6 +331,8 @@ export interface PracticePiece {
   composer?: string;
   arranger?: string;
   scoreUrl?: string;
+  scoreStorageKey?: string;
+  scoreSizeBytes?: number;
   notes?: string;
   isArchived: boolean;
   archivedAt?: string;
@@ -347,6 +350,7 @@ export interface PracticeTrack {
   storageKey?: string;
   mimeType?: string;
   durationSeconds?: number;
+  sizeBytes?: number;
   orderIndex: number;
   isArchived: boolean;
   createdAt: string;
@@ -374,5 +378,49 @@ export interface TrackPlayback {
   canPrefetch: boolean;
   supportsBackground: boolean;
   reason?: string;
+}
+
+/**
+ * 12. v3 Activity & Media Engine Types (MEMBER_UX_V3_SPEC.md §7-5)
+ */
+export type RsvpEventAction = 'insert' | 'update' | 'delete' | 'backfill';
+
+export interface RsvpEvent {
+  seq: number;
+  scheduleId: string;
+  memberId: string;
+  action: RsvpEventAction;
+  status: string;
+  prevStatus?: string | null;
+  occurredAt: string; // ISO 8601
+}
+
+export interface MemberActivityListen {
+  totalSeconds: number;
+  firstAt: string | null;
+  perPiece: Array<{
+    pieceId: string;
+    seconds: number;
+  }>;
+}
+
+export interface MemberActivity {
+  rsvpEvents: RsvpEvent[];
+  listen: MemberActivityListen;
+}
+
+export interface ListenSessionPayload {
+  chunkId: string;
+  memberId: string;
+  pieceId: string;
+  trackId: string;
+  startedAt: string;
+  listenedSeconds: number;
+}
+
+export interface MediaUsage {
+  tracksBytes: number;
+  scoresBytes: number;
+  totalBytes: number;
 }
 
