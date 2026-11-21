@@ -1287,3 +1287,17 @@
 
 
 
+
+---
+
+## [2026-11-21] 다크 모드 색상 버그 수정 (D1~D2)
+
+다크 모드 색상 버그 수정 작업 지시서(`check.md`)에 따라 정의되지 않은 CSS 변수를 실제 디자인 토큰으로 교체하고 회귀 방지 테스트를 추가함.
+
+### 작업 요약 (항목별 문제 및 해결 내용)
+1. **D1 (`fix(style): D1 replace undefined css variables with design tokens`)**:
+   - **문제**: `src/components/ProfileTab.tsx`, `src/components/admin/AdminPracticeTab.tsx`, `src/index.css`에서 정의되지 않은 CSS 변수(`--color-...`, `--text-secondary`, `--bg-surface-alt`, `--text-primary`)를 사용하여 다크 모드에서 카드가 흰색(#ffffff)으로 고정되고 글자 대비가 깨지며 라벨이 보이지 않는 결함 발생 (미사용 템플릿 파일 `src/App.css`도 미정의 변수 13개 잔존).
+   - **해결**: 미정의 변수를 실제 정의된 디자인 토큰(`--border-subtle`, `--brand-primary`, `--text-muted`, `--text-main`, `--bg-subtle`, `--bg-card`, `--brand-primary-light`, `--text-sub`)으로 교체하고 하드코딩된 fallback 색상을 제거하였으며, 미참조 레거시 파일 `src/App.css`를 삭제함.
+2. **D2 (`test(style): D2 add regression test for undefined css variables`)**:
+   - **문제**: 개발 과정에서 정의되지 않은 CSS 변수나 잘못된 변수명이 다시 유입될 경우 컴파일 단계에서 검출되지 않아 런타임에 다크 모드 색상 결함이 재발할 위험 존재.
+   - **해결**: `src/styles/cssVariables.test.ts`를 작성하여 `src/index.css`에 선언된 변수 목록을 추출하고 `src/` 내 모든 `.ts`/`.tsx`/`.css`에서 사용된 `var(--...)` 참조가 실제 선언된 토큰인지 자동 검사하는 정적 회귀 방지 테스트를 구축함 (D1 적용 전 74건 검출 실패 확인, 런타임 인라인 변수 `--gauge-size` 예외 사유 문서화).
