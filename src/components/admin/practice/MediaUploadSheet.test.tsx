@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { MediaUploadSheet } from './MediaUploadSheet';
+import { createUploadSaveFn } from '../../../services/media/uploadSave';
 import { sheetsService } from '../../../services/sheets';
-import type { AppConfig } from '../../../types/rollbook';
+import type { AppConfig, PracticePiece } from '../../../types/rollbook';
 
 describe('MediaUploadSheet Component', () => {
   const dummyConfig: AppConfig = {
@@ -60,5 +61,45 @@ describe('MediaUploadSheet Component', () => {
     const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
     expect(emojiRegex.test(html)).toBe(false);
     expect(html).toContain('min-height:44px');
+  });
+
+  describe('F1: score saveFn preserves piece fields', () => {
+    it('preserves existing piece fields (title, composer, arranger, scoreUrl, notes) when saving uploaded score', async () => {
+      const dummyPiece: PracticePiece = {
+        id: 'p1',
+        title: '아리랑',
+        composer: '민요',
+        arranger: '김편곡',
+        scoreUrl: 'https://example.com/score.pdf',
+        notes: '연습용 메모',
+        isArchived: false,
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      };
+
+      vi.spyOn(sheetsService, 'getPracticeCatalog').mockReturnValue({
+        pieces: [dummyPiece],
+        tracks: [],
+        programPieces: [],
+      });
+
+      const savePieceSpy = vi.spyOn(sheetsService, 'savePracticePiece').mockResolvedValue(dummyPiece);
+
+      const saveFn = createUploadSaveFn('score', 'p1', '악보', '가이드');
+      await saveFn('2026/score/newkey.pdf', 1024);
+
+      expect(savePieceSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'p1',
+          title: '아리랑',
+          composer: '민요',
+          arranger: '김편곡',
+          scoreUrl: 'https://example.com/score.pdf',
+          notes: '연습용 메모',
+          scoreStorageKey: '2026/score/newkey.pdf',
+          scoreSizeBytes: 1024,
+        })
+      );
+    });
   });
 });

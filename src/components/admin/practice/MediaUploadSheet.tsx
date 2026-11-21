@@ -3,6 +3,7 @@ import type { AppConfig, MediaUsage } from '../../../types/rollbook';
 import { sheetsService } from '../../../services/sheets';
 import { uploadQueue } from '../../../services/media/uploadQueue';
 import { validateAudioFile, COMPRESSION_ERROR_MESSAGE } from '../../../services/media/audioCompress';
+import { createUploadSaveFn } from '../../../services/media/uploadSave';
 
 interface MediaUploadSheetProps {
   pieceId: string;
@@ -81,26 +82,7 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
       file: selectedFile,
       previousStorageKey,
       baseUrl,
-      saveFn: async (key, size) => {
-        if (kind === 'score') {
-          await sheetsService.savePracticePiece({
-            id: pieceId,
-            title: '',
-            scoreStorageKey: key,
-            scoreSizeBytes: size,
-          });
-        } else {
-          await sheetsService.savePracticeTrack({
-            pieceId,
-            label: finalTitle,
-            kind: finalKind,
-            source: 'r2',
-            storageKey: key,
-            sizeBytes: size,
-            orderIndex: 0,
-          });
-        }
-      },
+      saveFn: createUploadSaveFn(kind, pieceId, finalTitle, finalKind),
     });
 
     if (onJobEnqueued) onJobEnqueued();
