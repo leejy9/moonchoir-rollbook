@@ -237,34 +237,10 @@ describe('SupabaseBackend', () => {
       );
     });
 
-    it('maps v3 activity and media actions to their respective RPCs', async () => {
+    it('maps GET_MEDIA_USAGE to fn_get_media_usage with admin token attached', async () => {
       const backend = new SupabaseBackend(mockConfig);
       setAdminToken('admin', 'tok_admin_media');
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(okResponse()));
-
-      const listenPayload = {
-        chunkId: 'chunk-123',
-        memberId: 'mem_1',
-        pieceId: 'p1',
-        trackId: 't1',
-        startedAt: '2026-11-23T10:00:00Z',
-        listenedSeconds: 60,
-      };
-      await backend.callAction('LOG_LISTEN_SESSION', listenPayload);
-      expect(fetchSpy).toHaveBeenLastCalledWith(
-        'https://test.supabase.co/rest/v1/rpc/fn_log_listen_session',
-        expect.objectContaining({
-          body: JSON.stringify({ p_payload: listenPayload }),
-        })
-      );
-
-      await backend.callAction('GET_MEMBER_ACTIVITY', { memberId: 'mem_1' });
-      expect(fetchSpy).toHaveBeenLastCalledWith(
-        'https://test.supabase.co/rest/v1/rpc/fn_get_member_activity',
-        expect.objectContaining({
-          body: JSON.stringify({ p_member_id: 'mem_1' }),
-        })
-      );
 
       await backend.callAction('GET_MEDIA_USAGE', {});
       expect(fetchSpy).toHaveBeenLastCalledWith(

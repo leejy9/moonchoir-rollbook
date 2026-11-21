@@ -40,6 +40,15 @@ export class GasBackend implements RemoteBackend {
     payload: unknown,
     targetUrl?: string
   ): Promise<BackendActionResult> {
+    if (action === 'GET_MEDIA_USAGE') {
+      return {
+        success: false,
+        code: 'UNSUPPORTED_BACKEND',
+        error: 'UNSUPPORTED_BACKEND',
+        message: '구글 시트 백엔드에서는 지원되지 않는 기능입니다.',
+      };
+    }
+
     const url = targetUrl || (this.getDefaultUrl ? this.getDefaultUrl() : undefined);
     if (!url) {
       return { success: false, message: '시트 Web App URL이 설정되지 않았습니다.' };

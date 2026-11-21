@@ -381,43 +381,8 @@ export interface TrackPlayback {
 }
 
 /**
- * 12. v3 Activity & Media Engine Types (MEMBER_UX_V3_SPEC.md §7-5)
+ * 12. v3 Media Storage Types (MEMBER_UX_V3_SPEC.md §7-3, §7-4)
  */
-export type RsvpEventAction = 'insert' | 'update' | 'delete' | 'backfill';
-
-export interface RsvpEvent {
-  seq: number;
-  scheduleId: string;
-  memberId: string;
-  action: RsvpEventAction;
-  status: string;
-  prevStatus?: string | null;
-  occurredAt: string; // ISO 8601
-}
-
-export interface MemberActivityListen {
-  totalSeconds: number;
-  firstAt: string | null;
-  perPiece: Array<{
-    pieceId: string;
-    seconds: number;
-  }>;
-}
-
-export interface MemberActivity {
-  rsvpEvents: RsvpEvent[];
-  listen: MemberActivityListen;
-}
-
-export interface ListenSessionPayload {
-  chunkId: string;
-  memberId: string;
-  pieceId: string;
-  trackId: string;
-  startedAt: string;
-  listenedSeconds: number;
-}
-
 export interface MediaUsage {
   tracksBytes: number;
   scoresBytes: number;

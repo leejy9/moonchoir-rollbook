@@ -80,9 +80,10 @@ export class SupabaseBackend implements RemoteBackend {
           json.message ||
           json.error ||
           (json.success === true ? '저장 완료' : '저장이 확인되지 않았습니다.'),
+        code: json.code,
         existingMemberId: json.existingMemberId,
         boundDeviceId: json.boundDeviceId,
-        data: json.data,
+        data: json.data !== undefined ? json.data : json,
       };
     } catch (err) {
       console.error('[Supabase API] RPC call failed:', err);
@@ -169,6 +170,8 @@ export class SupabaseBackend implements RemoteBackend {
         return 'fn_set_program_pieces';
       case 'REORDER_PRACTICE_TRACKS':
         return 'fn_reorder_practice_tracks';
+      case 'GET_MEDIA_USAGE':
+        return 'fn_get_media_usage';
       default:
         return null;
     }
@@ -186,7 +189,7 @@ export class SupabaseBackend implements RemoteBackend {
           : { pin: String(payload || '') };
       return { p_pin: pinObj.pin };
     }
-    if (action === 'GET_ADMIN_SECRETS') {
+    if (action === 'GET_ADMIN_SECRETS' || action === 'GET_MEDIA_USAGE') {
       return { p_token: getActiveAdminToken() ?? '' };
     }
     if (action === 'ADMIN_LOGOUT') {

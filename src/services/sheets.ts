@@ -14,6 +14,7 @@ import type {
   PracticeCatalog,
   PracticePiece,
   PracticeTrack,
+  MediaUsage,
 } from '../types/rollbook';
 import {
   calculateCumulativeAttendanceWithLifecycle,
@@ -134,6 +135,7 @@ const NON_MUTATING_ACTIONS = new Set([
   'VERIFY_SUPER_ADMIN_PIN',
   'VERIFY_ON_SITE_PIN',
   'GET_PRACTICE_CATALOG',
+  'GET_MEDIA_USAGE',
 ]);
 
 export class SheetsService {
@@ -570,6 +572,8 @@ export class SheetsService {
       composer: piece.composer ?? '',
       arranger: piece.arranger ?? '',
       scoreUrl: piece.scoreUrl ?? '',
+      scoreStorageKey: piece.scoreStorageKey ?? '',
+      scoreSizeBytes: piece.scoreSizeBytes,
       notes: piece.notes ?? '',
       isArchived: piece.isArchived ?? false,
       createdAt: piece.createdAt ?? new Date().toISOString(),
@@ -625,6 +629,7 @@ export class SheetsService {
       storageKey: track.storageKey ?? '',
       mimeType: track.mimeType ?? '',
       durationSeconds: track.durationSeconds,
+      sizeBytes: track.sizeBytes,
       orderIndex:
         track.orderIndex ??
         this.practiceCatalog.tracks.filter((t) => t.pieceId === track.pieceId).length,
@@ -718,6 +723,22 @@ export class SheetsService {
       }
     });
     saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+  }
+
+  public async getMediaUsage(): Promise<MediaUsage | null> {
+    if (this.backend.kind === 'gas') {
+      return null;
+    }
+    const result = await this.sendToGoogleSheet('GET_MEDIA_USAGE', {});
+    if (!result.success || !result.data) {
+      return null;
+    }
+    const data = result.data as Record<string, unknown>;
+    return {
+      tracksBytes: Number(data.tracksBytes) || 0,
+      scoresBytes: Number(data.scoresBytes) || 0,
+      totalBytes: Number(data.totalBytes) || 0,
+    };
   }
 
   // --- Append-Only Write Operations (Idempotent by log.id) ---

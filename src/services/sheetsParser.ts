@@ -356,12 +356,28 @@ export function parsePracticeCatalog(raw: unknown): PracticeCatalog {
           ? String(row.updated_at)
           : createdAt;
 
+    const scoreStorageKey =
+      row.scoreStorageKey !== undefined && row.scoreStorageKey !== null
+        ? String(row.scoreStorageKey)
+        : row.score_storage_key !== undefined && row.score_storage_key !== null
+          ? String(row.score_storage_key)
+          : undefined;
+    const rawScoreSize = row.scoreSizeBytes ?? row.score_size_bytes;
+    const scoreSizeBytes =
+      typeof rawScoreSize === 'number' && !Number.isNaN(rawScoreSize)
+        ? rawScoreSize
+        : typeof rawScoreSize === 'string' && rawScoreSize.trim() !== '' && !Number.isNaN(Number(rawScoreSize))
+          ? Number(rawScoreSize)
+          : undefined;
+
     pieces.push({
       id,
       title,
       composer,
       arranger,
       scoreUrl,
+      scoreStorageKey,
+      scoreSizeBytes,
       notes,
       isArchived,
       archivedAt,
@@ -414,6 +430,13 @@ export function parsePracticeCatalog(raw: unknown): PracticeCatalog {
         : typeof rawDuration === 'string' && rawDuration.trim() !== '' && !Number.isNaN(Number(rawDuration))
           ? Number(rawDuration)
           : undefined;
+    const rawSizeBytes = row.sizeBytes ?? row.size_bytes;
+    const sizeBytes =
+      typeof rawSizeBytes === 'number' && !Number.isNaN(rawSizeBytes)
+        ? rawSizeBytes
+        : typeof rawSizeBytes === 'string' && rawSizeBytes.trim() !== '' && !Number.isNaN(Number(rawSizeBytes))
+          ? Number(rawSizeBytes)
+          : undefined;
     const rawOrder = row.orderIndex ?? row.order_index;
     const orderIndex =
       typeof rawOrder === 'number' && !Number.isNaN(rawOrder)
@@ -453,6 +476,7 @@ export function parsePracticeCatalog(raw: unknown): PracticeCatalog {
       storageKey,
       mimeType,
       durationSeconds,
+      sizeBytes,
       orderIndex,
       isArchived,
       createdAt,
