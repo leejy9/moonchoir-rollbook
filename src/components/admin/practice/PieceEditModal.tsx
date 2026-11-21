@@ -105,10 +105,8 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
   }, [piece.id, catalog.tracks]);
 
   const handleArchiveTrack = async (track: PracticeTrack) => {
-    await sheetsService.savePracticeTrack({
-      ...track,
-      isArchived: true,
-    });
+    if (!track.id) return;
+    await sheetsService.setPracticeTrackArchived(track.id, true);
     onSaved();
   };
 
