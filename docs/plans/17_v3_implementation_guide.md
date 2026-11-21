@@ -19,7 +19,12 @@
 ## 1. 작업 환경
 
 1. **기준 브랜치:** `origin/fix/review-followups`(PR #14~#20의 최종 상태 포함). 여기서 `feat/v3-member-ux`를 새로 만들고, 곧바로 `git merge origin/main`으로 이 지시서와 명세를 가져온다(충돌이 나면 멈추고 보고).
-2. **PR:** 모든 티켓이 끝나면 `feat/v3-member-ux` → `fix/review-followups`로 PR 하나를 만든다. **머지하지 않는다. 배포하지 않는다**(`npm run deploy` 금지).
+2. **PR은 3번에 나눈다 (2026-11-21 추가).** 각 묶음이 끝나면 PR을 만들고 **리뷰어 검수와 사용자 화면 확인이 끝날 때까지 다음 묶음을 시작하지 않는다.** 머지하지 않는다. 배포하지 않는다(`npm run deploy` 금지).
+   - **v3-A (화면 골격):** V3-01, V3-02, V3-07b 중 카탈로그 새 필드 부분, V3-03, V3-04, V3-05, V3-06, V3-06b(새 탭 열기), V3-08, V3-09(압축 제외). 브랜치 `feat/v3-member-ux` → PR 대상 `fix/review-followups`.
+     - v3-A에 필요한 DB 변경(§7-3 열 추가, §7-4의 `fn_authorize_media_upload`, `fn_get_media_usage`, 기존 카탈로그 함수 3개 수정)만 별도 마이그레이션 `20261123000000_v3_media.sql`로 만든다.
+   - **v3-B (내 활동 기본):** V3-11. DB 변경 없음. v3-A PR 브랜치에서 이어서 `feat/v3-profile`.
+   - **v3-C (활동 기록):** V3-07의 나머지(§7-1, §7-2, `fn_log_listen_session`, `fn_get_member_activity`)를 `20261124000000_v3_activity.sql`로 만든다. 이어서 V3-10, V3-12, V3-13. 브랜치 `feat/v3-activity`.
+   - 이미 v3-A 범위를 넘어 작업한 부분이 있으면 지우지 말고 별도 브랜치로 옮겨 두고 보고한다.
 3. **커밋:** 티켓 하나 = 커밋 하나 이상. 메시지에 티켓 ID를 넣는다. 예: `feat(studio): V3-03 program scope dropdown`.
 4. **Green Bar:** 매 커밋 전에 아래 4개가 모두 통과해야 한다. 린트 경고 수는 시작 시점보다 늘면 안 된다(시작할 때 경고 수를 보고서에 적는다).
    ```
@@ -57,6 +62,8 @@
 | R16 | **문구는 명세에 있는 것만.** 설명 부제, 도움말, 툴팁, "~할 수 있어요" 안내를 새로 만들지 않는다(V3) | 결정과 어긋나는 문구 "파트 음원"(C13) | 새 한글 문자열 목록을 보고서에 붙인다 |
 | R17 | **병합된 회원을 잊지 않는다.** 회원 기준 집계는 `resolveMergedMemberIds`로 별칭을 합친다 | — (이번 기능에서 위험이 큼) | 병합 회원 테스트 1개 이상 |
 | R18 | **범위 밖 수정 금지.** `package.json`, `package-lock.json`, 설정 파일(`vite.config.*`, `tsconfig*`, 린트 설정), 다른 티켓 파일 | — | `git diff --stat` 보고 |
+| R20 | **파일 크기 (2026-11-21 추가).** 새 파일은 400줄 이하(테스트 제외). 기존 파일은 이번 작업으로 순증 300줄을 넘기지 않는다. 넘으면 기능 단위로 나눈다 | `AdminPracticeTab.tsx` 1,185줄, `SuperAdminDashboard.tsx` 1,806줄로 비대 | 보고서에 새·수정 파일 줄 수 |
+| R21 | **스타일·서비스 위치 (2026-11-21 추가).** `src/index.css`(7,000줄 이상)에는 명세 §6 토큰만 추가한다. 새 화면 스타일은 `src/styles/v3/<화면>.css`를 만들어 해당 컴포넌트에서 import 한다. `src/services/sheets.ts`(2,200줄 이상)에는 백엔드로 넘기는 1~5줄짜리 메서드만 추가하고, 로직은 `src/services/practice/`, `src/services/media/`, `src/utils/` 아래 기능별 파일에 둔다 | 전역 CSS와 서비스 파일 한 곳에 계속 누적됨 | `git diff --stat`에서 두 파일의 순증 줄 수 |
 | R19 | **완료라고 쓰기 전에** Green Bar 4개 출력 마지막 줄, 수용 기준 체크 결과, 화면 확인 방법을 보고서에 붙인다. 확인하지 못한 항목은 "미확인"으로 쓴다 | 확인하지 않은 항목을 완료로 보고함 | §5 보고 형식 |
 
 ---
@@ -67,7 +74,7 @@
 |---|---|---|---|---|---|
 | 1 | V3-01 | 디자인 토큰 3색 + 다크 모드 + 가드 테스트 | §6 | `src/index.css`, `src/styles/cssVariables.test.ts` | — |
 | 2 | V3-02 | 기기 선호값 저장 헬퍼 | §9 | `src/services/sheetsStorage.ts`(+테스트) | — |
-| 3 | V3-07 | DB 마이그레이션 + 검증 스크립트 | §7 | `supabase/migrations/20261123000000_v3_activity_and_media.sql`, `supabase/tests/v3_activity_media_check.sql` | — |
+| 3 | V3-07 | DB 마이그레이션 + 검증 스크립트 (묶음별 2개, §1-2) | §7 | `supabase/migrations/20261123000000_v3_media.sql`, `20261124000000_v3_activity.sql`, `supabase/tests/v3_*_check.sql` | — |
 | 4 | V3-07b | 타입·파서·서비스·백엔드 매핑 | §7-5 | `src/types/rollbook.ts`, 파서, `src/services/sheets.ts`, `src/services/backend/supabaseBackend.ts` | V3-07 |
 | 5 | V3-03 | 홈 탭 통합 + 옛 주소 호환 | §2 | `src/utils/route.ts`, `src/hooks/useHashRoute.ts`, `src/App.tsx`, 새 `src/components/HomeTab.tsx`, `TodayTab.tsx`, `CalendarTab.tsx` | V3-01, V3-02 |
 | 6 | V3-04 | 연습실 목록: 공연 드롭다운·검색·정렬 | §3-1 | `src/components/StudioTab.tsx`, 새 `src/components/studio/ProgramScopeMenu.tsx`, 새 `src/utils/practiceScope.ts` | V3-07b |
@@ -113,7 +120,7 @@
 - 기존 함수 3개(`fn_save_practice_piece`, `fn_save_practice_track`, `fn_get_practice_catalog`)는 **R3 절차를 따른다.** 명세에 적힌 최신 정의 위치가 실제와 다르면 멈추고 보고한다.
 - **권한:** 새 테이블은 `revoke all ... from public, anon, authenticated`. 새 함수는 `security definer`, `set search_path = public`. `grant execute`는 명세 권한 열 그대로.
 - `fn_authorize_media_upload`는 `fn_check_admin_token`을 감싸기만 한다. 토큰 검증 로직을 새로 만들지 않는다.
-- **검증 스크립트**(`supabase/tests/v3_activity_media_check.sql`)는 트랜잭션 안에서 실행하고 마지막에 `rollback`한다. 각 확인은 `raise exception`으로 실패를 알린다. 포함할 것:
+- **검증 스크립트**(`supabase/tests/v3_media_check.sql`, `supabase/tests/v3_activity_check.sql`, 묶음별)는 트랜잭션 안에서 실행하고 마지막에 `rollback`한다. 각 확인은 `raise exception`으로 실패를 알린다. 포함할 것:
   1. rsvp insert / 상태 변경 update / 같은 상태 update / delete → 이벤트 1 / 1 / 0 / 1
   2. `rsvp_events` update·delete 거부
   3. 백필 중복 없음(마이그레이션 본문의 백필 구문을 한 번 더 실행해도 행 수 동일)
@@ -280,7 +287,7 @@
 
 1. `docs/ARCHITECTURE_RECOVERY.md`에 v3 항목을 추가한다(바뀐 탭 구조, 새 테이블 2개, 업로드 경로, 알려진 한계 §0-3).
 2. `docs/DEV_LOG.md`에 티켓별 한 줄 요약을 쓴다.
-3. PR 본문에 아래를 넣는다.
+3. 각 묶음 PR 본문에 아래를 넣는다.
    - 티켓 표(완료 / 미완료 / 보류)
    - 미확인 항목
    - 마이그레이션 적용 요청("리뷰어가 운영 적용" 명시)

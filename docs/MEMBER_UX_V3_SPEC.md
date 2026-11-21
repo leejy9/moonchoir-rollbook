@@ -388,7 +388,7 @@ flowchart LR
 
 ## 7. 데이터 (Supabase)
 
-마이그레이션 파일 하나: `supabase/migrations/20261123000000_v3_activity_and_media.sql`. 검증 스크립트: `supabase/tests/v3_activity_media_check.sql`. **운영 적용은 리뷰어가 한다.**
+마이그레이션은 PR 묶음에 맞춰 2개로 나눈다(지시서 §1-2): `20261123000000_v3_media.sql`(§7-3, `fn_authorize_media_upload`, `fn_get_media_usage`, 기존 카탈로그 함수 3개 수정)과 `20261124000000_v3_activity.sql`(§7-1, §7-2, `fn_log_listen_session`, `fn_get_member_activity`). 검증 스크립트도 각각 `supabase/tests/v3_media_check.sql`, `supabase/tests/v3_activity_check.sql`. **운영 적용은 리뷰어가 한다.**
 
 ### 7-1. `rsvp_events` (추가 전용, V12)
 
