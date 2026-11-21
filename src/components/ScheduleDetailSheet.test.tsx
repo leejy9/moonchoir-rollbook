@@ -134,4 +134,31 @@ describe('ScheduleDetailSheet Component', () => {
 
     expect(html).toMatch(/aria-label="닫기"[^>]*style="[^"]*min-width:44px[^"]*min-height:44px/);
   });
+
+  it('preserves single schedule direct render across new array reference rerenders', () => {
+    const single = [mockSchedules[0]];
+    const html1 = renderToString(
+      <ScheduleDetailSheet
+        isOpen={true}
+        date="2026-11-20"
+        schedules={single}
+        member={mockMember}
+        onClose={() => {}}
+      />
+    );
+    expect(html1).toContain('파트 연습');
+
+    // Rerender with a completely fresh array instance (e.g. from Realtime)
+    const newRef = [...single];
+    const html2 = renderToString(
+      <ScheduleDetailSheet
+        isOpen={true}
+        date="2026-11-20"
+        schedules={newRef}
+        member={mockMember}
+        onClose={() => {}}
+      />
+    );
+    expect(html2).toContain('파트 연습');
+  });
 });

@@ -34,24 +34,14 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
       .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
   }, [date, schedules]);
 
-  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(() => {
-    if (scheduleId) return scheduleId;
-    const initialDaySchedules = schedules
-      .filter((s) => s.date === date && !s.isArchived)
-      .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
-    return initialDaySchedules.length === 1 ? initialDaySchedules[0].id : null;
-  });
+  // 사용자가 복수 일정 중 직접 탭하여 선택한 ID (초기값 null)
+  const [userPickedId, setUserPickedId] = useState<string | null>(null);
 
-  // Synchronize incoming scheduleId prop
-  useEffect(() => {
-    if (scheduleId) {
-      setSelectedScheduleId(scheduleId);
-    } else if (daySchedules.length === 1) {
-      setSelectedScheduleId(daySchedules[0].id);
-    } else {
-      setSelectedScheduleId(null);
-    }
-  }, [scheduleId, daySchedules]);
+  // 렌더 중 유효한 선택 계산 (prop 우선 -> 사용자 선택 -> 단일 일정 자동 선택 -> null)
+  const effectiveScheduleId =
+    scheduleId ??
+    (userPickedId && daySchedules.some((s) => s.id === userPickedId) ? userPickedId : null) ??
+    (daySchedules.length === 1 ? daySchedules[0].id : null);
 
   // Save and restore focus, focus first element on open
   useEffect(() => {
@@ -133,7 +123,7 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
   const isInvalidExplicitSchedule = scheduleId && !daySchedules.some((s) => s.id === scheduleId);
 
   // Find target schedule if selected
-  const activeSchedule = daySchedules.find((s) => s.id === selectedScheduleId);
+  const activeSchedule = daySchedules.find((s) => s.id === effectiveScheduleId);
 
   return (
     <div
@@ -215,7 +205,7 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
             {daySchedules.length > 1 && activeSchedule ? (
               <button
                 type="button"
-                onClick={() => setSelectedScheduleId(null)}
+                onClick={() => setUserPickedId(null)}
                 style={{
                   minWidth: '44px',
                   minHeight: '44px',
@@ -309,7 +299,7 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
                 <button
                   key={sch.id}
                   type="button"
-                  onClick={() => setSelectedScheduleId(sch.id)}
+                  onClick={() => setUserPickedId(sch.id)}
                   style={{
                     minHeight: '48px',
                     padding: '12px 14px',
