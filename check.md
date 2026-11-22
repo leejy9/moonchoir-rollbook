@@ -1,128 +1,128 @@
-# check.md — v3-A(PR #27) 검수 후속 작업 지시서
+# check.md — v3-A 사용자 화면 확인 후속 작업 지시서 (G1~G4)
 
-> 대상: 개발 에이전트 · 작성: 리뷰어(Claude), 2026-11-21
+> 대상: 개발 에이전트 · 작성: 리뷰어(Claude), 2026-11-22
 > 기본 규칙은 [v3 개발 지시서](docs/plans/17_v3_implementation_guide.md) §1·§2(R1~R21)를 그대로 따른다.
-> **이 문서는 작업이 모두 끝나면 마지막 커밋에서 삭제한다**(§4).
+> 사용자가 로컬에서 직접 써 보고 발견한 문제들이다. **v3-B를 시작했다면 멈추고 이 문서를 먼저 처리한다.**
+> **작업이 끝나면 마지막 커밋에서 이 파일을 삭제한다**(§4).
 
 ---
 
-## 0. 검수 결과 요약
+## 0. 배경 (리뷰어가 운영 DB를 읽기 전용으로 확인함)
 
-**리뷰어가 직접 확인해서 통과한 것**
-
-| 항목 | 결과 |
-|---|---|
-| Green Bar | typecheck / lint 0 / test 600 통과 / build 통과 |
-| 마이그레이션 `20261123000000_v3_media.sql` | 로컬 PostgreSQL 16에 전체 마이그레이션 순서대로 적용 성공. 두 번 실행해도 오류 없음. `v3_media_check.sql` 통과 |
-| R3 (기존 함수 복사) | 3개 함수 모두 최신 정의 원본 대비 필요한 줄만 추가된 것 확인. 잘했다 |
-| R7·R20·R21 | 정의 안 된 변수 0, 새 파일 400줄 이하, `index.css`는 토큰만 +29줄, `sheets.ts` +21줄 |
-| Worker | 인증·형식·크기·키 형식·DELETE 정규식 구현과 테스트 확인 |
-
-**반려 사유:** 운영진 연습곡 탭의 **저장 경로 버그 3개(데이터 손상 포함)**와 **기존 기능 회귀**가 있다. 단위 테스트는 통과하지만 실제 저장 결과를 검사하지 않아 못 잡았다(R10 위반).
+- `20261123000000_v3_media.sql`은 **아직 운영 DB에 적용되지 않았다**(리뷰어가 나중에 적용). 그래서 `fn_get_media_usage`가 운영에 없다.
+- 운영 `app_config`에 `mediaPublicBaseUrl`이 **없다.** Worker 업로드 기능도 아직 배포되지 않았다.
+- 따라서 로컬에서 "저장 공간이 느리게 뜨고 악보가 안 올라간" 것은 연결 전이라 당연하다. **문제는 앱이 그걸 사용자에게 알리지 않고 조용히 실패한다는 점이다**(G2).
+- 로컬 개발 서버도 운영 Supabase를 쓴다. 테스트로 만든 곡이 운영 DB에 그대로 저장된다.
 
 ---
 
 ## 1. 작업 환경
 
-1. 브랜치: 기존 `feat/v3-member-ux`에서 이어서 작업한다. 푸시하면 PR #27에 반영된다.
-2. 먼저 `git merge origin/main`으로 이 문서를 가져온다.
-3. 커밋은 항목 하나에 하나. 메시지에 F번호를 넣는다.
-4. **로컬에만 있는 `feat/v3-activity` 브랜치를 지금 원격에 푸시한다**(`git push -u origin feat/v3-activity`). 원격에 없으면 기기 문제로 v3-C 작업이 사라질 수 있다. 이 브랜치의 내용은 고치지 않는다.
+1. 브랜치: `feat/v3-member-ux`에서 이어서 작업한다(PR #27). 먼저 `git merge origin/main`.
+2. v3-B를 시작해 `feat/v3-profile`에 커밋이 있으면 그대로 두고, 이 작업은 `feat/v3-member-ux`에서 한다. 끝난 뒤 `feat/v3-profile`에 `feat/v3-member-ux`를 merge한다.
+3. 커밋은 항목 하나에 하나. 메시지에 G번호를 넣는다. 수정 전 실패하는 테스트를 먼저 확인한다(R10).
 
 ---
 
 ## 2. 작업 목록
 
-### F1. 악보 업로드가 항상 실패하고, 실패하지 않더라도 곡 정보를 지움 — P1
+### G1. 곡 추가·편집을 같은 화면 + "저장" 버튼 방식으로 — P1
 
-- **위치:** `src/components/admin/practice/MediaUploadSheet.tsx` 86행 근처 `saveFn`의 `kind === 'score'` 분기
-- **현상:** `savePracticePiece({ id, title: '', scoreStorageKey, scoreSizeBytes })`를 보낸다.
-  - `fn_save_practice_piece`는 빈 제목을 거부한다(`곡 제목은 필수입니다`). 그래서 저장이 항상 실패하고, 큐는 방금 올린 R2 객체를 지운다. 결과적으로 악보 업로드는 한 번도 성공할 수 없다.
-  - 제목 검사가 없었다면 upsert가 `composer`, `arranger`, `score_url`, `notes`를 빈 값으로 덮어썼을 것이다.
-- **수정:**
-  - 저장 시점에 `sheetsService.getPracticeCatalog()`에서 해당 곡의 **최신 값**을 찾는다. 찾은 값을 펼친 뒤 `scoreStorageKey`, `scoreSizeBytes`만 바꿔서 보낸다.
-  - 곡을 찾지 못하면 저장하지 않고 실패로 처리한다(새 키 삭제는 기존 큐 로직이 한다).
-- **테스트:** 제목·작곡·편곡·`scoreUrl`·메모가 있는 곡에 악보를 올리면 `savePracticePiece`에 그 값들이 그대로 전달되는지 검사한다. 수정 전 코드에서 실패하는 것을 확인한다(R10).
+명세 §4-2를 바꿨다(이 커밋과 함께 main에 반영됨). **입력란 자동 저장을 없애고 "저장" 버튼으로 저장한다.**
 
-### F2. 음원 "교체"가 새 트랙을 만들고 기존 트랙의 파일을 지움 — P1
+1. **"+ 곡"과 기존 곡 누르기**는 같은 `PieceEditModal`을 연다. 새 곡이면 빈 값, 제목은 "곡 추가", 기존 곡이면 "곡 정보 편집".
+2. **화면 맨 아래에 고정된 "저장" 버튼**(높이 52px, `--brand-primary`)을 둔다.
+   - 곡 이름이 비어 있으면 비활성화한다.
+   - 저장 중에는 "저장 중…"으로 바꾸고 다시 누를 수 없게 한다.
+3. **입력란 `onBlur` 자동 저장(`handleAutoSave`)은 지운다.** 이름·작곡·편곡은 "저장"을 눌러야 서버에 간다.
+4. **새 곡에서도 악보·음원·영상을 추가할 수 있게 한다.**
+   - 새 곡(아직 id 없음)에서 고른 악보·음원 파일과 유튜브 링크는 화면에 "저장 대기" 행으로 보여 준다. 이름, 종류, 파일명, 대기 표시가 들어간다.
+   - "저장"을 누르면 다음 순서로 처리한다.
+     - ① `savePracticePiece`로 곡을 만든다.
+     - ② 돌려받은 id로 유튜브 트랙을 저장한다.
+     - ③ 파일들을 업로드 큐에 넣는다.
+   - 공연 연결도 같은 방식으로 저장할 때 반영한다.
+   - 기존 곡에서는 파일을 고르면 지금처럼 바로 큐에 넣는다. 파일은 따로 올라가는 게 자연스럽기 때문이다.
+   - 기존 곡의 공연 연결·보관·순서 바꾸기도 지금처럼 즉시 반영해도 된다.
+5. **저장하지 않은 변경이 있는데 닫으면**(×, 바깥 누르기, 뒤로 가기) 확인 창을 띄운다. 문구는 "저장하지 않고 닫을까요?" / "닫기" / "계속 편집"이다. 저장 대기 파일이 있으면 그것도 변경으로 본다.
+6. **저장이 끝나면** 화면을 닫지 않고 "곡 정보 편집" 상태로 바꾼다. 이후 파일 진행 상태를 그 화면에서 볼 수 있게 하기 위해서다. 저장 실패 시에는 버튼 위에 빨간 한 줄로 서버 메시지를 보여 준다.
 
-- **위치:** `PieceTrackSection.tsx` 88행(`onOpenUpload(t.storageKey)`), `PieceEditModal.tsx`의 `uploadSheetTarget`, `MediaUploadSheet.tsx`의 audio `saveFn`
-- **현상:** 교체 시 `previousStorageKey`만 넘기고 트랙 id는 넘기지 않는다. 그래서 `saveFn`이 id 없는 **새 트랙**을 만든다. 이어서 큐가 이전 키를 삭제하므로 기존 트랙은 지워진 파일을 가리키게 된다. 단원 화면에서 재생이 실패한다.
-- **수정:**
-  - 교체일 때는 `replaceTrackId`를 함께 넘긴다.
-  - `saveFn`은 카탈로그에서 그 트랙의 최신 값을 펼친 뒤 `storageKey`, `sizeBytes`, `source: 'r2'`, (알 수 있으면) `durationSeconds`, `mimeType`만 바꿔 같은 id로 저장한다.
-  - 이름과 종류는 사용자가 시트에서 바꾼 경우에만 바꾼다.
-- **테스트:** 교체 후 `savePracticeTrack` 호출의 `id`가 기존 트랙 id와 같은지 검사한다. 새 트랙이 생기지 않는지, 저장 성공 후에만 이전 키 DELETE가 호출되는지도 검사한다.
+- **테스트:**
+  - 새 곡에 제목과 악보 파일 1개를 넣고 저장하면 `savePracticePiece`가 먼저, 그다음 큐 `enqueue`가 새 id로 불린다.
+  - 입력만 하고 저장하지 않으면 `savePracticePiece`가 불리지 않는다.
+  - 변경 후 닫기 시 확인 창이 뜬다.
+  - 제목이 비면 저장 버튼이 비활성이다.
 
-### F3. 트랙 "보관"이 서버에 반영되지 않음 — P1
+### G2. 업로드·저장 공간 실패를 조용히 삼키지 않기 — P1
 
-- **위치:** `PieceEditModal.tsx` 107행 `handleArchiveTrack`, `PieceTrackSection.tsx` 98·168행
-- **현상:** `savePracticeTrack({...track, isArchived: true})`를 부른다. 하지만 `fn_save_practice_track`은 보관 여부를 저장하지 않는다(보관은 `fn_set_practice_track_archived` 담당). 화면에서는 잠깐 사라졌다가 새로고침하면 다시 나타난다.
-- **수정:** 기존 `sheetsService.setPracticeTrackArchived(trackId, true)`를 쓴다. 이전 `AdminPracticeTab.tsx`(리뷰 기준 브랜치 188행)가 쓰던 방식이다.
-- **테스트:** 보관 버튼이 `setPracticeTrackArchived`를 부르고 `savePracticeTrack`은 부르지 않는지 검사한다.
+1. **미디어 주소가 없을 때:** `config.mediaPublicBaseUrl`이 비어 있으면 업로드 시트의 "올리기"와 "+ 악보 올리기"·"+ 음원 올리기"를 비활성화한다. 그 자리에 "파일 저장소가 아직 연결되지 않았어요" 한 줄을 보여 준다. 상태를 알리는 문구라 V3 예외로 허용하며, 이 문장 하나만 쓴다.
+2. **업로드 실패:** 큐 작업이 `failed`가 되면 두 곳에 보여 준다.
+   - 곡 편집 화면의 해당 행: 빨간 "실패" 표시 + "다시 시도" 버튼(같은 `File` 객체가 메모리에 있을 때만) + "지우기"
+   - 연습곡 목록 헤더 칩: "실패 n"
+   - 실패 사유는 행을 누르면 한 줄로 보인다. 401은 "다시 로그인해 주세요", 그 외는 상태 코드.
+3. **저장 공간 조회:**
+   - `getMediaUsage()`에 8초 시간 제한을 둔다.
+   - 실패하거나 시간이 초과되면 사용량 줄에 "확인할 수 없음"을 보여 주고 `console.warn`을 남긴다(빈 `catch` 금지, R9).
+   - 사용량을 모를 때 "올리기"를 막지는 않는다. Worker가 30MB·20MB 제한을 지킨다.
+   - 조회는 시트를 열 때 한 번만 한다. 곡 목록 화면에서 미리 부르지 않는다.
+- **테스트:**
+  - 주소가 비면 올리기 버튼이 비활성이고 안내 한 줄이 보인다.
+  - 실패 작업이 행과 헤더에 표시된다.
+  - 다시 시도하면 같은 파일로 큐에 다시 들어간다.
+  - 사용량 조회 시간 초과 시 "확인할 수 없음"이 표시된다.
 
-### F4. 기존 기능 회귀 복구 — P1
+### G3. 유튜브 영상을 앱 안에서 재생 (명세 §3-2, 구현 누락) — P1
 
-개편 전 `AdminPracticeTab.tsx`에 있던 기능 중 아래가 사라졌다. 명세 §4-1·§4-2에도 있는 기능이다.
+**현재 상태:** `PieceDetail.tsx`의 참고 영상 카드에 `<iframe>`이 아예 없다. 제목과 "YouTube" 글자 버튼만 있다. 명세 V7·§3-2 누락이며, 버튼의 화면 글자와 `background: '#ff0000'`, `color: '#ffffff'`도 규칙 위반(V3, R7)이다.
 
-| 기능 | 이전 코드(`origin/fix/review-followups` 기준) | 복구 위치 |
-|---|---|---|
-| 곡 보관 / 복원 | 109행 `setPracticePieceArchived` | 곡 편집 화면 하단 "보관" 버튼, 보관함 목록에서는 "복원" |
-| 트랙 보관 해제(복원) | 188행 `setPracticeTrackArchived(id, !isArchived)` | 보관된 트랙은 곡 편집의 "보관된 트랙" 접힘 영역에 표시하고 "복원" 버튼 |
-| 트랙 순서 바꾸기 | 212행 `reorderPracticeTracks` | 트랙 행의 ↑ 버튼과 ⋯ 메뉴 "아래로" (명세 §4-2) |
-| 트랙 이름·종류 바꾸기 | 트랙 편집 폼 | ⋯ 메뉴 "이름 바꾸기", "종류 바꾸기". 저장은 F2처럼 최신 값을 펼쳐서 |
+1. **`src/utils/youtubeUrl.ts`에 `getYoutubeVideoId(url)`를 추가한다.** 아래 형식에서 영상 id(11자, `[A-Za-z0-9_-]`)를 뽑고, 못 뽑으면 `null`을 돌려준다.
+   - `youtube.com/watch?v=ID`(다른 파라미터가 섞여도)
+   - `youtu.be/ID`
+   - `youtube.com/shorts/ID`
+   - `youtube.com/embed/ID`
+   - `m.youtube.com/watch?v=ID`
+   - `music.youtube.com/watch?v=ID`
+2. **카드 구성:** 영상마다 아래 두 줄이다.
+   - 첫 줄: 임베드 `<iframe>`
+     - `src="https://www.youtube.com/embed/{id}?playsinline=1&rel=0"`
+     - `title={영상 제목}`
+     - `allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"`
+     - `allowFullScreen`
+     - **`referrerPolicy="strict-origin-when-cross-origin"`** — 이 값이 없거나 `no-referrer`면 유튜브가 "동영상 플레이어 구성 오류(153)"로 재생을 거부한다.
+     - `loading="lazy"`
+     - 가로 100%, `aspect-ratio: 16 / 9`, 모서리 `var(--radius-md)`
+   - 둘째 줄: 왼쪽 영상 제목, 오른쪽 **유튜브 로고 + ↗ 아이콘 버튼**
+     - 화면 글자 없음, `aria-label="유튜브 앱으로 열기"`, 최소 44px
+     - 배경 `var(--bg-subtle)`, 로고는 인라인 SVG. 로고의 빨간색은 브랜드 색이라 SVG `fill` 안에서만 허용하고, `style` 배경색으로 쓰지 않는다.
+   - id를 못 뽑은 링크는 iframe 없이 둘째 줄만 보여 준다.
+3. **스타일 위치:** `src/styles/v3/studio.css`에 클래스로 둔다. 인라인 hex 금지.
+4. **다른 화면에서 쓰는지 확인:** 미니 플레이어가 재생 중일 때 영상을 눌러도 괜찮다. 유튜브는 자체 플레이어라 서로 간섭하지 않지만, 확인한 결과를 보고서에 적는다.
+- **테스트:**
+  - id 추출(위 6개 형식 + 잘못된 주소 3개)
+  - iframe의 `src`, `referrerPolicy`, `allow` 값
+  - 링크 버튼에 화면 글자가 없음
+  - id를 못 뽑은 링크는 iframe 없음
 
-- **테스트:** 각 기능이 위 서비스 메서드를 올바른 인자로 부르는지 검사한다. 순서 바꾸기는 맨 위의 ↑, 맨 아래의 "아래로"가 비활성인지도 본다.
+### G4. 규칙 위반 탐지 보강 — P2
 
-### F5. 새 트랙의 `orderIndex`가 항상 0 — P2
-
-- **위치:** `MediaUploadSheet.tsx` audio `saveFn` (`orderIndex: 0`)
-- **수정:** 같은 곡의 보관되지 않은 트랙 `orderIndex` 최댓값 + 1(없으면 0). 저장 시점의 최신 카탈로그 기준이다.
-
-### F6. `youtu.be` 링크가 영상으로 분류되지 않음 — P2
-
-- **위치:** `src/components/studio/PieceDetail.tsx` 31~32행, 운영진 목록의 음원·영상 개수 계산
-- **현상:** `url.includes('youtube')`로 판별해서 `https://youtu.be/...` 링크(source가 youtube가 아닌 기존 데이터)는 음원 목록에 들어간다.
-- **수정:** `src/utils/youtubeUrl.ts`의 검증 함수로 판별한다. `source === 'youtube'` 또는 URL이 유튜브 호스트면 영상이다. 같은 판별 함수를 단원 화면과 운영진 화면이 함께 쓴다.
-- **테스트:** `youtu.be`, `m.youtube.com`, 구글 드라이브 링크 분류.
-
-### F7. 쓰지 않는 컴포넌트 정리 — P2
-
-- `src/components/TodayTab.tsx`, `CalendarTab.tsx`, `HomeView.tsx`가 이제 `App.tsx`에서 쓰이지 않는다(테스트에서만 import).
-- **먼저 `grep -rn`으로 운영 코드에서 import하는 곳이 정말 없는지 확인한다.** 없으면 컴포넌트와 그 컴포넌트 전용 테스트 파일을 지운다. 이 경우에 한해 테스트 삭제를 허용한다(R9 예외).
-- 그 안에서만 쓰이던 하위 컴포넌트·유틸이 있으면 같이 지우되, `HomeTab`이나 다른 곳이 쓰는 것은 남긴다.
-- 지운 파일 목록과 확인한 grep 결과를 보고한다.
-
-### F8. 원본 업로드 시 길이(`durationSeconds`) 저장 — P2
-
-- 압축이 꺼져 있어(Q1 대기) 원본을 그대로 올리므로 트랙 길이가 비어 있다. 단원 화면에 `종류 · 길이`가 표시되지 않는다.
-- **수정:** 업로드 전에 `URL.createObjectURL(file)`을 `new Audio()`에 넣고 `loadedmetadata`에서 `duration`을 읽는다. 끝나면 `URL.revokeObjectURL`.
-  - 5초 안에 못 읽거나 `NaN` / `Infinity`면 비워 둔다.
-  - 이 처리는 `src/services/media/audioMetadata.ts`(신규)에 둔다.
-- **테스트:** 정상값, 시간 초과, `Infinity` 세 경우(오디오 요소는 가짜로 대체).
+- 이번 G3처럼 컴포넌트 `style`에 직접 쓴 hex(`'#ff0000'`)가 테스트에 걸리지 않았다.
+- `src/styles/cssVariables.test.ts`에 검사를 하나 추가한다. `src/components/**/*.tsx`에서 따옴표 안의 hex 색 리터럴(`'#…'`, `"#…"`)을 찾아 실패시키되, `var(--이름, #hex)`의 대체값과 SVG `fill`/`stroke` 속성 값은 예외로 한다.
+- 기존 위반이 많으면 **지금 있는 위반 목록을 허용 목록(파일:값)으로 고정**하고, 새 위반만 막는다. 허용 목록 개수를 보고한다.
 
 ---
 
-## 3. 보고 형식 보완
+## 3. 이번에 하지 않는 것 (사용자와 결정 중)
 
-이번 PR 보고에는 V3-08·V3-09만 지시서 §5 형식으로 적혀 있다. 아래 내용을 이번 보고에 **V3-01·02·07·07b·03·04·05·06** 각각에 대해 추가한다.
+- "연결된 공연" 구조(시즌 카드 대신 별도 "공연" 단위를 둘지)는 사용자가 결정 중이다. **곡 편집 화면의 공연 영역은 지금 동작 그대로 두고 손대지 않는다.**
 
-- 사용한 기존 식별자 → 정의 위치(R1)
-- 새 한글 문구 목록(R16)
-- 수정 전 실패 출력 요약(R10)
-- 새·수정 파일 줄 수(R20)
+## 4. 마무리
 
----
-
-## 4. 마무리 (마지막 커밋)
-
-1. `docs/DEV_LOG.md`에 F1~F8 요약(문제와 해결 한 줄씩)을 쓴다.
-2. **이 파일 `check.md`를 삭제한다**(`git rm check.md`). 커밋 메시지: `docs: record v3-A review fixes (F1-F8) and remove check.md`
-3. 푸시한다(PR #27에 반영). **머지하지 않는다.** 그 뒤 멈추고 보고한다.
+1. `docs/DEV_LOG.md`에 G1~G4 요약을 쓴다.
+2. `git rm check.md`. 커밋 메시지: `docs: record v3-A user feedback fixes (G1-G4) and remove check.md`
+3. PR #27에 푸시하고 멈춘다. 보고는 지시서 §5 형식으로 한다.
 
 ## 5. 하지 말 것
 
-- v3-B·v3-C 작업 시작
-- `supabase/` 파일 수정(이번 수정은 DB 변경이 필요 없다. 필요하다고 판단되면 멈추고 보고)
-- 운영 DB 실행·실행 요청, PR 머지, 배포
+- `supabase/` 변경, 운영 DB 실행·실행 요청, `app_config` 값 변경, Worker 배포, PR 머지, 배포
+- 공연 구조 변경(§3)
 - 이 문서에 없는 리팩터링
