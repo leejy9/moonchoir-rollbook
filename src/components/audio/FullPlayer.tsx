@@ -81,171 +81,181 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
 
   return (
     <div
-      className="full-player-overlay"
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
+      className="full-player-backdrop full-player-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       role="dialog"
       aria-modal="true"
       aria-label="오디오 플레이어 전체 화면"
     >
-      {/* Pull Handle */}
-      <div className="full-player-handle-bar" aria-hidden="true" />
-
-      {/* Top Header */}
-      <header className="full-player-header">
-        <button
-          type="button"
-          className="full-player-dismiss-btn"
-          onClick={onClose}
-          aria-label="플레이어 접기"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-
-        {hasScore && (
-          <button
-            type="button"
-            className="full-player-score-btn"
-            onClick={handleScoreClick}
-          >
-            악보 보기
-          </button>
-        )}
-      </header>
-
-      {/* Body */}
-      <div className="full-player-body">
-        {/* Large Cover */}
-        <div className="full-player-cover-large" aria-hidden="true">
-          <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 18V5l12-2v13" />
-            <circle cx="6" cy="18" r="3" />
-            <circle cx="18" cy="16" r="3" />
-          </svg>
+      <div
+        className="full-player-sheet"
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+      >
+        {/* Pull Handle */}
+        <div className="full-player-pull-area" aria-hidden="true">
+          <div className="full-player-pull-handle" />
         </div>
 
-        {/* Track & Piece Info */}
-        <h2 className="full-player-track-name">{currentTrack.track.label}</h2>
-        <p className="full-player-piece-name">{currentTrack.pieceTitle}</p>
+        {/* Top Header */}
+        <header className="full-player-header">
+          <button
+            type="button"
+            className="full-player-icon-btn full-player-dismiss-btn"
+            onClick={onClose}
+            aria-label="플레이어 접기"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <span className="full-player-header-title">{piece?.title || '오디오 플레이어'}</span>
+          {hasScore && (
+            <button
+              type="button"
+              className="full-player-score-link full-player-score-btn"
+              onClick={handleScoreClick}
+              aria-label="악보 보기"
+            >
+              악보 보기
+            </button>
+          )}
+        </header>
 
-        {/* Timeline Slider */}
-        <div className="full-player-timeline">
-          <input
-            type="range"
-            className="full-player-slider"
-            min={0}
-            max={duration || 100}
-            value={currentTime}
-            onChange={(e) => seekTo(parseFloat(e.target.value))}
-            aria-label="재생 구간 탐색"
-          />
-          <div className="full-player-times">
-            <span>{formatSeconds(currentTime)}</span>
-            <span>−{formatSeconds(remainingSeconds)}</span>
+        {/* Body */}
+        <div className="full-player-body">
+          {/* Large Cover */}
+          <div className="full-player-cover-area full-player-cover-large" aria-hidden="true">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18V5l12-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="16" r="3" />
+            </svg>
           </div>
-        </div>
 
-        {/* Control Buttons Row */}
-        <div className="full-player-controls-row">
-          {/* Repeat One toggle */}
-          <button
-            type="button"
-            className={`full-player-ctrl-btn ${repeatOne ? 'active' : ''}`}
-            onClick={toggleRepeatOne}
-            aria-label={repeatOne ? '1곡 반복 켜짐' : '1곡 반복 꺼짐'}
-          >
-            {repeatOne ? '1곡' : '전체'}
-          </button>
+          {/* Track & Piece Info */}
+          <div className="full-player-titles">
+            <h2 className="full-player-track-name">{currentTrack.track.label}</h2>
+            <p className="full-player-piece-name">{currentTrack.pieceTitle}</p>
+          </div>
 
-          {/* 5s Back */}
-          <button
-            type="button"
-            className="full-player-ctrl-btn"
-            onClick={() => seekRelative(-5)}
-            aria-label="5초 뒤로"
-          >
-            −5초
-          </button>
+          {/* Timeline Slider */}
+          <div className="full-player-timeline">
+            <input
+              type="range"
+              className="full-player-slider"
+              min={0}
+              max={duration || 100}
+              value={currentTime}
+              onChange={(e) => seekTo(parseFloat(e.target.value))}
+              aria-label="재생 구간 탐색"
+            />
+            <div className="full-player-time-labels full-player-times">
+              <span>{formatSeconds(currentTime)}</span>
+              <span>−{formatSeconds(remainingSeconds)}</span>
+            </div>
+          </div>
 
-          {/* Play/Pause */}
-          <button
-            type="button"
-            className="full-player-play-btn"
-            onClick={togglePlay}
-            aria-label={isPlaying ? '일시정지' : '재생'}
-          >
-            {isPlaying ? (
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="4" width="4" height="16" rx="1" />
-                <rect x="14" y="4" width="4" height="16" rx="1" />
-              </svg>
-            ) : (
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="5 3 19 12 5 21 5 3" />
-              </svg>
-            )}
-          </button>
+          {/* Control Buttons Row */}
+          <div className="full-player-controls-row">
+            {/* Repeat One toggle */}
+            <button
+              type="button"
+              className={`full-player-toggle-btn ${repeatOne ? 'active' : ''}`}
+              onClick={toggleRepeatOne}
+              aria-label={repeatOne ? '1곡 반복 켜짐' : '1곡 반복 꺼짐'}
+            >
+              {repeatOne ? '1곡' : '전체'}
+            </button>
 
-          {/* 5s Forward */}
-          <button
-            type="button"
-            className="full-player-ctrl-btn"
-            onClick={() => seekRelative(5)}
-            aria-label="5초 앞으로"
-          >
-            +5초
-          </button>
+            {/* 5s Back */}
+            <button
+              type="button"
+              className="full-player-circle-btn full-player-ctrl-btn"
+              onClick={() => seekRelative(-5)}
+              aria-label="5초 뒤로"
+            >
+              −5초
+            </button>
 
-          {/* Speed Button */}
-          <button
-            type="button"
-            className="full-player-ctrl-btn"
-            onClick={() => setShowSpeedSheet(true)}
-            aria-label="재생 속도"
-          >
-            {playbackSpeed.toFixed(1)}x
-          </button>
-        </div>
+            {/* Play/Pause */}
+            <button
+              type="button"
+              className="full-player-circle-btn play-main full-player-play-btn"
+              onClick={togglePlay}
+              aria-label={isPlaying ? '일시정지' : '재생'}
+            >
+              {isPlaying ? (
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="4" width="4" height="16" rx="1" />
+                  <rect x="14" y="4" width="4" height="16" rx="1" />
+                </svg>
+              ) : (
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+              )}
+            </button>
 
-        {/* Other tracks of this piece */}
-        {siblingTracks.length > 1 && (
-          <div className="full-player-siblings-section">
-            <h3 className="full-player-siblings-title">이 곡의 다른 음원</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {siblingTracks
-                .filter((t) => !t.isArchived)
-                .map((trk) => {
-                  const isCurrent = trk.id === currentTrack.track.id;
-                  const queueItem = queue.find((q) => q.track.id === trk.id);
+            {/* 5s Forward */}
+            <button
+              type="button"
+              className="full-player-circle-btn full-player-ctrl-btn"
+              onClick={() => seekRelative(5)}
+              aria-label="5초 앞으로"
+            >
+              +5초
+            </button>
 
+            {/* Speed Button */}
+            <button
+              type="button"
+              className="full-player-toggle-btn"
+              onClick={() => setShowSpeedSheet(true)}
+              aria-label="재생 속도 조절"
+            >
+              {playbackSpeed.toFixed(2)}x
+            </button>
+          </div>
+
+          {/* Sibling Tracks Section */}
+          {siblingTracks.length > 0 && (
+            <div className="full-player-siblings-section">
+              <h3 className="full-player-siblings-title">다른 파트 듣기</h3>
+              <div className="full-player-siblings-list">
+                {siblingTracks.map((t) => {
+                  const isCurrent = t.id === currentTrack.track.id;
                   return (
                     <button
-                      key={trk.id}
+                      key={t.id}
                       type="button"
                       className={`full-player-sibling-item ${isCurrent ? 'active' : ''}`}
                       onClick={() => {
-                        if (queueItem) {
-                          playTrack(queueItem, queue);
+                        const targetItem = queue.find((item) => item.track.id === t.id);
+                        if (targetItem) {
+                          playTrack(targetItem);
                         }
                       }}
+                      disabled={isCurrent}
+                      aria-label={`${t.label} 재생`}
                     >
-                      <span>{trk.label}</span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{trk.kind}</span>
+                      <span>{t.label}</span>
+                      {isCurrent && <span className="full-player-current-tag">재생 중</span>}
                     </button>
                   );
                 })}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Speed Sheet */}
       {showSpeedSheet && (
         <SpeedSheet
           currentSpeed={playbackSpeed}
-          onChangeSpeed={(spd) => setSpeed(spd)}
+          onChangeSpeed={setSpeed}
           onClose={() => setShowSpeedSheet(false)}
         />
       )}
