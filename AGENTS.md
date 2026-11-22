@@ -37,6 +37,12 @@
 - **ASK FIRST**:
   - 구글 시트의 원천 스키마(새로운 필수 열 추가 등) 구조를 변경할 때는 사용자에게 사전 확인.
 
+- **반복 실수 방지 (2026-11-22):**
+  - 작업 전 `.agents/rules/recurring-mistakes.md`를 읽는다.
+  - 보고 전 `.agents/workflows/report-ready.md`(`/report-ready`)를 실행한다.
+  - PR은 GitHub CI(`.github/workflows/ci.yml`: Green Bar, 빈 PostgreSQL에서 DB 변경·검증 스크립트 실행, 반복 실수 검사)가 초록불이어야 한다.
+  - 실수 기록은 `docs/agent/LESSONS.md`에 쌓는다.
+
 ## 3. 기술 스택 & 결정론적 명령어 (Tech Stack & Exact Commands)
 - **Frontend Core**: Vite + React 19 + TypeScript
 - **Styling**: Vanilla CSS (모바일 우선 반응형 설계)
