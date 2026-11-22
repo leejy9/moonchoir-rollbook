@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import type { Performance } from '../../../types/rollbook';
 import { sheetsService } from '../../../services/sheets';
+import { executeDeletePerformance } from '../../../services/practice/deleteFlow';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 
 interface PerformanceEditSheetProps {
@@ -22,6 +24,9 @@ export const PerformanceEditSheet: React.FC<PerformanceEditSheetProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const initialTitle = performance?.title || '';
   const initialDate = performance?.performanceDate || '';
@@ -74,6 +79,22 @@ export const PerformanceEditSheet: React.FC<PerformanceEditSheetProps> = ({
       setErrorMessage(msg);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!performance?.id) return;
+    try {
+      setIsDeleting(true);
+      setDeleteError(null);
+      await executeDeletePerformance(performance.id);
+      setShowDeleteModal(false);
+      onSaved();
+      onClose();
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : '공연 삭제에 실패했습니다.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -162,11 +183,30 @@ export const PerformanceEditSheet: React.FC<PerformanceEditSheetProps> = ({
           </div>
 
           {!isNew && (
-            <div style={{ marginTop: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
+            <div style={{ marginTop: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px', display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                disabled={isSaving || isDeleting}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--status-danger)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  minHeight: '44px',
+                  padding: '8px 16px',
+                  cursor: isSaving || isDeleting ? 'not-allowed' : 'pointer',
+                  flex: 1,
+                }}
+              >
+                삭제
+              </button>
               <button
                 type="button"
                 onClick={handleToggleArchive}
-                disabled={isSaving}
+                disabled={isSaving || isDeleting}
                 style={{
                   background: 'transparent',
                   border: '1px solid var(--border-subtle)',
@@ -176,8 +216,8 @@ export const PerformanceEditSheet: React.FC<PerformanceEditSheetProps> = ({
                   fontWeight: 600,
                   minHeight: '44px',
                   padding: '8px 16px',
-                  cursor: 'pointer',
-                  width: '100%',
+                  cursor: isSaving || isDeleting ? 'not-allowed' : 'pointer',
+                  flex: 1,
                 }}
               >
                 {performance?.isArchived ? '공연 복원' : '공연 보관'}
@@ -234,6 +274,19 @@ export const PerformanceEditSheet: React.FC<PerformanceEditSheetProps> = ({
             onClose();
           }}
           onContinueEditing={() => setShowConfirmClose(false)}
+        />
+      )}
+
+      {showDeleteModal && (
+        <DeleteConfirmModal
+          title={performance?.title || '공연'}
+          isDeleting={isDeleting}
+          errorMessage={deleteError}
+          onConfirm={handleConfirmDelete}
+          onClose={() => {
+            setShowDeleteModal(false);
+            setDeleteError(null);
+          }}
         />
       )}
     </div>

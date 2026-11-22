@@ -178,6 +178,12 @@ export class SupabaseBackend implements RemoteBackend {
         return 'fn_reorder_practice_tracks';
       case 'GET_MEDIA_USAGE':
         return 'fn_get_media_usage';
+      case 'DELETE_PRACTICE_PIECE':
+        return 'fn_delete_practice_piece';
+      case 'DELETE_PRACTICE_TRACK':
+        return 'fn_delete_practice_track';
+      case 'DELETE_PERFORMANCE':
+        return 'fn_delete_performance';
       default:
         return null;
     }

@@ -767,6 +767,31 @@ export class SheetsService {
     }
   }
 
+  public async deletePracticePiece(pieceId: string): Promise<{ success: boolean; storageKeys?: string[] }> {
+    const result = await this.sendToGoogleSheet('DELETE_PRACTICE_PIECE', { pieceId });
+    if (!result.success) {
+      throw new Error(result.message || '곡 삭제에 실패했습니다.');
+    }
+    const data = result.data as { storageKeys?: string[] } | undefined;
+    return { success: true, storageKeys: data?.storageKeys || (result as { storageKeys?: string[] }).storageKeys || [] };
+  }
+
+  public async deletePracticeTrack(trackId: string): Promise<{ success: boolean; storageKeys?: string[] }> {
+    const result = await this.sendToGoogleSheet('DELETE_PRACTICE_TRACK', { trackId });
+    if (!result.success) {
+      throw new Error(result.message || '트랙 삭제에 실패했습니다.');
+    }
+    const data = result.data as { storageKeys?: string[] } | undefined;
+    return { success: true, storageKeys: data?.storageKeys || (result as { storageKeys?: string[] }).storageKeys || [] };
+  }
+
+  public async deletePerformance(performanceId: string): Promise<void> {
+    const result = await this.sendToGoogleSheet('DELETE_PERFORMANCE', { performanceId });
+    if (!result.success) {
+      throw new Error(result.message || '공연 삭제에 실패했습니다.');
+    }
+  }
+
   public async getMediaUsage(): Promise<MediaUsage | null> {
     if (this.backend.kind === 'gas') {
       return null;

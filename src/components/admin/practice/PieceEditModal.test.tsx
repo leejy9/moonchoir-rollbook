@@ -116,8 +116,9 @@ describe('PieceEditModal Component', () => {
         />
       );
 
-      // Should render archive button in footer
+      // Should render archive and delete buttons in footer
       expect(html).toContain('곡 보관');
+      expect(html).toContain('삭제');
     });
 
     it('shows restore button for archived piece in HTML', async () => {

@@ -253,6 +253,24 @@ describe('SupabaseBackend', () => {
         'https://test.supabase.co/rest/v1/rpc/fn_set_performance_pieces',
         expect.anything()
       );
+
+      await backend.callAction('DELETE_PRACTICE_PIECE', { pieceId: 'p1' });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_delete_practice_piece',
+        expect.anything()
+      );
+
+      await backend.callAction('DELETE_PRACTICE_TRACK', { trackId: 't1' });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_delete_practice_track',
+        expect.anything()
+      );
+
+      await backend.callAction('DELETE_PERFORMANCE', { performanceId: 'perf1' });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_delete_performance',
+        expect.anything()
+      );
     });
 
     it('maps GET_MEDIA_USAGE to fn_get_media_usage with admin token attached', async () => {

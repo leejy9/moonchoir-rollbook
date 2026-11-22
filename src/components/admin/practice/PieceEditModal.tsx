@@ -1,8 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import type { AppConfig, PracticeCatalog, PracticePiece, ProgramCard } from '../../../types/rollbook';
+import type { AppConfig, PracticeCatalog, PracticePiece, PracticeTrack, ProgramCard } from '../../../types/rollbook';
 import { sheetsService } from '../../../services/sheets';
 import { useUploadQueue, uploadQueue } from '../../../services/media/uploadQueue';
 import { saveNewPieceWithStagedMedia } from '../../../services/media/uploadSave';
+import { executeDeletePracticeTrack } from '../../../services/practice/deleteFlow';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { MediaUploadSheet } from './MediaUploadSheet';
 import { YoutubeLinkModal } from './YoutubeLinkModal';
 import { PieceTrackSection, type StagedTrack } from './PieceTrackSection';
@@ -61,6 +63,24 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
   const [showNewPerformanceSheet, setShowNewPerformanceSheet] = useState(false);
   const [youtubeModal, setYoutubeModal] = useState<{ id?: string; title: string; url: string } | null>(null);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
+  const [deleteTrackTarget, setDeleteTrackTarget] = useState<PracticeTrack | null>(null);
+  const [isDeletingTrack, setIsDeletingTrack] = useState(false);
+  const [deleteTrackError, setDeleteTrackError] = useState<string | null>(null);
+
+  const handleConfirmDeleteTrack = async () => {
+    if (!deleteTrackTarget) return;
+    try {
+      setIsDeletingTrack(true);
+      setDeleteTrackError(null);
+      await executeDeletePracticeTrack(deleteTrackTarget.id);
+      setDeleteTrackTarget(null);
+      onSaved();
+    } catch (err: unknown) {
+      setDeleteTrackError(err instanceof Error ? err.message : '트랙 삭제에 실패했습니다.');
+    } finally {
+      setIsDeletingTrack(false);
+    }
+  };
 
   const { activeJob, failedJobs, retryJob, dismissJob } = useUploadQueue();
   const hasMediaBaseUrl = Boolean(config.mediaPublicBaseUrl?.trim());
@@ -70,9 +90,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
       title.trim() !== (initialPiece.title || '').trim() ||
       composer.trim() !== (initialPiece.composer || '').trim() ||
       arranger.trim() !== (initialPiece.arranger || '').trim() ||
-      stagedScore !== null ||
-      stagedTracks.length > 0 ||
-      stagedPerformanceIds.length > 0
+      stagedScore !== null || stagedTracks.length > 0 || stagedPerformanceIds.length > 0
     );
   }, [title, composer, arranger, initialPiece, stagedScore, stagedTracks, stagedPerformanceIds]);
 
@@ -92,12 +110,8 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
     try {
       if (isNew) {
         const created = await saveNewPieceWithStagedMedia({
-          title: trimmedTitle,
-          composer: composer.trim(),
-          arranger: arranger.trim(),
-          stagedPerformanceIds,
-          stagedTracks,
-          stagedScore,
+          title: trimmedTitle, composer: composer.trim(), arranger: arranger.trim(),
+          stagedPerformanceIds, stagedTracks, stagedScore,
           baseUrl: config.mediaPublicBaseUrl || '',
           catalogPerformancePieces: catalog.performancePieces,
           enqueueFn: (req) => uploadQueue.enqueue(req),
@@ -109,10 +123,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
         onSaved();
       } else {
         const updated = await sheetsService.savePracticePiece({
-          ...currentPiece,
-          title: trimmedTitle,
-          composer: composer.trim(),
-          arranger: arranger.trim(),
+          ...currentPiece, title: trimmedTitle, composer: composer.trim(), arranger: arranger.trim(),
         });
         setSavedPiece(updated);
         onSaved();
@@ -127,30 +138,23 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
   const connectedPerformances = useMemo(() => {
     const performances = catalog.performances || [];
     if (isNew) {
-      return stagedPerformanceIds.map((perfId) => {
-        const perf = performances.find((p) => p.id === perfId);
-        return { programId: perfId, orderIndex: 0, title: perf?.title || perfId, isStaged: true };
-      });
+      return stagedPerformanceIds.map((id) => ({
+        programId: id, orderIndex: 0, title: performances.find((p) => p.id === id)?.title || id, isStaged: true,
+      }));
     }
     if (!currentPiece.id) return [];
     return (catalog.performancePieces || [])
       .filter((pp) => pp.pieceId === currentPiece.id && !pp.isArchived)
-      .map((pp) => {
-        const perf = performances.find((p) => p.id === pp.performanceId);
-        return {
-          programId: pp.performanceId,
-          orderIndex: pp.orderIndex ?? 0,
-          title: perf?.title || pp.performanceId,
-          isStaged: false,
-        };
-      });
+      .map((pp) => ({
+        programId: pp.performanceId,
+        orderIndex: pp.orderIndex ?? 0,
+        title: performances.find((p) => p.id === pp.performanceId)?.title || pp.performanceId,
+        isStaged: false,
+      }));
   }, [isNew, stagedPerformanceIds, currentPiece.id, catalog.performancePieces, catalog.performances]);
 
   const handleRemoveFromPerformance = async (perfId: string) => {
-    if (isNew) {
-      setStagedPerformanceIds((prev) => prev.filter((id) => id !== perfId));
-      return;
-    }
+    if (isNew) return setStagedPerformanceIds((prev) => prev.filter((id) => id !== perfId));
     if (!currentPiece.id) return;
     const currentList = (catalog.performancePieces || [])
       .filter((pp) => pp.performanceId === perfId && !pp.isArchived)
@@ -189,9 +193,8 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
   const handleMoveTrackOrder = async (trackId: string, direction: 'UP' | 'DOWN') => {
     if (!currentPiece.id) return;
     const idx = pieceTracks.findIndex((t) => t.id === trackId);
-    if (idx < 0) return;
     const targetIdx = direction === 'UP' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= pieceTracks.length) return;
+    if (idx < 0 || targetIdx < 0 || targetIdx >= pieceTracks.length) return;
     const reordered = [...pieceTracks];
     const [moved] = reordered.splice(idx, 1);
     reordered.splice(targetIdx, 0, moved);
@@ -280,6 +283,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
               }
             }}
             onOpenYoutubeModal={(yt) => setYoutubeModal(yt ? { id: yt.id, title: yt.label, url: yt.url || '' } : { title: '', url: '' })}
+            onDeleteTrack={(track) => setDeleteTrackTarget(track)}
           />
 
           <PieceArchiveButton piece={currentPiece} onSaved={onSaved} onClose={onClose} />
@@ -325,10 +329,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
           onClose={() => setYoutubeModal(null)}
           onSave={async (ytTitle, ytUrl) => {
             if (isNew) {
-              setStagedTracks((prev) => [
-                ...prev,
-                { id: `staged_yt_${Date.now()}`, kind: 'youtube', label: ytTitle, url: ytUrl },
-              ]);
+              setStagedTracks((prev) => [...prev, { id: `staged_yt_${Date.now()}`, kind: 'youtube', label: ytTitle, url: ytUrl }]);
             } else if (currentPiece.id) {
               await sheetsService.savePracticeTrack({
                 id: youtubeModal.id,
@@ -354,27 +355,20 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
           config={config}
           onClose={() => setUploadSheetTarget(null)}
           onJobEnqueued={onSaved}
-          onStageUpload={
-            isNew
-              ? (staged) => {
-                  if (staged.kind === 'score') {
-                    setStagedScore({ file: staged.file, name: staged.title || staged.file.name });
-                  } else {
-                    setStagedTracks((prev) => [
-                      ...prev,
-                      {
-                        id: `staged_${Date.now()}_${Math.random()}`,
-                        kind: 'audio',
-                        file: staged.file,
-                        label: staged.title,
-                        trackKind: staged.trackKind || '가이드',
-                        durationSeconds: staged.durationSeconds,
-                      },
-                    ]);
-                  }
-                }
-              : undefined
-          }
+          onStageUpload={isNew ? (staged) => {
+            if (staged.kind === 'score') {
+              setStagedScore({ file: staged.file, name: staged.title || staged.file.name });
+            } else {
+              setStagedTracks((prev) => [...prev, {
+                id: `staged_${Date.now()}_${Math.random()}`,
+                kind: 'audio',
+                file: staged.file,
+                label: staged.title,
+                trackKind: staged.trackKind || '가이드',
+                durationSeconds: staged.durationSeconds,
+              }]);
+            }
+          } : undefined}
         />
       )}
 
@@ -382,6 +376,19 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
         <UnsavedChangesModal
           onConfirmClose={onClose}
           onContinueEditing={() => setShowConfirmClose(false)}
+        />
+      )}
+
+      {deleteTrackTarget && (
+        <DeleteConfirmModal
+          title={deleteTrackTarget.label || '트랙'}
+          isDeleting={isDeletingTrack}
+          errorMessage={deleteTrackError}
+          onConfirm={handleConfirmDeleteTrack}
+          onClose={() => {
+            setDeleteTrackTarget(null);
+            setDeleteTrackError(null);
+          }}
         />
       )}
     </div>

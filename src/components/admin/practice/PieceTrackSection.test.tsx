@@ -53,6 +53,7 @@ describe('PieceTrackSection Component', () => {
         onMoveTrackOrder={vi.fn()}
         onEditTrack={vi.fn()}
         onOpenYoutubeModal={vi.fn()}
+        onDeleteTrack={vi.fn()}
       />
     );
 
@@ -61,5 +62,6 @@ describe('PieceTrackSection Component', () => {
     expect(html).toContain('아래로');
     expect(html).toContain('보관된 트랙');
     expect(html).toContain('복원');
+    expect(html).toContain('삭제');
   });
 });

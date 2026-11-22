@@ -78,4 +78,17 @@ describe('PerformanceEditSheet Component (V3-15 Stage 5)', () => {
     await sheetsService.setPerformanceArchived('perf_1', false);
     expect(archiveSpy).toHaveBeenCalledWith('perf_1', false);
   });
+
+  it('renders delete button for existing performance (J4)', () => {
+    const html = renderToString(
+      <PerformanceEditSheet
+        performance={dummyPerf}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('삭제');
+    expect(html).toContain('var(--status-danger)');
+  });
 });

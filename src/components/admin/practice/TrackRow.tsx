@@ -10,6 +10,7 @@ interface TrackRowProps {
   onEditLabel: (track: PracticeTrack) => void;
   onEditKind: (track: PracticeTrack) => void;
   onArchiveTrack: (track: PracticeTrack) => void;
+  onDeleteTrack?: (track: PracticeTrack) => void;
 }
 
 export const TrackRow: React.FC<TrackRowProps> = ({
@@ -21,6 +22,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   onEditLabel,
   onEditKind,
   onArchiveTrack,
+  onDeleteTrack,
 }) => {
   return (
     <div
@@ -185,6 +187,28 @@ export const TrackRow: React.FC<TrackRowProps> = ({
             >
               보관
             </button>
+            {onDeleteTrack && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  onDeleteTrack(track);
+                  e.currentTarget.closest('details')?.removeAttribute('open');
+                }}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  textAlign: 'left',
+                  padding: '8px 12px',
+                  minHeight: '44px',
+                  cursor: 'pointer',
+                  color: 'var(--status-danger)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                }}
+              >
+                삭제
+              </button>
+            )}
           </div>
         </details>
       </div>

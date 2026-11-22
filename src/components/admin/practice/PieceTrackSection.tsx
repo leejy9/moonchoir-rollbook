@@ -34,6 +34,7 @@ interface PieceTrackSectionProps {
   onMoveTrackOrder?: (trackId: string, direction: 'UP' | 'DOWN') => void;
   onEditTrack?: (track: PracticeTrack, updates: { label?: string; kind?: string }) => void;
   onOpenYoutubeModal: (track?: PracticeTrack) => void;
+  onDeleteTrack?: (track: PracticeTrack) => void;
 }
 
 export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
@@ -54,6 +55,7 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
   onMoveTrackOrder,
   onEditTrack,
   onOpenYoutubeModal,
+  onDeleteTrack,
 }) => {
   const [editingModal, setEditingModal] = useState<{
     track: PracticeTrack;
@@ -163,6 +165,7 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
               onEditLabel={(track) => setEditingModal({ track, mode: 'label' })}
               onEditKind={(track) => setEditingModal({ track, mode: 'kind' })}
               onArchiveTrack={onArchiveTrack}
+              onDeleteTrack={onDeleteTrack}
             />
           ))}
         </div>
@@ -348,6 +351,15 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
                 >
                   보관
                 </button>
+                {onDeleteTrack && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteTrack(yt)}
+                    style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--status-danger)', minWidth: '44px', minHeight: '44px', fontSize: '12px', fontWeight: 600 }}
+                  >
+                    삭제
+                  </button>
+                )}
               </div>
             </div>
           ))}
