@@ -13,6 +13,7 @@ export const MAX_SCORE_BYTES = 20 * 1024 * 1024; // 20MB
 
 export const SUPPORTED_COMPRESSIBLE_EXTENSIONS = new Set([
   'wav',
+  'aif',
   'aiff',
   'flac',
   'm4a',

@@ -182,7 +182,11 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
               <label className="admin-field-label">파일 선택</label>
               <input
                 type="file"
-                accept={kind === 'audio' ? 'audio/mp4,audio/x-m4a,audio/mpeg,audio/aac,.m4a,.mp3,.aac' : 'application/pdf,.pdf'}
+                accept={
+                  kind === 'audio'
+                    ? 'audio/mp4,audio/x-m4a,audio/mpeg,audio/aac,audio/wav,audio/x-wav,audio/aiff,audio/x-aiff,audio/flac,.m4a,.mp3,.aac,.wav,.aif,.aiff,.flac'
+                    : 'application/pdf,.pdf'
+                }
                 onChange={handleFileChange}
                 className="admin-field-input"
                 style={{ padding: '10px' }}
@@ -213,7 +217,11 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
                   다른 파일
                   <input
                     type="file"
-                    accept={kind === 'audio' ? 'audio/mp4,audio/x-m4a,audio/mpeg,audio/aac,.m4a,.mp3,.aac' : 'application/pdf,.pdf'}
+                    accept={
+                      kind === 'audio'
+                        ? 'audio/mp4,audio/x-m4a,audio/mpeg,audio/aac,audio/wav,audio/x-wav,audio/aiff,audio/x-aiff,audio/flac,.m4a,.mp3,.aac,.wav,.aif,.aiff,.flac'
+                        : 'application/pdf,.pdf'
+                    }
                     onChange={handleFileChange}
                     style={{ display: 'none' }}
                   />

@@ -66,6 +66,20 @@ describe('audioCompress (V3-16)', () => {
       expect(res.ok).toBe(false);
       expect(res.reason).toBe(COMPRESSION_ERROR_MESSAGE);
     });
+
+    it('rejects wav/aiff when compression is not enabled and accepts when enabled (J3)', () => {
+      const wavFile = { name: 'rehearsal.wav', size: 10 * 1024 * 1024, type: 'audio/wav' };
+      const aifFile = { name: 'rehearsal.aif', size: 10 * 1024 * 1024, type: 'audio/aiff' };
+
+      expect(validateAudioFile(wavFile, { allowCompress: false }).ok).toBe(false);
+      expect(validateAudioFile(wavFile, { allowCompress: false }).reason).toBe(COMPRESSION_ERROR_MESSAGE);
+
+      expect(validateAudioFile(aifFile, { allowCompress: false }).ok).toBe(false);
+      expect(validateAudioFile(aifFile, { allowCompress: false }).reason).toBe(COMPRESSION_ERROR_MESSAGE);
+
+      expect(validateAudioFile(wavFile, { allowCompress: true }).ok).toBe(true);
+      expect(validateAudioFile(aifFile, { allowCompress: true }).ok).toBe(true);
+    });
   });
 
   describe('compressAudio', () => {

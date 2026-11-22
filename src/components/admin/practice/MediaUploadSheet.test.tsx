@@ -248,5 +248,21 @@ describe('MediaUploadSheet Component', () => {
       expect(html).toContain('파일 저장소가 아직 연결되지 않았어요');
       expect(html).toMatch(/<button[^>]*disabled[^>]*>.*올리기.*<\/button>/s);
     });
+
+    it('renders audio file input with extended accept attribute for wav, aiff, and flac (J3)', () => {
+      const html = renderToString(
+        <MediaUploadSheet
+          pieceId="p1"
+          kind="audio"
+          config={dummyConfig}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(html).toContain('audio/wav');
+      expect(html).toContain('audio/aiff');
+      expect(html).toContain('audio/flac');
+      expect(html).toContain('.wav,.aif,.aiff,.flac');
+    });
   });
 });
