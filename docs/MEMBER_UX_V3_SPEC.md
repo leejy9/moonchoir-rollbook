@@ -30,6 +30,7 @@
 | V15 | 정시 기준: 체크인 시각의 **분이 시작 시각의 분 이하**. 19:30 시작이면 19:30:59까지 정시 | 신규 |
 | V16 | 스티커 이미지는 **Microsoft Fluent Emoji 3D(MIT)**. 24장만 저장소에 포함하고 라이선스 고지를 둔다 | 신규 |
 | V17 | 스티커 이름의 운영진 편집 기능은 **보류** | 신규 |
+| V18 | **"공연"은 새 테이블 `performances`로 따로 둔다**(2026-11-22). 시즌 카드(`program_cards`)는 연습 일정용으로 그대로 둔다. 연습곡은 공연에 연결하고, 공연과 일정은 연결하지 않는다. 정기연습 일정을 공연 기간에 자동으로 바꾸는 "덮어쓰기"는 하지 않는다 | 신규 (v2 D5의 곡↔시즌 카드 연결을 대체) |
 
 ### 0-2. 사용자 결정 대기 (해당 티켓은 답이 올 때까지 착수 금지)
 
@@ -90,16 +91,13 @@
   - 항목마다 날짜(`12월 14일` 형식, 없으면 생략)와 곡 수.
   - 곡이 하나도 연결되지 않은 공연은 메뉴에 넣지 않는다.
   - "공연 미정"은 해당 곡이 0개면 숨긴다.
-- **"공연"의 정의:** `program_cards`(시즌 카드) 중 `is_archived = false`이면서 연결된 곡이 있는 것.
-- **공연 날짜:** 그 카드의 `program_id`를 가진 일정 중 취소·보관되지 않은 것만 본다.
-  - 구분이 `performanceCategories`에 들어 있는 일정이 있으면 그중 가장 늦은 날짜를 쓴다.
-  - 없으면 일정 전체 중 가장 늦은 날짜를 쓴다.
-  - 일정이 하나도 없으면 날짜 미정이다.
-  - 날짜가 오늘 이후이거나 미정이면 "다가오는 공연", 오늘 이전이면 "지난 공연"이다.
+- **"공연"의 정의 (V18):** `performances` 테이블의 행 중 보관되지 않았고(`archived_at is null`) 보관되지 않은 연결 곡이 1개 이상인 것. 시즌 카드는 연습실에 나오지 않는다.
+- **공연 날짜:** `performances.performance_date`(`YYYY-MM-DD`, 비어 있으면 날짜 미정). 일정에서 계산하지 않는다.
+  - 날짜가 오늘(KST) 이후이거나 미정이면 "다가오는 공연", 오늘 이전이면 "지난 공연"이다.
 - **목록 정렬:**
   - 전체 곡: `created_at` 내림차순.
-  - 공연: `practice_program_pieces.order_index` 오름차순. 각 행 왼쪽에 1부터 번호(라벤더 색).
-  - 공연 미정: 보관되지 않은 연결이 하나도 없는 곡. `created_at` 내림차순.
+  - 공연: `practice_performance_pieces.order_index` 오름차순. 각 행 왼쪽에 1부터 번호(라벤더 색).
+  - 공연 미정: 보관되지 않은 **공연 연결**(`practice_performance_pieces`)이 하나도 없는 곡. 기존 시즌 카드 연결(`practice_program_pieces`)은 보지 않는다. `created_at` 내림차순.
 - **검색:** 곡 이름, 작곡가, 편곡자, 연결된 공연 이름으로 찾는다. 대소문자와 공백을 무시한다. 검색 중에도 드롭다운 범위는 유지된다.
 - **행:** 곡 이름, 작곡가(·편곡), 자료 태그(`악보` / `음원 n` / `영상 n`), 새 음원 표시(7일 이내 추가된 트랙이 있으면 "새 음원").
 - **선택 기억:** 마지막 범위를 기기에 기억한다. 기억한 공연이 없어졌으면 "전체 곡".
@@ -164,14 +162,14 @@
 - **본문:** 검색창(placeholder "곡 이름·작곡가·공연"), 공연 드롭다운(§3-1과 같은 컴포넌트), 오른쪽 "보관함" 토글.
 - **곡 행:** 단원 화면과 같고, 공연 미정 곡에는 살구색 "공연 미정" 태그를 붙인다.
 - **추가 버튼:** 오른쪽 아래 떠 있는 "+ 곡" 버튼. 누르면 곡 편집 화면과 **같은 화면**을 빈 상태로 연다(제목 "곡 추가"). 새 곡에서도 악보·음원·영상·공연을 추가할 수 있고, 이것들은 "저장 대기"로 보이다가 "저장"을 누르면 곡 생성 → 링크 저장 → 파일 업로드 순서로 처리한다.
-- **기존 하위 탭:** `PIECES` / `PROGRAMS`는 "곡" / "공연별 순서"로 이름만 바꾸고 유지한다.
+- **하위 탭:** "곡" / "공연" 두 개. 기존 `PROGRAMS`(시즌 카드별 곡 연결) 화면은 "공연" 화면(§4-3)으로 **바꾼다.** 시즌 카드와 곡을 잇는 UI는 더 두지 않는다.
 
 ### 4-2. 곡 편집
 
 | 영역 | 내용 |
 |---|---|
 | 기본 정보 | 곡 이름(필수), 작곡, 편곡. **화면 아래 고정 "저장" 버튼으로 저장**(자동 저장 없음, 2026-11-22 변경). 실패하면 버튼 위 빨간 한 줄. 저장 안 한 변경이 있으면 닫을 때 "저장하지 않고 닫을까요?" 확인 |
-| 공연 | 연결된 공연 행(이름, 날짜 · n번째, × 빼기). "+ 공연에 넣기"는 공연 선택 시트를 열고, 고른 공연의 맨 뒤에 붙인다 |
+| 공연 | 연결된 공연 행(이름, 날짜 · n번째, × 빼기). "+ 공연에 넣기"는 보관되지 않은 공연 목록 시트를 열고(다가오는 공연 먼저), 고른 공연의 맨 뒤에 붙인다. 시트 맨 아래 "+ 새 공연"으로 바로 만들 수 있다 |
 | 악보 | PDF 1개. 행 = 파일명, 크기·날짜, "교체". 없으면 "+ 악보 올리기". 기존 `score_url`만 있는 곡은 "외부 링크" 행으로 보이고 "교체"로 업로드 가능 |
 | 음원 | 트랙 행 = 아이콘, 이름, `종류 · 길이 · 크기`, ↑(위로), ⋯(아래로 / 이름 바꾸기 / 종류 바꾸기 / 파일 교체 / 보관). 업로드 중인 행은 진행 막대와 "압축 중 n%" 또는 "올리는 중 n%" |
 | 영상 | 유튜브 행 = 로고, 제목, URL 일부, ⋯(수정 / 보관). "+ 유튜브 링크" |
@@ -179,12 +177,25 @@
 - **유튜브 URL 검증:** `https`이고 호스트가 `youtube.com`, `www.youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtu.be` 중 하나여야 한다. 아니면 저장 버튼을 비활성화한다.
 - **삭제 버튼은 없다.** 보관만 있다(기존 원칙). 파일 교체 시에만 이전 R2 객체를 지운다(V10).
 
-### 4-3. 공연별 순서
+### 4-3. 공연 (V18)
 
-- 상단 공연 드롭다운("이름 · 날짜").
+**공연 목록**
+- 다가오는 공연(날짜 오름차순, 미정은 맨 뒤) → 지난 공연(날짜 내림차순, 흐리게) 순서.
+- 행 = 이름, `12월 14일 · 장소`(있는 것만), `곡 n`. "보관함" 토글로 보관된 공연을 본다.
+- 오른쪽 아래 "+ 공연" 버튼.
+
+**공연 만들기·편집 시트**
+- 입력: 이름(필수, 100자 이하), 공연 날짜(`<input type="date">`, 비워 두면 미정), 장소(선택, 100자 이하).
+- 아래 고정 "저장" 버튼. 저장 안 한 변경이 있으면 닫을 때 §4-2와 같은 확인 창.
+- 기존 공연이면 시트 하단에 "보관"(보관된 공연이면 "복원")을 둔다. 삭제 버튼은 없다.
+
+**공연 곡 순서** (목록에서 공연을 누르면)
+- 헤더: 공연 이름 · 날짜, 오른쪽 "편집"(위 시트 열기).
 - 행 = 번호, 곡 이름, 작곡가, ↑, ↓, ×(빼기). 맨 위의 ↑과 맨 아래의 ↓는 비활성.
-- "+ 곡 넣기"는 곡 선택 시트(검색 가능, 이미 들어 있는 곡은 제외)를 연다.
-- 저장은 기존 `fn_set_program_pieces`로 전체 순서를 보낸다. 연속 탭은 300ms 디바운스한다.
+- "+ 곡 넣기"는 곡 선택 시트를 연다(검색 가능, 이미 들어 있는 곡과 보관된 곡은 제외).
+- 저장은 `fn_set_performance_pieces`로 전체 순서를 보낸다. 연속 탭은 300ms 디바운스.
+
+**이번에 하지 않는 것:** 출연진 명단, 공연과 일정(리허설) 연결, 일정 덮어쓰기.
 
 ### 4-4. 음원 올리기 시트
 
@@ -240,7 +251,7 @@ flowchart LR
 |---|---|
 | 함께한 날 | `members.joined_at`(없으면 첫 출석 로그 날짜)부터 오늘까지 KST 일수 + 1 |
 | 연습 시간 | 상태가 출석·수동인정·지각인 일정의 (`end_time` − `start_time`) 합. 시간 단위 내림 |
-| 공연 | 구분이 `performanceCategories`에 들어 있고 상태가 출석·수동인정·지각인 일정 수 |
+| 공연 | 구분이 `performanceCategories`에 들어 있고 상태가 출석·수동인정·지각인 **일정** 수. `performances` 테이블과는 무관하다(V18: 공연과 일정은 연결하지 않음) |
 | 출석률 | 기존 엔진 `attendanceRate`(최근 3개월 범위). 링 아래 표기 없음 |
 | 누적 출석 | 기존 엔진 `attended + late`(전체 기간). 레벨 계산에 쓴다 |
 
@@ -388,7 +399,7 @@ flowchart LR
 
 ## 7. 데이터 (Supabase)
 
-마이그레이션은 PR 묶음에 맞춰 2개로 나눈다(지시서 §1-2): `20261123000000_v3_media.sql`(§7-3, `fn_authorize_media_upload`, `fn_get_media_usage`, 기존 카탈로그 함수 3개 수정)과 `20261124000000_v3_activity.sql`(§7-1, §7-2, `fn_log_listen_session`, `fn_get_member_activity`). 검증 스크립트도 각각 `supabase/tests/v3_media_check.sql`, `supabase/tests/v3_activity_check.sql`. **운영 적용은 리뷰어가 한다.**
+마이그레이션은 PR 묶음에 맞춰 나눈다(지시서 §1-2). v3-A: `20261123000000_v3_media.sql`(§7-3, `fn_authorize_media_upload`, `fn_get_media_usage`, 기존 카탈로그 함수 3개 수정)과 `20261123010000_v3_performances.sql`(§7-6). v3-C: `20261124000000_v3_activity.sql`(§7-1, §7-2, `fn_log_listen_session`, `fn_get_member_activity`). 검증 스크립트도 각각 `supabase/tests/v3_media_check.sql`, `supabase/tests/v3_activity_check.sql`. **운영 적용은 리뷰어가 한다.** 공연 마이그레이션의 검증 스크립트는 `supabase/tests/v3_performances_check.sql`.
 
 ### 7-1. `rsvp_events` (추가 전용, V12)
 
@@ -448,12 +459,49 @@ flowchart LR
 
 - **회원 삭제 연동:** 기존 회원 삭제 함수가 "출석·투표 기록이 있으면 소프트 삭제"하는 규칙은 그대로 둔다. 재생 기록은 그 판단에 넣지 않는다. 물리 삭제될 때만 cascade로 지워진다.
 
+### 7-6. 공연 (V18) — `20261123010000_v3_performances.sql`
+
+**`performances`**
+
+| 열 | 타입 | 제약 |
+|---|---|---|
+| `id` | `text` | PK (`perf_` + 무작위 12자, 서버 생성) |
+| `title` | `text` | not null, 1~100자 |
+| `performance_date` | `text` | not null default `''`. 비었거나 `YYYY-MM-DD`(check 정규식) |
+| `venue` | `text` | not null default `''`, 100자 이하 |
+| `archived_at` | `timestamptz` | null 허용 |
+| `created_at` / `updated_at` | `timestamptz` | not null default `now()`. `updated_at`은 기존 `set_updated_at` 트리거 재사용 |
+
+**`practice_performance_pieces`**
+
+| 열 | 타입 | 제약 |
+|---|---|---|
+| `performance_id` | `text` | not null, `references performances(id) on delete restrict` |
+| `piece_id` | `text` | not null, `references practice_pieces(id) on delete restrict` |
+| `order_index` | `integer` | not null default 0 |
+| `archived_at` | `timestamptz` | null 허용 |
+| `created_at` | `timestamptz` | not null default `now()` |
+| PK | `(performance_id, piece_id)` | |
+
+- 두 테이블 모두 RLS를 켜고 직접 정책은 없다. `revoke all ... from public, anon, authenticated`. 물리 삭제는 기존 `prevent_row_deletion` 트리거로 막는다(`practice_program_pieces`와 같은 방식).
+- **기존 `practice_program_pieces`와 `fn_set_program_pieces`는 지우지도 고치지도 않는다.** UI에서만 쓰지 않는다. 운영 데이터 1건(시즌 카드 연결)은 공연으로 옮기지 않는다. 그 카드는 정기연습 카드이기 때문이다. 해당 곡은 "공연 미정"으로 보인다.
+
+**RPC** (모두 `security definer`, `set search_path = public, extensions`, anon·authenticated에 execute)
+
+| 함수 | 내용 |
+|---|---|
+| `fn_save_performance(p_payload jsonb)` | 관리자 토큰 검사(`p_payload->>'adminToken'`, 기존 카탈로그 RPC와 같은 방식). 입력 `id?`, `title`, `performanceDate`, `venue`. 제목이 비었거나 100자 초과, 날짜 형식 오류, 장소 100자 초과는 `{success:false, message}`. id가 없으면 서버가 만든다. upsert 후 `{success:true, id}` |
+| `fn_set_performance_archived(p_payload jsonb)` | 토큰 검사. 입력 `performanceId`, `archived`(boolean). 없는 id는 실패 메시지 |
+| `fn_set_performance_pieces(p_payload jsonb)` | 토큰 검사. 입력 `performanceId`, `pieceIds`(문자열 배열). **기존 `fn_set_program_pieces`(`20261122000000_practice_catalog.sql` 414행~)를 복사해서** 테이블·열·메시지만 바꾼다. 추가로 ① 중복 id가 있으면 `{success:false, message:'중복된 곡이 있습니다.'}` ② 200개 초과 거부 ③ 보관된 공연이면 거부 |
+| `fn_get_practice_catalog(boolean, text)` | 응답에 `performances`(보관 포함 여부는 기존 `p_include_archived` 규칙을 따름)와 `performancePieces` 배열을 추가한다. 기존 `programPieces`는 그대로 둔다(하위 호환). **최신 정의는 `20261123000000_v3_media.sql` 248행~** |
+
 ### 7-5. 클라이언트 계약
 
 - `src/types/rollbook.ts`:
   - `PracticePiece`에 `scoreStorageKey?`, `scoreSizeBytes?`, `PracticeTrack`에 `sizeBytes?`를 추가한다.
   - `RsvpEvent`, `MemberActivity` 타입을 추가한다.
   - `AppConfig`에 `performanceCategories?: string[]`를 추가한다.
+  - `Performance { id; title; performanceDate: string; venue: string; isArchived: boolean; createdAt; updatedAt }`, `PracticePerformancePiece { performanceId; pieceId; orderIndex; isArchived }`를 추가한다. `PracticeCatalog`에 `performances: Performance[]`, `performancePieces: PracticePerformancePiece[]`를 추가하고, 파서는 없으면 `[]`로 채운다.
 - 파서(`sheetsParser.ts` 또는 카탈로그 파서): 새 필드가 없으면 기본값을 넣는다(하위 호환).
 - **서비스 경로 규칙:**
   - 모든 새 호출은 `services/sheets.ts`의 메서드 → `backend` 어댑터를 거친다.
@@ -494,7 +542,7 @@ flowchart LR
 | 키 이름 | 값 | 실패 시 |
 |---|---|---|
 | `HOME_CALENDAR_VIEW` → `moonchoir_pref_home_view_v1` | `'week' \| 'month'` | `'week'` |
-| `STUDIO_SCOPE` → `moonchoir_pref_studio_scope_v1` | `'all' \| 'unassigned' \| programId` | `'all'` |
+| `STUDIO_SCOPE` → `moonchoir_pref_studio_scope_v1` | `'all' \| 'unassigned' \| performanceId` | `'all'` |
 | `PLAYBACK_RATE` → `moonchoir_pref_playback_rate_v1` | 0.5~2.0 숫자 | `1` |
 | `SEEN_STICKERS` → `moonchoir_pref_seen_stickers_v1` | id 배열 | 알림 생략 |
 | `UPLOAD_JOBS` → `moonchoir_pref_upload_jobs_v1` | 미완료 업로드 메타데이터 | 알림 생략 |
@@ -514,8 +562,8 @@ flowchart LR
 
 ### 연습실
 
-4. 곡이 연결되지 않은 공연은 드롭다운에 없다. 공연 미정 곡이 0개면 "공연 미정"이 없다.
-5. 공연을 고르면 `order_index` 순으로 번호가 매겨진다. 운영진이 순서를 바꾸면 다음 데이터 갱신 때 반영된다.
+4. 곡이 연결되지 않은 공연과 보관된 공연은 드롭다운에 없다. 시즌 카드(정기연습 등)는 드롭다운에 나오지 않는다. 공연 미정 곡이 0개면 "공연 미정"이 없다.
+5. 공연을 고르면 `practice_performance_pieces.order_index` 순으로 번호가 매겨진다. 운영진이 순서를 바꾸면 다음 데이터 갱신 때 반영된다.
 6. 드롭다운을 열어도 아래 목록의 위치가 바뀌지 않는다(레이어).
 7. 곡 상세에 편집·업로드 요소가 없다.
 8. 유튜브 버튼은 영상 바로 아래 줄에 있고, 화면 글자가 없다.
