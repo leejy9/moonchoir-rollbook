@@ -121,6 +121,7 @@ describe('Audio Player Mini -> Full Navigation Integration (J8)', () => {
       label: '소프라노 파트',
       kind: 'guide_soprano',
       source: 'r2',
+      orderIndex: 0,
       storageKey: 'audio/trk_soprano.m4a',
       url: '',
       isArchived: false,
@@ -248,7 +249,7 @@ describe('Audio Player Mini -> Full Navigation Integration (J8)', () => {
               navigate({ type: 'OPEN', overlay: { kind: 'player' } });
             }}
           />
-          {route.overlay?.kind === 'player' && (
+          {route.area === 'member' && route.overlay?.kind === 'player' && (
             <FullPlayer
               piece={samplePiece}
               onClose={() => navigate({ type: 'CLOSE' })}
