@@ -350,3 +350,10 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
   - **Fix applied to `google-apps-script.js` and `docs/google_apps_script.js`:** Payload is now parsed before `ensureSheetStructure` so the action is known first. ADD_COMMENT, EDIT_COMMENT, DELETE_COMMENT, RECORD_ATTENDANCE, and SUBMIT_CHECKIN skip `ensureSheetStructure` entirely. `canonicalOf` now caches the members sheet rows (`cachedMemberRows`) so `getDataRange().getValues()` is called at most once per request. Expected improvement: ADD_COMMENT drops from ~4 s to under 1 s; EDIT/DELETE_COMMENT from ~4–5 s to ~1 s; RECORD_ATTENDANCE from ~4 s to ~0.5 s (lock held only during dedup check + append, not during structure scan).
   - **Required action:** Deploy the updated `google-apps-script.js` to Apps Script as a new version (edit → 배포 관리 → 새 버전 → 배포).
 - **Deployment status to verify:** The production Apps Script was at version 19 (atomic register/bind actions, one-device rule still enforced server-side) when the local log was written; the owner-provided execution screenshot later showed version 26. The local instrumentation requires a new Apps Script version to be deployed before its stage timings can be observed. `gas/Code.gs` remains the older five-tab protocol; live spreadsheet contents have not been audited.
+
+## 2026-11-22 — 운영 지각 판정 버그 수정 (설정값 문자열)
+
+- **확인된 현상:** `app_config.value`는 `text`이고 `fn_get_initial_snapshot`이 값을 문자열로 내려 준다. 운영의 `lateGraceMinutes`는 `"15"`였고, `reconcileSingleMemberAttendance`에서 `startMinutes + lateGraceMinutes`가 문자열 이어 붙이기(`1170 + "15"` → `"117015"`)가 되어 **지각이 판정되지 않았다**(40분 늦은 체크인도 "출석"). 리뷰어가 테스트로 재현.
+- **수정:** `src/services/configNormalize.ts`의 `normalizeAppConfig`가 숫자 필드(`lateGraceMinutes`, `defaultLat`, `defaultLon`, `defaultRadius`)와 배열 필드(`customParts`, `customMemberStatuses`, `customCategories`, `practiceTrackKinds`, `performanceCategories`)를 타입에 맞게 되돌린다. 서버 스냅샷 반영과 기기 저장소 읽기 두 곳에 적용.
+- **영향:** 원천 출석 로그는 그대로이므로 배포 후 과거 기록의 지각도 다시 올바르게 계산된다. 운영 화면의 최근 지각 수가 늘어나는 것은 정상이다.
+- 사용자 결정(2026-11-22): v3 묶음과 함께 배포한다.
