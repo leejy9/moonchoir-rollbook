@@ -28,6 +28,12 @@ describe('MediaStorageSettingSection (V3-16)', () => {
     expect(html).toContain('https://media.moonchoir.org');
   });
 
+  it('renders workers.dev placeholder when mediaPublicBaseUrl is empty (K3)', () => {
+    const emptyConfig: AppConfig = { ...dummyConfig, mediaPublicBaseUrl: '' };
+    const html = renderToString(<MediaStorageSettingSection config={emptyConfig} />);
+    expect(html).toContain('placeholder="https://(이름).(계정).workers.dev"');
+  });
+
   it('validates URL format and strips trailing slashes', async () => {
     const saveSpy = vi.spyOn(sheetsService, 'saveConfigConfirmed').mockResolvedValue(dummyConfig);
 

@@ -74,7 +74,7 @@ export const MediaStorageSettingSection: React.FC<MediaStorageSettingSectionProp
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <input
           type="url"
-          placeholder="https://media.moonchoir.org"
+          placeholder="https://(이름).(계정).workers.dev"
           value={inputUrl}
           onChange={(e) => setInputUrl(e.target.value)}
           style={{
