@@ -1334,3 +1334,24 @@ v3-A(PR #27) 검수 후속 작업 지시서(`check.md`)에 따라 운영진 연�
    - **문제**: 압축 파이프라인 비활성화 상태에서 원본 업로드 시 오디오 재생 시간(`durationSeconds`)이 누락되어 단원 화면에 트랙 길이가 표시되지 않던 문제.
    - **해결**: `src/services/media/audioMetadata.ts`를 신설하여 클라이언트 업로드 전 `Audio` 객체와 5초 타임아웃을 통해 길이를 안전하게 추출해 저장하도록 구현함.
 
+---
+
+## [2026-11-22] v3-A 사용자 화면 확인 후속 수정 (G1~G4)
+
+사용자 로컬 실전 확인 후속 작업 지시서(`check.md`)에 따라 곡 편집 UX 개편, 스토리지/업로드 예외 처리 및 실패 추적, 유튜브 인앱 재생, 디자인 토큰 규칙 위반 탐지 테스트를 구축함.
+
+### 작업 요약 (항목별 문제 및 해결 내용)
+1. **G1 (`feat(admin): G1 unify piece create and edit with fixed save button and staging`)**:
+   - **문제**: 새 곡 추가와 기존 곡 편집 화면이 분리되어 있었고, 입력란 `onBlur` 자동 저장으로 의도치 않은 잦은 저장이 발생하며, 새 곡 상태에서는 악보·음원·영상을 사전 등록할 수 없는 불편 발생.
+   - **해결**: `PieceEditModal`로 화면을 일원화하고 하단 고정 52px "저장" 버튼 방식을 적용함. 새 곡에서 업로드할 파일과 유튜브 링크를 "저장 대기" 상태로 모아 곡 생성 시점에 일괄 반영하는 스테이징 메커니즘을 구현하고, 저장되지 않은 변경사항 이탈 방지 모달(`UnsavedChangesModal`)을 추가함.
+2. **G2 (`fix(media): G2 handle storage connection state, 8s usage timeout, and upload failure tracking`)**:
+   - **문제**: 미디어 저장소 주소가 미연결되었거나 업로드 또는 용량 조회가 실패/지연될 때 에러를 조용히 삼켜 사용자가 원인을 파악할 수 없었던 결함.
+   - **해결**: `config.mediaPublicBaseUrl` 미설정 시 업로드 버튼을 비활성화하고 "파일 저장소가 아직 연결되지 않았어요" 안내 문구를 노출함. `getMediaUsage`에 8초 타임아웃 및 "확인할 수 없음" fallback과 경고 로그(R9 빈 catch 금지 준수)를 추가함. 업로드 큐에 실패 상태 추적(`failedJobs`, `retryJob`, `dismissJob`)을 도입하여 관리자 화면 행과 헤더 칩에 실패 카운트와 원인 안내(401 로그인 안내 등) 및 재시도 액션을 제공함.
+3. **G3 (`feat(studio): G3 embed youtube videos with strict referrerpolicy and logo button`)**:
+   - **문제**: `PieceDetail.tsx`의 참고 영상 카드에 `<iframe>`이 누락되어 인앱 재생이 불가능했고, YouTube 버튼에 하드코딩된 raw hex 인라인 스타일(`#ff0000`)이 사용됨.
+   - **해결**: `src/utils/youtubeUrl.ts`에 6종 URL 형식 지원 `getYoutubeVideoId`를 구현하고, 16:9 비율의 lazy-loading iframe(`referrerPolicy="strict-origin-when-cross-origin"` 필수 속성 포함)과 `aria-label="유튜브 앱으로 열기"` 아이콘 버튼을 탑재함. 오디오 미니 플레이어와 유튜브 iframe 재생 간 간섭 없음을 확인하고 스타일을 CSS 클래스로 분리함.
+4. **G4 (`test(style): G4 add test guard against raw hex color literals in components`)**:
+   - **문제**: 컴포넌트 JSX 내 하드코딩된 raw hex 색상 리터럴(`'#...'`)이 정적 검사에서 검출되지 않아 다크 모드 및 테마 일관성 훼손 가능성 존재.
+   - **해결**: `src/styles/cssVariables.test.ts`에 raw hex 색상 리터럴 검사기를 신설하여 `src/components/**/*.tsx` 내 미승인 hex 리터럴을 차단하고, 기존 355개 허용 항목을 `src/styles/hexColorAllowlist.json`으로 동결 관리함.
+
+
