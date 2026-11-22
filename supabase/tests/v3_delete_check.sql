@@ -65,9 +65,9 @@ begin
   values (v_card_1, '삭제테스트시즌카드1')
   on conflict (id) do nothing;
 
-  insert into practice_program_pieces (card_id, piece_id, order_index)
+  insert into practice_program_pieces (program_id, piece_id, order_index)
   values (v_card_1, v_piece_1, 0)
-  on conflict (card_id, piece_id) do nothing;
+  on conflict (program_id, piece_id) do nothing;
 
   -- ----------------------------------------------------------------------------
   -- Check 4: RPC 밖에서 직접 delete from practice_pieces를 하면 여전히 거부된다
