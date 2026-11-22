@@ -123,6 +123,21 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onOpenFullPlayer }) => {
             <line x1="19" y1="5" x2="19" y2="19" />
           </svg>
         </button>
+
+        <button
+          type="button"
+          className="mini-player-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            closePlayer();
+          }}
+          aria-label="플레이어 닫기"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
       </div>
 
       {/* 4. Bottom 2px Progress Line */}
