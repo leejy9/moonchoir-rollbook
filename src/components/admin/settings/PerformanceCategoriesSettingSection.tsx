@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { AppConfig } from '../../../types/rollbook';
 import { sheetsService } from '../../../services/sheets';
+import { serializeConfigForSave } from '../../../services/configNormalize';
 
 interface PerformanceCategoriesSettingSectionProps {
   config: AppConfig;
@@ -68,7 +69,7 @@ export const PerformanceCategoriesSettingSection: React.FC<PerformanceCategories
     setIsSaving(true);
     try {
       await sheetsService.saveConfigConfirmed({
-        performanceCategories: JSON.stringify(selectedCategories) as any,
+        performanceCategories: serializeConfigForSave(selectedCategories),
       });
       setSuccessMsg('공연 일정 구분이 저장되었습니다.');
       if (onSaved) onSaved();

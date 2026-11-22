@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { AppConfig } from '../../../types/rollbook';
 import { sheetsService } from '../../../services/sheets';
+import { serializeConfigForSave } from '../../../services/configNormalize';
 
 interface PracticeTrackKindsSettingSectionProps {
   config: AppConfig;
@@ -83,7 +84,7 @@ export const PracticeTrackKindsSettingSection: React.FC<PracticeTrackKindsSettin
     setIsSaving(true);
     try {
       await sheetsService.saveConfigConfirmed({
-        practiceTrackKinds: JSON.stringify(kinds) as any,
+        practiceTrackKinds: serializeConfigForSave(kinds),
       });
       setSuccessMsg('트랙 종류가 저장되었습니다.');
       if (onSaved) onSaved();

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { sheetsService } from '../../services/sheets';
 import {
   calculateCenter,
@@ -36,8 +37,7 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
   const [renderScale, setRenderScale] = useState(1.0);
   const [translate, setTranslate] = useState<Point>({ x: 0, y: 0 });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfDocRef = useRef<any>(null);
+  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const pointersRef = useRef<Map<number, Point>>(new Map());
   const pinchStartRef = useRef<{ dist: number; scale: number; focal: Point; translate: Point } | null>(null);
@@ -75,11 +75,7 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
 
         const doc = await pdfjs.getDocument({ url: storageUrl }).promise;
         if (isCancelled) {
-          if (typeof (doc as any).destroy === 'function') {
-            (doc as any).destroy();
-          } else if ((doc as any).loadingTask?.destroy) {
-            (doc as any).loadingTask.destroy();
-          }
+          doc.loadingTask?.destroy();
           return;
         }
         pdfDocRef.current = doc;
@@ -98,12 +94,7 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
     return () => {
       isCancelled = true;
       if (pdfDocRef.current) {
-        const d = pdfDocRef.current as any;
-        if (typeof d.destroy === 'function') {
-          d.destroy();
-        } else if (d.loadingTask?.destroy) {
-          d.loadingTask.destroy();
-        }
+        pdfDocRef.current.loadingTask?.destroy();
         pdfDocRef.current = null;
       }
       if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);

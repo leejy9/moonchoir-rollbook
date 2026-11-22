@@ -3,6 +3,8 @@
  * Uses mediabunny dynamic import to encode audio to AAC-LC 64kbps M4A.
  */
 
+import type { Conversion } from 'mediabunny';
+
 export const COMPRESSION_ERROR_MESSAGE = '이 기기에서는 압축할 수 없어요';
 
 export const MAX_COMPRESSIBLE_AUDIO_BYTES = 300 * 1024 * 1024; // 300MB
@@ -30,7 +32,7 @@ export const SUPPORTED_DIRECT_MIME_TYPES = new Set([
  * Checks if the runtime supports WebCodecs AudioEncoder.
  */
 export function isAudioEncoderSupportedSync(): boolean {
-  return typeof window !== 'undefined' && typeof (window as any).AudioEncoder !== 'undefined';
+  return typeof window !== 'undefined' && 'AudioEncoder' in window;
 }
 
 /**
@@ -161,7 +163,7 @@ export async function compressAudio(
 
   const target = new BufferTarget();
   const output = new Output({ format: new Mp4OutputFormat(), target });
-  const conversion = await Conversion.init({
+  const conversion: Conversion = await Conversion.init({
     input,
     output,
     video: { discard: true },
@@ -174,7 +176,7 @@ export async function compressAudio(
   });
 
   if (!conversion.isValid) {
-    console.warn('[audioCompress] conversion is not valid:', (conversion as any).discardedTracks);
+    console.warn('[audioCompress] conversion is not valid:', conversion.discardedTracks);
     throw new Error(COMPRESSION_ERROR_MESSAGE);
   }
 

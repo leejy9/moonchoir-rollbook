@@ -1483,10 +1483,11 @@ export class SheetsService {
     return { ...this.config };
   }
 
-  public async saveConfigConfirmed(newConfig: Partial<AppConfig>): Promise<AppConfig> {
+  public async saveConfigConfirmed(newConfig: Partial<AppConfig> | Record<string, unknown>): Promise<AppConfig> {
+    const rawUrl = 'sheetsWebAppUrl' in newConfig && typeof newConfig.sheetsWebAppUrl === 'string' ? newConfig.sheetsWebAppUrl : undefined;
     const nextEndpoint =
-      newConfig.sheetsWebAppUrl !== undefined
-        ? newConfig.sheetsWebAppUrl.trim()
+      rawUrl !== undefined
+        ? rawUrl.trim()
         : this.config.sheetsWebAppUrl;
     const endpoint = this.config.sheetsWebAppUrl || nextEndpoint;
     if (this.backend.kind === 'gas' && (!endpoint || !nextEndpoint)) {

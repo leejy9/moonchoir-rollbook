@@ -65,7 +65,7 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    let timeoutId: any;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error('Media usage fetch timeout')), 8000);
     });
@@ -81,12 +81,12 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
         }
       })
       .finally(() => {
-        clearTimeout(timeoutId);
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
       });
 
     return () => {
       cancelled = true;
-      clearTimeout(timeoutId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
     };
   }, []);
 

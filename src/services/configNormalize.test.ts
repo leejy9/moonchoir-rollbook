@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeAppConfig } from './configNormalize';
+import { normalizeAppConfig, serializeConfigForSave } from './configNormalize';
 import { reconcileSingleMemberAttendance } from '../utils/attendanceStats';
 import type { Member, RawAttendanceLog, Schedule } from '../types/rollbook';
 
@@ -50,5 +50,10 @@ describe('normalizeAppConfig', () => {
 
     expect(reconcileSingleMemberAttendance(member, schedule, logAt('19:46'), undefined, grace).finalStatus).toBe('지각');
     expect(reconcileSingleMemberAttendance(member, schedule, logAt('19:45'), undefined, grace).finalStatus).toBe('출석');
+  });
+
+  it('serializes array config values into JSON strings for server save', () => {
+    expect(serializeConfigForSave(['파트', '연습'])).toBe('["파트","연습"]');
+    expect(serializeConfigForSave([])).toBe('[]');
   });
 });

@@ -62,3 +62,10 @@ export function normalizeAppConfig(raw: unknown): Partial<AppConfig> {
 
   return result as Partial<AppConfig>;
 }
+
+/**
+ * 배열 설정값을 서버 저장용 JSON 문자열로 직렬화한다.
+ */
+export function serializeConfigForSave(values: readonly string[]): string {
+  return JSON.stringify(values);
+}
