@@ -4,7 +4,7 @@ import { PREFERENCE_KEYS, readPreference, writePreference } from '../services/sh
 import type { PracticePiece } from '../types/rollbook';
 import { getKSTDateString } from '../utils/date';
 import {
-  buildProgramScopes,
+  buildPerformanceScopes,
   filterPiecesByScope,
   searchPieces,
 } from '../utils/practiceScope';
@@ -29,7 +29,6 @@ export interface StudioTabProps {
 export const StudioTab: React.FC<StudioTabProps> = ({ onOpenScore }) => {
   const [catalog, setCatalog] = useState(() => sheetsService.getPracticeCatalog());
   const programCards = sheetsService.getProgramCards();
-  const schedules = sheetsService.getSchedules();
   const config = sheetsService.getConfig();
   const backendKind = sheetsService.getBackendKind();
 
@@ -67,10 +66,10 @@ export const StudioTab: React.FC<StudioTabProps> = ({ onOpenScore }) => {
     };
   }, [backendKind]);
 
-  // Build program scopes
+  // Build performance scopes (V18)
   const scopes = useMemo(() => {
-    return buildProgramScopes(catalog, programCards, schedules, config, todayStr);
-  }, [catalog, programCards, schedules, config, todayStr]);
+    return buildPerformanceScopes(catalog, todayStr);
+  }, [catalog, todayStr]);
 
   // Derived effective scope; if selected scope was removed, fall back to 'ALL'
   const effectiveScopeId = useMemo(() => {
@@ -86,13 +85,13 @@ export const StudioTab: React.FC<StudioTabProps> = ({ onOpenScore }) => {
 
   // Filter and sort pieces by scope
   const scopedPieces = useMemo(() => {
-    return filterPiecesByScope(catalog.pieces, catalog.programPieces, effectiveScopeId);
-  }, [catalog.pieces, catalog.programPieces, effectiveScopeId]);
+    return filterPiecesByScope(catalog.pieces, catalog.performancePieces, effectiveScopeId);
+  }, [catalog.pieces, catalog.performancePieces, effectiveScopeId]);
 
   // Search pieces
   const displayedPieces = useMemo(() => {
-    return searchPieces(scopedPieces, programCards, catalog.programPieces, searchQuery);
-  }, [scopedPieces, programCards, catalog.programPieces, searchQuery]);
+    return searchPieces(scopedPieces, catalog.performances, catalog.performancePieces, searchQuery);
+  }, [scopedPieces, catalog.performances, catalog.performancePieces, searchQuery]);
 
   // Map pieceId -> tracks
   const tracksByPieceId = useMemo(() => {
@@ -109,7 +108,22 @@ export const StudioTab: React.FC<StudioTabProps> = ({ onOpenScore }) => {
     return map;
   }, [catalog.tracks]);
 
-  // Connected program IDs by pieceId
+  // Connected performance IDs by pieceId
+  const connectedPerformanceIdsByPieceId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const pp of catalog.performancePieces) {
+      if (pp.isArchived) continue;
+      const existing = map.get(pp.pieceId);
+      if (existing) {
+        existing.push(pp.performanceId);
+      } else {
+        map.set(pp.pieceId, [pp.performanceId]);
+      }
+    }
+    return map;
+  }, [catalog.performancePieces]);
+
+  // Connected program IDs by pieceId (legacy fallback)
   const connectedProgramIdsByPieceId = useMemo(() => {
     const map = new Map<string, string[]>();
     for (const pp of catalog.programPieces) {
@@ -164,6 +178,8 @@ export const StudioTab: React.FC<StudioTabProps> = ({ onOpenScore }) => {
           tracks={tracksByPieceId.get(selectedPiece.id) || []}
           programCards={programCards}
           connectedProgramIds={connectedProgramIdsByPieceId.get(selectedPiece.id) || []}
+          performances={catalog.performances}
+          connectedPerformanceIds={connectedPerformanceIdsByPieceId.get(selectedPiece.id) || []}
           config={config}
           mediaPublicBaseUrl={config.mediaPublicBaseUrl}
           onBack={() => setSelectedPieceId(null)}

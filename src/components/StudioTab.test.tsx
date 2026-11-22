@@ -105,8 +105,25 @@ describe('StudioTab Component (MEMBER_UX_V3_SPEC §3-1, §3-2)', () => {
         isArchived: false,
       },
     ],
-    performances: [],
-    performancePieces: [],
+    performances: [
+      {
+        id: 'perf_1',
+        title: '정기연주회',
+        performanceDate: '2026-12-24',
+        venue: '아트홀',
+        isArchived: false,
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      },
+    ],
+    performancePieces: [
+      {
+        performanceId: 'perf_1',
+        pieceId: 'piece_1',
+        orderIndex: 0,
+        isArchived: false,
+      },
+    ],
   };
 
   beforeEach(() => {

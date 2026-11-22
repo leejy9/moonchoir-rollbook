@@ -1,5 +1,5 @@
 import React from 'react';
-import type { AppConfig, PracticePiece, PracticeTrack, ProgramCard } from '../../types/rollbook';
+import type { AppConfig, Performance, PracticePiece, PracticeTrack, ProgramCard } from '../../types/rollbook';
 import { useOptionalAudioPlayer } from '../audio/audioPlayerContext';
 import { buildAudioQueue } from '../../utils/audioQueue';
 import { resolveTrackPlayback } from '../../utils/practiceMedia';
@@ -10,6 +10,8 @@ export interface PieceDetailProps {
   tracks: PracticeTrack[];
   programCards?: ProgramCard[];
   connectedProgramIds?: string[];
+  performances?: Performance[];
+  connectedPerformanceIds?: string[];
   config: AppConfig;
   mediaPublicBaseUrl?: string;
   onBack: () => void;
@@ -21,6 +23,8 @@ export const PieceDetail: React.FC<PieceDetailProps> = ({
   tracks = [],
   programCards = [],
   connectedProgramIds = [],
+  performances = [],
+  connectedPerformanceIds = [],
   config,
   mediaPublicBaseUrl,
   onBack,
@@ -34,12 +38,14 @@ export const PieceDetail: React.FC<PieceDetailProps> = ({
   const audioTracks = activeTracks.filter((t) => !isVideoTrack(t));
   const videoTracks = activeTracks.filter((t) => isVideoTrack(t));
 
-  // Program name line
+  // Performance or Program name line
+  const connectedPerf = performances.find((p) => connectedPerformanceIds.includes(p.id));
   const connectedCard = programCards.find((c) => connectedProgramIds.includes(c.id));
+  const connectedTitle = connectedPerf?.title || connectedCard?.title;
   const subLineParts = [
     piece.composer,
     piece.arranger ? `편곡: ${piece.arranger}` : undefined,
-    connectedCard?.title,
+    connectedTitle,
   ].filter(Boolean);
 
   const subLine = subLineParts.join(' · ');

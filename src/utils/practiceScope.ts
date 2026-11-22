@@ -1,14 +1,14 @@
 import type {
-  AppConfig,
+  Performance,
   PracticeCatalog,
+  PracticePerformancePiece,
   PracticePiece,
   PracticeProgramPiece,
   ProgramCard,
-  Schedule,
 } from '../types/rollbook';
 
 export interface ProgramScopeItem {
-  id: string; // 'ALL' | cardId | 'UNASSIGNED' | `DIVIDER_${number}`
+  id: string; // 'ALL' | performanceId | 'UNASSIGNED' | `DIVIDER_${number}`
   title: string;
   dateStr?: string; // e.g. '12월 14일'
   pieceCount: number;
@@ -16,9 +16,11 @@ export interface ProgramScopeItem {
   isDivider?: boolean;
 }
 
+export type PerformanceScopeItem = ProgramScopeItem;
+
 export interface ScopedPieceItem {
   piece: PracticePiece;
-  orderNumber?: number; // 1-based index if viewing a specific program scope
+  orderNumber?: number; // 1-based index if viewing a specific performance scope
 }
 
 /**
@@ -33,7 +35,7 @@ function formatMonthDay(dateStr: string): string {
 }
 
 /**
- * Build structured program scope dropdown items (MEMBER_UX_V3_SPEC §3-1).
+ * Build structured performance scope dropdown items (MEMBER_UX_V3_SPEC §3-1, V18).
  * Order:
  * 1. 전체 곡
  * 2. 구분선
@@ -41,79 +43,65 @@ function formatMonthDay(dateStr: string): string {
  * 4. 공연 미정 (0개면 생략)
  * 5. 구분선 (지난 공연이 있을 때만)
  * 6. 지난 공연 (날짜 내림차순, 흐리게)
+ *
+ * Rule:
+ * - 날짜는 performanceDate만 쓰고, 일정·시즌 카드·performanceCategories는 이 계산에 쓰지 않는다.
+ * - 공연 미정 = 보관되지 않은 공연 연결이 없는 곡.
+ * - 시즌 카드는 연습실 범위에 나오지 않는다.
  */
-export function buildProgramScopes(
+export function buildPerformanceScopes(
   catalog: PracticeCatalog,
-  programCards: ProgramCard[],
-  schedules: Schedule[],
-  config: AppConfig,
   todayStr: string
 ): ProgramScopeItem[] {
   const activePieces = catalog.pieces.filter((p) => !p.isArchived);
   const activePiecesMap = new Map(activePieces.map((p) => [p.id, p]));
-  const unarchivedLinks = catalog.programPieces.filter(
+  const unarchivedLinks = (catalog.performancePieces || []).filter(
     (pp) => !pp.isArchived && activePiecesMap.has(pp.pieceId)
   );
 
-  // Group unarchived links by cardId
-  const linksByCardId = new Map<string, PracticeProgramPiece[]>();
+  // Group unarchived links by performanceId
+  const linksByPerfId = new Map<string, PracticePerformancePiece[]>();
   const piecesWithLinks = new Set<string>();
 
   for (const link of unarchivedLinks) {
     piecesWithLinks.add(link.pieceId);
-    const existing = linksByCardId.get(link.programId);
+    const existing = linksByPerfId.get(link.performanceId);
     if (existing) {
       existing.push(link);
     } else {
-      linksByCardId.set(link.programId, [link]);
+      linksByPerfId.set(link.performanceId, [link]);
     }
   }
 
-  const performanceCategories = new Set(config.performanceCategories || ['연주']);
+  // Active unarchived performances
+  const unarchivedPerfs = (catalog.performances || []).filter((p) => !p.isArchived);
 
-  // Compute date for each card
-  const unarchivedCards = programCards.filter((c) => !c.isArchived);
-
-  interface CardWithMeta {
-    card: ProgramCard;
+  interface PerfWithMeta {
+    perf: Performance;
     rawDate?: string;
     dateStr?: string;
     pieceCount: number;
     isPast: boolean;
   }
 
-  const upcomingCards: CardWithMeta[] = [];
-  const pastCards: CardWithMeta[] = [];
+  const upcomingPerfs: PerfWithMeta[] = [];
+  const pastPerfs: PerfWithMeta[] = [];
 
-  for (const card of unarchivedCards) {
-    const cardLinks = linksByCardId.get(card.id) || [];
-    // Distinct active piece count
-    const distinctPieceIds = new Set(cardLinks.map((l) => l.pieceId));
+  for (const perf of unarchivedPerfs) {
+    const perfLinks = linksByPerfId.get(perf.id) || [];
+    const distinctPieceIds = new Set(perfLinks.map((l) => l.pieceId));
     const pieceCount = distinctPieceIds.size;
 
     // "곡이 하나도 연결되지 않은 공연은 메뉴에 넣지 않는다."
     if (pieceCount === 0) continue;
 
-    // Find card schedules
-    const cardSchedules = schedules.filter(
-      (s) => s.programId === card.id && !s.isCancelled && !s.isArchived
-    );
-
-    // Performance category schedules
-    const perfSchedules = cardSchedules.filter((s) => performanceCategories.has(s.category));
-
-    let rawDate: string | undefined;
-    if (perfSchedules.length > 0) {
-      rawDate = perfSchedules.reduce((max, s) => (s.date > max ? s.date : max), perfSchedules[0].date);
-    } else if (cardSchedules.length > 0) {
-      rawDate = cardSchedules.reduce((max, s) => (s.date > max ? s.date : max), cardSchedules[0].date);
-    }
-
+    const rawDate =
+      perf.performanceDate && perf.performanceDate.trim() !== '' ? perf.performanceDate : undefined;
     const isPast = rawDate !== undefined && rawDate < todayStr;
     const dateStr = rawDate ? formatMonthDay(rawDate) : undefined;
 
-    const meta: CardWithMeta = {
-      card,
+    const meta: PerfWithMeta = {
+      perf,
       rawDate,
       dateStr,
       pieceCount,
@@ -121,29 +109,29 @@ export function buildProgramScopes(
     };
 
     if (isPast) {
-      pastCards.push(meta);
+      pastPerfs.push(meta);
     } else {
-      upcomingCards.push(meta);
+      upcomingPerfs.push(meta);
     }
   }
 
   // Sort upcoming: ascending by date. Undefined rawDate goes to the end.
-  upcomingCards.sort((a, b) => {
-    if (!a.rawDate && !b.rawDate) return a.card.title.localeCompare(b.card.title);
+  upcomingPerfs.sort((a, b) => {
+    if (!a.rawDate && !b.rawDate) return a.perf.title.localeCompare(b.perf.title);
     if (!a.rawDate) return 1;
     if (!b.rawDate) return -1;
-    return a.rawDate.localeCompare(b.rawDate) || a.card.title.localeCompare(b.card.title);
+    return a.rawDate.localeCompare(b.rawDate) || a.perf.title.localeCompare(b.perf.title);
   });
 
   // Sort past: descending by date
-  pastCards.sort((a, b) => {
-    if (!a.rawDate && !b.rawDate) return a.card.title.localeCompare(b.card.title);
+  pastPerfs.sort((a, b) => {
+    if (!a.rawDate && !b.rawDate) return a.perf.title.localeCompare(b.perf.title);
     if (!a.rawDate) return 1;
     if (!b.rawDate) return -1;
-    return b.rawDate.localeCompare(a.rawDate) || a.card.title.localeCompare(b.card.title);
+    return b.rawDate.localeCompare(a.rawDate) || a.perf.title.localeCompare(b.perf.title);
   });
 
-  // Unassigned pieces: active pieces with 0 unarchived links
+  // Unassigned pieces: active pieces with 0 unarchived performance links
   const unassignedPieces = activePieces.filter((p) => !piecesWithLinks.has(p.id));
   const unassignedCount = unassignedPieces.length;
 
@@ -165,10 +153,10 @@ export function buildProgramScopes(
   });
 
   // 3. 다가오는 공연
-  for (const item of upcomingCards) {
+  for (const item of upcomingPerfs) {
     result.push({
-      id: item.card.id,
-      title: item.card.title,
+      id: item.perf.id,
+      title: item.perf.title,
       dateStr: item.dateStr,
       pieceCount: item.pieceCount,
       isPast: false,
@@ -185,7 +173,7 @@ export function buildProgramScopes(
   }
 
   // 5. 구분선 & 지난 공연 (있을 때만)
-  if (pastCards.length > 0) {
+  if (pastPerfs.length > 0) {
     result.push({
       id: 'DIVIDER_2',
       title: '',
@@ -193,10 +181,10 @@ export function buildProgramScopes(
       isDivider: true,
     });
 
-    for (const item of pastCards) {
+    for (const item of pastPerfs) {
       result.push({
-        id: item.card.id,
-        title: item.card.title,
+        id: item.perf.id,
+        title: item.perf.title,
         dateStr: item.dateStr,
         pieceCount: item.pieceCount,
         isPast: true,
@@ -208,18 +196,30 @@ export function buildProgramScopes(
 }
 
 /**
- * Filter and sort pieces according to selected program scope (MEMBER_UX_V3_SPEC §3-1).
+ * Backward compatibility alias for buildPerformanceScopes
+ */
+export function buildProgramScopes(
+  catalog: PracticeCatalog,
+  _programCards?: unknown,
+  _schedules?: unknown,
+  _config?: unknown,
+  todayStr: string = ''
+): ProgramScopeItem[] {
+  return buildPerformanceScopes(catalog, todayStr);
+}
+
+/**
+ * Filter and sort pieces according to selected scope (MEMBER_UX_V3_SPEC §3-1).
  */
 export function filterPiecesByScope(
   pieces: PracticePiece[],
-  programPieces: PracticeProgramPiece[],
+  links: (PracticePerformancePiece | PracticeProgramPiece)[],
   selectedScopeId: string
 ): ScopedPieceItem[] {
   const activePieces = pieces.filter((p) => !p.isArchived);
   const activePiecesMap = new Map(activePieces.map((p) => [p.id, p]));
 
   if (selectedScopeId === 'ALL') {
-    // Sorted by created_at descending
     return [...activePieces]
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
       .map((piece) => ({ piece }));
@@ -227,9 +227,9 @@ export function filterPiecesByScope(
 
   if (selectedScopeId === 'UNASSIGNED') {
     const piecesWithLinks = new Set(
-      programPieces
-        .filter((pp) => !pp.isArchived && activePiecesMap.has(pp.pieceId))
-        .map((pp) => pp.pieceId)
+      links
+        .filter((l) => !l.isArchived && activePiecesMap.has(l.pieceId))
+        .map((l) => l.pieceId)
     );
 
     return activePieces
@@ -238,42 +238,46 @@ export function filterPiecesByScope(
       .map((piece) => ({ piece }));
   }
 
-  // Specific program card ID:
-  // Filter links for this card that are not archived and point to active pieces
-  const cardLinks = programPieces
-    .filter((pp) => !pp.isArchived && pp.programId === selectedScopeId && activePiecesMap.has(pp.pieceId))
+  // Filter links for this performance/program that are not archived and point to active pieces
+  const matchedLinks = links
+    .filter((l) => {
+      if (l.isArchived || !activePiecesMap.has(l.pieceId)) return false;
+      const targetId = 'performanceId' in l ? l.performanceId : l.programId;
+      return targetId === selectedScopeId;
+    })
     .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
 
-  return cardLinks.map((link, idx) => ({
+  return matchedLinks.map((link, idx) => ({
     piece: activePiecesMap.get(link.pieceId)!,
     orderNumber: idx + 1,
   }));
 }
 
 /**
- * Search pieces by title, composer, arranger, or connected program card title (case & space insensitive).
+ * Search pieces by title, composer, arranger, or connected performance/program title.
  */
 export function searchPieces(
   items: ScopedPieceItem[],
-  programCards: ProgramCard[],
-  programPieces: PracticeProgramPiece[],
+  containers: (Performance | ProgramCard)[],
+  links: (PracticePerformancePiece | PracticeProgramPiece)[],
   query: string
 ): ScopedPieceItem[] {
   const normalizedQuery = query.trim().toLowerCase().replace(/\s+/g, '');
   if (!normalizedQuery) return items;
 
-  const cardMap = new Map(programCards.map((c) => [c.id, c.title]));
-  const pieceCardTitlesMap = new Map<string, string[]>();
+  const containerMap = new Map(containers.map((c) => [c.id, c.title]));
+  const pieceContainerTitlesMap = new Map<string, string[]>();
 
-  for (const pp of programPieces) {
-    if (pp.isArchived) continue;
-    const cardTitle = cardMap.get(pp.programId);
-    if (!cardTitle) continue;
-    const existing = pieceCardTitlesMap.get(pp.pieceId);
+  for (const l of links) {
+    if (l.isArchived) continue;
+    const targetId = 'performanceId' in l ? l.performanceId : l.programId;
+    const containerTitle = containerMap.get(targetId);
+    if (!containerTitle) continue;
+    const existing = pieceContainerTitlesMap.get(l.pieceId);
     if (existing) {
-      existing.push(cardTitle);
+      existing.push(containerTitle);
     } else {
-      pieceCardTitlesMap.set(pp.pieceId, [cardTitle]);
+      pieceContainerTitlesMap.set(l.pieceId, [containerTitle]);
     }
   }
 
@@ -287,8 +291,8 @@ export function searchPieces(
     const arranger = (piece.arranger || '').toLowerCase().replace(/\s+/g, '');
     if (arranger.includes(normalizedQuery)) return true;
 
-    const cardTitles = pieceCardTitlesMap.get(piece.id) || [];
-    for (const ct of cardTitles) {
+    const containerTitles = pieceContainerTitlesMap.get(piece.id) || [];
+    for (const ct of containerTitles) {
       if (ct.toLowerCase().replace(/\s+/g, '').includes(normalizedQuery)) {
         return true;
       }

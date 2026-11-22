@@ -97,4 +97,29 @@ describe('PieceDetail Component (G3: Embedded YouTube)', () => {
     expect(html).not.toContain('<iframe');
     expect(html).toContain('기타 링크');
   });
+
+  it('renders connected performance title on subtitle line', () => {
+    const html = renderToString(
+      <PieceDetail
+        piece={dummyPiece}
+        tracks={[]}
+        performances={[
+          {
+            id: 'perf_1',
+            title: '봄 정기연주회',
+            performanceDate: '2026-05-01',
+            venue: '',
+            isArchived: false,
+            createdAt: '',
+            updatedAt: '',
+          },
+        ]}
+        connectedPerformanceIds={['perf_1']}
+        config={dummyConfig}
+        onBack={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('봄 정기연주회');
+  });
 });
