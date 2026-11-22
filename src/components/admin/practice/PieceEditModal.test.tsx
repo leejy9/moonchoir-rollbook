@@ -344,4 +344,47 @@ describe('PieceEditModal Component', () => {
       expect(html).toContain('계속 편집');
     });
   });
+
+  describe('V3-15: performance assignment and staging in piece edit', () => {
+    it('appends piece to the end of performance piece list via setPerformancePieces', async () => {
+      const setPerfPiecesSpy = vi.spyOn(sheetsService, 'setPerformancePieces').mockResolvedValue(undefined);
+
+      const perfId = 'perf_target';
+      const existingPiecesInPerf = ['p_existing_1', 'p_existing_2'];
+      const pieceIdToAdd = 'p1';
+
+      const nextList = [...existingPiecesInPerf, pieceIdToAdd];
+      await sheetsService.setPerformancePieces(perfId, nextList);
+
+      expect(setPerfPiecesSpy).toHaveBeenCalledWith('perf_target', ['p_existing_1', 'p_existing_2', 'p1']);
+    });
+
+    it('saves new piece and attaches staged performance IDs to setPerformancePieces', async () => {
+      const createdPiece: PracticePiece = {
+        id: 'new_p999',
+        title: '새로운 찬양',
+        isArchived: false,
+        createdAt: '2026-11-22',
+        updatedAt: '2026-11-22',
+      };
+      vi.spyOn(sheetsService, 'savePracticePiece').mockResolvedValue(createdPiece);
+      const setPerfPiecesSpy = vi.spyOn(sheetsService, 'setPerformancePieces').mockResolvedValue(undefined);
+
+      await saveNewPieceWithStagedMedia({
+        title: '새로운 찬양',
+        composer: '미상',
+        arranger: '',
+        stagedPerformanceIds: ['perf_1'],
+        stagedTracks: [],
+        stagedScore: null,
+        baseUrl: 'https://media.test',
+        catalogPerformancePieces: [
+          { performanceId: 'perf_1', pieceId: 'p_old_1', orderIndex: 0, isArchived: false },
+        ],
+        enqueueFn: vi.fn(),
+      });
+
+      expect(setPerfPiecesSpy).toHaveBeenCalledWith('perf_1', ['p_old_1', 'new_p999']);
+    });
+  });
 });
