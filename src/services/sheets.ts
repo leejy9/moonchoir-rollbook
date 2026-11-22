@@ -43,6 +43,7 @@ import {
   saveToStorage,
 } from './sheetsStorage';
 import type { RemoteBackend, RemoteSnapshot } from './backend/types';
+import { normalizeAppConfig } from './configNormalize';
 import { GasBackend } from './backend/gasBackend';
 import { SupabaseBackend, type SupabaseConfig } from './backend/supabaseBackend';
 import { extractIssuedToken, getAdminToken, setAdminToken, type AdminTier } from './adminSession';
@@ -148,7 +149,8 @@ export class SheetsService {
   private backend: RemoteBackend;
 
   constructor(backend?: RemoteBackend) {
-    this.config = loadFromStorage(STORAGE_KEYS.CONFIG, { ...INITIAL_CONFIG, locationPresets: [] });
+    const storedConfig = loadFromStorage(STORAGE_KEYS.CONFIG, { ...INITIAL_CONFIG, locationPresets: [] });
+    this.config = { ...INITIAL_CONFIG, locationPresets: [], ...normalizeAppConfig(storedConfig) };
     if (!this.config.sheetsWebAppUrl && INITIAL_CONFIG.sheetsWebAppUrl) {
       this.config.sheetsWebAppUrl = INITIAL_CONFIG.sheetsWebAppUrl;
       saveToStorage(STORAGE_KEYS.CONFIG, this.config);
@@ -1612,7 +1614,11 @@ export class SheetsService {
     }
 
     if (data.config && typeof data.config === 'object') {
-      this.config = { ...this.config, ...data.config, sheetsWebAppUrl: targetUrl || this.config.sheetsWebAppUrl };
+      this.config = {
+        ...this.config,
+        ...normalizeAppConfig(data.config),
+        sheetsWebAppUrl: targetUrl || this.config.sheetsWebAppUrl,
+      };
       saveToStorage(STORAGE_KEYS.CONFIG, this.config);
     }
 
