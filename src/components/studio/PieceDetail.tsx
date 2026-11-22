@@ -1,15 +1,15 @@
 import React from 'react';
 import type { AppConfig, PracticePiece, PracticeTrack, ProgramCard } from '../../types/rollbook';
-import { useAudioPlayer } from '../audio/audioPlayerContext';
+import { useOptionalAudioPlayer } from '../audio/audioPlayerContext';
 import { buildAudioQueue } from '../../utils/audioQueue';
 import { resolveTrackPlayback } from '../../utils/practiceMedia';
-import { isVideoTrack } from '../../utils/youtubeUrl';
+import { isVideoTrack, getYoutubeVideoId } from '../../utils/youtubeUrl';
 
 export interface PieceDetailProps {
   piece: PracticePiece;
   tracks: PracticeTrack[];
-  programCards: ProgramCard[];
-  connectedProgramIds: string[];
+  programCards?: ProgramCard[];
+  connectedProgramIds?: string[];
   config: AppConfig;
   mediaPublicBaseUrl?: string;
   onBack: () => void;
@@ -18,15 +18,17 @@ export interface PieceDetailProps {
 
 export const PieceDetail: React.FC<PieceDetailProps> = ({
   piece,
-  tracks,
-  programCards,
-  connectedProgramIds,
+  tracks = [],
+  programCards = [],
+  connectedProgramIds = [],
   config,
   mediaPublicBaseUrl,
   onBack,
   onOpenScore,
 }) => {
-  const { playTrack, currentTrack, isPlaying, togglePlay } = useAudioPlayer();
+  const audioPlayer = useOptionalAudioPlayer();
+  const currentTrack = audioPlayer?.currentTrack;
+  const isPlaying = Boolean(audioPlayer?.isPlaying);
 
   const activeTracks = tracks.filter((t) => !t.isArchived);
   const audioTracks = activeTracks.filter((t) => !isVideoTrack(t));
@@ -43,15 +45,16 @@ export const PieceDetail: React.FC<PieceDetailProps> = ({
   const subLine = subLineParts.join(' · ');
 
   const handlePlay = (track: PracticeTrack) => {
+    if (!audioPlayer) return;
     const pieceMap = new Map([[piece.id, piece.title]]);
     const queue = buildAudioQueue(audioTracks, pieceMap, config);
     const item = queue.find((q) => q.track.id === track.id);
     if (!item) return;
 
     if (currentTrack?.track.id === track.id) {
-      togglePlay();
+      audioPlayer.togglePlay();
     } else {
-      playTrack(item, queue);
+      audioPlayer.playTrack(item, queue);
     }
   };
 
@@ -237,49 +240,51 @@ export const PieceDetail: React.FC<PieceDetailProps> = ({
           </h3>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {videoTracks.map((v) => (
-              <div
-                key={v.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-subtle)',
-                  background: 'var(--bg-subtle)',
-                }}
-              >
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                  {v.label}
-                </span>
+            {videoTracks.map((v) => {
+              const videoId = v.url ? getYoutubeVideoId(v.url) : null;
 
-                {v.url && (
-                  <a
-                    href={v.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="유튜브 앱으로 열기"
-                    style={{
-                      minHeight: '44px',
-                      minWidth: '44px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '6px 12px',
-                      borderRadius: 'var(--radius-md)',
-                      background: '#ff0000',
-                      color: '#ffffff',
-                      textDecoration: 'none',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                    }}
-                  >
-                    YouTube
-                  </a>
-                )}
-              </div>
-            ))}
+              return (
+                <div key={v.id} className="studio-video-card">
+                  {videoId && (
+                    <iframe
+                      className="studio-video-iframe"
+                      src={`https://www.youtube.com/embed/${videoId}?playsinline=1&rel=0`}
+                      title={v.label}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      referrerPolicy="strict-origin-when-cross-origin"
+                      loading="lazy"
+                    />
+                  )}
+                  <div className="studio-video-info-row">
+                    <span className="studio-video-title">
+                      {v.label}
+                    </span>
+                    {v.url && (
+                      <a
+                        href={v.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="유튜브 앱으로 열기"
+                        className="studio-video-link-btn"
+                      >
+                        <svg width="20" height="14" viewBox="0 0 24 17" fill="none" aria-hidden="true">
+                          <path
+                            d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.377.55a3.016 3.016 0 0 0-2.122 2.136C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.55 9.376.55 9.376.55s7.505 0 9.377-.55a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
+                            fill="#FF0000"
+                          />
+                        </svg>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                          <polyline points="15 3 21 3 21 9" />
+                          <line x1="10" y1="14" x2="21" y2="3" />
+                        </svg>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
