@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { sheetsService } from '../../services/sheets';
 import type { AppConfig, LocationPreset } from '../../types/rollbook';
 import { LocationPickerMap } from '../LocationPickerMap';
+import { PracticeSettingsSection } from './settings/PracticeSettingsSection';
 
 export interface AdminSettingsTabProps {
   config: AppConfig;
@@ -15,13 +16,14 @@ export interface AdminSettingsTabProps {
 type TaxonomyGroup = 'PARTS' | 'STATUSES' | 'CATEGORIES';
 
 export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
+  config,
   locationPresets,
   dynamicParts,
   dynamicMemberStatuses,
   dynamicCategories,
   onDataChanged,
 }) => {
-  const [settingsSubTab, setSettingsSubTab] = useState<'LOCATIONS' | 'TAXONOMY'>('LOCATIONS');
+  const [settingsSubTab, setSettingsSubTab] = useState<'LOCATIONS' | 'TAXONOMY' | 'PRACTICE'>('LOCATIONS');
 
   // Location search and drawer
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
@@ -226,6 +228,13 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
           onClick={() => setSettingsSubTab('TAXONOMY')}
         >
           태그 관리
+        </button>
+        <button
+          type="button"
+          className={`subsegment-pill ${settingsSubTab === 'PRACTICE' ? 'active' : ''}`}
+          onClick={() => setSettingsSubTab('PRACTICE')}
+        >
+          연습곡 설정
         </button>
       </div>
 
@@ -505,6 +514,17 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* SUBTAB 3: 연습곡 설정 (V3-16)                                  */}
+      {/* ============================================================== */}
+      {settingsSubTab === 'PRACTICE' && (
+        <PracticeSettingsSection
+          config={config}
+          allCategories={dynamicCategories}
+          onDataChanged={onDataChanged}
+        />
       )}
 
       {/* ============================================================== */}

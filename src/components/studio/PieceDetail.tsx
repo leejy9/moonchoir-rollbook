@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import type { AppConfig, Performance, PracticePiece, PracticeTrack, ProgramCard } from '../../types/rollbook';
 import { useOptionalAudioPlayer } from '../audio/audioPlayerContext';
 import { buildAudioQueue } from '../../utils/audioQueue';
 import { resolveTrackPlayback } from '../../utils/practiceMedia';
 import { isVideoTrack, getYoutubeVideoId } from '../../utils/youtubeUrl';
+import { createYoutubeBlurListener, createYoutubeMessageListener } from '../../utils/youtubeSync';
 
 export interface PieceDetailProps {
   piece: PracticePiece;
@@ -33,6 +34,24 @@ export const PieceDetail: React.FC<PieceDetailProps> = ({
   const audioPlayer = useOptionalAudioPlayer();
   const currentTrack = audioPlayer?.currentTrack;
   const isPlaying = Boolean(audioPlayer?.isPlaying);
+
+  const iframeRefs = useRef<Map<string, HTMLIFrameElement>>(new Map());
+
+  // YouTube playback synchronization (V3-16, §3-3, §4-A-3)
+  useEffect(() => {
+    if (!audioPlayer) return;
+    const onPause = () => audioPlayer.pause();
+    const handleMessage = createYoutubeMessageListener(onPause);
+    const handleBlur = createYoutubeBlurListener(() => Array.from(iframeRefs.current.values()), onPause);
+
+    window.addEventListener('message', handleMessage);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [audioPlayer]);
 
   const activeTracks = tracks.filter((t) => !t.isArchived);
   const audioTracks = activeTracks.filter((t) => !isVideoTrack(t));
@@ -248,14 +267,29 @@ export const PieceDetail: React.FC<PieceDetailProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {videoTracks.map((v) => {
               const videoId = v.url ? getYoutubeVideoId(v.url) : null;
+              const originParam = typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : '';
 
               return (
                 <div key={v.id} className="studio-video-card">
                   {videoId && (
                     <iframe
+                      ref={(el) => {
+                        if (el) iframeRefs.current.set(v.id, el);
+                        else iframeRefs.current.delete(v.id);
+                      }}
                       className="studio-video-iframe"
-                      src={`https://www.youtube.com/embed/${videoId}?playsinline=1&rel=0`}
+                      src={`https://www.youtube.com/embed/${videoId}?playsinline=1&rel=0&enablejsapi=1&origin=${originParam}`}
                       title={v.label}
+                      onLoad={(e) => {
+                        try {
+                          (e.currentTarget as HTMLIFrameElement).contentWindow?.postMessage(
+                            JSON.stringify({ event: 'listening', id: videoId, channel: 'widget' }),
+                            'https://www.youtube.com'
+                          );
+                        } catch {
+                          // Silently ignore cross-origin error
+                        }
+                      }}
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                       allowFullScreen
                       referrerPolicy="strict-origin-when-cross-origin"

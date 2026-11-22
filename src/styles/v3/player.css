@@ -96,6 +96,12 @@
   background: var(--bg-hover);
 }
 
+.mini-player-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .mini-player-progress-line {
   position: absolute;
   bottom: 0;

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { readPreference, writePreference, PREFERENCE_KEYS } from '../sheetsStorage';
 import { uploadFile, deleteObject } from './workerClient';
-import { canCompress, validateAudioFile, COMPRESSION_ERROR_MESSAGE } from './audioCompress';
+import { canCompress, compressAudio, validateAudioFile, COMPRESSION_ERROR_MESSAGE } from './audioCompress';
 
 export type UploadJobStatus =
   | 'queued'
@@ -20,7 +20,7 @@ export interface UploadJobRequest {
   file: Blob | File;
   previousStorageKey?: string;
   baseUrl: string;
-  saveFn: (newKey: string, size: number) => Promise<void>;
+  saveFn: (newKey: string, size: number, durationSeconds?: number) => Promise<void>;
 }
 
 export interface UploadJob extends UploadJobRequest {
@@ -194,12 +194,23 @@ class UploadQueueManager {
 
     try {
       // 1. 음원 압축 검증 분기
+      let uploadBlob: Blob = job.file;
+      let durationSeconds: number | undefined;
+
       if (job.kind === 'audio') {
-        if (canCompress()) {
+        const canComp = await canCompress();
+        if (canComp) {
           job.status = 'compressing';
-          job.progress = 50;
+          job.progress = 0;
           this.notify();
-          // Future Q1 AAC compression pipeline
+          const compResult = await compressAudio(job.file, (percent) => {
+            job.progress = percent;
+            this.notify();
+          });
+          uploadBlob = compResult.file;
+          if (compResult.durationSeconds) {
+            durationSeconds = compResult.durationSeconds;
+          }
         } else {
           const val = validateAudioFile({
             name: job.fileName,
@@ -219,7 +230,7 @@ class UploadQueueManager {
 
       const uploadRes = await uploadFile(
         job.kind,
-        job.file,
+        uploadBlob,
         (percent) => {
           job.progress = percent;
           this.notify();
@@ -235,7 +246,11 @@ class UploadQueueManager {
       this.notify();
 
       try {
-        await job.saveFn(uploadRes.key, uploadRes.size);
+        if (durationSeconds !== undefined) {
+          await job.saveFn(uploadRes.key, uploadRes.size, durationSeconds);
+        } else {
+          await job.saveFn(uploadRes.key, uploadRes.size);
+        }
       } catch (saveErr) {
         // 저장이 실패하면 새로 올린 R2 키를 DELETE하여 고아 객체 방지
         try {

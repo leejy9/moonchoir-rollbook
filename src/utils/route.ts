@@ -4,7 +4,8 @@ export type Overlay =
   | { kind: 'scheduleSheet'; date: string; scheduleId?: string }
   | { kind: 'qr'; scheduleId: string }
   | { kind: 'rsvp'; scheduleId: string }
-  | { kind: 'player' };
+  | { kind: 'player' }
+  | { kind: 'score'; pieceId: string };
 
 export type Route =
   | { area: 'member'; tab: MemberTab; month?: string; overlay?: Overlay }
@@ -55,20 +56,32 @@ export function parseRoute(hash: string): Route {
   const params = new URLSearchParams(queryPart || '');
 
   if (path === 'profile') {
+    const isScore = params.get('score') === '1' && !!params.get('pieceId');
     const isPlayer = params.get('player') === '1';
+    const overlay: Overlay | undefined = isScore
+      ? { kind: 'score', pieceId: params.get('pieceId')! }
+      : isPlayer
+      ? { kind: 'player' }
+      : undefined;
     return {
       area: 'member',
       tab: 'profile',
-      overlay: isPlayer ? { kind: 'player' } : undefined,
+      overlay,
     };
   }
 
   if (path === 'studio') {
+    const isScore = params.get('score') === '1' && !!params.get('pieceId');
     const isPlayer = params.get('player') === '1';
+    const overlay: Overlay | undefined = isScore
+      ? { kind: 'score', pieceId: params.get('pieceId')! }
+      : isPlayer
+      ? { kind: 'player' }
+      : undefined;
     return {
       area: 'member',
       tab: 'studio',
-      overlay: isPlayer ? { kind: 'player' } : undefined,
+      overlay,
     };
   }
 
@@ -87,6 +100,8 @@ export function parseRoute(hash: string): Route {
       overlay = { kind: 'qr', scheduleId: sid };
     } else if (params.get('rsvp') === '1' && sid) {
       overlay = { kind: 'rsvp', scheduleId: sid };
+    } else if (params.get('score') === '1' && params.get('pieceId')) {
+      overlay = { kind: 'score', pieceId: params.get('pieceId')! };
     } else if (params.get('player') === '1') {
       overlay = { kind: 'player' };
     }
@@ -126,6 +141,13 @@ export function formatRoute(route: Route): string {
       const q = new URLSearchParams();
       q.set('rsvp', '1');
       q.set('sid', route.overlay.scheduleId);
+      return `#/${tab}?${q.toString()}`;
+    }
+    if (route.overlay.kind === 'score') {
+      const q = new URLSearchParams();
+      q.set('score', '1');
+      q.set('pieceId', route.overlay.pieceId);
+      if (tab === 'home' && route.month) q.set('m', route.month);
       return `#/${tab}?${q.toString()}`;
     }
     if (route.overlay.kind === 'player') {

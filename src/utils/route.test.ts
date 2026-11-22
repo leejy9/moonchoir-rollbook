@@ -86,6 +86,25 @@ describe('Route Pure Functions & navReducer', () => {
         scheduleId: 'sch_vote',
       },
     });
+
+    expect(parseRoute('#/studio?score=1&pieceId=piece_123')).toEqual({
+      area: 'member',
+      tab: 'studio',
+      overlay: {
+        kind: 'score',
+        pieceId: 'piece_123',
+      },
+    });
+
+    expect(parseRoute('#/home?score=1&pieceId=piece_456&m=2026-11')).toEqual({
+      area: 'member',
+      tab: 'home',
+      month: '2026-11',
+      overlay: {
+        kind: 'score',
+        pieceId: 'piece_456',
+      },
+    });
   });
 
   it('ignores invalid dates and invalid month query formats', () => {
@@ -127,6 +146,17 @@ describe('Route Pure Functions & navReducer', () => {
         area: 'member',
         tab: 'home',
         overlay: { kind: 'rsvp', scheduleId: 'sch_rsvp' },
+      },
+      {
+        area: 'member',
+        tab: 'studio',
+        overlay: { kind: 'score', pieceId: 'piece_test' },
+      },
+      {
+        area: 'member',
+        tab: 'home',
+        month: '2026-11',
+        overlay: { kind: 'score', pieceId: 'piece_test2' },
       },
     ];
 

@@ -11,6 +11,7 @@ import type {
 } from '../../types/rollbook';
 import { getActiveSupabaseRealtime } from '../../services/realtime/supabaseRealtime';
 import { getKSTDateString, getKSTTimestampString, addDaysKST, getWeekdayOfDate } from '../../utils/date';
+import { MediaStorageSettingSection } from './settings/MediaStorageSettingSection';
 
 interface SuperAdminDashboardProps {
   onBackToHome: () => void;
@@ -1623,6 +1624,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Media Storage CDN Base URL */}
+            <MediaStorageSettingSection config={sheetsService.getConfig()} onSaved={onDataChanged} />
           </div>
         )}
 
@@ -1796,6 +1800,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Media Storage CDN Base URL */}
+            <MediaStorageSettingSection config={sheetsService.getConfig()} onSaved={onDataChanged} />
           </div>
         )}
       </div>

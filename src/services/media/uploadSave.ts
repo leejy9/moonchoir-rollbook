@@ -12,8 +12,9 @@ export function createUploadSaveFn(
   finalKind: string,
   replaceTrackId?: string,
   durationSeconds?: number
-): (key: string, size: number) => Promise<void> {
-  return async (key: string, size: number) => {
+): (key: string, size: number, dynamicDurationSeconds?: number) => Promise<void> {
+  return async (key: string, size: number, dynamicDurationSeconds?: number) => {
+    const effectiveDuration = dynamicDurationSeconds ?? durationSeconds;
     if (kind === 'score') {
       const currentCatalog = sheetsService.getPracticeCatalog();
       const existing = currentCatalog.pieces.find((p) => p.id === pieceId);
@@ -41,7 +42,7 @@ export function createUploadSaveFn(
           source: 'r2',
           storageKey: key,
           sizeBytes: size,
-          durationSeconds: durationSeconds ?? existingTrack.durationSeconds,
+          durationSeconds: effectiveDuration ?? existingTrack.durationSeconds,
         });
       } else {
         const currentCatalog = sheetsService.getPracticeCatalog();
@@ -62,7 +63,7 @@ export function createUploadSaveFn(
           storageKey: key,
           sizeBytes: size,
           orderIndex,
-          durationSeconds,
+          durationSeconds: effectiveDuration,
         });
       }
     }

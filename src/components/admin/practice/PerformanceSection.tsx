@@ -29,8 +29,9 @@ export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
 
   const piecesByPerfId = useMemo(() => {
     const map = new Map<string, string[]>();
+    const archivedPieceIds = new Set((catalog.pieces || []).filter((p) => p.isArchived).map((p) => p.id));
     const unarchivedLinks = (catalog.performancePieces || [])
-      .filter((pp) => !pp.isArchived)
+      .filter((pp) => !pp.isArchived && !archivedPieceIds.has(pp.pieceId))
       .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
 
     for (const pp of unarchivedLinks) {
@@ -42,7 +43,7 @@ export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
       }
     }
     return map;
-  }, [catalog.performancePieces]);
+  }, [catalog.performancePieces, catalog.pieces]);
 
   const { upcomingPerfs, pastPerfs, archivedPerfs } = useMemo(() => {
     const all = catalog.performances || [];
@@ -107,7 +108,7 @@ export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
     );
   }
 
-  const renderPerfRow = (perf: Performance, isPast: boolean) => {
+  const renderPerfRow = (perf: Performance, _isPast: boolean) => {
     const pieceCount = (piecesByPerfId.get(perf.id) || []).length;
     const dateFormatted = perf.performanceDate ? formatMonthDay(perf.performanceDate) : undefined;
     const metaParts = [dateFormatted, perf.venue].filter(Boolean);
@@ -126,7 +127,7 @@ export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
           border: '1px solid var(--border-subtle)',
           background: 'var(--bg-card)',
           cursor: 'pointer',
-          opacity: isPast || perf.isArchived ? 0.65 : 1,
+          opacity: perf.isArchived ? 0.65 : 1,
           minHeight: '56px',
         }}
       >

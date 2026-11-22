@@ -102,4 +102,55 @@ describe('PerformanceSection & PerformancePieceOrderView (V3-15 Stage 5)', () =>
     const downDisabled = /<button[^>]*disabled[^>]*aria-label="아래로 이동"|<button[^>]*aria-label="아래로 이동"[^>]*disabled/.test(html);
     expect(downDisabled).toBe(true);
   });
+
+  it('excludes archived pieces from piece count and does NOT dim past performances (V3-16 §3-1, §4-3)', () => {
+    const catalogWithArchivedPiece: PracticeCatalog = {
+      pieces: [
+        { id: 'p1', title: '활성 곡', composer: '', isArchived: false, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+        { id: 'p2', title: '보관된 곡', composer: '', isArchived: true, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+      ],
+      tracks: [],
+      programPieces: [],
+      performances: [dummyPerformances[1]], // Past performance: '과거 공연'
+      performancePieces: [
+        { performanceId: 'perf_past', pieceId: 'p1', orderIndex: 0, isArchived: false },
+        { performanceId: 'perf_past', pieceId: 'p2', orderIndex: 1, isArchived: false },
+      ],
+    };
+
+    const rawHtml = renderToString(
+      <PerformanceSection catalog={catalogWithArchivedPiece} onDataChanged={vi.fn()} />
+    );
+    const html = rawHtml.replace(/<!-- -->/g, '');
+
+    // 1) Piece count is 1 (excluding archived piece p2)
+    expect(html).toContain('곡 1');
+    expect(html).not.toContain('곡 2');
+
+    // 2) Past performance is not dimmed with opacity 0.65
+    expect(html).toContain('opacity:1');
+    expect(html).not.toContain('opacity:0.65');
+  });
+
+  it('ensures pieces linked to archived performances are NOT treated as "공연 미정" (V3-16 §4-3)', () => {
+    const catalogWithArchivedPerf: PracticeCatalog = {
+      pieces: [
+        { id: 'p_linked_to_archived', title: '과거 보관 공연 수록곡', composer: '', isArchived: false, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+        { id: 'p_unassigned', title: '진짜 미정 곡', composer: '', isArchived: false, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+      ],
+      tracks: [],
+      programPieces: [],
+      performances: [dummyPerformances[2]], // Archived performance: 'perf_archived'
+      performancePieces: [
+        { performanceId: 'perf_archived', pieceId: 'p_linked_to_archived', orderIndex: 0, isArchived: false },
+      ],
+    };
+
+    const scopes = buildPerformanceScopes(catalogWithArchivedPerf, '2026-11-20');
+    const unassignedScope = scopes.find((s) => s.id === 'UNASSIGNED');
+
+    // Only p_unassigned is in unassignedCount (1), not p_linked_to_archived
+    expect(unassignedScope).toBeDefined();
+    expect(unassignedScope?.pieceCount).toBe(1);
+  });
 });

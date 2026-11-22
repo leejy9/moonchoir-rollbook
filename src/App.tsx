@@ -9,6 +9,7 @@ import { HomeTab } from './components/HomeTab';
 import { ScheduleDetailSheet } from './components/ScheduleDetailSheet';
 import { ProfileTab } from './components/ProfileTab';
 import { StudioTab } from './components/StudioTab';
+import { ScoreViewer } from './components/studio/ScoreViewer';
 import { QRScannerModal } from './components/QRScannerModal';
 import { RSVPModal } from './components/RSVPModal';
 import { SyncStatus } from './components/SyncStatus';
@@ -350,6 +351,13 @@ function MainApp() {
           {route.tab === 'studio' && profile && (
             <StudioTab
               onOpenAdmin={handleOpenAdmin}
+              onOpenScore={(piece) => {
+                if (piece.scoreStorageKey) {
+                  navigate({ type: 'OPEN', overlay: { kind: 'score', pieceId: piece.id } });
+                } else if (piece.scoreUrl) {
+                  window.open(piece.scoreUrl, '_blank', 'noopener,noreferrer');
+                }
+              }}
             />
           )}
 
@@ -432,13 +440,20 @@ function MainApp() {
           }
           onClose={() => navigate({ type: 'CLOSE' })}
           onOpenScore={(piece) => {
-            const scoreUrl = piece.scoreStorageKey
-              ? `${sheetsService.getConfig().mediaPublicBaseUrl || ''}/${piece.scoreStorageKey}`
-              : piece.scoreUrl;
-            if (scoreUrl) {
-              window.open(scoreUrl, '_blank', 'noopener,noreferrer');
+            if (piece.scoreStorageKey) {
+              navigate({ type: 'OPEN', overlay: { kind: 'score', pieceId: piece.id } });
+            } else if (piece.scoreUrl) {
+              window.open(piece.scoreUrl, '_blank', 'noopener,noreferrer');
             }
           }}
+        />
+      )}
+
+      {/* Score Viewer Overlay */}
+      {isBound && route.area === 'member' && route.overlay?.kind === 'score' && (
+        <ScoreViewer
+          pieceId={route.overlay.pieceId}
+          onClose={() => navigate({ type: 'CLOSE' })}
         />
       )}
 

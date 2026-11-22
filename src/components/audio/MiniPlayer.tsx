@@ -15,7 +15,11 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onOpenFullPlayer }) => {
     resume,
     nextTrack,
     closePlayer,
+    queue,
+    currentIndex,
   } = useAudioPlayer();
+
+  const hasNext = Boolean(queue.length > 0 && currentIndex >= 0 && currentIndex < queue.length - 1);
 
   const { currentTime, duration } = useAudioPosition();
 
@@ -111,6 +115,7 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onOpenFullPlayer }) => {
           type="button"
           className="mini-player-btn"
           onClick={nextTrack}
+          disabled={!hasNext}
           aria-label="다음 트랙"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

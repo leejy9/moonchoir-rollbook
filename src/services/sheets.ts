@@ -1473,7 +1473,7 @@ export class SheetsService {
   }
 
   public updateConfig(newConfig: Partial<AppConfig>): AppConfig {
-    this.config = { ...this.config, ...newConfig };
+    this.config = { ...this.config, ...normalizeAppConfig(newConfig) };
     saveToStorage(STORAGE_KEYS.CONFIG, this.config);
 
     if (this.isBackendActive()) {
@@ -1502,7 +1502,7 @@ export class SheetsService {
       throw new Error(result.message || '설정 저장이 구글 시트에서 확인되지 않았습니다.');
     }
 
-    this.config = { ...this.config, ...newConfig, sheetsWebAppUrl: nextEndpoint };
+    this.config = { ...this.config, ...normalizeAppConfig(newConfig), sheetsWebAppUrl: nextEndpoint };
     saveToStorage(STORAGE_KEYS.CONFIG, this.config);
     return { ...this.config };
   }

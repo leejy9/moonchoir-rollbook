@@ -63,7 +63,7 @@ describe('PieceDetail Component (G3: Embedded YouTube)', () => {
     );
 
     expect(html).toContain('<iframe');
-    expect(html).toContain('src="https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&amp;rel=0"');
+    expect(html).toContain('src="https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&amp;rel=0&amp;enablejsapi=1&amp;origin="');
     expect(html).toContain('referrerPolicy="strict-origin-when-cross-origin"');
     expect(html).toContain('allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"');
     expect(html).toContain('allowFullScreen=""');
