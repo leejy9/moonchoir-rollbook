@@ -518,6 +518,98 @@ await page.render({ canvas, viewport }).promise;   // v6: canvas 필수, canvasC
   - 쪽 번호 계산 함수의 경계(맨 위, 두 쪽 경계, 맨 아래)
 - **사용자 확인:** 고친 뒤 로컬에서 같은 PDF가 똑바로, 쪽 전체 폭으로 그려지는지 사용자가 확인한다.
 
+**J7. 악보 화면을 pdf.js 공식 뷰어 부품으로 교체 — J6을 대체한다 (2026-11-22 리뷰어 결정)**
+
+J6의 "직접 만드는 방식"은 하지 않는다. 쪽 배치, 화면 근처만 그리기, 먼 쪽 메모리 해제, 확대 후 고해상도 재렌더, 현재 쪽 추적은 pdf.js 팀이 Firefox PDF 보기용으로 이미 만든 `PDFViewer` 부품이 한다. 이미 설치한 `pdfjs-dist@6.5.438` 안에 들어 있어 **새 패키지가 필요 없다.** 압축 후 약 72KB이고 악보 화면 청크에만 들어간다.
+
+- **원인 요약(J6과 같음):**
+  - 쪽을 자리 표시와 바꿔 끼워 크기가 흔들린다. 그래서 2쪽 근처에서 멈춘다.
+  - 인라인 ref 때문에 렌더가 반복 취소된다. 그래서 흰 화면이 남는다.
+  - 고해상도 재렌더가 끝나지 않아 흐릿하다.
+  - 저장된 PDF는 원본과 같다(운영 DB 크기 193,457바이트 일치).
+- **구현 (`ScoreViewer.tsx`를 이 방식으로 다시 작성):**
+  ```ts
+  const pdfjs = await import('pdfjs-dist');
+  const viewerMod = await import('pdfjs-dist/web/pdf_viewer.mjs');
+  await import('pdfjs-dist/web/pdf_viewer.css');           // 악보 청크에만 들어가야 함
+  pdfjs.GlobalWorkerOptions.workerSrc = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+
+  const eventBus = new viewerMod.EventBus();
+  const viewer = new viewerMod.PDFViewer({
+    container,                 // position:absolute; inset:0; overflow:auto 인 div
+    viewer: innerDiv,          // className="pdfViewer"
+    eventBus,
+    textLayerMode: 0,          // 글자 선택 레이어 끔(가볍게)
+    annotationMode: 0,         // 주석 레이어 끔
+    removePageBorders: true,
+    maxCanvasPixels: 16_000_000, // 아이폰 캔버스 한도
+  });
+  const doc = await pdfjs.getDocument({ url }).promise;
+  viewer.setDocument(doc);
+  eventBus.on('pagesinit', () => { viewer.currentScaleValue = 'page-width'; });
+  eventBus.on('pagechanging', (e) => setCurrentPage(e.pageNumber));
+  ```
+  - **쪽 이동 ‹ ›:** `viewer.currentPageNumber = n`. **−/+:** `viewer.decreaseScale()` / `viewer.increaseScale()`. 범위는 `page-width` 기준 1~3배로 제한한다(배율을 확인한 뒤 넘치면 되돌림).
+  - **두 손가락 확대:**
+    - 컨테이너의 `touchstart`/`touchmove`/`touchend`에서 손가락 2개 사이 거리 비율을 구한다.
+    - `viewer.updateScale({ scaleFactor: 이전 대비 비율, origin: [두 손가락 가운데 x, y](컨테이너 기준), drawingDelay: 400 })`를 부른다. pdf.js 뷰어 앱이 핀치에 쓰는 방식과 같다.
+    - 손가락 2개일 때만 `preventDefault()`(리스너는 `{ passive: false }`). 손가락 1개는 기본 스크롤 그대로.
+    - J5의 `pinchZoom.ts` 중 거리→비율 계산만 재사용하고, 나머지 직접 렌더 코드는 지운다.
+  - **두 번 탭:** `page-width` ↔ 2배.
+  - **닫을 때:** `viewer.setDocument(null)` → `doc.destroy()`. J5의 `ScoreRenderCoordinator`와 직접 렌더 코드는 더 이상 쓰지 않으므로 지운다(테스트도 함께 정리, R9 예외 허용).
+  - 위 API 이름(`EventBus`, `PDFViewer`, `setDocument`, `currentScaleValue`, `currentPageNumber`, `updateScale`, `increaseScale`, `decreaseScale`, `pagesinit`, `pagechanging`)은 리뷰어가 `pdfjs-dist@6.5.438`의 `types/web/pdf_viewer.d.ts`에서 확인했다. 다르면 멈추고 보고한다.
+- **테스트:**
+  - `pdfjs-dist`와 뷰어를 가짜로 대체해 `setDocument`, `page-width` 설정, ‹ ›의 `currentPageNumber`, 핀치의 `updateScale` 인자(비율, 가운데 점), 닫을 때 정리 순서를 검사한다.
+  - 빌드 결과에서 `pdf_viewer` 코드와 CSS가 첫 화면 청크에 없음을 보고한다.
+- **사용자 확인(보고서에 "미확인"):** 9쪽 PDF 끝까지 스크롤, ‹ ›로 9쪽, 확대 후 선명, 휴대폰 두 손가락 확대와 한 손가락 스크롤.
+
+**J8. 미니 바를 눌러도 전체 화면 플레이어가 열리지 않음 (사용자 재현)**
+- **코드상으로는:** `MiniPlayer` 클릭 → `navigate({ type: 'OPEN', overlay: { kind: 'player' } })` → `App.tsx`에서 `route.overlay?.kind === 'player'`일 때 `FullPlayer`를 그린다. 리뷰어가 정적으로는 원인을 찾지 못했다.
+- **할 일:**
+  1. `npm run dev`에서 재현하고, 개발자 도구로 클릭 후 주소(`#/…?player=1`)가 바뀌는지, `FullPlayer` DOM이 생기는지 확인한다.
+  2. 아래 후보를 하나씩 확인하고, 찾은 원인과 근거를 보고한다.
+     - ① 주소는 바뀌는데 `hashchange` 처리에서 overlay가 사라짐
+     - ② DOM은 생기는데 CSS(`position`, `z-index`, 부모의 `transform`/`overflow`) 때문에 안 보임
+     - ③ 미니 바 안쪽 요소가 클릭을 막음(`stopPropagation`, 포인터 처리)
+     - ④ `FullPlayer`가 `null`을 반환
+  3. **통합 테스트를 추가한다:** 트랙 재생 상태에서 미니 바 제목을 클릭하면 `FullPlayer`가 화면에 있고, 뒤로 가기(`CLOSE`)로 닫힌다. 수정 전 실패를 확인한다.
+
+**J9. 미니 바 × 닫기 버튼 (명세 §3-3, 사용자 요청)**
+- 미니 바 오른쪽 끝(다음 버튼 오른쪽)에 × 버튼(44px, `aria-label="플레이어 닫기"`)을 둔다. 누르면 기존 `closePlayer()`를 부른다(재생 멈춤 + 미니 바 사라짐 + Media Session 해제).
+- 클릭이 미니 바의 "전체 화면 열기"로 번지지 않게 한다.
+- 아이콘은 인라인 SVG, 색은 토큰.
+- **테스트:** × 클릭 시 `closePlayer` 1회, 전체 화면 열기 0회.
+
+**J6. 악보 화면: 쪽 넘김이 2쪽에서 멈추고, 스크롤하면 흰 화면, 흐릿함 — J7로 대체됨, 하지 않음**
+- **저장된 PDF는 손상되지 않았다.** 운영 DB의 `score_size_bytes`가 원본 크기(193,457바이트)와 같고, Worker는 받은 바이트를 그대로 저장한다. 문제는 전부 화면 그리기 쪽이다.
+- **원인(`ScoreViewer.tsx`):**
+  1. 현재 쪽 ±1만 `<canvas>`를 두고 나머지는 **고정 크기 320×450 자리 표시**로 바꿔 끼운다. 쪽 크기가 계속 바뀌어 스크롤 위치와 현재 쪽 계산이 흔들리고, 쪽 이동이 2쪽 근처에서 멈춘다.
+  2. `ref`가 인라인 함수라 다시 그릴 때마다 `renderPage`가 다시 불린다. 그 결과 렌더 → 취소가 반복되어 그리기가 끝나지 않고 흰 캔버스로 남는다.
+  3. 확대 중에는 CSS로만 키운 저해상도 그림이 보이는데, 위 반복 때문에 고해상도 재렌더가 끝나지 않아 흐릿하게 남는다.
+- **수정(구조 변경, 이 방식 그대로):**
+  1. 문서를 연 직후 모든 쪽의 크기를 미리 구한다(`for n: (await doc.getPage(n)).getViewport({ scale: 1 })`, 메타데이터라 가볍다).
+     - 각 쪽마다 **크기가 정확한 감싸개 `<div>`**를 만든다. 가로 = 화면 폭 맞춤 × 배율, 세로 = 비율대로.
+     - 감싸개 안의 `<canvas>`는 **항상 그 자리에 둔다.** 자리 표시로 바꿔 끼우지 않는다.
+  2. 캔버스 ref는 쪽 번호별로 한 번만 만든다(`useRef<Map<number, HTMLCanvasElement>>` + 쪽마다 고정된 콜백, 또는 `createRef` 배열). 다시 그릴 때마다 ref 콜백이 다시 불리지 않아야 한다.
+  3. **`IntersectionObserver`**(root = 스크롤 컨테이너, `rootMargin: '100% 0px'`)로 화면 근처의 쪽만 그린다(J5의 `ScoreRenderCoordinator` 사용, 같은 배율이면 생략).
+     - 화면에서 3화면 이상 멀어진 쪽은 `canvas.width = canvas.height = 0`으로 메모리를 돌려주고 "안 그림"으로 표시한다.
+     - 다시 가까워지면 다시 그린다. 감싸개 크기는 그대로라 스크롤 위치가 변하지 않는다.
+  4. **현재 쪽:** 감싸개들의 위치로 계산한다(J5의 `scoreViewport` 사용). 감싸개 크기가 고정이므로 흔들리지 않는다.
+  5. **‹ › 버튼:** `container.scrollTo({ top: 감싸개.offsetTop, behavior: 'smooth' })`. 현재 쪽 상태를 직접 바꾸지 않고, 스크롤 결과로 갱신되게 한다.
+  6. **터치:**
+     - 배율 1이고 손가락이 1개면 브라우저 기본 세로 스크롤을 쓴다(컨테이너 `touch-action: pan-y`).
+     - 손가락 2개를 감지했거나 배율이 1보다 크면 `touch-action: none`으로 바꿔 직접 처리한다.
+     - 지금처럼 항상 `none`이면 휴대폰에서 스크롤이 안 된다.
+  7. **선명도:** 캔버스 실제 픽셀 = 감싸개 CSS 크기 × `devicePixelRatio`(16,000,000픽셀 한도 안). 손을 뗀 뒤 300ms 후 화면 근처 쪽만 새 배율로 다시 그린다.
+- **테스트(수정 전 실패 확인):**
+  - 모든 쪽 감싸개 높이가 쪽 비율대로 정해짐
+  - 다시 그려도 캔버스 요소가 바뀌지 않음(같은 객체)
+  - 화면 근처 쪽만 렌더 요청
+  - 먼 쪽은 해제되고 돌아오면 다시 렌더
+  - ‹ ›가 해당 감싸개 위치로 스크롤
+  - `touch-action` 전환
+- **사용자 확인 항목(보고서에 "미확인"으로 남겨 두고 사용자에게 요청):** 9쪽짜리 PDF에서 끝까지 스크롤, ‹ ›로 9쪽까지 이동, 확대 후 선명해짐, 휴대폰에서 한 손가락 스크롤.
+
 **J4. 삭제 기능 (명세 V22, §4-2, §4-3, §7-7)**
 1. **마이그레이션** `supabase/migrations/20261123020000_v3_delete.sql` + `supabase/tests/v3_delete_check.sql`
    - `prevent_row_deletion()`은 `20261122000000_practice_catalog.sql` 67행 정의를 **복사해서** `if current_setting('moonchoir.allow_catalog_delete', true) = 'on' then return old; end if;` 한 줄만 추가한다(R3, diff 보고).
