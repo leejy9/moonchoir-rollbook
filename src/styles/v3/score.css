@@ -95,54 +95,37 @@
   cursor: not-allowed;
 }
 
-.score-viewer-content {
+.score-viewer-body {
   flex: 1;
   position: relative;
-  overflow-y: auto;
-  overflow-x: hidden;
-  background: var(--bg-subtle, #f9fafb);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 12px 0;
-  touch-action: pan-y;
-}
-
-.score-viewer-content.zoomed {
-  overflow: hidden;
-  touch-action: none;
-}
-
-.score-viewer-transform-layer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
+  min-height: 0;
   width: 100%;
-  transform-origin: center top;
-  transition: transform 0.05s linear;
+  background: var(--bg-subtle, #f9fafb);
+  overflow: hidden;
 }
 
-.score-viewer-page {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  background: #ffffff;
+.score-viewer-pdf-container {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.score-viewer-pdf-container .pdfViewer {
+  margin: 0 auto;
+  padding: 8px 0;
+}
+
+.score-viewer-loading-overlay {
+  position: absolute;
+  inset: 0;
   display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-}
-
-.score-viewer-page canvas {
-  display: block;
-}
-
-.score-viewer-page-placeholder {
-  display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--bg-card, #ffffff);
   color: var(--text-muted, #9ca3af);
-  font-size: 13px;
-  background: #ffffff;
+  font-size: 14px;
+  z-index: 5;
 }
 
 .score-viewer-bottom-bar {

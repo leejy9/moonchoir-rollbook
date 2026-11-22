@@ -1,23 +1,23 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { sheetsService } from '../../services/sheets';
-import { ScoreRenderCoordinator } from '../../utils/scoreRenderCoordinator';
-import { computeCurrentPage, type PageViewportInfo } from '../../utils/scoreViewport';
-import {
-  calculateCenter,
-  calculateDistance,
-  clampCanvasResolution,
-  clampScale,
-  clampTranslation,
-  computePinchStep,
-  type Point,
-} from '../../utils/pinchZoom';
+import { calculateDistance, type Point } from '../../utils/pinchZoom';
 import { useOptionalAudioPlayer } from '../audio/audioPlayerContext';
 import '../../styles/v3/score.css';
 
 export interface ScoreViewerProps {
   pieceId: string;
   onClose: () => void;
+}
+
+interface ViewerInstance {
+  setDocument: (doc: PDFDocumentProxy | null) => void;
+  currentPageNumber: number;
+  currentScaleValue: string;
+  currentScale: number;
+  increaseScale: () => void;
+  decreaseScale: () => void;
+  updateScale: (options: { scaleFactor?: number; origin?: number[]; drawingDelay?: number }) => void;
 }
 
 export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) => {
@@ -35,56 +35,71 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
   const [error, setError] = useState(() => !storageUrl);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [scale, setScale] = useState(1.0);
-  const [renderScale, setRenderScale] = useState(1.0);
-  const [translate, setTranslate] = useState<Point>({ x: 0, y: 0 });
+  const [zoomRatio, setZoomRatio] = useState(1.0);
 
-  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const pointersRef = useRef<Map<number, Point>>(new Map());
-  const pinchStartRef = useRef<{ dist: number; scale: number; focal: Point; translate: Point } | null>(null);
-  const panStartRef = useRef<{ x: number; y: number; translate: Point } | null>(null);
-  const lastTapTimeRef = useRef<number>(0);
-  const debounceTimerRef = useRef<number | null>(null);
-  const pageRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
-  const coordinatorRef = useRef<ScoreRenderCoordinator>(new ScoreRenderCoordinator());
-
-  const scheduleRenderScale = useCallback((targetScale: number) => {
-    if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = window.setTimeout(() => setRenderScale(targetScale), 300);
-  }, []);
-
-  const updateScale = useCallback((nextScale: number) => {
-    const clamped = clampScale(nextScale);
-    setScale(clamped);
-    if (clamped <= 1.0) {
-      setTranslate({ x: 0, y: 0 });
-    } else if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      setTranslate((prev) => clampTranslation(prev.x, prev.y, clamped, { width: rect.width, height: rect.height }));
-    }
-    scheduleRenderScale(clamped);
-  }, [scheduleRenderScale]);
+  const viewerDivRef = useRef<HTMLDivElement>(null);
+  const loadingTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
+  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
+  const viewerInstanceRef = useRef<ViewerInstance | null>(null);
+  const baseScaleRef = useRef<number>(1.0);
 
   useEffect(() => {
     let isCancelled = false;
-    const coordinator = coordinatorRef.current;
-    if (!storageUrl) return;
+    const container = containerRef.current;
+    const innerDiv = viewerDivRef.current;
+
+    if (!storageUrl || !container || !innerDiv) return;
 
     (async () => {
       try {
         const pdfjs = await import('pdfjs-dist');
-        const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
-        pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+        const viewerMod = await import('pdfjs-dist/web/pdf_viewer.mjs');
+        await import('pdfjs-dist/web/pdf_viewer.css');
+        pdfjs.GlobalWorkerOptions.workerSrc = (
+          await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+        ).default;
 
-        const doc = await pdfjs.getDocument({ url: storageUrl }).promise;
+        if (isCancelled) return;
+
+        const eventBus = new viewerMod.EventBus();
+        const viewer = new viewerMod.PDFViewer({
+          container,
+          viewer: innerDiv,
+          eventBus,
+          textLayerMode: 0,
+          annotationMode: 0,
+          removePageBorders: true,
+          maxCanvasPixels: 16_000_000,
+        });
+
+        viewerInstanceRef.current = viewer;
+
+        eventBus.on('pagesinit', () => {
+          if (isCancelled) return;
+          viewer.currentScaleValue = 'page-width';
+          baseScaleRef.current = viewer.currentScale || 1.0;
+          setZoomRatio(1.0);
+        });
+
+        eventBus.on('pagechanging', (e: { pageNumber: number }) => {
+          if (!isCancelled) {
+            setCurrentPage(e.pageNumber);
+          }
+        });
+
+        const task = pdfjs.getDocument({ url: storageUrl });
+        loadingTaskRef.current = task;
+        const doc = await task.promise;
         if (isCancelled) {
-          doc.loadingTask?.destroy();
+          void task.destroy();
           return;
         }
+
         pdfDocRef.current = doc;
         setNumPages(doc.numPages);
         setCurrentPage(1);
+        viewer.setDocument(doc);
         setLoading(false);
       } catch (err) {
         console.warn('[ScoreViewer] Failed to load PDF:', err);
@@ -97,149 +112,175 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
 
     return () => {
       isCancelled = true;
-      coordinator.cancelAll();
+      if (viewerInstanceRef.current) {
+        try {
+          viewerInstanceRef.current.setDocument(null);
+        } catch {
+          // ignore cleanup error
+        }
+        viewerInstanceRef.current = null;
+      }
       if (pdfDocRef.current) {
-        void pdfDocRef.current.loadingTask?.destroy();
+        try {
+          void pdfDocRef.current.cleanup();
+        } catch {
+          // ignore cleanup error
+        }
         pdfDocRef.current = null;
       }
-      if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
+      if (loadingTaskRef.current) {
+        try {
+          void loadingTaskRef.current.destroy();
+        } catch {
+          // ignore cleanup error
+        }
+        loadingTaskRef.current = null;
+      }
     };
   }, [storageUrl]);
 
-  const renderPage = useCallback(async (pageNumber: number, canvas: HTMLCanvasElement) => {
-    const doc = pdfDocRef.current;
-    if (!doc) return;
-    try {
-      const page = await doc.getPage(pageNumber);
-      const containerWidth = containerRef.current?.clientWidth || 360;
-      const unscaledViewport = page.getViewport({ scale: 1.0 });
-      const baseFitScale = (containerWidth - 32) / unscaledViewport.width;
-      const targetScale = Math.max(0.5, baseFitScale) * renderScale;
-
-      const { scale: safeScale, effectiveDpr } = clampCanvasResolution(
-        unscaledViewport.width,
-        unscaledViewport.height,
-        targetScale,
-        window.devicePixelRatio || 1
-      );
-
-      const viewport = page.getViewport({ scale: safeScale * effectiveDpr });
-      canvas.width = Math.floor(viewport.width);
-      canvas.height = Math.floor(viewport.height);
-      canvas.style.width = `${Math.floor(viewport.width / effectiveDpr)}px`;
-      canvas.style.height = `${Math.floor(viewport.height / effectiveDpr)}px`;
-
-      await coordinatorRef.current.requestRender(pageNumber, renderScale, () => {
-        return page.render({ canvas, viewport });
-      });
-    } catch (err) {
-      console.warn(`[ScoreViewer] Error rendering page ${pageNumber}:`, err);
-    }
-  }, [renderScale]);
-
+  // Touch & Pinch gestures on container
   useEffect(() => {
-    if (!pdfDocRef.current || numPages === 0) return;
-    const targetPages = [currentPage, currentPage + 1].filter((p) => p <= numPages);
-    for (const p of targetPages) {
-      const canvas = pageRefs.current.get(p);
-      if (canvas) void renderPage(p, canvas);
+    const container = containerRef.current;
+    if (!container) return;
+
+    let lastDistance = 0;
+    let lastTapTime = 0;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const p1: Point = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        const p2: Point = { x: e.touches[1].clientX, y: e.touches[1].clientY };
+        lastDistance = calculateDistance(p1, p2);
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const viewer = viewerInstanceRef.current;
+        if (!viewer) return;
+
+        const p1: Point = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        const p2: Point = { x: e.touches[1].clientX, y: e.touches[1].clientY };
+        const currentDistance = calculateDistance(p1, p2);
+
+        if (lastDistance > 0) {
+          let scaleFactor = currentDistance / lastDistance;
+          const rect = container.getBoundingClientRect();
+          const originX = (p1.x + p2.x) / 2 - rect.left;
+          const originY = (p1.y + p2.y) / 2 - rect.top;
+
+          const base = baseScaleRef.current || 1.0;
+          const targetScale = viewer.currentScale * scaleFactor;
+          if (targetScale < base * 1.0) {
+            scaleFactor = (base * 1.0) / viewer.currentScale;
+          } else if (targetScale > base * 3.0) {
+            scaleFactor = (base * 3.0) / viewer.currentScale;
+          }
+
+          if (Math.abs(scaleFactor - 1.0) > 0.002) {
+            viewer.updateScale({
+              scaleFactor,
+              origin: [originX, originY],
+              drawingDelay: 400,
+            });
+            setZoomRatio(viewer.currentScale / base);
+          }
+        }
+        lastDistance = currentDistance;
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        lastDistance = 0;
+        const viewer = viewerInstanceRef.current;
+        if (viewer) {
+          const base = baseScaleRef.current || 1.0;
+          if (viewer.currentScale < base * 1.0) {
+            viewer.currentScaleValue = 'page-width';
+            setZoomRatio(1.0);
+          } else {
+            setZoomRatio(viewer.currentScale / base);
+          }
+        }
+      }
+
+      if (e.changedTouches.length === 1 && e.touches.length === 0) {
+        const now = Date.now();
+        if (now - lastTapTime < 300) {
+          const viewer = viewerInstanceRef.current;
+          if (viewer) {
+            const base = baseScaleRef.current || 1.0;
+            if (viewer.currentScale > base * 1.2) {
+              viewer.currentScaleValue = 'page-width';
+              setZoomRatio(1.0);
+            } else {
+              viewer.currentScale = base * 2.0;
+              setZoomRatio(2.0);
+            }
+          }
+          lastTapTime = 0;
+        } else {
+          lastTapTime = now;
+        }
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('touchcancel', handleTouchEnd);
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []);
+
+  const handleZoomIn = useCallback(() => {
+    const viewer = viewerInstanceRef.current;
+    if (!viewer) return;
+    viewer.increaseScale();
+    const base = baseScaleRef.current || 1.0;
+    if (viewer.currentScale > base * 3.0) {
+      viewer.currentScale = base * 3.0;
     }
-  }, [currentPage, numPages, renderPage]);
+    setZoomRatio(viewer.currentScale / base);
+  }, []);
 
-  const scrollToPage = useCallback((pageNum: number) => {
-    const targetPage = Math.max(1, Math.min(pageNum, numPages));
-    setCurrentPage(targetPage);
-    const canvas = pageRefs.current.get(targetPage);
-    if (canvas && containerRef.current) {
-      canvas.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const handleZoomOut = useCallback(() => {
+    const viewer = viewerInstanceRef.current;
+    if (!viewer) return;
+    viewer.decreaseScale();
+    const base = baseScaleRef.current || 1.0;
+    if (viewer.currentScale <= base * 1.0) {
+      viewer.currentScaleValue = 'page-width';
+      setZoomRatio(1.0);
+    } else {
+      setZoomRatio(viewer.currentScale / base);
     }
-  }, [numPages]);
+  }, []);
 
-  const handleScroll = useCallback(() => {
-    if (!containerRef.current) return;
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const pagesInfo: PageViewportInfo[] = [];
-
-    pageRefs.current.forEach((canvas, pageNum) => {
-      pagesInfo.push({
-        pageNumber: pageNum,
-        top: canvas.getBoundingClientRect().top,
-      });
-    });
-
-    const nextPage = computeCurrentPage(pagesInfo, {
-      top: containerRect.top,
-      height: containerRect.height,
-    });
-    if (nextPage !== currentPage) {
-      setCurrentPage(nextPage);
-    }
+  const handlePrevPage = useCallback(() => {
+    const viewer = viewerInstanceRef.current;
+    if (!viewer) return;
+    const target = Math.max(1, currentPage - 1);
+    viewer.currentPageNumber = target;
+    setCurrentPage(target);
   }, [currentPage]);
 
-  const handlePointerDown = (e: React.PointerEvent) => {
-    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-    if (pointersRef.current.size === 1) {
-      const now = Date.now();
-      if (now - lastTapTimeRef.current < 300) {
-        updateScale(scale > 1.0 ? 1.0 : 2.0);
-        lastTapTimeRef.current = 0;
-        return;
-      }
-      lastTapTimeRef.current = now;
-      if (scale > 1.0) {
-        panStartRef.current = { x: e.clientX, y: e.clientY, translate: { ...translate } };
-      }
-    } else if (pointersRef.current.size === 2) {
-      const pts = Array.from(pointersRef.current.values());
-      pinchStartRef.current = {
-        dist: calculateDistance(pts[0], pts[1]),
-        scale,
-        focal: calculateCenter(pts[0], pts[1]),
-        translate: { ...translate },
-      };
-      panStartRef.current = null;
-    }
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!pointersRef.current.has(e.pointerId)) return;
-    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-    if (pointersRef.current.size === 2 && pinchStartRef.current && containerRef.current) {
-      const pts = Array.from(pointersRef.current.values());
-      const rect = containerRef.current.getBoundingClientRect();
-      const step = computePinchStep({
-        initialDistance: pinchStartRef.current.dist,
-        currentDistance: calculateDistance(pts[0], pts[1]),
-        initialScale: pinchStartRef.current.scale,
-        focalPoint: pinchStartRef.current.focal,
-        initialTranslate: pinchStartRef.current.translate,
-        container: { width: rect.width, height: rect.height },
-      });
-      setScale(step.scale);
-      setTranslate({ x: step.translateX, y: step.translateY });
-    } else if (pointersRef.current.size === 1 && panStartRef.current && scale > 1.0 && containerRef.current) {
-      const dx = e.clientX - panStartRef.current.x;
-      const dy = e.clientY - panStartRef.current.y;
-      const rect = containerRef.current.getBoundingClientRect();
-      setTranslate(clampTranslation(
-        panStartRef.current.translate.x + dx,
-        panStartRef.current.translate.y + dy,
-        scale,
-        { width: rect.width, height: rect.height }
-      ));
-    }
-  };
-
-  const handlePointerUpOrCancel = (e: React.PointerEvent) => {
-    pointersRef.current.delete(e.pointerId);
-    if (pointersRef.current.size < 2) {
-      pinchStartRef.current = null;
-      scheduleRenderScale(scale);
-    }
-    if (pointersRef.current.size === 0) panStartRef.current = null;
-  };
+  const handleNextPage = useCallback(() => {
+    const viewer = viewerInstanceRef.current;
+    if (!viewer) return;
+    const target = Math.min(numPages, currentPage + 1);
+    viewer.currentPageNumber = target;
+    setCurrentPage(target);
+  }, [currentPage, numPages]);
 
   const handleOpenExternal = () => {
     const url = piece?.scoreUrl || storageUrl;
@@ -260,8 +301,8 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
           <button
             type="button"
             className="score-viewer-zoom-btn"
-            onClick={() => updateScale(scale - 0.5)}
-            disabled={scale <= 1.0}
+            onClick={handleZoomOut}
+            disabled={zoomRatio <= 1.05}
             aria-label="축소"
           >
             −
@@ -269,8 +310,8 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
           <button
             type="button"
             className="score-viewer-zoom-btn"
-            onClick={() => updateScale(scale + 0.5)}
-            disabled={scale >= 3.0}
+            onClick={handleZoomIn}
+            disabled={zoomRatio >= 2.95}
             aria-label="확대"
           >
             +
@@ -278,61 +319,33 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
         </div>
       </header>
 
-      {/* 2. Content */}
-      {loading && <div className="score-viewer-loading">악보를 불러오는 중...</div>}
+      {/* 2. PDF Viewer Container */}
+      <div className="score-viewer-body">
+        {loading && (
+          <div className="score-viewer-loading score-viewer-loading-overlay">
+            악보를 불러오는 중...
+          </div>
+        )}
 
-      {error && !loading && (
-        <div className="score-viewer-error">
-          <p className="score-viewer-error-text">악보를 열 수 없어요</p>
-          {(piece?.scoreUrl || storageUrl) && (
-            <button type="button" className="score-viewer-error-btn" onClick={handleOpenExternal}>
-              새 탭에서 열기
-            </button>
-          )}
-        </div>
-      )}
+        {error && !loading && (
+          <div className="score-viewer-error">
+            <p className="score-viewer-error-text">악보를 열 수 없어요</p>
+            {(piece?.scoreUrl || storageUrl) && (
+              <button type="button" className="score-viewer-error-btn" onClick={handleOpenExternal}>
+                새 탭에서 열기
+              </button>
+            )}
+          </div>
+        )}
 
-      {!loading && !error && (
         <div
           ref={containerRef}
-          className={`score-viewer-content ${scale > 1.0 ? 'zoomed' : ''}`}
-          onScroll={handleScroll}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUpOrCancel}
-          onPointerCancel={handlePointerUpOrCancel}
+          className="score-viewer-pdf-container"
+          style={{ visibility: loading || error ? 'hidden' : 'visible' }}
         >
-          <div
-            className="score-viewer-transform-layer"
-            style={{ transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale / renderScale})` }}
-          >
-            {Array.from({ length: numPages }, (_, idx) => {
-              const pageNum = idx + 1;
-              const isVisible = Math.abs(pageNum - currentPage) <= 1;
-              return (
-                <div key={pageNum} className="score-viewer-page">
-                  {isVisible ? (
-                    <canvas
-                      ref={(el) => {
-                        if (el) {
-                          pageRefs.current.set(pageNum, el);
-                          void renderPage(pageNum, el);
-                        } else {
-                          pageRefs.current.delete(pageNum);
-                        }
-                      }}
-                    />
-                  ) : (
-                    <div className="score-viewer-page-placeholder" style={{ width: '320px', height: '450px' }}>
-                      {pageNum}쪽
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <div ref={viewerDivRef} className="pdfViewer" />
         </div>
-      )}
+      </div>
 
       {/* 3. Bottom Pagination */}
       {!loading && !error && numPages > 0 && (
@@ -340,7 +353,7 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
           <button
             type="button"
             className="score-viewer-nav-btn"
-            onClick={() => scrollToPage(currentPage - 1)}
+            onClick={handlePrevPage}
             disabled={currentPage <= 1}
             aria-label="이전 쪽"
           >
@@ -352,7 +365,7 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
           <button
             type="button"
             className="score-viewer-nav-btn"
-            onClick={() => scrollToPage(currentPage + 1)}
+            onClick={handleNextPage}
             disabled={currentPage >= numPages}
             aria-label="다음 쪽"
           >
