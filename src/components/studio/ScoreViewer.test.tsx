@@ -81,6 +81,7 @@ interface MockPDFViewerInstance {
 
 let lastMockViewer: MockPDFViewerInstance | null = null;
 let lastEventBus: { on: (event: string, handler: (data?: unknown) => void) => void; emit: (event: string, data?: unknown) => void } | null = null;
+let pdfjsLibAtViewerInit: unknown = null;
 const mockTaskDestroy = vi.fn();
 const mockDocCleanup = vi.fn();
 
@@ -100,6 +101,10 @@ vi.mock('pdfjs-dist/web/pdf_viewer.mjs', () => {
     EventBus: class {
       private handlers: Record<string, ((data?: unknown) => void)[]> = {};
       constructor() {
+        pdfjsLibAtViewerInit = (globalThis as { pdfjsLib?: unknown }).pdfjsLib;
+        if (!pdfjsLibAtViewerInit) {
+          throw new TypeError("Cannot destructure property 'AbortException' of 'globalThis.pdfjsLib'");
+        }
         // eslint-disable-next-line @typescript-eslint/no-this-alias
         lastEventBus = this;
       }
@@ -120,6 +125,9 @@ vi.mock('pdfjs-dist/web/pdf_viewer.mjs', () => {
       decreaseScale = vi.fn();
       updateScale = vi.fn();
       constructor() {
+        if (!(globalThis as { pdfjsLib?: unknown }).pdfjsLib) {
+          throw new TypeError("Cannot destructure property 'AbortException' of 'globalThis.pdfjsLib'");
+        }
         // eslint-disable-next-line @typescript-eslint/no-this-alias
         lastMockViewer = this;
       }
@@ -130,6 +138,41 @@ vi.mock('pdfjs-dist/web/pdf_viewer.mjs', () => {
 vi.mock('pdfjs-dist/web/pdf_viewer.css', () => ({}));
 vi.mock('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({ default: 'mock-worker-url' }));
 
+function setupMockDom() {
+  const mockWin: Record<string, unknown> = {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    setTimeout: globalThis.setTimeout.bind(globalThis),
+    clearTimeout: globalThis.clearTimeout.bind(globalThis),
+    HTMLIFrameElement: MockHTMLIFrameElement,
+    HTMLElement: MockElement,
+    Element: MockElement,
+  };
+
+  const mockDoc: Record<string, unknown> = {
+    nodeType: 9,
+    nodeName: '#document',
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    activeElement: null,
+    visibilityState: 'visible',
+    defaultView: mockWin,
+  };
+  mockWin.document = mockDoc;
+  mockDoc.documentElement = new MockElement('HTML', mockDoc);
+  mockDoc.body = new MockElement('BODY', mockDoc);
+  mockDoc.createElement = (tag: string) => new MockElement(tag.toUpperCase(), mockDoc);
+  mockDoc.createElementNS = (_: unknown, tag: string) => new MockElement(tag.toUpperCase(), mockDoc);
+  mockDoc.createTextNode = (text: string) => ({ nodeType: 3, nodeValue: text, ownerDocument: mockDoc });
+  mockDoc.createComment = () => ({ nodeType: 8, ownerDocument: mockDoc });
+
+  vi.stubGlobal('document', mockDoc);
+  vi.stubGlobal('window', mockWin);
+
+  const container = new MockElement('DIV', mockDoc);
+  return { mockDoc, mockWin, container };
+}
+
 describe('ScoreViewer Component (J7)', () => {
   const originalOpen = typeof window !== 'undefined' ? window.open : undefined;
 
@@ -137,6 +180,8 @@ describe('ScoreViewer Component (J7)', () => {
     vi.clearAllMocks();
     lastMockViewer = null;
     lastEventBus = null;
+    pdfjsLibAtViewerInit = null;
+    delete (globalThis as { pdfjsLib?: unknown }).pdfjsLib;
     if (typeof window !== 'undefined') {
       window.open = vi.fn();
     }
@@ -320,37 +365,7 @@ describe('ScoreViewer Component (J7)', () => {
     });
     vi.spyOn(sheetsService, 'getConfig').mockReturnValue(dummyConfig);
 
-    const mockWin: Record<string, unknown> = {
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      setTimeout: globalThis.setTimeout.bind(globalThis),
-      clearTimeout: globalThis.clearTimeout.bind(globalThis),
-      HTMLIFrameElement: MockHTMLIFrameElement,
-      HTMLElement: MockElement,
-      Element: MockElement,
-    };
-
-    const mockDoc: Record<string, unknown> = {
-      nodeType: 9,
-      nodeName: '#document',
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      activeElement: null,
-      visibilityState: 'visible',
-      defaultView: mockWin,
-    };
-    mockWin.document = mockDoc;
-    mockDoc.documentElement = new MockElement('HTML', mockDoc);
-    mockDoc.body = new MockElement('BODY', mockDoc);
-    mockDoc.createElement = (tag: string) => new MockElement(tag.toUpperCase(), mockDoc);
-    mockDoc.createElementNS = (_: unknown, tag: string) => new MockElement(tag.toUpperCase(), mockDoc);
-    mockDoc.createTextNode = (text: string) => ({ nodeType: 3, nodeValue: text, ownerDocument: mockDoc });
-    mockDoc.createComment = () => ({ nodeType: 8, ownerDocument: mockDoc });
-
-    vi.stubGlobal('document', mockDoc);
-    vi.stubGlobal('window', mockWin);
-
-    const container = new MockElement('DIV', mockDoc);
+    const { container } = setupMockDom();
     const root = createRoot(container as unknown as Element);
 
     await act(async () => {
@@ -379,6 +394,38 @@ describe('ScoreViewer Component (J7)', () => {
     expect(lastMockViewer?.setDocument).toHaveBeenCalledWith(null);
     expect(mockDocCleanup).toHaveBeenCalled();
     expect(mockTaskDestroy).toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('뷰어 모듈을 불러오기 전에 globalThis.pdfjsLib이 설정돼 있다', async () => {
+    vi.spyOn(sheetsService, 'getPracticeCatalog').mockReturnValue({
+      pieces: [samplePieceWithStorage],
+      tracks: [],
+      programPieces: [],
+      performances: [],
+      performancePieces: [],
+    });
+    vi.spyOn(sheetsService, 'getConfig').mockReturnValue(dummyConfig);
+
+    const { container } = setupMockDom();
+    let root: ReturnType<typeof createRoot> | undefined;
+
+    await act(async () => {
+      root = createRoot(container as unknown as Element);
+      root.render(<ScoreViewer pieceId={samplePieceWithStorage.id} onClose={vi.fn()} />);
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    expect(pdfjsLibAtViewerInit).toBeDefined();
+    expect((globalThis as { pdfjsLib?: unknown }).pdfjsLib).toBeDefined();
+    expect(lastMockViewer).not.toBeNull();
+
+    if (root) {
+      await act(async () => {
+        root.unmount();
+      });
+    }
 
     vi.unstubAllGlobals();
   });

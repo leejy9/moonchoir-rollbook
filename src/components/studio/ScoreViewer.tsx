@@ -54,6 +54,8 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
     (async () => {
       try {
         const pdfjs = await import('pdfjs-dist');
+        // 필수: pdf_viewer.mjs는 불러오는 순간 globalThis.pdfjsLib에서 값을 꺼낸다(6.5.438 기준 91행).
+        (globalThis as { pdfjsLib?: typeof pdfjs }).pdfjsLib = pdfjs;
         const viewerMod = await import('pdfjs-dist/web/pdf_viewer.mjs');
         await import('pdfjs-dist/web/pdf_viewer.css');
         pdfjs.GlobalWorkerOptions.workerSrc = (
@@ -115,24 +117,24 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
       if (viewerInstanceRef.current) {
         try {
           viewerInstanceRef.current.setDocument(null);
-        } catch {
-          // ignore cleanup error
+        } catch (err) {
+          console.warn('[ScoreViewer] Failed to reset viewer document:', err);
         }
         viewerInstanceRef.current = null;
       }
       if (pdfDocRef.current) {
         try {
           void pdfDocRef.current.cleanup();
-        } catch {
-          // ignore cleanup error
+        } catch (err) {
+          console.warn('[ScoreViewer] Failed to cleanup pdf document:', err);
         }
         pdfDocRef.current = null;
       }
       if (loadingTaskRef.current) {
         try {
           void loadingTaskRef.current.destroy();
-        } catch {
-          // ignore cleanup error
+        } catch (err) {
+          console.warn('[ScoreViewer] Failed to destroy loading task:', err);
         }
         loadingTaskRef.current = null;
       }
