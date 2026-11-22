@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { PieceEditModal } from './PieceEditModal';
+import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { sheetsService } from '../../../services/sheets';
+import { uploadQueue } from '../../../services/media/uploadQueue';
+import { saveNewPieceWithStagedMedia } from '../../../services/media/uploadSave';
 import type { AppConfig, PracticePiece, PracticeTrack } from '../../../types/rollbook';
 
 let capturedTrackSectionProps: any = null;
@@ -233,6 +236,98 @@ describe('PieceEditModal Component', () => {
           storageKey: 'audio/t1.m4a',
         })
       );
+    });
+  });
+
+  describe('G1: piece create and edit with save button and staging', () => {
+    it('disables save button when title is empty', () => {
+      const html = renderToString(
+        <PieceEditModal
+          piece={{ title: '', composer: '' }}
+          catalog={{ pieces: [], tracks: [], programPieces: [] }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      // Save button exists, has disabled state, and header is '곡 추가'
+      expect(html).toContain('곡 추가');
+      expect(html).toMatch(/<button[^>]*disabled[^>]*>.*저장.*<\/button>/s);
+    });
+
+    it('does NOT call savePracticePiece on input blur and removes handleAutoSave', async () => {
+      const saveSpy = vi.spyOn(sheetsService, 'savePracticePiece').mockResolvedValue(dummyPiece);
+
+      const html = renderToString(
+        <PieceEditModal
+          piece={{ title: '새 곡', composer: '작곡가' }}
+          catalog={{ pieces: [], tracks: [], programPieces: [] }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      expect(saveSpy).not.toHaveBeenCalled();
+      // Verify no onblur attribute or auto save trigger in HTML
+      expect(html).toContain('저장');
+    });
+
+    it('saves new piece first, then enqueues staged score with new piece id', async () => {
+      const createdPiece: PracticePiece = {
+        id: 'new_p123',
+        title: '신곡',
+        isArchived: false,
+        createdAt: '2026-11-22',
+        updatedAt: '2026-11-22',
+      };
+      const saveSpy = vi.spyOn(sheetsService, 'savePracticePiece').mockResolvedValue(createdPiece);
+      const enqueueSpy = vi.spyOn(uploadQueue, 'enqueue').mockReturnValue('job_1');
+
+      const dummyFile = new File(['dummy content'], 'score.pdf', { type: 'application/pdf' });
+
+      const saved = await saveNewPieceWithStagedMedia({
+        title: '신곡',
+        composer: '작곡가',
+        arranger: '',
+        stagedProgramIds: [],
+        stagedTracks: [],
+        stagedScore: { file: dummyFile, name: 'score.pdf' },
+        baseUrl: 'https://media.test',
+        catalogProgramPieces: [],
+        enqueueFn: (req) => uploadQueue.enqueue(req),
+      });
+
+      expect(saved.id).toBe('new_p123');
+      expect(saveSpy).toHaveBeenCalledWith({
+        title: '신곡',
+        composer: '작곡가',
+        arranger: '',
+      });
+      expect(enqueueSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pieceId: 'new_p123',
+          kind: 'score',
+          title: '신곡',
+          fileName: 'score.pdf',
+        })
+      );
+    });
+
+    it('shows confirm dialog with required Korean copy when closing with unsaved changes', () => {
+      const html = renderToString(
+        <UnsavedChangesModal
+          onConfirmClose={vi.fn()}
+          onContinueEditing={vi.fn()}
+        />
+      );
+
+      expect(html).toContain('저장하지 않고 닫을까요?');
+      expect(html).toContain('닫기');
+      expect(html).toContain('계속 편집');
     });
   });
 });

@@ -7,13 +7,20 @@ import { createUploadSaveFn } from '../../../services/media/uploadSave';
 import { readAudioDuration } from '../../../services/media/audioMetadata';
 
 interface MediaUploadSheetProps {
-  pieceId: string;
+  pieceId?: string;
   kind: 'audio' | 'score';
   previousStorageKey?: string;
   replaceTrackId?: string;
   config: AppConfig;
   onClose: () => void;
   onJobEnqueued?: () => void;
+  onStageUpload?: (data: {
+    file: File;
+    title: string;
+    trackKind?: string;
+    durationSeconds?: number;
+    kind: 'audio' | 'score';
+  }) => void;
 }
 
 export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
@@ -24,6 +31,7 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
   config,
   onClose,
   onJobEnqueued,
+  onStageUpload,
 }) => {
   const kinds = config.practiceTrackKinds?.length ? config.practiceTrackKinds : ['가이드', 'MR', '참고영상'];
 
@@ -96,6 +104,20 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
     const baseUrl = config.mediaPublicBaseUrl || '';
 
     const durationSeconds = kind === 'audio' ? await readAudioDuration(selectedFile) : undefined;
+
+    if (onStageUpload) {
+      onStageUpload({
+        file: selectedFile,
+        title: finalTitle,
+        trackKind: kind === 'audio' ? finalKind : undefined,
+        durationSeconds,
+        kind,
+      });
+      onClose();
+      return;
+    }
+
+    if (!pieceId) return;
 
     uploadQueue.enqueue({
       pieceId,

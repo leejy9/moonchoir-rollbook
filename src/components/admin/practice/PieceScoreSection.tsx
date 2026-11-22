@@ -3,12 +3,16 @@ import type { PracticePiece } from '../../../types/rollbook';
 
 interface PieceScoreSectionProps {
   piece: Partial<PracticePiece>;
+  stagedScore?: { file: File; name: string } | null;
   onOpenUpload: (previousStorageKey?: string) => void;
+  onRemoveStagedScore?: () => void;
 }
 
 export const PieceScoreSection: React.FC<PieceScoreSectionProps> = ({
   piece,
+  stagedScore,
   onOpenUpload,
+  onRemoveStagedScore,
 }) => {
   return (
     <>
@@ -32,10 +36,27 @@ export const PieceScoreSection: React.FC<PieceScoreSectionProps> = ({
             cursor: 'pointer',
           }}
         >
-          {piece.scoreStorageKey || piece.scoreUrl ? '교체' : '+ 악보 올리기'}
+          {stagedScore || piece.scoreStorageKey || piece.scoreUrl ? '교체' : '+ 악보 올리기'}
         </button>
       </div>
-      {piece.scoreStorageKey ? (
+      {stagedScore ? (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '12px' }}>
+          <div>
+            <span>{stagedScore.name}</span>
+            <span style={{ fontSize: '11px', color: 'var(--brand-primary)', marginLeft: '8px', fontWeight: 600 }}>저장 대기</span>
+          </div>
+          {onRemoveStagedScore && (
+            <button
+              type="button"
+              onClick={onRemoveStagedScore}
+              aria-label="악보 삭제"
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer', minWidth: '44px', minHeight: '44px', fontSize: '16px' }}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      ) : piece.scoreStorageKey ? (
         <div style={{ padding: '8px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '12px' }}>
           <span>{piece.scoreStorageKey.split('/').pop()}</span>
           {piece.scoreSizeBytes && (

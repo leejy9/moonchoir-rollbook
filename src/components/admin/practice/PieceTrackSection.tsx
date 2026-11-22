@@ -5,11 +5,23 @@ import { TrackEditModal } from './TrackEditModal';
 import { TrackRow } from './TrackRow';
 import { isVideoTrack } from '../../../utils/youtubeUrl';
 
+export interface StagedTrack {
+  id: string;
+  kind: 'audio' | 'youtube';
+  file?: File;
+  label: string;
+  trackKind?: string;
+  url?: string;
+  durationSeconds?: number;
+}
+
 interface PieceTrackSectionProps {
   tracks: PracticeTrack[];
   archivedTracks?: PracticeTrack[];
+  stagedTracks?: StagedTrack[];
+  onRemoveStagedTrack?: (id: string) => void;
   activeJob: UploadJob | null;
-  pieceId: string;
+  pieceId?: string;
   availableKinds?: string[];
   onOpenUpload: (previousStorageKey?: string, replaceTrackId?: string) => void;
   onArchiveTrack: (track: PracticeTrack) => void;
@@ -22,6 +34,8 @@ interface PieceTrackSectionProps {
 export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
   tracks,
   archivedTracks = [],
+  stagedTracks = [],
+  onRemoveStagedTrack,
   activeJob,
   pieceId,
   availableKinds = ['가이드', '파트음원', 'MR', '참고영상'],
@@ -39,6 +53,8 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
 
   const audioTracks = tracks.filter((t) => !isVideoTrack(t));
   const youtubeTracks = tracks.filter((t) => isVideoTrack(t));
+  const stagedAudioTracks = stagedTracks.filter((t) => t.kind === 'audio');
+  const stagedYoutubeTracks = stagedTracks.filter((t) => t.kind === 'youtube');
 
   return (
     <>
@@ -66,12 +82,46 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
         </button>
       </div>
 
-      {audioTracks.length === 0 && !activeJob ? (
+      {audioTracks.length === 0 && stagedAudioTracks.length === 0 && !activeJob ? (
         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
           등록된 음원이 없습니다.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+          {stagedAudioTracks.map((st) => (
+            <div
+              key={st.id}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '8px 12px',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--bg-subtle)',
+                fontSize: '13px',
+              }}
+            >
+              <div>
+                <span style={{ fontWeight: 600 }}>{st.label}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                  {st.trackKind} · {st.file?.name}
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--brand-primary)', marginLeft: '8px', fontWeight: 600 }}>
+                  저장 대기
+                </span>
+              </div>
+              {onRemoveStagedTrack && (
+                <button
+                  type="button"
+                  onClick={() => onRemoveStagedTrack(st.id)}
+                  aria-label="트랙 삭제"
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', minWidth: '44px', minHeight: '44px', fontSize: '16px' }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
           {activeJob && activeJob.pieceId === pieceId && activeJob.kind === 'audio' && (
             <div style={{ padding: '8px 12px', background: 'var(--brand-primary-light)', borderRadius: 'var(--radius-md)', fontSize: '13px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
@@ -180,12 +230,46 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
         </button>
       </div>
 
-      {youtubeTracks.length === 0 ? (
+      {youtubeTracks.length === 0 && stagedYoutubeTracks.length === 0 ? (
         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
           등록된 영상 링크가 없습니다.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {stagedYoutubeTracks.map((st) => (
+            <div
+              key={st.id}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '8px 12px',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--bg-subtle)',
+                fontSize: '13px',
+              }}
+            >
+              <div>
+                <span style={{ fontWeight: 600 }}>{st.label}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                  유튜브 · {st.url}
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--brand-primary)', marginLeft: '8px', fontWeight: 600 }}>
+                  저장 대기
+                </span>
+              </div>
+              {onRemoveStagedTrack && (
+                <button
+                  type="button"
+                  onClick={() => onRemoveStagedTrack(st.id)}
+                  aria-label="유튜브 링크 삭제"
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', minWidth: '44px', minHeight: '44px', fontSize: '16px' }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
           {youtubeTracks.map((yt, idx) => (
             <div
               key={yt.id}
