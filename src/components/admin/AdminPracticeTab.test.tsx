@@ -101,6 +101,8 @@ describe('AdminPracticeTab Component', () => {
         isArchived: false,
       },
     ],
+    performances: [],
+    performancePieces: [],
   };
 
   beforeEach(() => {

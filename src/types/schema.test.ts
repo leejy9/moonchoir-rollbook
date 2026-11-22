@@ -204,6 +204,8 @@ describe('Data Contract & Schema Integrity (DATA_SCHEMA.md Compliance)', () => {
       pieces: [piece],
       tracks: [track],
       programPieces: [programPiece],
+      performances: [],
+      performancePieces: [],
     };
 
     const playback: TrackPlayback = {

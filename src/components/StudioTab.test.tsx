@@ -105,6 +105,8 @@ describe('StudioTab Component (MEMBER_UX_V3_SPEC §3-1, §3-2)', () => {
         isArchived: false,
       },
     ],
+    performances: [],
+    performancePieces: [],
   };
 
   beforeEach(() => {
@@ -165,6 +167,8 @@ describe('StudioTab Component (MEMBER_UX_V3_SPEC §3-1, §3-2)', () => {
       pieces: [],
       tracks: [],
       programPieces: [],
+      performances: [],
+      performancePieces: [],
     });
 
     const html = renderToString(

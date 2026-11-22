@@ -243,6 +243,8 @@ describe('practiceMedia utils', () => {
         { programId: 'card_winter', pieceId: 'piece_winter_only', orderIndex: 0, isArchived: false },
         { programId: 'card_fall', pieceId: 'piece_archived', orderIndex: 2, isArchived: false },
       ],
+      performances: [],
+      performancePieces: [],
     };
 
     it('groups active pieces and tracks under active program cards and excludes archived ones', () => {

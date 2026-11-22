@@ -235,6 +235,24 @@ describe('SupabaseBackend', () => {
         'https://test.supabase.co/rest/v1/rpc/fn_reorder_practice_tracks',
         expect.anything()
       );
+
+      await backend.callAction('SAVE_PERFORMANCE', { title: '정기연주회' });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_save_performance',
+        expect.anything()
+      );
+
+      await backend.callAction('SET_PERFORMANCE_ARCHIVED', { performanceId: 'perf1', archived: true });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_set_performance_archived',
+        expect.anything()
+      );
+
+      await backend.callAction('SET_PERFORMANCE_PIECES', { performanceId: 'perf1', pieceIds: ['p1'] });
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_set_performance_pieces',
+        expect.anything()
+      );
     });
 
     it('maps GET_MEDIA_USAGE to fn_get_media_usage with admin token attached', async () => {

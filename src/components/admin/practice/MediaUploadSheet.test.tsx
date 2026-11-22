@@ -81,6 +81,8 @@ describe('MediaUploadSheet Component', () => {
         pieces: [dummyPiece],
         tracks: [],
         programPieces: [],
+        performances: [],
+        performancePieces: [],
       });
 
       const savePieceSpy = vi.spyOn(sheetsService, 'savePracticePiece').mockResolvedValue(dummyPiece);
@@ -122,6 +124,8 @@ describe('MediaUploadSheet Component', () => {
         pieces: [],
         tracks: [existingTrack],
         programPieces: [],
+        performances: [],
+        performancePieces: [],
       });
 
       const saveTrackSpy = vi.spyOn(sheetsService, 'savePracticeTrack').mockResolvedValue(existingTrack);
@@ -180,6 +184,8 @@ describe('MediaUploadSheet Component', () => {
         pieces: [],
         tracks: [track1, track2, archivedTrack],
         programPieces: [],
+        performances: [],
+        performancePieces: [],
       });
 
       const saveTrackSpy = vi.spyOn(sheetsService, 'savePracticeTrack').mockResolvedValue(track1);
@@ -204,6 +210,8 @@ describe('MediaUploadSheet Component', () => {
         pieces: [],
         tracks: [],
         programPieces: [],
+        performances: [],
+        performancePieces: [],
       });
 
       const saveTrackSpy = vi.spyOn(sheetsService, 'savePracticeTrack').mockResolvedValue({} as any);

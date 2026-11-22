@@ -180,6 +180,8 @@ export class SheetsService {
       pieces: [],
       tracks: [],
       programPieces: [],
+      performances: [],
+      performancePieces: [],
     });
   }
 
@@ -544,12 +546,14 @@ export class SheetsService {
       pieces: [...this.practiceCatalog.pieces],
       tracks: [...this.practiceCatalog.tracks],
       programPieces: [...this.practiceCatalog.programPieces],
+      performances: [...(this.practiceCatalog.performances || [])],
+      performancePieces: [...(this.practiceCatalog.performancePieces || [])],
     };
   }
 
   public async refreshPracticeCatalog(): Promise<PracticeCatalog> {
     if (this.backend.kind === 'gas') {
-      return { pieces: [], tracks: [], programPieces: [] };
+      return { pieces: [], tracks: [], programPieces: [], performances: [], performancePieces: [] };
     }
 
     const result = await this.sendToGoogleSheet('GET_PRACTICE_CATALOG', { includeArchived: true });
@@ -723,6 +727,42 @@ export class SheetsService {
       }
     });
     saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+  }
+
+  public async savePerformance(performance: {
+    id?: string;
+    title: string;
+    performanceDate?: string;
+    venue?: string;
+  }): Promise<{ success: boolean; id?: string }> {
+    const result = await this.sendToGoogleSheet('SAVE_PERFORMANCE', performance);
+    if (!result.success) {
+      throw new Error(result.message || '공연 저장에 실패했습니다.');
+    }
+    const dataObj =
+      result.data && typeof result.data === 'object' ? (result.data as { id?: string }) : undefined;
+    const finalId = dataObj?.id || (result as { id?: string }).id;
+    return { success: true, id: finalId };
+  }
+
+  public async setPerformanceArchived(performanceId: string, archived: boolean): Promise<void> {
+    const result = await this.sendToGoogleSheet('SET_PERFORMANCE_ARCHIVED', {
+      performanceId,
+      archived,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '공연 보관 상태 변경에 실패했습니다.');
+    }
+  }
+
+  public async setPerformancePieces(performanceId: string, pieceIds: string[]): Promise<void> {
+    const result = await this.sendToGoogleSheet('SET_PERFORMANCE_PIECES', {
+      performanceId,
+      pieceIds,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '공연 곡 목록 저장에 실패했습니다.');
+    }
   }
 
   public async getMediaUsage(): Promise<MediaUsage | null> {

@@ -168,6 +168,12 @@ export class SupabaseBackend implements RemoteBackend {
         return 'fn_set_practice_track_archived';
       case 'SET_PROGRAM_PIECES':
         return 'fn_set_program_pieces';
+      case 'SAVE_PERFORMANCE':
+        return 'fn_save_performance';
+      case 'SET_PERFORMANCE_ARCHIVED':
+        return 'fn_set_performance_archived';
+      case 'SET_PERFORMANCE_PIECES':
+        return 'fn_set_performance_pieces';
       case 'REORDER_PRACTICE_TRACKS':
         return 'fn_reorder_practice_tracks';
       case 'GET_MEDIA_USAGE':

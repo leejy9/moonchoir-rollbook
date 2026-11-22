@@ -1888,7 +1888,13 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
       const catalog = await gasService.refreshPracticeCatalog();
-      expect(catalog).toEqual({ pieces: [], tracks: [], programPieces: [] });
+      expect(catalog).toEqual({
+        pieces: [],
+        tracks: [],
+        programPieces: [],
+        performances: [],
+        performancePieces: [],
+      });
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
@@ -2039,6 +2045,20 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
         scoresBytes: 2000000,
         totalBytes: 7000000,
       });
+    });
+
+    it('savePerformance, setPerformanceArchived and setPerformancePieces delegate to sendToGoogleSheet', async () => {
+      const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true, data: { id: 'perf_1' } });
+
+      const res = await service.savePerformance({ title: '정기공연' });
+      expect(res).toEqual({ success: true, id: 'perf_1' });
+      expect(sendSpy).toHaveBeenCalledWith('SAVE_PERFORMANCE', { title: '정기공연' });
+
+      await service.setPerformanceArchived('perf_1', true);
+      expect(sendSpy).toHaveBeenCalledWith('SET_PERFORMANCE_ARCHIVED', { performanceId: 'perf_1', archived: true });
+
+      await service.setPerformancePieces('perf_1', ['p1', 'p2']);
+      expect(sendSpy).toHaveBeenCalledWith('SET_PERFORMANCE_PIECES', { performanceId: 'perf_1', pieceIds: ['p1', 'p2'] });
     });
   });
 });

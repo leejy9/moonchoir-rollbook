@@ -171,6 +171,8 @@ describe('practiceScope utilities (V3-04)', () => {
       { programId: 'card_no_date', pieceId: 'p_no_date', orderIndex: 0, isArchived: false },
       { programId: 'card_future_1', pieceId: 'p_archived', orderIndex: 2, isArchived: false },
     ],
+    performances: [],
+    performancePieces: [],
   };
 
   const todayStr = '2026-11-20';

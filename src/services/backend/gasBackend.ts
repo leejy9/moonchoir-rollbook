@@ -40,7 +40,12 @@ export class GasBackend implements RemoteBackend {
     payload: unknown,
     targetUrl?: string
   ): Promise<BackendActionResult> {
-    if (action === 'GET_MEDIA_USAGE') {
+    if (
+      action === 'GET_MEDIA_USAGE' ||
+      action === 'SAVE_PERFORMANCE' ||
+      action === 'SET_PERFORMANCE_ARCHIVED' ||
+      action === 'SET_PERFORMANCE_PIECES'
+    ) {
       return {
         success: false,
         code: 'UNSUPPORTED_BACKEND',

@@ -58,6 +58,8 @@ describe('PieceEditModal Component', () => {
       pieces: [dummyPiece],
       tracks: [dummyTrack],
       programPieces: [],
+      performances: [],
+      performancePieces: [],
     });
   });
 
@@ -77,6 +79,8 @@ describe('PieceEditModal Component', () => {
             pieces: [dummyPiece],
             tracks: [dummyTrack],
             programPieces: [],
+            performances: [],
+            performancePieces: [],
           }}
           programCards={[]}
           config={dummyConfig}
@@ -102,6 +106,8 @@ describe('PieceEditModal Component', () => {
             pieces: [dummyPiece],
             tracks: [dummyTrack],
             programPieces: [],
+            performances: [],
+            performancePieces: [],
           }}
           programCards={[]}
           config={dummyConfig}
@@ -127,6 +133,8 @@ describe('PieceEditModal Component', () => {
             pieces: [archivedPiece],
             tracks: [dummyTrack],
             programPieces: [],
+            performances: [],
+            performancePieces: [],
           }}
           programCards={[]}
           config={dummyConfig}
@@ -163,6 +171,8 @@ describe('PieceEditModal Component', () => {
             pieces: [dummyPiece],
             tracks: [dummyTrack, archivedTrack],
             programPieces: [],
+            performances: [],
+            performancePieces: [],
           }}
           programCards={[]}
           config={dummyConfig}
@@ -194,6 +204,8 @@ describe('PieceEditModal Component', () => {
             pieces: [dummyPiece],
             tracks: [track1, track2, track3],
             programPieces: [],
+            performances: [],
+            performancePieces: [],
           }}
           programCards={[]}
           config={dummyConfig}
@@ -218,6 +230,8 @@ describe('PieceEditModal Component', () => {
             pieces: [dummyPiece],
             tracks: [dummyTrack],
             programPieces: [],
+            performances: [],
+            performancePieces: [],
           }}
           programCards={[]}
           config={dummyConfig}
@@ -244,7 +258,7 @@ describe('PieceEditModal Component', () => {
       const html = renderToString(
         <PieceEditModal
           piece={{ title: '', composer: '' }}
-          catalog={{ pieces: [], tracks: [], programPieces: [] }}
+          catalog={{ pieces: [], tracks: [], programPieces: [], performances: [], performancePieces: [] }}
           programCards={[]}
           config={dummyConfig}
           onClose={vi.fn()}
@@ -263,7 +277,7 @@ describe('PieceEditModal Component', () => {
       const html = renderToString(
         <PieceEditModal
           piece={{ title: '새 곡', composer: '작곡가' }}
-          catalog={{ pieces: [], tracks: [], programPieces: [] }}
+          catalog={{ pieces: [], tracks: [], programPieces: [], performances: [], performancePieces: [] }}
           programCards={[]}
           config={dummyConfig}
           onClose={vi.fn()}
