@@ -364,3 +364,10 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 - 적용 전 확인: 운영의 `fn_get_practice_catalog`, `fn_save_practice_piece`, `fn_save_practice_track` 정의가 저장소의 v3 이전 정의와 같음(차이는 이전 붙여넣기로 생긴 CRLF 줄바꿈뿐).
 - 적용 후 확인: 기존 데이터(곡 5, 트랙 1, 시즌 카드 연결 1) 그대로. 새 함수 5개, 새 테이블 2개(RLS 켜짐, anon 직접 조회 불가), 새 열 3개, 삭제 방지·updated_at 트리거 3개. 카탈로그 응답에 `performances`, `performancePieces` 포함. 토큰 없는 공연 저장은 `ADMIN_AUTH_REQUIRED`.
 - 현재 배포된 앱은 새 응답 키와 새 함수를 쓰지 않으므로 영향 없음.
+
+## 2026-11-22 — 삭제 기능 DB 변경 운영 적용 (리뷰어)
+
+- 사용자 승인 후 `feat/v3-member-ux`에 커밋된 원본 그대로 적용: `20261123020000_v3_delete.sql`(sha256 `70494acd…4657`, 커밋 `62a01be`).
+- 적용 전 확인: `prevent_row_deletion()`을 쓰는 테이블은 카탈로그 5개(`practice_pieces`, `practice_tracks`, `practice_program_pieces`, `performances`, `practice_performance_pieces`)뿐이고, anon·authenticated는 이 테이블들을 직접 삭제할 권한이 없음.
+- 적용 후 확인: 삭제 함수 3개 생성, 트리거 함수에 트랜잭션 한정 우회 조건 반영, 토큰 없는 삭제는 `ADMIN_AUTH_REQUIRED`, 기존 데이터(곡 5, 트랙 2, 시즌 카드 연결 1) 그대로. 로컬 검증에서 함수 밖 직접 삭제는 계속 거부됨을 확인.
+- 참고: 우회 설정은 같은 트랜잭션 안에서는 함수가 끝난 뒤에도 남는다. PostgREST는 요청마다 트랜잭션이 따로라 실제 노출은 없음.
