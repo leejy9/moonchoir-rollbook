@@ -409,10 +409,9 @@ describe('ScoreViewer Component (J7)', () => {
     vi.spyOn(sheetsService, 'getConfig').mockReturnValue(dummyConfig);
 
     const { container } = setupMockDom();
-    let root: ReturnType<typeof createRoot> | undefined;
+    const root = createRoot(container as unknown as Element);
 
     await act(async () => {
-      root = createRoot(container as unknown as Element);
       root.render(<ScoreViewer pieceId={samplePieceWithStorage.id} onClose={vi.fn()} />);
       await new Promise((r) => setTimeout(r, 20));
     });
@@ -421,11 +420,9 @@ describe('ScoreViewer Component (J7)', () => {
     expect((globalThis as { pdfjsLib?: unknown }).pdfjsLib).toBeDefined();
     expect(lastMockViewer).not.toBeNull();
 
-    if (root) {
-      await act(async () => {
-        root.unmount();
-      });
-    }
+    await act(async () => {
+      root.unmount();
+    });
 
     vi.unstubAllGlobals();
   });
