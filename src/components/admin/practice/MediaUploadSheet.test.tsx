@@ -220,4 +220,25 @@ describe('MediaUploadSheet Component', () => {
       );
     });
   });
+
+  describe('G2: handle storage connection and upload failure transparency', () => {
+    it('disables upload button and shows guide message when mediaPublicBaseUrl is empty', () => {
+      const configWithoutMedia: AppConfig = {
+        ...dummyConfig,
+        mediaPublicBaseUrl: '',
+      };
+
+      const html = renderToString(
+        <MediaUploadSheet
+          pieceId="p1"
+          kind="audio"
+          config={configWithoutMedia}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(html).toContain('파일 저장소가 아직 연결되지 않았어요');
+      expect(html).toMatch(/<button[^>]*disabled[^>]*>.*올리기.*<\/button>/s);
+    });
+  });
 });

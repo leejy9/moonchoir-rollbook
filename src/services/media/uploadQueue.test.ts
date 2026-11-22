@@ -156,4 +156,42 @@ describe('uploadQueue', () => {
 
     expect(fakeWindow.removeEventListener).toHaveBeenCalledWith('beforeunload', expect.any(Function));
   });
+
+  it('records failed jobs, supports retrying with same file, and dismisses failed job', async () => {
+    vi.spyOn(workerClient, 'uploadFile').mockRejectedValueOnce(new Error('Network error'));
+
+    const dummyFile = new File(['audio data'], 'fail.m4a', { type: 'audio/mp4' });
+    uploadQueue.enqueue({
+      pieceId: 'p1',
+      kind: 'audio',
+      title: '실패 트랙',
+      fileName: 'fail.m4a',
+      file: dummyFile,
+      baseUrl: 'https://media.worker.dev',
+      saveFn: vi.fn(),
+    });
+
+    await vi.waitFor(() => {
+      const snap = uploadQueue.getSnapshot();
+      expect(snap.failedCount).toBe(1);
+      expect(snap.failedJobs.length).toBe(1);
+    });
+
+    const failedJob = uploadQueue.getSnapshot().failedJobs[0];
+    expect(failedJob.error).toBe('Network error');
+
+    // Retry job
+    vi.spyOn(workerClient, 'uploadFile').mockResolvedValueOnce({ key: 'key_ok', size: 100 });
+    uploadQueue.retryJob(failedJob.id);
+
+    await vi.waitFor(() => {
+      const snap = uploadQueue.getSnapshot();
+      expect(snap.failedCount).toBe(0);
+      expect(snap.completedJobs[0].status).toBe('done');
+    });
+
+    // Dismiss job
+    uploadQueue.dismissJob(failedJob.id);
+    expect(uploadQueue.getSnapshot().completedJobs).toHaveLength(0);
+  });
 });

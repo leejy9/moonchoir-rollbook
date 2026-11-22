@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { AdminPracticeTab } from './AdminPracticeTab';
 import { sheetsService } from '../../services/sheets';
+import { uploadQueue } from '../../services/media/uploadQueue';
 import type { AppConfig, PracticeCatalog, ProgramCard } from '../../types/rollbook';
 import { resolveTrackPlayback } from '../../utils/practiceMedia';
 
@@ -186,5 +187,27 @@ describe('AdminPracticeTab Component', () => {
     );
     expect(insecurePlayback.mode).toBe('unavailable');
     expect(insecurePlayback.reason).toContain('https');
+  });
+
+  it('renders failed count chip in header when failed uploads exist', () => {
+    vi.spyOn(uploadQueue, 'getSnapshot').mockReturnValue({
+      activeJob: null,
+      queuedJobs: [],
+      completedJobs: [],
+      failedJobs: [{ id: 'f1', status: 'failed' } as any],
+      haltedJobs: [],
+      activeCount: 0,
+      failedCount: 1,
+    });
+
+    const html = renderToString(
+      <AdminPracticeTab
+        config={dummyConfig}
+        programCards={dummyProgramCards}
+        onDataChanged={vi.fn()}
+      />
+    );
+
+    expect(html.replace(/<!-- -->/g, '')).toContain('실패 1');
   });
 });

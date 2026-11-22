@@ -53,7 +53,8 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
   const [youtubeModal, setYoutubeModal] = useState<{ id?: string; title: string; url: string } | null>(null);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
 
-  const { activeJob } = useUploadQueue();
+  const { activeJob, failedJobs, retryJob, dismissJob } = useUploadQueue();
+  const hasMediaBaseUrl = Boolean(config.mediaPublicBaseUrl?.trim());
 
   const isDirty = useMemo(() => {
     if (title.trim() !== (initialPiece.title || '').trim()) return true;
@@ -240,6 +241,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
           <PieceScoreSection
             piece={currentPiece}
             stagedScore={stagedScore}
+            hasMediaBaseUrl={hasMediaBaseUrl}
             onOpenUpload={(prevKey) => setUploadSheetTarget({ kind: 'score', previousStorageKey: prevKey })}
             onRemoveStagedScore={() => setStagedScore(null)}
           />
@@ -248,6 +250,10 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
             tracks={pieceTracks}
             archivedTracks={archivedTracks}
             stagedTracks={stagedTracks}
+            failedJobs={failedJobs}
+            onRetryJob={retryJob}
+            onDismissJob={dismissJob}
+            hasMediaBaseUrl={hasMediaBaseUrl}
             onRemoveStagedTrack={(id) => setStagedTracks((prev) => prev.filter((t) => t.id !== id))}
             activeJob={activeJob}
             pieceId={currentPiece.id}

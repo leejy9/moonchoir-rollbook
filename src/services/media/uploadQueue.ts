@@ -127,13 +127,39 @@ class UploadQueueManager {
   }
 
   public getSnapshot() {
+    const failedJobs = this.completedJobs.filter((j) => j.status === 'failed');
     return {
       activeJob: this.activeJob,
       queuedJobs: [...this.queue],
       completedJobs: [...this.completedJobs],
+      failedJobs,
       haltedJobs: [...this.haltedJobs],
       activeCount: (this.activeJob ? 1 : 0) + this.queue.length,
+      failedCount: failedJobs.length,
     };
+  }
+
+  public retryJob(id: string): void {
+    const idx = this.completedJobs.findIndex((j) => j.id === id);
+    if (idx === -1) return;
+    const job = this.completedJobs[idx];
+    if (!job.file) return;
+
+    this.completedJobs.splice(idx, 1);
+    job.status = 'queued';
+    job.progress = 0;
+    job.error = undefined;
+    this.queue.push(job);
+    this.persistActiveMeta();
+    this.notify();
+    void this.processNext();
+  }
+
+  public dismissJob(id: string): void {
+    this.completedJobs = this.completedJobs.filter((j) => j.id !== id);
+    this.haltedJobs = this.haltedJobs.filter((j) => j.id !== id);
+    this.persistActiveMeta();
+    this.notify();
   }
 
   public dismissHaltedJob(id: string): void {
@@ -270,5 +296,7 @@ export function useUploadQueue() {
   return {
     ...snapshot,
     dismissHaltedJob: (id: string) => uploadQueue.dismissHaltedJob(id),
+    retryJob: (id: string) => uploadQueue.retryJob(id),
+    dismissJob: (id: string) => uploadQueue.dismissJob(id),
   };
 }

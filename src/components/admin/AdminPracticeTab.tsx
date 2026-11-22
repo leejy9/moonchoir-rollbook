@@ -29,7 +29,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
   const [currentScopeId, setCurrentScopeId] = useState<string>('ALL');
   const [editingPiece, setEditingPiece] = useState<Partial<PracticePiece> | null>(null);
 
-  const { activeCount } = useUploadQueue();
+  const { activeCount, failedCount } = useUploadQueue();
 
   const reloadCatalog = useCallback(async () => {
     try {
@@ -71,6 +71,14 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
           {activeCount > 0 && (
             <span className="admin-uploading-chip">
               올리는 중 {activeCount}
+            </span>
+          )}
+          {failedCount > 0 && (
+            <span
+              className="admin-uploading-chip"
+              style={{ background: 'var(--status-danger-light)', color: 'var(--status-danger)' }}
+            >
+              실패 {failedCount}
             </span>
           )}
         </div>

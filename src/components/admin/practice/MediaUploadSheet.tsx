@@ -59,10 +59,35 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
     return Boolean(existingTrack && !kinds.includes(existingTrack.kind));
   });
   const [mediaUsage, setMediaUsage] = useState<MediaUsage | null>(null);
+  const [usageError, setUsageError] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const hasMediaStorage = Boolean(config.mediaPublicBaseUrl?.trim());
 
   useEffect(() => {
-    sheetsService.getMediaUsage().then(setMediaUsage).catch(() => {});
+    let cancelled = false;
+    let timeoutId: any;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Media usage fetch timeout')), 8000);
+    });
+
+    Promise.race([sheetsService.getMediaUsage(), timeoutPromise])
+      .then((usage) => {
+        if (!cancelled) setMediaUsage(usage);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          console.warn('[MediaUploadSheet] Failed to get media usage:', err);
+          setUsageError(true);
+        }
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+      });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -266,9 +291,19 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '20px 0 16px 0', fontSize: '13px', color: 'var(--text-muted)' }}>
             <span>저장 공간 사용량</span>
             <span style={{ fontWeight: 700, color: isOverQuota ? 'var(--status-danger)' : 'var(--text-main)' }}>
-              {mediaUsage ? `${totalGB.toFixed(1)}GB / 10GB` : '계산 중...'}
+              {usageError
+                ? '확인할 수 없음'
+                : mediaUsage
+                ? `${totalGB.toFixed(1)}GB / 10GB`
+                : '계산 중...'}
             </span>
           </div>
+
+          {!hasMediaStorage && (
+            <div style={{ fontSize: '13px', color: 'var(--status-warning)', marginBottom: '12px' }}>
+              파일 저장소가 아직 연결되지 않았어요
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             <button
@@ -289,7 +324,7 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
             </button>
             <button
               type="submit"
-              disabled={!selectedFile || isOverQuota || Boolean(fileError)}
+              disabled={!selectedFile || isOverQuota || Boolean(fileError) || !hasMediaStorage}
               style={{
                 minHeight: '44px',
                 padding: '8px 20px',
@@ -298,8 +333,8 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
                 background: 'var(--brand-primary)',
                 color: 'var(--text-white, #ffffff)',
                 fontWeight: 700,
-                cursor: (!selectedFile || isOverQuota || Boolean(fileError)) ? 'not-allowed' : 'pointer',
-                opacity: (!selectedFile || isOverQuota || Boolean(fileError)) ? 0.45 : 1,
+                cursor: (!selectedFile || isOverQuota || Boolean(fileError) || !hasMediaStorage) ? 'not-allowed' : 'pointer',
+                opacity: (!selectedFile || isOverQuota || Boolean(fileError) || !hasMediaStorage) ? 0.45 : 1,
               }}
             >
               올리기

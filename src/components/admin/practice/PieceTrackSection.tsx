@@ -3,6 +3,7 @@ import type { PracticeTrack } from '../../../types/rollbook';
 import type { UploadJob } from '../../../services/media/uploadQueue';
 import { TrackEditModal } from './TrackEditModal';
 import { TrackRow } from './TrackRow';
+import { FailedJobsList } from './FailedJobsList';
 import { isVideoTrack } from '../../../utils/youtubeUrl';
 
 export interface StagedTrack {
@@ -19,9 +20,13 @@ interface PieceTrackSectionProps {
   tracks: PracticeTrack[];
   archivedTracks?: PracticeTrack[];
   stagedTracks?: StagedTrack[];
+  failedJobs?: UploadJob[];
   onRemoveStagedTrack?: (id: string) => void;
+  onRetryJob?: (id: string) => void;
+  onDismissJob?: (id: string) => void;
   activeJob: UploadJob | null;
   pieceId?: string;
+  hasMediaBaseUrl?: boolean;
   availableKinds?: string[];
   onOpenUpload: (previousStorageKey?: string, replaceTrackId?: string) => void;
   onArchiveTrack: (track: PracticeTrack) => void;
@@ -35,9 +40,13 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
   tracks,
   archivedTracks = [],
   stagedTracks = [],
+  failedJobs = [],
   onRemoveStagedTrack,
+  onRetryJob,
+  onDismissJob,
   activeJob,
   pieceId,
+  hasMediaBaseUrl = true,
   availableKinds = ['가이드', '파트음원', 'MR', '참고영상'],
   onOpenUpload,
   onArchiveTrack,
@@ -55,6 +64,7 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
   const youtubeTracks = tracks.filter((t) => isVideoTrack(t));
   const stagedAudioTracks = stagedTracks.filter((t) => t.kind === 'audio');
   const stagedYoutubeTracks = stagedTracks.filter((t) => t.kind === 'youtube');
+  const pieceFailedJobs = failedJobs.filter((j) => j.pieceId === pieceId);
 
   return (
     <>
@@ -65,6 +75,7 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
         <label className="admin-field-label" style={{ margin: 0 }}>음원 목록</label>
         <button
           type="button"
+          disabled={!hasMediaBaseUrl}
           onClick={() => onOpenUpload()}
           style={{
             minHeight: '44px',
@@ -75,19 +86,30 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
             color: 'var(--brand-primary)',
             fontSize: '12px',
             fontWeight: 700,
-            cursor: 'pointer',
+            cursor: !hasMediaBaseUrl ? 'not-allowed' : 'pointer',
+            opacity: !hasMediaBaseUrl ? 0.5 : 1,
           }}
         >
           + 음원 올리기
         </button>
       </div>
+      {!hasMediaBaseUrl && (
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+          파일 저장소가 아직 연결되지 않았어요
+        </div>
+      )}
 
-      {audioTracks.length === 0 && stagedAudioTracks.length === 0 && !activeJob ? (
+      {audioTracks.length === 0 && stagedAudioTracks.length === 0 && pieceFailedJobs.length === 0 && !activeJob ? (
         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
           등록된 음원이 없습니다.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+          <FailedJobsList
+            failedJobs={pieceFailedJobs}
+            onRetryJob={onRetryJob}
+            onDismissJob={onDismissJob}
+          />
           {stagedAudioTracks.map((st) => (
             <div
               key={st.id}
