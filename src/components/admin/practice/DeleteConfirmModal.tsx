@@ -115,7 +115,7 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
               borderRadius: 'var(--radius-md, 8px)',
               border: 'none',
               background: 'var(--status-danger)',
-              color: '#ffffff',
+              color: 'var(--text-white, #ffffff)',
               fontSize: '14px',
               fontWeight: 600,
               cursor: isDeleting ? 'not-allowed' : 'pointer',
