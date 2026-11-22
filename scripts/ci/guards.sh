@@ -46,6 +46,14 @@ if git diff --name-only "$BASE" HEAD | grep -qx 'src/index.css'; then
   (( plus > 40 )) && report "R21 index.css" "순증 ${plus}줄. 새 화면 스타일은 src/styles/v3/*.css에 둔다"
 fi
 
+# 라이브러리 전제 조건: pdf.js 공식 뷰어는 불러오기 전에 globalThis.pdfjsLib 등록이 필요하다
+# (등록 없이 import하면 TypeError. 테스트 환경엔 DOM이 없어 단위 테스트로는 못 잡는다 — LESSONS 2026-11-22)
+for f in $(git ls-files 'src/*.ts' 'src/*.tsx' | grep -v '\.test\.'); do
+  if grep -q "pdfjs-dist/web/pdf_viewer" "$f" && ! grep -qE "globalThis[^;]*pdfjsLib[^=]*=" "$f"; then
+    report "라이브러리 전제" "$f: pdf_viewer를 불러오기 전에 globalThis.pdfjsLib = pdfjs 를 등록해야 한다"
+  fi
+done
+
 # R18: 패키지 파일 변경은 사람이 확인 (실패는 아님)
 if git diff --name-only "$BASE" HEAD | grep -qE '^package(-lock)?\.json$'; then
   echo "NOTE [R18] package.json / package-lock.json이 바뀌었다. 승인된 패키지인지 리뷰어가 확인한다."
