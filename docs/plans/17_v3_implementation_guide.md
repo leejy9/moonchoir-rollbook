@@ -88,7 +88,7 @@
 | 14 | V3-12 | 열정 온도 엔진 + 내역 시트 | §5-5 | 새 `src/utils/passionTemperature.ts`(+테스트), `ProfileTab.tsx` | V3-07b, V3-11 |
 | 15 | V3-13 | 칭찬 스티커 엔진 + 보드 + 이미지 | §5-6 | 새 `src/utils/praiseStickers.ts`(+테스트), `public/stickers/*`, `ProfileTab.tsx` | V3-12 |
 | 16 | V3-14 | 마무리: 문서, PR | — | `docs/ARCHITECTURE_RECOVERY.md`, `docs/DEV_LOG.md` | 전부 |
-| v3-A 추가 | V3-17 | 곡·트랙·공연 삭제, 업로드 완료 후 목록 갱신, 악보 업로드 실패 표시, 받는 음원 형식 | §4-2, §4-3, §7-7 | 아래 상세 | V3-16, H1·H2 완료 후 |
+| v3-A 추가 | V3-17 | 곡·트랙·공연 삭제, 업로드 완료 후 목록 갱신, 악보 업로드 실패 표시, 받는 음원 형식, 악보 뒤집힘 | §4-2, §4-3, §7-7 | 아래 상세 | V3-16, H1·H2 완료 후 |
 | v3-A 추가 | V3-16 | 흐름 검토 반영: 관리자 설정 3칸, 음원 압축, 악보 앱 안 보기, 유튜브 재생 시 음원 일시정지, 미니 바 범위 | §3-3, §3-4, §4-4~4-6 | 아래 상세 | V3-15 완료 후 |
 | v3-A 추가 | V3-15 | 공연 단위(`performances`) 도입, 연습실·운영진의 공연 기준을 시즌 카드에서 공연으로 교체 | §3-1, §4-2, §4-3, §7-6 | 아래 상세 | `check.md` G1~G4 완료 후 |
 
@@ -497,6 +497,26 @@ await page.render({ canvas, viewport }).promise;   // v6: canvas 필수, canvasC
 - `validateAudioFile`은 **압축 가능할 때만** 이 형식을 허용한다. 압축이 불가능하면 지금처럼 m4a·mp3·aac 30MB 이하만 받는다.
 - 300MB 제한을 지킨다.
 - **테스트:** 압축 가능/불가 각각에서 wav 허용 여부.
+
+**J5. 악보가 뒤집히고 일부만 그려짐 (사용자 재현, 리뷰어 원인 확인)**
+- **현상:** 앱 안 악보 보기에서 쪽이 위아래로 뒤집히고, 쪽의 왼쪽 위 일부에만 작게 그려진다. 저장된 PDF는 정상이다.
+- **원인:** `ScoreViewer.tsx`의 `renderPage`가 같은 캔버스에 **이전 `page.render()`가 끝나기 전에 새 `page.render()`를 시작한다**(쪽 번호·배율 변경 effect, 개발 모드의 effect 이중 실행). pdf.js는 같은 캔버스의 동시 렌더를 허용하지 않는다. 겹치면 뷰포트 변환(위아래 뒤집기 포함)이 두 번 쌓여 뒤집히고 축소된다.
+- **수정:**
+  1. 쪽 번호별로 진행 중인 `RenderTask`를 `Map<number, RenderTask>`(ref)에 보관한다. 새로 그리기 전에 이전 작업의 `cancel()`을 부르고, 그 `promise`가 끝나기(거절 포함)를 기다린 다음 시작한다.
+     - 취소로 생기는 `RenderingCancelledException`(`err.name === 'RenderingCancelledException'`)은 정상이므로 경고 없이 무시한다. 다른 오류만 `console.warn`.
+  2. 쪽마다 "마지막으로 그린 배율"을 기억해, 같은 배율이면 다시 그리지 않는다.
+  3. 언마운트와 `storageUrl` 변경 시 진행 중인 렌더 작업을 모두 `cancel()`한 뒤 `doc.destroy()`를 부른다.
+  4. `page.render()` 전에 `canvas.getContext('2d')`를 따로 부르지 않는다(`canvas`만 넘긴다).
+  5. 타입은 `pdfjs-dist`의 `RenderTask`, `PDFDocumentProxy`를 쓴다(R9, `as any` 금지).
+- **현재 쪽 표시 버그:** 1쪽이 보이는데 "2 / 9"로 표시된다.
+  - `offsetTop` 비교 대신 각 쪽의 `getBoundingClientRect().top`과 컨테이너의 `getBoundingClientRect().top`을 비교한다.
+  - **컨테이너 위쪽 절반 안에 윗변이 들어온 마지막 쪽**을 현재 쪽으로 한다. 순수 함수 `src/utils/scoreViewport.ts`로 빼서 테스트한다.
+- **테스트(수정 전 실패 확인):**
+  - 같은 쪽 `renderPage`를 연달아 두 번 부르면 첫 작업의 `cancel`이 불리고, 두 번째 렌더는 첫 번째가 끝난 뒤 시작된다(가짜 `RenderTask`).
+  - 같은 배율 재호출 시 렌더 생략
+  - 언마운트 시 모든 작업 취소
+  - 쪽 번호 계산 함수의 경계(맨 위, 두 쪽 경계, 맨 아래)
+- **사용자 확인:** 고친 뒤 로컬에서 같은 PDF가 똑바로, 쪽 전체 폭으로 그려지는지 사용자가 확인한다.
 
 **J4. 삭제 기능 (명세 V22, §4-2, §4-3, §7-7)**
 1. **마이그레이션** `supabase/migrations/20261123020000_v3_delete.sql` + `supabase/tests/v3_delete_check.sql`
