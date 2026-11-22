@@ -332,10 +332,10 @@
 
 명세 V19~V21, §3-1(지난 공연·곡 수), §3-3, §3-4, §4-3(보관 용도), §4-4~4-6, §10의 27·30·31·32. **V3-15를 끝낸 뒤** 같은 브랜치에서 한다. 묶음마다 커밋한다.
 
-1. **패키지 설치:** `npm install --save-exact mediabunny pdfjs-dist` 한 번만 한다(R18 예외). 다른 패키지는 금지.
+1. **패키지 설치:** `npm install --save-exact mediabunny@1.65.2 pdfjs-dist@6.5.438` 한 번만 한다(R18 예외). **버전을 바꾸지 않는다**(둘 다 공개된 지 2주 이상 지난 버전이고, 아래 §4-A의 API는 이 버전의 타입 정의로 확인했다). 다른 패키지는 금지.
 2. **관리자 설정 3칸**(§4-6)
    - `mediaPublicBaseUrl`은 최고관리자 설정 화면, 나머지 둘은 관리자 설정 화면에 둔다. 각 화면 파일이 300줄 넘게 늘면 칸을 `src/components/admin/settings/` 아래 새 컴포넌트로 뺀다(R20).
-   - 저장 전에 **기존 설정 파서가 배열 값을 어떻게 읽는지** 찾아서 같은 방식으로 저장한다. 찾은 위치(파일:행)를 보고한다(R1).
+   - **설정값은 서버에서 모두 문자열로 돌아온다**(리뷰어 확인: `app_config.value`가 `text`, `fn_get_initial_snapshot`이 `jsonb_object_agg(key, value)`로 내려 줌, `sheets.ts`가 `{...this.config, ...data.config}`로 그대로 합침). 배열은 `JSON.stringify`로 보내고, 읽을 때는 아래 §4-A-0의 정규화 함수가 배열로 되돌린다.
    - **테스트:** 형식 검증(`http://` 거부, 끝 `/` 제거, 빈 종류·중복 거부), 저장 호출 인자, 파서가 배열로 되돌림.
 3. **음원 압축**(§4-4, §4-5)
    - `audioCompress.ts`의 `canCompress()`와 `compressAudio(file, onProgress)`를 구현한다. `mediabunny`는 함수 안에서 `await import('mediabunny')`로만 불러온다.
@@ -355,7 +355,110 @@
    - **테스트:** 다른 출처 무시, 상태 1에서만 일시정지, 언마운트 후 리스너 해제.
 6. **미니 바 범위와 다음 버튼**(§3-3): 운영진·최고관리자 화면에서 숨기기(재생 유지), 마지막 트랙에서 "다음" 비활성. 테스트 포함.
 7. **공연 목록 규칙 확인**(§3-1, §4-3): 지난 공연을 흐리게 하거나 숨기지 않기, 곡 수에서 보관된 곡 제외, 보관된 공연의 곡은 "공연 미정"이 아님. V3-15에서 이미 했으면 테스트만 추가한다.
+0. **(가장 먼저) 설정값 정규화 — 운영 중인 지각 판정 버그 수정**: 아래 §4-A-0. 별도 커밋, 메시지에 `V3-16-0`.
 8. **번들 확인:** `npm run build` 결과에서 첫 화면 청크에 `mediabunny`, `pdfjs-dist`가 없음을 보고한다(청크 이름과 크기 표).
+
+### §4-A. V3-16 구현 참고 (리뷰어가 코드·패키지 타입 정의로 확인한 내용)
+
+추측으로 API를 쓰지 않는다. 아래 이름이 실제와 다르면 **멈추고 보고**한다.
+
+#### §4-A-0. 설정값 정규화 (운영 버그)
+
+- **현상(리뷰어 재현):**
+  - 운영 `app_config`의 `lateGraceMinutes` 값은 문자열 `"15"`다.
+  - 이 값이 그대로 `reconcileSingleMemberAttendance(…, lateGraceMinutes)`에 들어가면, `startMinutes + lateGraceMinutes`가 숫자 덧셈이 아니라 문자열 이어 붙이기(`1170 + "15"` → `"117015"`)가 된다.
+  - 그래서 **40분 늦은 체크인도 "출석"이 된다.** 숫자 `15`를 넣으면 "지각", 문자열 `"15"`를 넣으면 "출석"이다.
+  - 운영 앱은 Supabase 전환 이후 지각을 판정하지 못하고 있다. 원천 로그는 그대로라 고치면 과거 기록도 올바르게 다시 계산된다.
+- **수정:**
+  - 새 파일 `src/services/configNormalize.ts`에 `normalizeAppConfig(raw: Record<string, unknown>): Partial<AppConfig>`를 만든다.
+    - `AppConfig`에서 타입이 `number`인 필드 전부(최소 `lateGraceMinutes`, `defaultLat`, `defaultLon`, `defaultRadius`. `src/types/rollbook.ts`의 `AppConfig`를 읽고 목록을 보고서에 적는다): 문자열이면 `Number()`로 바꾸고, `NaN`이면 그 키를 버린다(기본값 유지).
+    - 배열 필드(`practiceTrackKinds`, `performanceCategories`, 그 밖에 `AppConfig`에서 배열인 것): 문자열이면 `JSON.parse`. 실패하거나 배열이 아니면 키를 버린다.
+    - `boolean` 필드: `"true"`/`"false"` 문자열을 boolean으로 바꾼다.
+    - 그 밖의 키는 원문 그대로 둔다(AGENTS §1 하위 호환).
+  - 적용 위치(모두):
+    - ① `sheets.ts`에서 서버 스냅샷의 `data.config`를 합치는 곳(현재 `this.config = { ...this.config, ...data.config, … }`)
+    - ② 기기 저장소에서 설정을 읽는 곳(`loadFromStorage(STORAGE_KEYS.CONFIG, …)`)
+    - ③ 실시간 갱신으로 설정이 들어오는 곳(`src/services/realtime/supabaseRealtime.ts`에서 config를 반영하는 경로. 없으면 "없음"이라고 보고)
+    - ④ GAS 백엔드 응답(같은 합치기 경로를 쓰면 ①로 충분)
+- **테스트(수정 전 실패 필수):**
+  - `normalizeAppConfig({lateGraceMinutes:'15'})` → `15`
+  - 스냅샷에 `lateGraceMinutes:'15'`가 든 상태로 서비스를 초기화한 뒤, 19:30 시작 일정에 19:46 체크인 → "지각", 19:45 → "출석"
+  - `practiceTrackKinds:'["가이드","MR"]'` → 배열
+  - 잘못된 JSON → 기본값 유지
+- **이 커밋은 v3 기능과 무관하게 운영 배포 대상이다.** PR 본문 맨 위에 "운영 버그 수정 포함"을 적는다.
+
+#### §4-A-1. `mediabunny@1.65.2`로 압축 (`src/services/media/audioCompress.ts`)
+
+```ts
+// 함수 안에서만 동적 import (첫 화면 번들에 넣지 않기)
+const mb = await import('mediabunny');
+const { Input, ALL_FORMATS, BlobSource, Output, Mp4OutputFormat, BufferTarget, Conversion, canEncodeAudio } = mb;
+
+// 1) 지원 확인
+const ok = await canEncodeAudio('aac', { numberOfChannels: 2, sampleRate: 44100, bitrate: 64000 });
+if (!ok) → 압축 불가 경로(§4-5)
+
+// 2) 변환
+const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
+const durationSeconds = await input.computeDuration();
+const target = new BufferTarget();
+const output = new Output({ format: new Mp4OutputFormat(), target });
+const conversion = await Conversion.init({
+  input, output,
+  video: { discard: true },
+  audio: { codec: 'aac', bitrate: 64000, sampleRate: 44100 },   // 모노 원본이면 numberOfChannels: 1
+});
+if (!conversion.isValid) → conversion.discardedTracks의 reason을 console.warn으로 남기고 압축 불가 경로
+conversion.onProgress = (progress) => onProgress(Math.round(progress * 100));  // 0~1
+await conversion.execute();
+const blob = new Blob([target.buffer!], { type: 'audio/mp4' });
+```
+
+- 위 이름(`Input`, `ALL_FORMATS`, `BlobSource`, `Output`, `Mp4OutputFormat`, `BufferTarget`, `Conversion.init`, `isValid`, `discardedTracks`, `onProgress(progress, processedTime)`, `execute()`, `target.buffer`, `canEncodeAudio`, `input.computeDuration()`)은 리뷰어가 `mediabunny` 패키지의 `dist/mediabunny.d.ts`에서 확인했다.
+- 모노 판별: `(await input.getPrimaryAudioTrack())`의 채널 수. 메서드 이름이 다르면 `d.ts`에서 찾아 보고한다.
+- 취소: 큐에서 작업을 지우면 `conversion.cancel()`.
+- 테스트에서는 `vi.mock('mediabunny', …)`로 대체한다. 실제 인코딩은 테스트하지 않는다(브라우저 API 필요).
+
+#### §4-A-2. `pdfjs-dist@6.5.438`로 악보 보기 (`ScoreViewer.tsx`)
+
+```ts
+const pdfjs = await import('pdfjs-dist');
+const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+const doc = await pdfjs.getDocument({ url }).promise;
+const page = await doc.getPage(n);
+const viewport = page.getViewport({ scale });
+await page.render({ canvas, viewport }).promise;   // v6: canvas 필수, canvasContext는 선택
+```
+
+- **확대·축소는 버튼으로 한다.** 앱의 `index.html`이 `user-scalable=no`라서 브라우저의 두 손가락 확대가 꺼져 있고, 직접 만든 핀치 제스처는 이번 범위에서 빼기로 한다.
+  - 헤더 오른쪽에 −/+ 버튼(44px). 배율 100% / 150% / 200% / 300%.
+  - 배율이 화면보다 크면 가로 스크롤.
+- **아이폰 캔버스 한도:** 캔버스 한 장의 `width × height`가 16,000,000 픽셀을 넘지 않도록 `scale × devicePixelRatio`를 줄인다. 넘으면 흰 화면이 된다.
+- 쪽 이동은 스크롤 위치로 현재 쪽을 계산한다. ‹ › 버튼은 해당 쪽으로 스크롤한다.
+- 화면을 닫을 때 `doc.destroy()`를 부른다.
+- 테스트에서는 `vi.mock('pdfjs-dist', …)`로 대체한다.
+- 명세 §3-4의 "두 손가락 확대·축소"는 이 버튼 방식으로 대체한다(리뷰어 결정, 2026-11-22).
+
+#### §4-A-3. 유튜브 재생 감지 (곡 상세)
+
+두 가지를 함께 쓴다. ①은 비공식 방식이라 동작하지 않는 기기가 있을 수 있어서, ②를 반드시 같이 둔다.
+
+1. **iframe 메시지:**
+   - iframe `src`에 `enablejsapi=1&origin=${encodeURIComponent(location.origin)}`을 붙인다.
+   - iframe `onLoad`에서 `iframe.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: <영상 id>, channel: 'widget' }), 'https://www.youtube.com')`를 보낸다. 이걸 보내야 유튜브가 상태 메시지를 보내기 시작한다.
+   - `message` 이벤트에서 `event.origin === 'https://www.youtube.com'`만 받는다. `data`가 문자열이면 `JSON.parse`(실패하면 무시).
+   - 아래 둘 중 하나면 앱 플레이어 `pause()`:
+     - `{event:'onStateChange', info: 1}`
+     - `{event:'infoDelivery', info:{playerState: 1}}`
+2. **포커스 감지(예비):** `window`의 `blur` 이벤트에서 `document.activeElement`가 곡 상세의 유튜브 iframe 중 하나면 `pause()`. 사용자가 영상을 누르는 순간 포커스가 iframe으로 넘어가는 것을 이용한다.
+
+- 리스너는 곡 상세 언마운트 시 모두 해제한다.
+- **테스트:**
+  - 다른 출처 무시
+  - 두 메시지 형식 각각
+  - `blur` + `activeElement`
+  - 언마운트 후 해제
 
 ### V3-14 마무리
 
