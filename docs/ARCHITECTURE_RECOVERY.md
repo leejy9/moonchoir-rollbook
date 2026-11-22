@@ -357,3 +357,10 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 - **수정:** `src/services/configNormalize.ts`의 `normalizeAppConfig`가 숫자 필드(`lateGraceMinutes`, `defaultLat`, `defaultLon`, `defaultRadius`)와 배열 필드(`customParts`, `customMemberStatuses`, `customCategories`, `practiceTrackKinds`, `performanceCategories`)를 타입에 맞게 되돌린다. 서버 스냅샷 반영과 기기 저장소 읽기 두 곳에 적용.
 - **영향:** 원천 출석 로그는 그대로이므로 배포 후 과거 기록의 지각도 다시 올바르게 계산된다. 운영 화면의 최근 지각 수가 늘어나는 것은 정상이다.
 - 사용자 결정(2026-11-22): v3 묶음과 함께 배포한다.
+
+## 2026-11-22 — v3-A DB 변경 운영 적용 (리뷰어)
+
+- 사용자 승인 후 `feat/v3-member-ux`에 커밋된 원본 그대로 적용: `20261123000000_v3_media.sql`(sha256 `68e933ee…88cb`), `20261123010000_v3_performances.sql`(sha256 `31926b6a…82e0`).
+- 적용 전 확인: 운영의 `fn_get_practice_catalog`, `fn_save_practice_piece`, `fn_save_practice_track` 정의가 저장소의 v3 이전 정의와 같음(차이는 이전 붙여넣기로 생긴 CRLF 줄바꿈뿐).
+- 적용 후 확인: 기존 데이터(곡 5, 트랙 1, 시즌 카드 연결 1) 그대로. 새 함수 5개, 새 테이블 2개(RLS 켜짐, anon 직접 조회 불가), 새 열 3개, 삭제 방지·updated_at 트리거 3개. 카탈로그 응답에 `performances`, `performancePieces` 포함. 토큰 없는 공연 저장은 `ADMIN_AUTH_REQUIRED`.
+- 현재 배포된 앱은 새 응답 키와 새 함수를 쓰지 않으므로 영향 없음.
