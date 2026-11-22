@@ -20,7 +20,7 @@
 
 1. **기준 브랜치:** `origin/fix/review-followups`(PR #14~#20의 최종 상태 포함). 여기서 `feat/v3-member-ux`를 새로 만들고, 곧바로 `git merge origin/main`으로 이 지시서와 명세를 가져온다(충돌이 나면 멈추고 보고).
 2. **PR은 3번에 나눈다 (2026-11-21 추가).** 각 묶음이 끝나면 PR을 만들고 **리뷰어 검수와 사용자 화면 확인이 끝날 때까지 다음 묶음을 시작하지 않는다.** 머지하지 않는다. 배포하지 않는다(`npm run deploy` 금지).
-   - **v3-A (화면 골격):** V3-01, V3-02, V3-07b 중 카탈로그 새 필드 부분, V3-03, V3-04, V3-05, V3-06, V3-06b(새 탭 열기), V3-08, V3-09(압축 제외), **V3-15(공연 단위, 2026-11-22 추가)**. 브랜치 `feat/v3-member-ux` → PR 대상 `fix/review-followups`.
+   - **v3-A (화면 골격):** V3-01, V3-02, V3-07b 중 카탈로그 새 필드 부분, V3-03, V3-04, V3-05, V3-06, V3-06b(새 탭 열기), V3-08, V3-09(압축 제외), **V3-15(공연 단위)**, **V3-16(흐름 검토 반영)** (둘 다 2026-11-22 추가). 브랜치 `feat/v3-member-ux` → PR 대상 `fix/review-followups`.
      - v3-A에 필요한 DB 변경(§7-3 열 추가, §7-4의 `fn_authorize_media_upload`, `fn_get_media_usage`, 기존 카탈로그 함수 3개 수정)만 별도 마이그레이션 `20261123000000_v3_media.sql`로 만든다.
    - **v3-B (내 활동 기본):** V3-11. DB 변경 없음. v3-A PR 브랜치에서 이어서 `feat/v3-profile`.
    - **v3-C (활동 기록):** V3-07의 나머지(§7-1, §7-2, `fn_log_listen_session`, `fn_get_member_activity`)를 `20261124000000_v3_activity.sql`로 만든다. 이어서 V3-10, V3-12, V3-13. 브랜치 `feat/v3-activity`.
