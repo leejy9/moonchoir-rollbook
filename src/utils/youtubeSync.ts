@@ -3,6 +3,11 @@
  * Compliant with §3-3 and §4-A-3.
  */
 
+interface YouTubeIFrameMessage {
+  event?: string;
+  info?: number | { playerState?: number };
+}
+
 /**
  * Creates message listener for YouTube IFrame API events.
  */
@@ -11,23 +16,26 @@ export function createYoutubeMessageListener(onPause: () => void): (event: Messa
     // Only accept messages originating from YouTube embed domain
     if (event.origin !== 'https://www.youtube.com') return;
 
-    // R9 exception: YouTube embeds emit numerous internal telemetry/string messages;
-    // silently skip non-JSON or invalid strings without console.warn.
-    let data: any = event.data;
-    if (typeof data === 'string') {
+    let payload: unknown = event.data;
+    if (typeof payload === 'string') {
       try {
-        data = JSON.parse(data);
+        payload = JSON.parse(payload);
       } catch {
         return;
       }
     }
 
-    if (!data || typeof data !== 'object') return;
+    if (!payload || typeof payload !== 'object') return;
+
+    const data = payload as YouTubeIFrameMessage;
 
     // Detect playing state 1 from both standard onStateChange and infoDelivery formats
     const isPlaying =
       (data.event === 'onStateChange' && data.info === 1) ||
-      (data.event === 'infoDelivery' && data.info?.playerState === 1);
+      (data.event === 'infoDelivery' &&
+        typeof data.info === 'object' &&
+        data.info !== null &&
+        data.info.playerState === 1);
 
     if (isPlaying) {
       onPause();
