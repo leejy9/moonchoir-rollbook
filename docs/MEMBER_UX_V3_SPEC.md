@@ -33,6 +33,7 @@
 | V19 | **음원 압축 라이브러리 `mediabunny`(MPL-2.0) 설치 승인**(2026-11-22). 운영진 화면에서만 동적 import | 신규 |
 | V20 | **악보 앱 안 보기 `pdfjs-dist`(Apache-2.0) 설치 승인**(2026-11-22). 악보 화면에서만 동적 import | 신규 |
 | V21 | 악보는 **PDF만** 받는다(사진·이미지 파일 받지 않음) | 신규 |
+| V22 | **곡·트랙·공연 삭제 기능을 둔다**(2026-11-22 사용자 요청). 보관은 "잠시 숨기기", 삭제는 "잘못 만든 것을 완전히 지우기". 삭제하면 R2 파일도 지운다. 재생 기록이 있는 곡·트랙은 삭제할 수 없고 보관만 된다 | 변경 (V10·§4-2의 "삭제 없음" 대체) |
 | V18 | **"공연"은 새 테이블 `performances`로 따로 둔다**(2026-11-22). 시즌 카드(`program_cards`)는 연습 일정용으로 그대로 둔다. 연습곡은 공연에 연결하고, 공연과 일정은 연결하지 않는다. 정기연습 일정을 공연 기간에 자동으로 바꾸는 "덮어쓰기"는 하지 않는다 | 신규 (v2 D5의 곡↔시즌 카드 연결을 대체) |
 
 ### 0-2. 사용자 결정 대기
@@ -188,7 +189,15 @@
 | 영상 | 유튜브 행 = 로고, 제목, URL 일부, ⋯(수정 / 보관). "+ 유튜브 링크" |
 
 - **유튜브 URL 검증:** `https`이고 호스트가 `youtube.com`, `www.youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtu.be` 중 하나여야 한다. 아니면 저장 버튼을 비활성화한다.
-- **삭제 버튼은 없다.** 보관만 있다(기존 원칙). 파일 교체 시에만 이전 R2 객체를 지운다(V10).
+- **보관과 삭제 (V22):**
+  - **곡:** 편집 화면 맨 아래에 "보관"(보관된 곡은 "복원")과 빨간 "삭제"를 둔다.
+  - **트랙:** ⋯ 메뉴에 "보관"과 "삭제"를 둔다.
+  - **영상:** ⋯ 메뉴에 "보관"과 "삭제"를 둔다.
+  - **삭제 확인 창:** 문구는 "'{이름}'을(를) 삭제할까요?" + "파일도 함께 지워지고 되돌릴 수 없어요." 버튼은 "취소" / 빨간 "삭제". 삭제 중에는 버튼을 막는다.
+  - **삭제 순서:** ① 삭제 RPC(§7-7)가 DB 행을 지우고 지운 파일 키 목록을 돌려준다. ② 앱이 Worker DELETE로 각 키를 지운다. ③ 목록을 다시 불러온다.
+    - ②가 일부 실패해도 DB는 이미 지워졌으므로 실패를 화면에 띄우지 않고 `console.warn`만 남긴다(R2에 고아 파일이 남는 것은 허용).
+  - **재생 기록이 있는 곡·트랙**(v3-C의 `practice_listen_sessions`에 행이 있음)은 RPC가 거부한다. 화면에는 "재생 기록이 있어 삭제할 수 없어요. 보관해 주세요." 한 줄을 보여 준다.
+  - 파일 교체 시 이전 R2 객체를 지우는 규칙(V10)은 그대로다.
 
 ### 4-3. 공연 (V18)
 
@@ -200,7 +209,7 @@
 **공연 만들기·편집 시트**
 - 입력: 이름(필수, 100자 이하), 공연 날짜(`<input type="date">`, 비워 두면 미정), 장소(선택, 100자 이하).
 - 아래 고정 "저장" 버튼. 저장 안 한 변경이 있으면 닫을 때 §4-2와 같은 확인 창.
-- 기존 공연이면 시트 하단에 "보관"(보관된 공연이면 "복원")을 둔다. 보관은 **잘못 만든 공연을 치우는 용도**다. 끝난 공연은 보관하지 않아도 자동으로 "지난 공연"으로 내려간다. 삭제 버튼은 없다.
+- 기존 공연이면 시트 하단에 "보관"(보관된 공연이면 "복원")과 빨간 "삭제"를 둔다. 끝난 공연은 보관하지 않아도 자동으로 "지난 공연"으로 내려간다. **삭제**는 공연과 그 곡 연결만 지운다(곡 자체는 남아 "공연 미정"이 될 수 있다). 확인 창 문구는 §4-2와 같다.
 
 **공연 곡 순서** (목록에서 공연을 누르면)
 - 헤더: 공연 이름 · 날짜, 오른쪽 "편집"(위 시트 열기).
@@ -454,7 +463,7 @@ flowchart LR
 - **백필:** 마이그레이션 안에서 기존 `rsvp_votes` 각 행을 `action='backfill'`로 1회 넣는다.
   - `occurred_at`은 `timestamp`를 `timestamptz`로 바꿀 수 있으면 그 값, 안 되면 `received_at`.
   - 다시 실행해도 중복되지 않게 `not exists`로 막는다.
-- **보호:** RLS 켜고 직접 정책은 없다. update/delete를 막는 트리거를 건다(기존 `prevent_row_deletion` 재사용 + update 차단 함수 신규).
+- **보호:** RLS 켜고 직접 정책은 없다. update/delete를 막는 트리거를 건다. **`prevent_row_deletion`은 재사용하지 않는다**(V22에서 카탈로그 삭제용 우회 장치가 생겼으므로). `rsvp_events` 전용 차단 함수를 새로 만든다.
 - 인덱스: `(member_id, schedule_id, occurred_at)`.
 
 ### 7-2. `practice_listen_sessions` (V13)
@@ -529,6 +538,23 @@ flowchart LR
 | `fn_set_performance_archived(p_payload jsonb)` | 토큰 검사. 입력 `performanceId`, `archived`(boolean). 없는 id는 실패 메시지 |
 | `fn_set_performance_pieces(p_payload jsonb)` | 토큰 검사. 입력 `performanceId`, `pieceIds`(문자열 배열). **기존 `fn_set_program_pieces`(`20261122000000_practice_catalog.sql` 414행~)를 복사해서** 테이블·열·메시지만 바꾼다. 추가로 ① 중복 id가 있으면 `{success:false, message:'중복된 곡이 있습니다.'}` ② 200개 초과 거부 ③ 보관된 공연이면 거부 |
 | `fn_get_practice_catalog(boolean, text)` | 응답에 `performances`(보관 포함 여부는 기존 `p_include_archived` 규칙을 따름)와 `performancePieces` 배열을 추가한다. 기존 `programPieces`는 그대로 둔다(하위 호환). **최신 정의는 `20261123000000_v3_media.sql` 248행~** |
+
+### 7-7. 삭제 (V22) — `20261123020000_v3_delete.sql` (v3-A)
+
+- **삭제 방지 트리거 우회 장치:** 기존 `prevent_row_deletion()`(카탈로그 테이블 5개 전용: `practice_pieces`, `practice_tracks`, `practice_program_pieces`, `performances`, `practice_performance_pieces`)을 고친다.
+  - `current_setting('moonchoir.allow_catalog_delete', true) = 'on'`일 때만 삭제를 통과시키고, 아니면 지금처럼 예외를 낸다.
+  - 이 설정은 아래 삭제 RPC 안에서만 `set_config('moonchoir.allow_catalog_delete', 'on', true)`(트랜잭션 한정)로 켠다.
+  - **최신 정의(`20261122000000_practice_catalog.sql` 67행~)를 복사해서 조건 한 줄만 추가한다.**
+- **RPC** (모두 관리자 토큰 검사, `security definer`, anon·authenticated에 execute)
+
+| 함수 | 입력 | 동작 | 반환 |
+|---|---|---|---|
+| `fn_delete_practice_piece(p_payload jsonb)` | `pieceId` | 재생 기록이 있으면 거부(`practice_listen_sessions`가 있을 때만 확인: `to_regclass('public.practice_listen_sessions') is not null`). 공연 연결 → 시즌 카드 연결 → 트랙 → 곡 순서로 삭제 | `{success, storageKeys: [트랙 storage_key들 + score_storage_key, 빈 값 제외]}` |
+| `fn_delete_practice_track(p_payload jsonb)` | `trackId` | 재생 기록이 있으면 거부. 트랙 삭제 | `{success, storageKeys: [storage_key](빈 값이면 [])}` |
+| `fn_delete_performance(p_payload jsonb)` | `performanceId` | 공연의 곡 연결 → 공연 삭제(곡은 남김) | `{success}` |
+
+- 없는 id는 `{success:false, message}`. 거부 문구는 "재생 기록이 있어 삭제할 수 없어요. 보관해 주세요."
+- **v3-C 주의:** `practice_listen_sessions`의 `piece_id`, `track_id` 외래 키는 `on delete restrict` 그대로 둔다. 위 RPC가 먼저 확인하므로 정상 경로에서는 걸리지 않는다.
 
 ### 7-5. 클라이언트 계약
 

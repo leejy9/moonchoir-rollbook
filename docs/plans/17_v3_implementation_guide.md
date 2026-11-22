@@ -20,7 +20,7 @@
 
 1. **기준 브랜치:** `origin/fix/review-followups`(PR #14~#20의 최종 상태 포함). 여기서 `feat/v3-member-ux`를 새로 만들고, 곧바로 `git merge origin/main`으로 이 지시서와 명세를 가져온다(충돌이 나면 멈추고 보고).
 2. **PR은 3번에 나눈다 (2026-11-21 추가).** 각 묶음이 끝나면 PR을 만들고 **리뷰어 검수와 사용자 화면 확인이 끝날 때까지 다음 묶음을 시작하지 않는다.** 머지하지 않는다. 배포하지 않는다(`npm run deploy` 금지).
-   - **v3-A (화면 골격):** V3-01, V3-02, V3-07b 중 카탈로그 새 필드 부분, V3-03, V3-04, V3-05, V3-06, V3-06b(새 탭 열기), V3-08, V3-09(압축 제외), **V3-15(공연 단위)**, **V3-16(흐름 검토 반영)** (둘 다 2026-11-22 추가). 브랜치 `feat/v3-member-ux` → PR 대상 `fix/review-followups`.
+   - **v3-A (화면 골격):** V3-01, V3-02, V3-07b 중 카탈로그 새 필드 부분, V3-03, V3-04, V3-05, V3-06, V3-06b(새 탭 열기), V3-08, V3-09(압축 제외), **V3-15(공연 단위)**, **V3-16(흐름 검토 반영)**, **V3-17(삭제 기능 + 사용자 확인 버그)** (모두 2026-11-22 추가). 브랜치 `feat/v3-member-ux` → PR 대상 `fix/review-followups`.
      - v3-A에 필요한 DB 변경(§7-3 열 추가, §7-4의 `fn_authorize_media_upload`, `fn_get_media_usage`, 기존 카탈로그 함수 3개 수정)만 별도 마이그레이션 `20261123000000_v3_media.sql`로 만든다.
    - **v3-B (내 활동 기본):** V3-11. DB 변경 없음. v3-A PR 브랜치에서 이어서 `feat/v3-profile`.
    - **v3-C (활동 기록):** V3-07의 나머지(§7-1, §7-2, `fn_log_listen_session`, `fn_get_member_activity`)를 `20261124000000_v3_activity.sql`로 만든다. 이어서 V3-10, V3-12, V3-13. 브랜치 `feat/v3-activity`.
@@ -88,6 +88,7 @@
 | 14 | V3-12 | 열정 온도 엔진 + 내역 시트 | §5-5 | 새 `src/utils/passionTemperature.ts`(+테스트), `ProfileTab.tsx` | V3-07b, V3-11 |
 | 15 | V3-13 | 칭찬 스티커 엔진 + 보드 + 이미지 | §5-6 | 새 `src/utils/praiseStickers.ts`(+테스트), `public/stickers/*`, `ProfileTab.tsx` | V3-12 |
 | 16 | V3-14 | 마무리: 문서, PR | — | `docs/ARCHITECTURE_RECOVERY.md`, `docs/DEV_LOG.md` | 전부 |
+| v3-A 추가 | V3-17 | 곡·트랙·공연 삭제, 업로드 완료 후 목록 갱신, 악보 업로드 실패 표시, 받는 음원 형식, 악보 뒤집힘 | §4-2, §4-3, §7-7 | 아래 상세 | V3-16, H1·H2 완료 후 |
 | v3-A 추가 | V3-16 | 흐름 검토 반영: 관리자 설정 3칸, 음원 압축, 악보 앱 안 보기, 유튜브 재생 시 음원 일시정지, 미니 바 범위 | §3-3, §3-4, §4-4~4-6 | 아래 상세 | V3-15 완료 후 |
 | v3-A 추가 | V3-15 | 공연 단위(`performances`) 도입, 연습실·운영진의 공연 기준을 시즌 카드에서 공연으로 교체 | §3-1, §4-2, §4-3, §7-6 | 아래 상세 | `check.md` G1~G4 완료 후 |
 
@@ -465,6 +466,83 @@ await page.render({ canvas, viewport }).promise;   // v6: canvas 필수, canvasC
   - 두 메시지 형식 각각
   - `blur` + `activeElement`
   - 언마운트 후 해제
+
+### V3-17 삭제 기능 + 사용자 확인 버그 (v3-A, 2026-11-22 추가)
+
+사용자가 로컬에서 직접 써 보고 나온 항목이다. **H1·H2를 먼저 끝낸 뒤** 같은 브랜치에서 한다. 항목마다 커밋한다.
+
+**J1. 업로드가 끝나도 목록이 갱신되지 않음 (사용자 재현, 리뷰어 운영 DB로 확인)**
+- **현상:** 음원 업로드·압축·저장은 성공했다(운영 DB에 트랙 행 있음). 그런데 운영진 곡 편집 화면에는 "등록된 음원이 없습니다"가 계속 보인다.
+- **원인:** `AdminPracticeTab`은 큐에 넣는 순간(`onJobEnqueued`)에만 `reloadCatalog()`를 부르고, 작업이 `done`이 될 때는 부르지 않는다.
+- **수정:**
+  - `AdminPracticeTab`에서 `uploadQueue.subscribe`로 작업 상태를 지켜본다. 어떤 작업이 `done`으로 바뀌면 `reloadCatalog()`를 부른다.
+  - 같은 순간에 여러 작업이 끝나면 300ms 디바운스로 한 번만 부른다.
+  - 열려 있는 `PieceEditModal`은 새 `catalog`를 받아 바로 반영한다. 트랙·악보 표시가 `catalog` prop에서 계산되는지 확인한다. 모달 안에 따로 복사해 둔 상태(`currentPiece` 등)가 있으면 최신 카탈로그의 같은 id 값으로 갱신한다.
+- **테스트:** 가짜 큐에서 작업을 `done`으로 바꾸면 `refreshPracticeCatalog`가 1회 불린다. 모달에 새 트랙이 보인다.
+
+**J2. 악보 업로드가 실패해도 아무 표시가 없음 (사용자 재현: 0.2MB PDF)**
+- **현상:** 운영 DB에는 악보 키가 하나도 저장되지 않았다. 화면에는 실패 표시도 없다.
+- **확인된 부분:** `failedJobs`가 트랙 영역에만 넘어가고 악보 영역(`PieceScoreSection`)에는 넘어가지 않는다.
+- **수정:**
+  - ① 악보 영역에도 해당 곡의 `kind === 'score'` 실패 작업을 "실패 · 이유 · 다시 시도 · 지우기"로 표시한다.
+  - ② 큐가 작업을 `failed`로 바꿀 때 `console.warn('[uploadQueue] failed', { kind, fileName, status, message })`를 남긴다. `status`는 Worker 응답 코드이고, 저장 단계 실패면 `'save'`다.
+  - ③ `workerClient.uploadFile`의 실패 메시지에 HTTP 상태 코드를 넣는다(`Upload failed (415): …`).
+- **원인 찾기(필수):** 수정 후 로컬에서 0.2MB PDF를 기존 곡과 새 곡 각각에 올려 보고, 실패하면 위 로그의 상태 코드와 메시지를 보고서에 붙인다.
+  - 성공하면 운영 DB 확인을 리뷰어에게 요청한다.
+  - 원인이 코드에 있으면 고치고, 수정 전 실패 테스트를 함께 넣는다.
+- **테스트:** 악보 실패 표시, 상태 코드가 들어간 메시지.
+
+**J3. 받는 음원 형식**
+- `MediaUploadSheet`의 `accept`에 명세 §4-4의 wav, aiff, flac을 추가한다(`audio/wav,audio/x-wav,audio/aiff,audio/x-aiff,audio/flac,.wav,.aif,.aiff,.flac`).
+- `validateAudioFile`은 **압축 가능할 때만** 이 형식을 허용한다. 압축이 불가능하면 지금처럼 m4a·mp3·aac 30MB 이하만 받는다.
+- 300MB 제한을 지킨다.
+- **테스트:** 압축 가능/불가 각각에서 wav 허용 여부.
+
+**J5. 악보가 뒤집히고 일부만 그려짐 (사용자 재현, 리뷰어 원인 확인)**
+- **현상:** 앱 안 악보 보기에서 쪽이 위아래로 뒤집히고, 쪽의 왼쪽 위 일부에만 작게 그려진다. 저장된 PDF는 정상이다.
+- **원인:** `ScoreViewer.tsx`의 `renderPage`가 같은 캔버스에 **이전 `page.render()`가 끝나기 전에 새 `page.render()`를 시작한다**(쪽 번호·배율 변경 effect, 개발 모드의 effect 이중 실행). pdf.js는 같은 캔버스의 동시 렌더를 허용하지 않는다. 겹치면 뷰포트 변환(위아래 뒤집기 포함)이 두 번 쌓여 뒤집히고 축소된다.
+- **수정:**
+  1. 쪽 번호별로 진행 중인 `RenderTask`를 `Map<number, RenderTask>`(ref)에 보관한다. 새로 그리기 전에 이전 작업의 `cancel()`을 부르고, 그 `promise`가 끝나기(거절 포함)를 기다린 다음 시작한다.
+     - 취소로 생기는 `RenderingCancelledException`(`err.name === 'RenderingCancelledException'`)은 정상이므로 경고 없이 무시한다. 다른 오류만 `console.warn`.
+  2. 쪽마다 "마지막으로 그린 배율"을 기억해, 같은 배율이면 다시 그리지 않는다.
+  3. 언마운트와 `storageUrl` 변경 시 진행 중인 렌더 작업을 모두 `cancel()`한 뒤 `doc.destroy()`를 부른다.
+  4. `page.render()` 전에 `canvas.getContext('2d')`를 따로 부르지 않는다(`canvas`만 넘긴다).
+  5. 타입은 `pdfjs-dist`의 `RenderTask`, `PDFDocumentProxy`를 쓴다(R9, `as any` 금지).
+- **현재 쪽 표시 버그:** 1쪽이 보이는데 "2 / 9"로 표시된다.
+  - `offsetTop` 비교 대신 각 쪽의 `getBoundingClientRect().top`과 컨테이너의 `getBoundingClientRect().top`을 비교한다.
+  - **컨테이너 위쪽 절반 안에 윗변이 들어온 마지막 쪽**을 현재 쪽으로 한다. 순수 함수 `src/utils/scoreViewport.ts`로 빼서 테스트한다.
+- **테스트(수정 전 실패 확인):**
+  - 같은 쪽 `renderPage`를 연달아 두 번 부르면 첫 작업의 `cancel`이 불리고, 두 번째 렌더는 첫 번째가 끝난 뒤 시작된다(가짜 `RenderTask`).
+  - 같은 배율 재호출 시 렌더 생략
+  - 언마운트 시 모든 작업 취소
+  - 쪽 번호 계산 함수의 경계(맨 위, 두 쪽 경계, 맨 아래)
+- **사용자 확인:** 고친 뒤 로컬에서 같은 PDF가 똑바로, 쪽 전체 폭으로 그려지는지 사용자가 확인한다.
+
+**J4. 삭제 기능 (명세 V22, §4-2, §4-3, §7-7)**
+1. **마이그레이션** `supabase/migrations/20261123020000_v3_delete.sql` + `supabase/tests/v3_delete_check.sql`
+   - `prevent_row_deletion()`은 `20261122000000_practice_catalog.sql` 67행 정의를 **복사해서** `if current_setting('moonchoir.allow_catalog_delete', true) = 'on' then return old; end if;` 한 줄만 추가한다(R3, diff 보고).
+   - 삭제 RPC 3개는 명세 §7-7 표 그대로 만든다. 각 함수는 토큰 검사 직후 `perform set_config('moonchoir.allow_catalog_delete', 'on', true);`를 부른다.
+   - 재생 기록 확인은 `to_regclass('public.practice_listen_sessions') is not null`일 때만 `execute format(...)`로 한다(v3-C 테이블이 아직 없으므로).
+   - **검증 스크립트**(트랜잭션 + rollback, 토큰은 `admin_sessions`에 `fn_admin_token_hash('32자 이상')`로 행 추가. 지어낸 열 금지):
+     1. 곡 삭제 시 트랙·공연 연결·시즌 카드 연결이 모두 사라지고, 반환 `storageKeys`에 트랙 키와 악보 키가 들어 있다.
+     2. 트랙 삭제 반환값
+     3. 공연 삭제 후 곡은 남아 있다.
+     4. **RPC 밖에서 직접 `delete from practice_pieces`를 하면 여전히 거부된다**(우회 장치가 새지 않는지).
+     5. 토큰 없으면 `ADMIN_AUTH_REQUIRED`.
+     6. 없는 id 거부.
+2. **서비스:** `sheets.ts`에 `deletePracticePiece`, `deletePracticeTrack`, `deletePerformance`(각 1~5줄, R21). `mapActionToRpc` 매핑과 테스트(R4).
+   - 삭제 후 Worker DELETE와 목록 갱신은 새 파일 `src/services/practice/deleteFlow.ts`에서 한다(DB 성공 → 키마다 `deleteObject` → 실패는 `console.warn` → `refreshPracticeCatalog`).
+3. **화면:**
+   - 곡 편집 하단 "삭제", 트랙·영상 ⋯ 메뉴 "삭제", 공연 편집 시트 하단 "삭제"를 둔다.
+   - 확인 창은 공통 컴포넌트 `src/components/admin/practice/DeleteConfirmModal.tsx` 하나로 만든다. 문구는 명세 그대로, 빨간 버튼은 `--status-danger` 토큰을 쓴다.
+   - 재생 기록 때문에 거부되면 명세 문구 한 줄을 보여 준다.
+4. **테스트:**
+   - 삭제 순서(DB → 파일 → 갱신)
+   - 파일 삭제 실패해도 성공 처리
+   - 거부 메시지 표시
+   - 확인 창 취소 시 아무것도 호출 안 함
+
+**완료 후 운영 적용:** `20261123020000_v3_delete.sql`은 리뷰어가 운영 DB에 적용한다. 개발 에이전트는 실행하지 않는다.
 
 ### V3-14 마무리
 
