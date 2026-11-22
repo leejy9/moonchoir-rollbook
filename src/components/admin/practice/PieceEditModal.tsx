@@ -59,6 +59,14 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
   const { activeJob, failedJobs, retryJob, dismissJob } = useUploadQueue();
   const hasMediaBaseUrl = Boolean(config.mediaPublicBaseUrl?.trim());
 
+  useEffect(() => {
+    if (!currentPiece.id) return;
+    const latest = (catalog.pieces || []).find((p) => p.id === currentPiece.id);
+    if (latest) {
+      setCurrentPiece(latest);
+    }
+  }, [catalog.pieces, currentPiece.id]);
+
   const isDirty = useMemo(() => {
     return (
       title.trim() !== (initialPiece.title || '').trim() ||

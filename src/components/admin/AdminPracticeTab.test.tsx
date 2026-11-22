@@ -212,4 +212,43 @@ describe('AdminPracticeTab Component', () => {
 
     expect(html.replace(/<!-- -->/g, '')).toContain('실패 1');
   });
+
+  it('triggers reloadCatalog once with debounce when a job in uploadQueue transitions to done (J1)', async () => {
+    vi.useFakeTimers();
+    const reloadMock = vi.fn();
+
+    const { setupUploadCatalogSync } = await import('./AdminPracticeTab');
+    let listener: (() => void) | null = null;
+    let completedList: any[] = [];
+
+    const fakeQueue = {
+      getSnapshot: () => ({ completedJobs: completedList }),
+      subscribe: (l: () => void) => {
+        listener = l;
+        return () => {
+          listener = null;
+        };
+      },
+    } as any;
+
+    const cleanup = setupUploadCatalogSync(fakeQueue, reloadMock, 300);
+
+    // Job 1 done
+    completedList = [{ id: 'job_1', status: 'done' }];
+    listener?.();
+
+    // Job 2 done within 100ms
+    vi.advanceTimersByTime(100);
+    completedList = [{ id: 'job_1', status: 'done' }, { id: 'job_2', status: 'done' }];
+    listener?.();
+
+    expect(reloadMock).not.toHaveBeenCalled();
+
+    // Advance 300ms after second job
+    vi.advanceTimersByTime(300);
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    vi.useRealTimers();
+  });
 });
