@@ -19,6 +19,9 @@ describe('PieceScoreSection (V3-17, J2)', () => {
     status: 'failed',
     progress: 0,
     error: 'Upload failed (415): Unsupported Media Type',
+    createdAt: Date.now(),
+    baseUrl: 'https://media.test.com',
+    saveFn: vi.fn(),
   };
 
   it('renders failed score job with failure tag and action buttons', () => {

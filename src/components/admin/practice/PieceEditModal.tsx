@@ -32,7 +32,13 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
   onClose,
   onSaved,
 }) => {
-  const [currentPiece, setCurrentPiece] = useState<Partial<PracticePiece>>(initialPiece);
+  const [savedPiece, setSavedPiece] = useState<Partial<PracticePiece> | null>(null);
+  const activePieceId = savedPiece?.id || initialPiece.id;
+  const currentPiece = useMemo(() => {
+    if (!activePieceId) return savedPiece || initialPiece;
+    const latest = (catalog.pieces || []).find((p) => p.id === activePieceId);
+    return latest || savedPiece || initialPiece;
+  }, [activePieceId, catalog.pieces, savedPiece, initialPiece]);
   const isNew = !currentPiece.id;
 
   const [title, setTitle] = useState(initialPiece.title || '');
@@ -58,14 +64,6 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
 
   const { activeJob, failedJobs, retryJob, dismissJob } = useUploadQueue();
   const hasMediaBaseUrl = Boolean(config.mediaPublicBaseUrl?.trim());
-
-  useEffect(() => {
-    if (!currentPiece.id) return;
-    const latest = (catalog.pieces || []).find((p) => p.id === currentPiece.id);
-    if (latest) {
-      setCurrentPiece(latest);
-    }
-  }, [catalog.pieces, currentPiece.id]);
 
   const isDirty = useMemo(() => {
     return (
@@ -107,7 +105,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
         setStagedScore(null);
         setStagedTracks([]);
         setStagedPerformanceIds([]);
-        setCurrentPiece(created);
+        setSavedPiece(created);
         onSaved();
       } else {
         const updated = await sheetsService.savePracticePiece({
@@ -116,7 +114,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
           composer: composer.trim(),
           arranger: arranger.trim(),
         });
-        setCurrentPiece(updated);
+        setSavedPiece(updated);
         onSaved();
       }
     } catch (err: unknown) {

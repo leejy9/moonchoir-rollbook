@@ -192,6 +192,7 @@ class UploadQueueManager {
     this.persistActiveMeta();
     this.notify();
 
+    let inSaveStep = false;
     try {
       // 1. 음원 압축 검증 분기
       let uploadBlob: Blob = job.file;
@@ -245,7 +246,6 @@ class UploadQueueManager {
       job.progress = 100;
       this.notify();
 
-      let inSaveStep = false;
       try {
         inSaveStep = true;
         if (durationSeconds !== undefined) {
@@ -285,7 +285,7 @@ class UploadQueueManager {
         const match = job.error.match(/Upload failed \((\d+)\)/);
         if (match) {
           status = Number(match[1]);
-        } else if (job.status === 'saving') {
+        } else if (inSaveStep) {
           status = 'save';
         }
       }

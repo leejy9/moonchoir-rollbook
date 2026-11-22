@@ -217,7 +217,7 @@ describe('AdminPracticeTab Component', () => {
     vi.useFakeTimers();
     const reloadMock = vi.fn();
 
-    const { setupUploadCatalogSync } = await import('./AdminPracticeTab');
+    const { setupUploadCatalogSync } = await import('../../utils/uploadCatalogSync');
     let listener: (() => void) | null = null;
     let completedList: any[] = [];
 
@@ -235,12 +235,12 @@ describe('AdminPracticeTab Component', () => {
 
     // Job 1 done
     completedList = [{ id: 'job_1', status: 'done' }];
-    listener?.();
+    if (listener) (listener as () => void)();
 
     // Job 2 done within 100ms
     vi.advanceTimersByTime(100);
     completedList = [{ id: 'job_1', status: 'done' }, { id: 'job_2', status: 'done' }];
-    listener?.();
+    if (listener) (listener as () => void)();
 
     expect(reloadMock).not.toHaveBeenCalled();
 

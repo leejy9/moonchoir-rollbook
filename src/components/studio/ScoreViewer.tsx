@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { sheetsService } from '../../services/sheets';
+import { ScoreRenderCoordinator } from '../../utils/scoreRenderCoordinator';
+import { computeCurrentPage, type PageViewportInfo } from '../../utils/scoreViewport';
 import {
   calculateCenter,
   calculateDistance,
@@ -45,6 +47,7 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
   const lastTapTimeRef = useRef<number>(0);
   const debounceTimerRef = useRef<number | null>(null);
   const pageRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
+  const coordinatorRef = useRef<ScoreRenderCoordinator>(new ScoreRenderCoordinator());
 
   const scheduleRenderScale = useCallback((targetScale: number) => {
     if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
@@ -65,6 +68,7 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
 
   useEffect(() => {
     let isCancelled = false;
+    const coordinator = coordinatorRef.current;
     if (!storageUrl) return;
 
     (async () => {
@@ -93,8 +97,9 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
 
     return () => {
       isCancelled = true;
+      coordinator.cancelAll();
       if (pdfDocRef.current) {
-        pdfDocRef.current.loadingTask?.destroy();
+        void pdfDocRef.current.loadingTask?.destroy();
         pdfDocRef.current = null;
       }
       if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
@@ -124,8 +129,9 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
       canvas.style.width = `${Math.floor(viewport.width / effectiveDpr)}px`;
       canvas.style.height = `${Math.floor(viewport.height / effectiveDpr)}px`;
 
-      const ctx = canvas.getContext('2d');
-      if (ctx) await page.render({ canvas, viewport }).promise;
+      await coordinatorRef.current.requestRender(pageNumber, renderScale, () => {
+        return page.render({ canvas, viewport });
+      });
     } catch (err) {
       console.warn(`[ScoreViewer] Error rendering page ${pageNumber}:`, err);
     }
@@ -151,18 +157,23 @@ export const ScoreViewer: React.FC<ScoreViewerProps> = ({ pieceId, onClose }) =>
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
-    const containerTop = containerRef.current.scrollTop;
-    let closestPage = 1;
-    let minDistance = Infinity;
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const pagesInfo: PageViewportInfo[] = [];
 
     pageRefs.current.forEach((canvas, pageNum) => {
-      const distance = Math.abs(canvas.offsetTop - containerTop);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestPage = pageNum;
-      }
+      pagesInfo.push({
+        pageNumber: pageNum,
+        top: canvas.getBoundingClientRect().top,
+      });
     });
-    if (closestPage !== currentPage) setCurrentPage(closestPage);
+
+    const nextPage = computeCurrentPage(pagesInfo, {
+      top: containerRect.top,
+      height: containerRect.height,
+    });
+    if (nextPage !== currentPage) {
+      setCurrentPage(nextPage);
+    }
   }, [currentPage]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
