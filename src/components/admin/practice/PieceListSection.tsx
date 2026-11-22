@@ -1,14 +1,14 @@
 import React from 'react';
 import type { AppConfig, PracticeCatalog, PracticePiece, ProgramCard, Schedule } from '../../../types/rollbook';
 import { ProgramScopeMenu } from '../../studio/ProgramScopeMenu';
-import { buildProgramScopes, filterPiecesByScope, searchPieces } from '../../../utils/practiceScope';
+import { buildPerformanceScopes, filterPiecesByScope, searchPieces } from '../../../utils/practiceScope';
 import { getKSTDateString } from '../../../utils/date';
 import { isVideoTrack } from '../../../utils/youtubeUrl';
 import { useUploadQueue } from '../../../services/media/uploadQueue';
 
 interface PieceListSectionProps {
   catalog: PracticeCatalog;
-  programCards: ProgramCard[];
+  programCards?: ProgramCard[];
   schedules?: Schedule[];
   config: AppConfig;
   currentScopeId: string;
@@ -23,9 +23,6 @@ interface PieceListSectionProps {
 
 export const PieceListSection: React.FC<PieceListSectionProps> = ({
   catalog,
-  programCards,
-  schedules = [],
-  config,
   currentScopeId,
   onSelectScope,
   searchQuery,
@@ -38,30 +35,30 @@ export const PieceListSection: React.FC<PieceListSectionProps> = ({
   const { haltedJobs, dismissHaltedJob } = useUploadQueue();
   const [showHaltedList, setShowHaltedList] = React.useState(false);
 
-  // 1. Program scopes
+  // 1. Performance scopes (V3-15)
   const scopes = React.useMemo(() => {
-    return buildProgramScopes(catalog, programCards, schedules, config, getKSTDateString());
-  }, [catalog, programCards, schedules, config]);
+    return buildPerformanceScopes(catalog, getKSTDateString());
+  }, [catalog]);
 
   // 2. Filter pieces
   const filteredPieces = React.useMemo(() => {
-    let pieces = catalog.pieces;
+    let pieces = catalog.pieces || [];
     if (!showArchived) {
       pieces = pieces.filter((p) => !p.isArchived);
     }
-    const scoped = filterPiecesByScope(pieces, catalog.programPieces, currentScopeId);
-    return searchPieces(scoped, programCards, catalog.programPieces, searchQuery || '');
-  }, [catalog, showArchived, currentScopeId, programCards, searchQuery]);
+    const scoped = filterPiecesByScope(pieces, catalog.performancePieces, currentScopeId);
+    return searchPieces(scoped, catalog.performances, catalog.performancePieces, searchQuery || '');
+  }, [catalog, showArchived, currentScopeId, searchQuery]);
 
-  // Check if a piece is unassigned to any active program
+  // Check if a piece is unassigned to any active performance (V3-15)
   const unassignedPieceIds = React.useMemo(() => {
     const assigned = new Set(
-      catalog.programPieces
+      (catalog.performancePieces || [])
         .filter((pp) => !pp.isArchived)
         .map((pp) => pp.pieceId)
     );
-    return new Set(catalog.pieces.filter((p) => !assigned.has(p.id)).map((p) => p.id));
-  }, [catalog]);
+    return new Set((catalog.pieces || []).filter((p) => !assigned.has(p.id)).map((p) => p.id));
+  }, [catalog.performancePieces, catalog.pieces]);
 
   return (
     <div className="piece-list-section">
@@ -130,7 +127,7 @@ export const PieceListSection: React.FC<PieceListSectionProps> = ({
         ) : (
           filteredPieces.map(({ piece, orderNumber }) => {
             const isUnassigned = unassignedPieceIds.has(piece.id);
-            const pieceTracks = catalog.tracks.filter((t) => t.pieceId === piece.id && !t.isArchived);
+            const pieceTracks = (catalog.tracks || []).filter((t) => t.pieceId === piece.id && !t.isArchived);
             const audioCount = pieceTracks.filter((t) => !isVideoTrack(t)).length;
             const videoCount = pieceTracks.filter(isVideoTrack).length;
             const hasScore = Boolean(piece.scoreStorageKey || piece.scoreUrl);

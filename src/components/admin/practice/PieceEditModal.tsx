@@ -11,12 +11,14 @@ import { PieceScoreSection } from './PieceScoreSection';
 import { PieceBasicInfoSection } from './PieceBasicInfoSection';
 import { ConnectedProgramsSection } from './ConnectedProgramsSection';
 import { PieceSaveButton } from './PieceSaveButton';
+import { PieceArchiveButton } from './PieceArchiveButton';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
+import { PerformanceEditSheet } from './PerformanceEditSheet';
 
 interface PieceEditModalProps {
   piece: Partial<PracticePiece>;
   catalog: PracticeCatalog;
-  programCards: ProgramCard[];
+  programCards?: ProgramCard[];
   config: AppConfig;
   onClose: () => void;
   onSaved: () => void;
@@ -25,7 +27,7 @@ interface PieceEditModalProps {
 export const PieceEditModal: React.FC<PieceEditModalProps> = ({
   piece: initialPiece,
   catalog,
-  programCards,
+  programCards = [],
   config,
   onClose,
   onSaved,
@@ -41,7 +43,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
 
   const [stagedScore, setStagedScore] = useState<{ file: File; name: string } | null>(null);
   const [stagedTracks, setStagedTracks] = useState<StagedTrack[]>([]);
-  const [stagedProgramIds, setStagedProgramIds] = useState<string[]>([]);
+  const [stagedPerformanceIds, setStagedPerformanceIds] = useState<string[]>([]);
 
   const [uploadSheetTarget, setUploadSheetTarget] = useState<{
     kind: 'audio' | 'score';
@@ -50,6 +52,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
   } | null>(null);
 
   const [showAddProgramModal, setShowAddProgramModal] = useState(false);
+  const [showNewPerformanceSheet, setShowNewPerformanceSheet] = useState(false);
   const [youtubeModal, setYoutubeModal] = useState<{ id?: string; title: string; url: string } | null>(null);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
 
@@ -57,21 +60,19 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
   const hasMediaBaseUrl = Boolean(config.mediaPublicBaseUrl?.trim());
 
   const isDirty = useMemo(() => {
-    if (title.trim() !== (initialPiece.title || '').trim()) return true;
-    if (composer.trim() !== (initialPiece.composer || '').trim()) return true;
-    if (arranger.trim() !== (initialPiece.arranger || '').trim()) return true;
-    if (stagedScore !== null) return true;
-    if (stagedTracks.length > 0) return true;
-    if (stagedProgramIds.length > 0) return true;
-    return false;
-  }, [title, composer, arranger, initialPiece, stagedScore, stagedTracks, stagedProgramIds]);
+    return (
+      title.trim() !== (initialPiece.title || '').trim() ||
+      composer.trim() !== (initialPiece.composer || '').trim() ||
+      arranger.trim() !== (initialPiece.arranger || '').trim() ||
+      stagedScore !== null ||
+      stagedTracks.length > 0 ||
+      stagedPerformanceIds.length > 0
+    );
+  }, [title, composer, arranger, initialPiece, stagedScore, stagedTracks, stagedPerformanceIds]);
 
   const handleRequestClose = () => {
-    if (isDirty) {
-      setShowConfirmClose(true);
-    } else {
-      onClose();
-    }
+    if (isDirty) setShowConfirmClose(true);
+    else onClose();
   };
 
   const handleSave = async () => {
@@ -80,27 +81,24 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
       setFieldError('곡 이름을 입력해 주세요.');
       return;
     }
-
     setFieldError(null);
     setIsSaving(true);
-
     try {
       if (isNew) {
         const created = await saveNewPieceWithStagedMedia({
           title: trimmedTitle,
           composer: composer.trim(),
           arranger: arranger.trim(),
-          stagedProgramIds,
+          stagedPerformanceIds,
           stagedTracks,
           stagedScore,
           baseUrl: config.mediaPublicBaseUrl || '',
-          catalogProgramPieces: catalog.programPieces,
+          catalogPerformancePieces: catalog.performancePieces,
           enqueueFn: (req) => uploadQueue.enqueue(req),
         });
-
         setStagedScore(null);
         setStagedTracks([]);
-        setStagedProgramIds([]);
+        setStagedPerformanceIds([]);
         setCurrentPiece(created);
         onSaved();
       } else {
@@ -120,75 +118,66 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
     }
   };
 
-  const connectedPrograms = useMemo(() => {
+  const connectedPerformances = useMemo(() => {
+    const performances = catalog.performances || [];
     if (isNew) {
-      return stagedProgramIds.map((progId) => {
-        const prog = programCards.find((c) => c.id === progId);
-        return {
-          programId: progId,
-          orderIndex: 0,
-          title: prog?.title || progId,
-          isStaged: true,
-        };
+      return stagedPerformanceIds.map((perfId) => {
+        const perf = performances.find((p) => p.id === perfId);
+        return { programId: perfId, orderIndex: 0, title: perf?.title || perfId, isStaged: true };
       });
     }
     if (!currentPiece.id) return [];
-    return catalog.programPieces
+    return (catalog.performancePieces || [])
       .filter((pp) => pp.pieceId === currentPiece.id && !pp.isArchived)
       .map((pp) => {
-        const prog = programCards.find((c) => c.id === pp.programId);
+        const perf = performances.find((p) => p.id === pp.performanceId);
         return {
-          programId: pp.programId,
-          orderIndex: pp.orderIndex,
-          title: prog?.title || pp.programId,
+          programId: pp.performanceId,
+          orderIndex: pp.orderIndex ?? 0,
+          title: perf?.title || pp.performanceId,
           isStaged: false,
         };
       });
-  }, [isNew, stagedProgramIds, currentPiece.id, catalog.programPieces, programCards]);
+  }, [isNew, stagedPerformanceIds, currentPiece.id, catalog.performancePieces, catalog.performances]);
 
-  const handleRemoveFromProgram = async (programId: string) => {
+  const handleRemoveFromPerformance = async (perfId: string) => {
     if (isNew) {
-      setStagedProgramIds((prev) => prev.filter((id) => id !== programId));
+      setStagedPerformanceIds((prev) => prev.filter((id) => id !== perfId));
       return;
     }
     if (!currentPiece.id) return;
-    const currentList = catalog.programPieces
-      .filter((pp) => pp.programId === programId && !pp.isArchived)
-      .sort((a, b) => a.orderIndex - b.orderIndex)
+    const currentList = (catalog.performancePieces || [])
+      .filter((pp) => pp.performanceId === perfId && !pp.isArchived)
+      .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
       .map((pp) => pp.pieceId);
-    await sheetsService.setProgramPieces(programId, currentList.filter((id) => id !== currentPiece.id));
+    await sheetsService.setPerformancePieces(perfId, currentList.filter((id) => id !== currentPiece.id));
     onSaved();
   };
 
-  const handleAddToProgram = async (programId: string) => {
+  const handleAddToPerformance = async (perfId: string) => {
     if (isNew) {
-      setStagedProgramIds((prev) => (prev.includes(programId) ? prev : [...prev, programId]));
+      setStagedPerformanceIds((prev) => (prev.includes(perfId) ? prev : [...prev, perfId]));
       setShowAddProgramModal(false);
       return;
     }
     if (!currentPiece.id) return;
-    const currentList = catalog.programPieces
-      .filter((pp) => pp.programId === programId && !pp.isArchived)
-      .sort((a, b) => a.orderIndex - b.orderIndex)
+    const currentList = (catalog.performancePieces || [])
+      .filter((pp) => pp.performanceId === perfId && !pp.isArchived)
+      .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
       .map((pp) => pp.pieceId);
     if (!currentList.includes(currentPiece.id)) currentList.push(currentPiece.id);
-    await sheetsService.setProgramPieces(programId, currentList);
+    await sheetsService.setPerformancePieces(perfId, currentList);
     setShowAddProgramModal(false);
     onSaved();
   };
 
-  const pieceTracks = useMemo(() => {
-    if (!currentPiece.id) return [];
-    return catalog.tracks
-      .filter((t) => t.pieceId === currentPiece.id && !t.isArchived)
-      .sort((a, b) => a.orderIndex - b.orderIndex);
-  }, [currentPiece.id, catalog.tracks]);
-
-  const archivedTracks = useMemo(() => {
-    if (!currentPiece.id) return [];
-    return catalog.tracks
-      .filter((t) => t.pieceId === currentPiece.id && t.isArchived)
-      .sort((a, b) => a.orderIndex - b.orderIndex);
+  const { pieceTracks, archivedTracks } = useMemo(() => {
+    if (!currentPiece.id) return { pieceTracks: [], archivedTracks: [] };
+    const all = (catalog.tracks || []).filter((t) => t.pieceId === currentPiece.id);
+    return {
+      pieceTracks: all.filter((t) => !t.isArchived).sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0)),
+      archivedTracks: all.filter((t) => t.isArchived).sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0)),
+    };
   }, [currentPiece.id, catalog.tracks]);
 
   const handleMoveTrackOrder = async (trackId: string, direction: 'UP' | 'DOWN') => {
@@ -233,9 +222,9 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
           <hr className="admin-section-divider" />
 
           <ConnectedProgramsSection
-            connectedPrograms={connectedPrograms}
+            connectedPrograms={connectedPerformances}
             onOpenAddModal={() => setShowAddProgramModal(true)}
-            onRemoveProgram={handleRemoveFromProgram}
+            onRemoveProgram={handleRemoveFromPerformance}
           />
 
           <PieceScoreSection
@@ -262,51 +251,29 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
               setUploadSheetTarget({ kind: 'audio', previousStorageKey: prevKey, replaceTrackId: trackId })
             }
             onArchiveTrack={async (track) => {
-              if (!track.id) return;
-              await sheetsService.setPracticeTrackArchived(track.id, true);
-              onSaved();
+              if (track.id) {
+                await sheetsService.setPracticeTrackArchived(track.id, true);
+                onSaved();
+              }
             }}
             onRestoreTrack={async (track) => {
-              if (!track.id) return;
-              await sheetsService.setPracticeTrackArchived(track.id, false);
-              onSaved();
+              if (track.id) {
+                await sheetsService.setPracticeTrackArchived(track.id, false);
+                onSaved();
+              }
             }}
             onMoveTrackOrder={handleMoveTrackOrder}
             onEditTrack={async (track, updates) => {
-              const latestTrack = catalog.tracks.find((t) => t.id === track.id);
-              if (!latestTrack) return;
-              await sheetsService.savePracticeTrack({ ...latestTrack, ...updates });
-              onSaved();
+              const latestTrack = (catalog.tracks || []).find((t) => t.id === track.id);
+              if (latestTrack) {
+                await sheetsService.savePracticeTrack({ ...latestTrack, ...updates });
+                onSaved();
+              }
             }}
             onOpenYoutubeModal={(yt) => setYoutubeModal(yt ? { id: yt.id, title: yt.label, url: yt.url || '' } : { title: '', url: '' })}
           />
 
-          {currentPiece.id && (
-            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!currentPiece.id) return;
-                  await sheetsService.setPracticePieceArchived(currentPiece.id, !currentPiece.isArchived);
-                  onSaved();
-                  onClose();
-                }}
-                style={{
-                  minHeight: '44px',
-                  padding: '8px 16px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-subtle)',
-                  background: 'transparent',
-                  color: currentPiece.isArchived ? 'var(--brand-primary)' : 'var(--text-muted)',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                {currentPiece.isArchived ? '곡 복원' : '곡 보관'}
-              </button>
-            </div>
-          )}
+          <PieceArchiveButton piece={currentPiece} onSaved={onSaved} onClose={onClose} />
         </div>
 
         <PieceSaveButton
@@ -319,9 +286,25 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
 
       {showAddProgramModal && (
         <AddProgramModal
+          performances={catalog.performances || []}
           programCards={programCards}
           onClose={() => setShowAddProgramModal(false)}
-          onSelect={handleAddToProgram}
+          onSelect={handleAddToPerformance}
+          onAddNewPerformance={() => {
+            setShowAddProgramModal(false);
+            setShowNewPerformanceSheet(true);
+          }}
+        />
+      )}
+
+      {showNewPerformanceSheet && (
+        <PerformanceEditSheet
+          performance={null}
+          onClose={() => setShowNewPerformanceSheet(false)}
+          onSaved={() => {
+            setShowNewPerformanceSheet(false);
+            onSaved();
+          }}
         />
       )}
 

@@ -83,11 +83,13 @@ export async function saveNewPieceWithStagedMedia(params: {
   title: string;
   composer: string;
   arranger: string;
-  stagedProgramIds: string[];
+  stagedProgramIds?: string[];
+  stagedPerformanceIds?: string[];
   stagedTracks: StagedItem[];
   stagedScore: { file: File; name: string } | null;
   baseUrl: string;
-  catalogProgramPieces: Array<{ programId: string; pieceId: string; orderIndex: number; isArchived?: boolean }>;
+  catalogProgramPieces?: Array<{ programId: string; pieceId: string; orderIndex: number; isArchived?: boolean }>;
+  catalogPerformancePieces?: Array<{ performanceId: string; pieceId: string; orderIndex: number; isArchived?: boolean }>;
   enqueueFn: (job: import('./uploadQueue').UploadJobRequest) => string;
 }): Promise<import('../../types/rollbook').PracticePiece> {
   const created = await sheetsService.savePracticePiece({
@@ -96,13 +98,29 @@ export async function saveNewPieceWithStagedMedia(params: {
     arranger: params.arranger,
   });
 
-  for (const progId of params.stagedProgramIds) {
-    const currentList = params.catalogProgramPieces
-      .filter((pp) => pp.programId === progId && !pp.isArchived)
-      .sort((a, b) => a.orderIndex - b.orderIndex)
-      .map((pp) => pp.pieceId);
-    if (!currentList.includes(created.id)) {
-      await sheetsService.setProgramPieces(progId, [...currentList, created.id]);
+  // Staged performances (V3-15)
+  if (params.stagedPerformanceIds && params.stagedPerformanceIds.length > 0) {
+    for (const perfId of params.stagedPerformanceIds) {
+      const currentList = (params.catalogPerformancePieces || [])
+        .filter((pp) => pp.performanceId === perfId && !pp.isArchived)
+        .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+        .map((pp) => pp.pieceId);
+      if (!currentList.includes(created.id)) {
+        await sheetsService.setPerformancePieces(perfId, [...currentList, created.id]);
+      }
+    }
+  }
+
+  // Legacy staged program cards fallback
+  if (params.stagedProgramIds && params.stagedProgramIds.length > 0) {
+    for (const progId of params.stagedProgramIds) {
+      const currentList = (params.catalogProgramPieces || [])
+        .filter((pp) => pp.programId === progId && !pp.isArchived)
+        .sort((a, b) => a.orderIndex - b.orderIndex)
+        .map((pp) => pp.pieceId);
+      if (!currentList.includes(created.id)) {
+        await sheetsService.setProgramPieces(progId, [...currentList, created.id]);
+      }
     }
   }
 

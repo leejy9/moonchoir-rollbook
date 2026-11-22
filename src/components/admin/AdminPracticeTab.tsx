@@ -4,21 +4,21 @@ import type { AppConfig, PracticeCatalog, PracticePiece, ProgramCard, Schedule }
 import { useUploadQueue } from '../../services/media/uploadQueue';
 import { PieceListSection } from './practice/PieceListSection';
 import { PieceEditModal } from './practice/PieceEditModal';
-import { ProgramOrderSection } from './practice/ProgramOrderSection';
+import { PerformanceSection } from './practice/PerformanceSection';
 import '../../styles/v3/adminPractice.css';
 
 interface AdminPracticeTabProps {
   config: AppConfig;
-  programCards: ProgramCard[];
+  programCards?: ProgramCard[];
   schedules?: Schedule[];
   onDataChanged: () => void;
 }
 
-type SubSection = 'PIECES' | 'PROGRAMS';
+type SubSection = 'PIECES' | 'PERFORMANCES';
 
 export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
   config,
-  programCards,
+  programCards = [],
   schedules = [],
   onDataChanged,
 }) => {
@@ -84,7 +84,7 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
         </div>
       </div>
 
-      {/* 하위 탭: 곡 / 공연별 순서 */}
+      {/* 하위 탭: 곡 / 공연 (V3-15) */}
       <div className="admin-practice-tabs" role="tablist">
         <button
           type="button"
@@ -99,12 +99,12 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
         <button
           type="button"
           role="tab"
-          aria-selected={subSection === 'PROGRAMS'}
-          aria-label="시즌별 곡 순서"
-          className={`admin-practice-tab-btn ${subSection === 'PROGRAMS' ? 'active' : ''}`}
-          onClick={() => setSubSection('PROGRAMS')}
+          aria-selected={subSection === 'PERFORMANCES'}
+          aria-label="공연"
+          className={`admin-practice-tab-btn ${subSection === 'PERFORMANCES' ? 'active' : ''}`}
+          onClick={() => setSubSection('PERFORMANCES')}
         >
-          공연별 순서
+          공연
         </button>
       </div>
 
@@ -125,9 +125,8 @@ export const AdminPracticeTab: React.FC<AdminPracticeTabProps> = ({
           onAddNewPiece={() => setEditingPiece({ title: '', composer: '', arranger: '' })}
         />
       ) : (
-        <ProgramOrderSection
+        <PerformanceSection
           catalog={catalog}
-          programCards={programCards}
           onDataChanged={async () => {
             await reloadCatalog();
             onDataChanged();

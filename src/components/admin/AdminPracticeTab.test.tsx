@@ -121,7 +121,7 @@ describe('AdminPracticeTab Component', () => {
     );
 
     expect(html).toContain('곡 및 트랙 관리');
-    expect(html).toContain('시즌별 곡 순서');
+    expect(html).toContain('공연');
     expect(html).toContain('아리랑');
     expect(html).toContain('새 연습곡 등록');
   });
