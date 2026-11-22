@@ -20,7 +20,7 @@
 
 1. **기준 브랜치:** `origin/fix/review-followups`(PR #14~#20의 최종 상태 포함). 여기서 `feat/v3-member-ux`를 새로 만들고, 곧바로 `git merge origin/main`으로 이 지시서와 명세를 가져온다(충돌이 나면 멈추고 보고).
 2. **PR은 3번에 나눈다 (2026-11-21 추가).** 각 묶음이 끝나면 PR을 만들고 **리뷰어 검수와 사용자 화면 확인이 끝날 때까지 다음 묶음을 시작하지 않는다.** 머지하지 않는다. 배포하지 않는다(`npm run deploy` 금지).
-   - **v3-A (화면 골격):** V3-01, V3-02, V3-07b 중 카탈로그 새 필드 부분, V3-03, V3-04, V3-05, V3-06, V3-06b(새 탭 열기), V3-08, V3-09(압축 제외). 브랜치 `feat/v3-member-ux` → PR 대상 `fix/review-followups`.
+   - **v3-A (화면 골격):** V3-01, V3-02, V3-07b 중 카탈로그 새 필드 부분, V3-03, V3-04, V3-05, V3-06, V3-06b(새 탭 열기), V3-08, V3-09(압축 제외), **V3-15(공연 단위, 2026-11-22 추가)**. 브랜치 `feat/v3-member-ux` → PR 대상 `fix/review-followups`.
      - v3-A에 필요한 DB 변경(§7-3 열 추가, §7-4의 `fn_authorize_media_upload`, `fn_get_media_usage`, 기존 카탈로그 함수 3개 수정)만 별도 마이그레이션 `20261123000000_v3_media.sql`로 만든다.
    - **v3-B (내 활동 기본):** V3-11. DB 변경 없음. v3-A PR 브랜치에서 이어서 `feat/v3-profile`.
    - **v3-C (활동 기록):** V3-07의 나머지(§7-1, §7-2, `fn_log_listen_session`, `fn_get_member_activity`)를 `20261124000000_v3_activity.sql`로 만든다. 이어서 V3-10, V3-12, V3-13. 브랜치 `feat/v3-activity`.
@@ -88,6 +88,7 @@
 | 14 | V3-12 | 열정 온도 엔진 + 내역 시트 | §5-5 | 새 `src/utils/passionTemperature.ts`(+테스트), `ProfileTab.tsx` | V3-07b, V3-11 |
 | 15 | V3-13 | 칭찬 스티커 엔진 + 보드 + 이미지 | §5-6 | 새 `src/utils/praiseStickers.ts`(+테스트), `public/stickers/*`, `ProfileTab.tsx` | V3-12 |
 | 16 | V3-14 | 마무리: 문서, PR | — | `docs/ARCHITECTURE_RECOVERY.md`, `docs/DEV_LOG.md` | 전부 |
+| v3-A 추가 | V3-15 | 공연 단위(`performances`) 도입, 연습실·운영진의 공연 기준을 시즌 카드에서 공연으로 교체 | §3-1, §4-2, §4-3, §7-6 | 아래 상세 | `check.md` G1~G4 완료 후 |
 
 ---
 
@@ -155,7 +156,7 @@
 ### V3-04 연습실 목록
 
 - 공연 범위 계산은 순수 함수 `src/utils/practiceScope.ts`로 만든다.
-  - `buildProgramScopes(catalog, programCards, schedules, config, today)` → 메뉴 항목 목록
+  - `buildProgramScopes(catalog, programCards, schedules, config, today)` → 메뉴 항목 목록 (**V3-15에서 `buildPerformanceScopes(catalog, today)`로 바뀐다**)
   - `filterPiecesByScope(...)`
   - `searchPieces(...)`
 - 명세 §3-1의 날짜·정렬·숨김 규칙을 각각 테스트한다. 특히:
@@ -282,6 +283,45 @@
 - **테스트:** 스티커마다 최소 "획득 / 미획득" 1쌍(24×2), 그리고 획득일이 처음 만족한 날짜인지.
 - 새 스티커 알림은 한 번만 뜬다(`SEEN_STICKERS`). 저장 실패 시 알림을 띄우지 않는다.
 - 시안: `Stickers`, `Profile`의 미리보기.
+
+### V3-15 공연 단위 (v3-A, 2026-11-22 추가)
+
+명세 V18, §3-1, §4-2, §4-3, §7-6. **`check.md` G1~G4를 끝낸 뒤** 같은 브랜치(`feat/v3-member-ux`)에서 한다. 커밋은 아래 단계마다 하나씩이다.
+
+1. **마이그레이션** `supabase/migrations/20261123010000_v3_performances.sql` + `supabase/tests/v3_performances_check.sql`
+   - 명세 §7-6의 열·제약·권한을 그대로 따른다. 다시 실행해도 안전해야 한다(`if not exists`, `drop trigger if exists`).
+   - `fn_set_performance_pieces`: `20261122000000_practice_catalog.sql` 414행의 `fn_set_program_pieces`를 **복사해서** 테이블·열·메시지만 바꾼다. 명세의 추가 검증 3개(중복, 200개, 보관된 공연)를 넣는다. 원본 대비 diff를 보고서에 붙인다(R3).
+   - `fn_get_practice_catalog`: `20261123000000_v3_media.sql` 248행 정의를 복사해서 `performances`, `performancePieces`만 추가한다(R3).
+   - 물리 삭제 방지 트리거는 `20261122000000_practice_catalog.sql` 79~83행의 `trg_practice_program_pieces_no_delete` 방식을 그대로 따른다. `updated_at`은 같은 파일의 `set_updated_at` 트리거 방식을 따른다.
+   - `practice_program_pieces`, `fn_set_program_pieces`, `program_cards`는 **수정 금지**.
+   - **검증 스크립트**(트랜잭션 + `rollback`, 실패는 `raise exception`):
+     1. 저장 성공 / 빈 제목 거부 / 날짜 형식 오류 거부 / 토큰 오류 거부
+     2. 순서 저장 후 `order_index` 0,1,2
+     3. 목록에서 뺀 곡은 `archived_at`이 채워짐(행은 남음)
+     4. 중복 id 거부, 보관된 공연 거부
+     5. 두 테이블 delete 거부
+     6. 카탈로그 응답에 `performances`, `performancePieces` 키가 있고, 기존 `programPieces`도 그대로 있음
+   - 로컬에서 실행하지 못하면 "미실행"으로 보고한다(리뷰어가 로컬 PostgreSQL로 확인한다).
+2. **타입·파서·서비스·백엔드**
+   - 명세 §7-5의 `Performance`, `PracticePerformancePiece`, `PracticeCatalog` 확장. 옛 응답(새 키 없음)은 `[]`로 읽혀야 한다(파서 테스트).
+   - `sheets.ts`에 `savePerformance`, `setPerformanceArchived`, `setPerformancePieces`(각 1~5줄, R21)를 추가한다.
+   - `supabaseBackend.ts`의 `mapActionToRpc`에 매핑과 테스트를 추가한다(R4). GAS 백엔드는 `UNSUPPORTED_BACKEND`.
+3. **연습실 범위 계산 교체** (`src/utils/practiceScope.ts`)
+   - `buildPerformanceScopes(catalog, today)`로 바꾼다. 날짜는 `performanceDate`만 쓰고, 일정·시즌 카드·`performanceCategories`는 이 계산에 쓰지 않는다.
+   - 공연 미정 = 보관되지 않은 공연 연결이 없는 곡.
+   - 기존 테스트는 지우지 말고 새 기준에 맞게 고친다. 시즌 카드 기반 테스트는 "시즌 카드는 범위에 나오지 않는다" 테스트로 바꾼다.
+   - `STUDIO_SCOPE`에 예전 programId가 저장돼 있으면 "전체 곡"으로 돌아가야 한다(테스트).
+4. **운영진 화면**
+   - 하위 탭 "공연별 순서" → "공연". `ProgramOrderSection.tsx`는 `src/components/admin/practice/PerformanceSection.tsx`(목록 + 곡 순서)와 `PerformanceEditSheet.tsx`(만들기·편집·보관)로 바꾼다. 각 400줄 이하(R20).
+   - 곡 편집의 "공연" 영역과 `AddProgramModal.tsx`는 공연 목록을 쓰도록 바꾼다. 시트 맨 아래에 "+ 새 공연"을 둔다.
+   - 새 곡 화면(G1)에서도 공연 연결은 "저장 대기"로 쌓였다가 저장 시 반영된다.
+   - 시안: Design 아티팩트의 `AdminProgramOrder` 보드(공연 곡 순서), `AdminPieceEdit`의 공연 영역.
+5. **테스트**
+   - 공연 만들기 시트: 제목 없으면 저장 비활성, 날짜 비우면 `''` 전송.
+   - 보관된 공연은 단원 드롭다운에 없음.
+   - 곡 편집에서 공연에 넣으면 해당 공연 목록 맨 뒤에 붙음(`setPerformancePieces` 인자 검사).
+   - 순서 ↑↓ 경계 비활성.
+- **완료 조건:** 명세 §10의 4·5번이 새 기준으로 통과한다. 보고는 §5 형식, 사용한 기존 식별자 표(R1)와 R3 diff를 포함한다.
 
 ### V3-14 마무리
 
