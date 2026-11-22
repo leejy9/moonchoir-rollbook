@@ -17,7 +17,15 @@ export function createUploadSaveFn(
     const effectiveDuration = dynamicDurationSeconds ?? durationSeconds;
     if (kind === 'score') {
       const currentCatalog = sheetsService.getPracticeCatalog();
-      const existing = currentCatalog.pieces.find((p) => p.id === pieceId);
+      let existing = currentCatalog.pieces.find((p) => p.id === pieceId);
+      if (!existing) {
+        try {
+          const refreshed = await sheetsService.refreshPracticeCatalog();
+          existing = refreshed.pieces.find((p) => p.id === pieceId);
+        } catch {
+          // ignore refresh error
+        }
+      }
       if (!existing) {
         throw new Error(`Piece not found in catalog: ${pieceId}`);
       }

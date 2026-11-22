@@ -238,6 +238,9 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
           <PieceScoreSection
             piece={currentPiece}
             stagedScore={stagedScore}
+            failedJobs={failedJobs}
+            onRetryJob={retryJob}
+            onDismissJob={dismissJob}
             hasMediaBaseUrl={hasMediaBaseUrl}
             onOpenUpload={(prevKey) => setUploadSheetTarget({ kind: 'score', previousStorageKey: prevKey })}
             onRemoveStagedScore={() => setStagedScore(null)}

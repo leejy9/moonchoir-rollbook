@@ -84,5 +84,26 @@ describe('workerClient', () => {
       expect(res).toEqual({ key: '2026/audio/mock.m4a', size: 100 });
       expect(progressSpy).toHaveBeenCalledWith(50);
     });
+
+    it('includes HTTP status code in upload failure message (J2)', async () => {
+      class FailingXHR {
+        public upload = { onprogress: null as any };
+        public status = 415;
+        public responseText = 'Unsupported Media Type';
+        public onload: any = null;
+        public open = vi.fn();
+        public setRequestHeader = vi.fn();
+        public send = vi.fn(() => {
+          if (this.onload) this.onload();
+        });
+      }
+
+      vi.stubGlobal('XMLHttpRequest', FailingXHR);
+      const blob = new Blob(['bad content'], { type: 'text/plain' });
+
+      await expect(uploadFile('score', blob, undefined, 'https://media.worker.dev')).rejects.toThrow(
+        'Upload failed (415)'
+      );
+    });
   });
 });

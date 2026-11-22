@@ -245,12 +245,15 @@ class UploadQueueManager {
       job.progress = 100;
       this.notify();
 
+      let inSaveStep = false;
       try {
+        inSaveStep = true;
         if (durationSeconds !== undefined) {
           await job.saveFn(uploadRes.key, uploadRes.size, durationSeconds);
         } else {
           await job.saveFn(uploadRes.key, uploadRes.size);
         }
+        inSaveStep = false;
       } catch (saveErr) {
         // 저장이 실패하면 새로 올린 R2 키를 DELETE하여 고아 객체 방지
         try {
@@ -274,6 +277,24 @@ class UploadQueueManager {
     } catch (err: unknown) {
       job.status = 'failed';
       job.error = err instanceof Error ? err.message : String(err);
+
+      let status: number | string = 'unknown';
+      if (err && typeof err === 'object' && 'status' in err && typeof (err as { status: unknown }).status === 'number') {
+        status = (err as { status: number }).status;
+      } else {
+        const match = job.error.match(/Upload failed \((\d+)\)/);
+        if (match) {
+          status = Number(match[1]);
+        } else if (job.status === 'saving') {
+          status = 'save';
+        }
+      }
+      console.warn('[uploadQueue] failed', {
+        kind: job.kind,
+        fileName: job.fileName,
+        status,
+        message: job.error,
+      });
     } finally {
       this.completedJobs.unshift(job);
       if (this.completedJobs.length > 20) {

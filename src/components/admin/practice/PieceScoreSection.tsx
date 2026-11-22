@@ -1,9 +1,14 @@
 import React from 'react';
 import type { PracticePiece } from '../../../types/rollbook';
+import type { UploadJob } from '../../../services/media/uploadQueue';
+import { FailedJobsList } from './FailedJobsList';
 
 interface PieceScoreSectionProps {
   piece: Partial<PracticePiece>;
   stagedScore?: { file: File; name: string } | null;
+  failedJobs?: UploadJob[];
+  onRetryJob?: (id: string) => void;
+  onDismissJob?: (id: string) => void;
   hasMediaBaseUrl?: boolean;
   onOpenUpload: (previousStorageKey?: string) => void;
   onRemoveStagedScore?: () => void;
@@ -12,10 +17,14 @@ interface PieceScoreSectionProps {
 export const PieceScoreSection: React.FC<PieceScoreSectionProps> = ({
   piece,
   stagedScore,
+  failedJobs = [],
+  onRetryJob,
+  onDismissJob,
   hasMediaBaseUrl = true,
   onOpenUpload,
   onRemoveStagedScore,
 }) => {
+  const scoreFailedJobs = failedJobs.filter((j) => j.pieceId === piece.id && j.kind === 'score');
   return (
     <>
       <hr className="admin-section-divider" />
@@ -46,6 +55,15 @@ export const PieceScoreSection: React.FC<PieceScoreSectionProps> = ({
       {!hasMediaBaseUrl && (
         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
           파일 저장소가 아직 연결되지 않았어요
+        </div>
+      )}
+      {scoreFailedJobs.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+          <FailedJobsList
+            failedJobs={scoreFailedJobs}
+            onRetryJob={onRetryJob}
+            onDismissJob={onDismissJob}
+          />
         </div>
       )}
       {stagedScore ? (

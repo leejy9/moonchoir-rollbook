@@ -34,10 +34,10 @@ export function uploadFile(
     xhr.open('POST', url, true);
 
     xhr.setRequestHeader('X-Admin-Token', adminToken);
-    if (file.type) {
-      xhr.setRequestHeader('Content-Type', file.type);
-    } else if (kind === 'score') {
+    if (kind === 'score') {
       xhr.setRequestHeader('Content-Type', 'application/pdf');
+    } else if (file.type) {
+      xhr.setRequestHeader('Content-Type', file.type);
     }
 
     if (xhr.upload && onProgress) {
@@ -61,8 +61,10 @@ export function uploadFile(
         clearAllAdminTokens();
         reject(new Error('ADMIN_AUTH_REQUIRED'));
       } else {
-        const errorText = xhr.responseText || `Upload failed with status ${xhr.status}`;
-        reject(new Error(errorText));
+        const bodyText = xhr.responseText ? `: ${xhr.responseText}` : '';
+        const errorText = `Upload failed (${xhr.status})${bodyText}`;
+        const err = Object.assign(new Error(errorText), { status: xhr.status });
+        reject(err);
       }
     };
 
