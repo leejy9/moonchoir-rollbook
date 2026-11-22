@@ -20,7 +20,7 @@
 
 1. **기준 브랜치:** `origin/fix/review-followups`(PR #14~#20의 최종 상태 포함). 여기서 `feat/v3-member-ux`를 새로 만들고, 곧바로 `git merge origin/main`으로 이 지시서와 명세를 가져온다(충돌이 나면 멈추고 보고).
 2. **PR은 3번에 나눈다 (2026-11-21 추가).** 각 묶음이 끝나면 PR을 만들고 **리뷰어 검수와 사용자 화면 확인이 끝날 때까지 다음 묶음을 시작하지 않는다.** 머지하지 않는다. 배포하지 않는다(`npm run deploy` 금지).
-   - **v3-A (화면 골격):** V3-01, V3-02, V3-07b 중 카탈로그 새 필드 부분, V3-03, V3-04, V3-05, V3-06, V3-06b(새 탭 열기), V3-08, V3-09(압축 제외), **V3-15(공연 단위, 2026-11-22 추가)**. 브랜치 `feat/v3-member-ux` → PR 대상 `fix/review-followups`.
+   - **v3-A (화면 골격):** V3-01, V3-02, V3-07b 중 카탈로그 새 필드 부분, V3-03, V3-04, V3-05, V3-06, V3-06b(새 탭 열기), V3-08, V3-09(압축 제외), **V3-15(공연 단위)**, **V3-16(흐름 검토 반영)** (둘 다 2026-11-22 추가). 브랜치 `feat/v3-member-ux` → PR 대상 `fix/review-followups`.
      - v3-A에 필요한 DB 변경(§7-3 열 추가, §7-4의 `fn_authorize_media_upload`, `fn_get_media_usage`, 기존 카탈로그 함수 3개 수정)만 별도 마이그레이션 `20261123000000_v3_media.sql`로 만든다.
    - **v3-B (내 활동 기본):** V3-11. DB 변경 없음. v3-A PR 브랜치에서 이어서 `feat/v3-profile`.
    - **v3-C (활동 기록):** V3-07의 나머지(§7-1, §7-2, `fn_log_listen_session`, `fn_get_member_activity`)를 `20261124000000_v3_activity.sql`로 만든다. 이어서 V3-10, V3-12, V3-13. 브랜치 `feat/v3-activity`.
@@ -36,7 +36,7 @@
    - 티켓에 적힌 파일 외의 파일을 고쳐야 할 때(테스트 파일 제외)
    - 같은 오류를 3번 고쳐도 해결되지 않을 때
    - 명세에 없는 문구가 필요할 때
-   - npm 패키지가 필요할 때(Q1, Q2 포함. 승인 전 설치 금지)
+   - 아래 승인된 2개 외의 npm 패키지가 필요할 때(승인 전 설치 금지)
 
 ---
 
@@ -61,7 +61,7 @@
 | R15 | **하드코딩 금지.** 사람 이름·전화번호·특정 회원 id, 파트·일정 구분·트랙 종류를 닫힌 enum으로 만드는 것 | 특정 개인 정보 하드코딩(Q6) | — |
 | R16 | **문구는 명세에 있는 것만.** 설명 부제, 도움말, 툴팁, "~할 수 있어요" 안내를 새로 만들지 않는다(V3) | 결정과 어긋나는 문구 "파트 음원"(C13) | 새 한글 문자열 목록을 보고서에 붙인다 |
 | R17 | **병합된 회원을 잊지 않는다.** 회원 기준 집계는 `resolveMergedMemberIds`로 별칭을 합친다 | — (이번 기능에서 위험이 큼) | 병합 회원 테스트 1개 이상 |
-| R18 | **범위 밖 수정 금지.** `package.json`, `package-lock.json`, 설정 파일(`vite.config.*`, `tsconfig*`, 린트 설정), 다른 티켓 파일 | — | `git diff --stat` 보고 |
+| R18 | **범위 밖 수정 금지.** `package.json`, `package-lock.json`, 설정 파일(`vite.config.*`, `tsconfig*`, 린트 설정), 다른 티켓 파일. **예외(2026-11-22 사용자 승인):** `npm install mediabunny pdfjs-dist`로 두 패키지를 추가하는 것만 허용한다. 정확한 버전으로 고정하고(`--save-exact`), `package-lock.json`은 npm이 만든 그대로 커밋한다(손으로 고치지 않음) | — | `git diff --stat` 보고 |
 | R20 | **파일 크기 (2026-11-21 추가).** 새 파일은 400줄 이하(테스트 제외). 기존 파일은 이번 작업으로 순증 300줄을 넘기지 않는다. 넘으면 기능 단위로 나눈다 | `AdminPracticeTab.tsx` 1,185줄, `SuperAdminDashboard.tsx` 1,806줄로 비대 | 보고서에 새·수정 파일 줄 수 |
 | R21 | **스타일·서비스 위치 (2026-11-21 추가).** `src/index.css`(7,000줄 이상)에는 명세 §6 토큰만 추가한다. 새 화면 스타일은 `src/styles/v3/<화면>.css`를 만들어 해당 컴포넌트에서 import 한다. `src/services/sheets.ts`(2,200줄 이상)에는 백엔드로 넘기는 1~5줄짜리 메서드만 추가하고, 로직은 `src/services/practice/`, `src/services/media/`, `src/utils/` 아래 기능별 파일에 둔다 | 전역 CSS와 서비스 파일 한 곳에 계속 누적됨 | `git diff --stat`에서 두 파일의 순증 줄 수 |
 | R19 | **완료라고 쓰기 전에** Green Bar 4개 출력 마지막 줄, 수용 기준 체크 결과, 화면 확인 방법을 보고서에 붙인다. 확인하지 못한 항목은 "미확인"으로 쓴다 | 확인하지 않은 항목을 완료로 보고함 | §5 보고 형식 |
@@ -80,14 +80,15 @@
 | 6 | V3-04 | 연습실 목록: 공연 드롭다운·검색·정렬 | §3-1 | `src/components/StudioTab.tsx`, 새 `src/components/studio/ProgramScopeMenu.tsx`, 새 `src/utils/practiceScope.ts` | V3-07b |
 | 7 | V3-05 | 곡 상세: 단원 읽기 전용, 유튜브 버튼 줄 | §3-2 | `StudioTab.tsx`(또는 분리한 `PieceDetail.tsx`) | V3-04 |
 | 8 | V3-06 | 플레이어: 미니 바 스와이프, 전체 화면, ±5초, 반복, 속도 시트 | §3-3 | `src/components/audio/*` | V3-02 |
-| 9 | V3-06b | 악보 보기 | §3-4 | `PieceDetail` | **Q1/Q2 답 필요** (Q2 전에는 새 탭 열기만) |
+| 9 | V3-06b | 악보 보기 (임시: 새 탭) | §3-4 | `PieceDetail` | 앱 안 보기는 V3-16에서 |
 | 10 | V3-08 | Worker 업로드·삭제 | §8 | `workers/media/index.js`, `index.test.js`, `README.md` | — |
-| 11 | V3-09 | 업로드 큐 + (승인 시) 압축 + 운영진 연습곡 탭 개편 | §4 | 새 `src/services/media/uploadQueue.ts`, `workerClient.ts`, `audioCompress.ts`, `AdminPracticeTab.tsx` | V3-07b, V3-08 (**압축은 Q1 답 필요**) |
+| 11 | V3-09 | 업로드 큐 + 운영진 연습곡 탭 개편 (압축은 V3-16) | §4 | 새 `src/services/media/uploadQueue.ts`, `workerClient.ts`, `audioCompress.ts`, `AdminPracticeTab.tsx` | V3-07b, V3-08 (**압축은 Q1 답 필요**) |
 | 12 | V3-10 | 재생 기록 수집 | §7-2, §7-4 | `src/components/audio/AudioPlayerProvider.tsx`, 새 `src/services/media/listenLogger.ts` | V3-07b, V3-06 |
 | 13 | V3-11 | 내 활동: 레이아웃, 레벨, 숫자, 출석 기록 필터 | §5-1~5-4 | `src/components/ProfileTab.tsx`, 새 `src/utils/memberProgress.ts` | V3-01 |
 | 14 | V3-12 | 열정 온도 엔진 + 내역 시트 | §5-5 | 새 `src/utils/passionTemperature.ts`(+테스트), `ProfileTab.tsx` | V3-07b, V3-11 |
 | 15 | V3-13 | 칭찬 스티커 엔진 + 보드 + 이미지 | §5-6 | 새 `src/utils/praiseStickers.ts`(+테스트), `public/stickers/*`, `ProfileTab.tsx` | V3-12 |
 | 16 | V3-14 | 마무리: 문서, PR | — | `docs/ARCHITECTURE_RECOVERY.md`, `docs/DEV_LOG.md` | 전부 |
+| v3-A 추가 | V3-16 | 흐름 검토 반영: 관리자 설정 3칸, 음원 압축, 악보 앱 안 보기, 유튜브 재생 시 음원 일시정지, 미니 바 범위 | §3-3, §3-4, §4-4~4-6 | 아래 상세 | V3-15 완료 후 |
 | v3-A 추가 | V3-15 | 공연 단위(`performances`) 도입, 연습실·운영진의 공연 기준을 시즌 카드에서 공연으로 교체 | §3-1, §4-2, §4-3, §7-6 | 아래 상세 | `check.md` G1~G4 완료 후 |
 
 ---
@@ -197,8 +198,7 @@
 
 ### V3-06b 악보 보기
 
-- **Q2 답 전:** 악보 카드를 누르면 새 탭으로 연다. URL 선택 규칙(§3-4)만 구현하고 테스트한다.
-- **Q2 승인 후:** 별도 지시를 받는다.
+- 완료됨(새 탭 열기). 앱 안 보기는 **V3-16**에서 한다.
 
 ### V3-08 Worker
 
@@ -216,8 +216,7 @@
 - **업로드 큐:** 명세 §4-5. React 밖 모듈 싱글턴 + `subscribe(listener)`를 두고, 훅 `useUploadQueue()`는 구독만 한다.
 - **`workerClient.ts`:** `uploadFile(kind, blob, onProgress)`(XHR), `deleteObject(key)`. 토큰은 `getActiveAdminToken()`. 401이면 기존 관리자 인증 만료 처리 함수를 호출한다(새로 만들지 말고 `supabaseBackend`에 있는 처리 경로를 찾아 재사용, 없으면 멈추고 보고).
 - **`audioCompress.ts`:**
-  - **Q1 답 전에는** `canCompress()`가 항상 `false`를 돌려주는 자리만 만든다.
-  - 압축 불가 경로(§4-5의 30MB 원본 업로드 / 오류 문구)는 지금 구현한다.
+  - 완료됨(압축 자리 + 압축 불가 경로). 실제 압축은 **V3-16**에서 한다.
   - 오류 문구는 "이 기기에서는 압축할 수 없어요" 하나만 쓴다.
 - **교체:** 새 키로 저장 RPC가 성공한 뒤에만 이전 키를 DELETE한다. 저장이 실패하면 새로 올린 키를 DELETE하고 실패를 표시한다.
 - **`AdminPracticeTab.tsx` 개편:** 명세 §4-1~4-4와 시안 `AdminPieces`, `AdminPieceEdit`, `AdminProgramOrder`, `AdminUpload`.
@@ -246,6 +245,8 @@
 
 ### V3-11 내 활동 기본
 
+- **2026-11-22 추가:** 출석률은 명세 §5-2의 새 정의(최근 90일 일정만 걸러 엔진에 넘김, 모수 0이면 "—")를 따른다. 테스트: 91일 전 결석이 출석률에 영향 없음, 신입은 "—". 레벨·온도·스티커의 빈 상태는 "아직 기록이 없어요" 한 줄.
+
 - 숫자 정의(§5-2)와 레벨(§5-3)은 `src/utils/memberProgress.ts` 순수 함수로 만든다.
   - 입력: 기존 엔진 결과 + schedules + config
   - 출력: 레벨, 진행률, 함께한 날, 연습 시간, 공연 수
@@ -259,6 +260,8 @@
 - 시안: `Profile`, `ProfileLevel`, `ProfileRecords`.
 
 ### V3-12 열정 온도
+
+- **2026-11-22 추가:** 내역 항목을 누르면 출석 기록 시트를 "선택한 일정만" 모드로 연다(명세 §5-5). 테스트: 칩 표시, × 해제, 그 모드에서 기간 칩이 "전체" 고정.
 
 - 명세 §5-5 표를 상수 하나(`PASSION_RULES`)에 모은다. 반환 형식:
   ```ts
@@ -276,6 +279,8 @@
 - 시안: `ProfileTemp`.
 
 ### V3-13 칭찬 스티커
+
+- **2026-11-22 변경:** 새 스티커 팝업 알림은 만들지 않는다. 보드 칸의 "신규" 표시와 미리보기의 `신규 n`만 둔다(명세 §5-6). 보드를 닫을 때 본 목록 저장, 본 목록이 한 번도 없으면 표시 없이 현재 목록 저장. 테스트: 신규 표시 → 닫기 → 사라짐, 첫 기기에서 표시 안 함, 저장소 실패 시 표시 안 함.
 
 - 이미지 24장을 `public/stickers/`에 넣는다. 원본 경로는 명세 §5-6. 파일명은 표의 "이미지" 열 + `.png`.
 - `LICENSE-fluentui-emoji.txt`에 원본 저장소의 MIT 원문을 그대로 넣는다.
@@ -323,6 +328,144 @@
    - 순서 ↑↓ 경계 비활성.
 - **완료 조건:** 명세 §10의 4·5번이 새 기준으로 통과한다. 보고는 §5 형식, 사용한 기존 식별자 표(R1)와 R3 diff를 포함한다.
 
+### V3-16 흐름 검토 반영 (v3-A, 2026-11-22 추가)
+
+명세 V19~V21, §3-1(지난 공연·곡 수), §3-3, §3-4, §4-3(보관 용도), §4-4~4-6, §10의 27·30·31·32. **V3-15를 끝낸 뒤** 같은 브랜치에서 한다. 묶음마다 커밋한다.
+
+1. **패키지 설치:** `npm install --save-exact mediabunny@1.65.2 pdfjs-dist@6.5.438` 한 번만 한다(R18 예외). **버전을 바꾸지 않는다**(둘 다 공개된 지 2주 이상 지난 버전이고, 아래 §4-A의 API는 이 버전의 타입 정의로 확인했다). 다른 패키지는 금지.
+2. **관리자 설정 3칸**(§4-6)
+   - `mediaPublicBaseUrl`은 최고관리자 설정 화면, 나머지 둘은 관리자 설정 화면에 둔다. 각 화면 파일이 300줄 넘게 늘면 칸을 `src/components/admin/settings/` 아래 새 컴포넌트로 뺀다(R20).
+   - **설정값은 서버에서 모두 문자열로 돌아온다**(리뷰어 확인: `app_config.value`가 `text`, `fn_get_initial_snapshot`이 `jsonb_object_agg(key, value)`로 내려 줌, `sheets.ts`가 `{...this.config, ...data.config}`로 그대로 합침). 배열은 `JSON.stringify`로 보내고, 읽을 때는 아래 §4-A-0의 정규화 함수가 배열로 되돌린다.
+   - **테스트:** 형식 검증(`http://` 거부, 끝 `/` 제거, 빈 종류·중복 거부), 저장 호출 인자, 파서가 배열로 되돌림.
+3. **음원 압축**(§4-4, §4-5)
+   - `audioCompress.ts`의 `canCompress()`와 `compressAudio(file, onProgress)`를 구현한다. `mediabunny`는 함수 안에서 `await import('mediabunny')`로만 불러온다.
+   - 받는 형식·300MB 제한·"결과가 더 크면 원본" 규칙을 지킨다. 압축 결과의 길이로 `durationSeconds`를 채운다(F8의 `audioMetadata.ts`보다 우선).
+   - 큐 상태 `compressing(%)`를 실제 진행률로 갱신한다.
+   - **테스트:** 압축 가능/불가 분기, 300MB 초과 거부, 결과가 더 클 때 원본 사용, 진행률 콜백. `mediabunny`는 테스트에서 가짜로 대체한다.
+4. **악보 앱 안 보기**(§3-4)
+   - 새 `src/components/studio/ScoreViewer.tsx`(+ `src/styles/v3/score.css`). 오버레이 라우트를 추가한다(`useHashRoute` 규칙, R12).
+   - `pdfjs-dist`는 화면 진입 시 `import()`, 워커는 `pdfjs-dist/build/pdf.worker.min.mjs?url`(실제 경로는 설치된 버전에서 확인해 보고)을 쓴다.
+   - `score_storage_key`가 있을 때만 앱 안 보기, 외부 `score_url`은 새 탭. 실패 시 "악보를 열 수 없어요" + "새 탭에서 열기".
+   - 전체 화면 플레이어의 "악보 보기" 버튼도 이 화면을 연다.
+   - **테스트:** URL 분기, 실패 화면, 뒤로 가기로 닫힘, 미니 바 표시.
+5. **유튜브 재생 시 음원 일시정지**(§3-3)
+   - G3에서 만든 iframe `src`에 `enablejsapi=1&origin=`을 추가한다.
+   - `message` 이벤트에서 `event.origin === 'https://www.youtube.com'`만 받고, JSON 파싱이 실패해도 조용히 넘기되 `console.warn`은 하지 않는다(유튜브가 다른 메시지도 많이 보냄. 이 경우만 R9 예외로 주석에 이유를 적는다).
+   - 재생 상태 1이면 앱 플레이어 `pause()`를 부른다. 리스너는 곡 상세가 언마운트될 때 해제한다.
+   - **테스트:** 다른 출처 무시, 상태 1에서만 일시정지, 언마운트 후 리스너 해제.
+6. **미니 바 범위와 다음 버튼**(§3-3): 운영진·최고관리자 화면에서 숨기기(재생 유지), 마지막 트랙에서 "다음" 비활성. 테스트 포함.
+7. **공연 목록 규칙 확인**(§3-1, §4-3): 지난 공연을 흐리게 하거나 숨기지 않기, 곡 수에서 보관된 곡 제외, 보관된 공연의 곡은 "공연 미정"이 아님. V3-15에서 이미 했으면 테스트만 추가한다.
+0. **설정값 정규화(운영 지각 버그):** **리뷰어가 이미 고쳐서 main에 반영했다**(`src/services/configNormalize.ts`). 직접 다시 만들지 말고 `git merge origin/main`으로 가져온다. 충돌이 나면 main 쪽을 남기고, `feat/v3-member-ux`에만 있는 설정 합치기 코드가 있으면 거기에도 `normalizeAppConfig`를 적용한다. 그 위치를 보고한다.
+8. **번들 확인:** `npm run build` 결과에서 첫 화면 청크에 `mediabunny`, `pdfjs-dist`가 없음을 보고한다(청크 이름과 크기 표).
+
+### §4-A. V3-16 구현 참고 (리뷰어가 코드·패키지 타입 정의로 확인한 내용)
+
+추측으로 API를 쓰지 않는다. 아래 이름이 실제와 다르면 **멈추고 보고**한다.
+
+#### §4-A-0. 설정값 정규화 (운영 버그)
+
+- **현상(리뷰어 재현):**
+  - 운영 `app_config`의 `lateGraceMinutes` 값은 문자열 `"15"`다.
+  - 이 값이 그대로 `reconcileSingleMemberAttendance(…, lateGraceMinutes)`에 들어가면, `startMinutes + lateGraceMinutes`가 숫자 덧셈이 아니라 문자열 이어 붙이기(`1170 + "15"` → `"117015"`)가 된다.
+  - 그래서 **40분 늦은 체크인도 "출석"이 된다.** 숫자 `15`를 넣으면 "지각", 문자열 `"15"`를 넣으면 "출석"이다.
+  - 운영 앱은 Supabase 전환 이후 지각을 판정하지 못하고 있다. 원천 로그는 그대로라 고치면 과거 기록도 올바르게 다시 계산된다.
+- **수정:**
+  - 새 파일 `src/services/configNormalize.ts`에 `normalizeAppConfig(raw: Record<string, unknown>): Partial<AppConfig>`를 만든다.
+    - `AppConfig`에서 타입이 `number`인 필드 전부(최소 `lateGraceMinutes`, `defaultLat`, `defaultLon`, `defaultRadius`. `src/types/rollbook.ts`의 `AppConfig`를 읽고 목록을 보고서에 적는다): 문자열이면 `Number()`로 바꾸고, `NaN`이면 그 키를 버린다(기본값 유지).
+    - 배열 필드(`practiceTrackKinds`, `performanceCategories`, 그 밖에 `AppConfig`에서 배열인 것): 문자열이면 `JSON.parse`. 실패하거나 배열이 아니면 키를 버린다.
+    - `boolean` 필드: `"true"`/`"false"` 문자열을 boolean으로 바꾼다.
+    - 그 밖의 키는 원문 그대로 둔다(AGENTS §1 하위 호환).
+  - 적용 위치(모두):
+    - ① `sheets.ts`에서 서버 스냅샷의 `data.config`를 합치는 곳(현재 `this.config = { ...this.config, ...data.config, … }`)
+    - ② 기기 저장소에서 설정을 읽는 곳(`loadFromStorage(STORAGE_KEYS.CONFIG, …)`)
+    - ③ 실시간 갱신으로 설정이 들어오는 곳(`src/services/realtime/supabaseRealtime.ts`에서 config를 반영하는 경로. 없으면 "없음"이라고 보고)
+    - ④ GAS 백엔드 응답(같은 합치기 경로를 쓰면 ①로 충분)
+- **테스트(수정 전 실패 필수):**
+  - `normalizeAppConfig({lateGraceMinutes:'15'})` → `15`
+  - 스냅샷에 `lateGraceMinutes:'15'`가 든 상태로 서비스를 초기화한 뒤, 19:30 시작 일정에 19:46 체크인 → "지각", 19:45 → "출석"
+  - `practiceTrackKinds:'["가이드","MR"]'` → 배열
+  - 잘못된 JSON → 기본값 유지
+- **이 커밋은 v3 기능과 무관하게 운영 배포 대상이다.** PR 본문 맨 위에 "운영 버그 수정 포함"을 적는다.
+
+#### §4-A-1. `mediabunny@1.65.2`로 압축 (`src/services/media/audioCompress.ts`)
+
+```ts
+// 함수 안에서만 동적 import (첫 화면 번들에 넣지 않기)
+const mb = await import('mediabunny');
+const { Input, ALL_FORMATS, BlobSource, Output, Mp4OutputFormat, BufferTarget, Conversion, canEncodeAudio } = mb;
+
+// 1) 지원 확인
+const ok = await canEncodeAudio('aac', { numberOfChannels: 2, sampleRate: 44100, bitrate: 64000 });
+if (!ok) → 압축 불가 경로(§4-5)
+
+// 2) 변환
+const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
+const durationSeconds = await input.computeDuration();
+const target = new BufferTarget();
+const output = new Output({ format: new Mp4OutputFormat(), target });
+const conversion = await Conversion.init({
+  input, output,
+  video: { discard: true },
+  audio: { codec: 'aac', bitrate: 64000, sampleRate: 44100 },   // 모노 원본이면 numberOfChannels: 1
+});
+if (!conversion.isValid) → conversion.discardedTracks의 reason을 console.warn으로 남기고 압축 불가 경로
+conversion.onProgress = (progress) => onProgress(Math.round(progress * 100));  // 0~1
+await conversion.execute();
+const blob = new Blob([target.buffer!], { type: 'audio/mp4' });
+```
+
+- 위 이름(`Input`, `ALL_FORMATS`, `BlobSource`, `Output`, `Mp4OutputFormat`, `BufferTarget`, `Conversion.init`, `isValid`, `discardedTracks`, `onProgress(progress, processedTime)`, `execute()`, `target.buffer`, `canEncodeAudio`, `input.computeDuration()`)은 리뷰어가 `mediabunny` 패키지의 `dist/mediabunny.d.ts`에서 확인했다.
+- 모노 판별: `(await input.getPrimaryAudioTrack())`의 채널 수. 메서드 이름이 다르면 `d.ts`에서 찾아 보고한다.
+- 취소: 큐에서 작업을 지우면 `conversion.cancel()`.
+- 테스트에서는 `vi.mock('mediabunny', …)`로 대체한다. 실제 인코딩은 테스트하지 않는다(브라우저 API 필요).
+
+#### §4-A-2. `pdfjs-dist@6.5.438`로 악보 보기 (`ScoreViewer.tsx`)
+
+```ts
+const pdfjs = await import('pdfjs-dist');
+const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+const doc = await pdfjs.getDocument({ url }).promise;
+const page = await doc.getPage(n);
+const viewport = page.getViewport({ scale });
+await page.render({ canvas, viewport }).promise;   // v6: canvas 필수, canvasContext는 선택
+```
+
+- **두 손가락 확대(사용자 확정).** 앱의 `index.html`이 `user-scalable=no`라 브라우저 확대가 꺼져 있으므로 **직접 구현한다.** `index.html`의 viewport는 바꾸지 않는다(앱 전체가 확대되는 문제). 라이브러리 금지.
+  - 쪽들을 감싼 컨테이너에 `touch-action: none`을 주고, 포인터 이벤트(`pointerdown`/`pointermove`/`pointerup`/`pointercancel`)로 손가락 2개의 거리 변화를 잰다.
+  - **제스처 중:** 컨테이너에 CSS `transform: translate(x, y) scale(s)`만 바꾼다(다시 그리지 않음 → 부드러움). 두 손가락 가운데 점을 기준으로 확대한다.
+  - **손을 뗀 뒤:** 최종 배율로 화면에 보이는 쪽만 다시 그려 선명하게 만든다(300ms 디바운스). 다시 그린 뒤 transform의 scale을 1로 되돌리고 캔버스 크기에 반영한다.
+  - 배율 1~3배로 제한. 1배보다 크면 한 손가락 끌기로 이동, 1배면 한 손가락은 세로 스크롤(쪽 넘기기)로 동작한다.
+  - 두 번 탭(300ms 이내)하면 1배 ↔ 2배.
+  - 헤더 −/+ 버튼(44px)은 0.5씩 같은 배율 값을 바꾼다(접근성).
+  - 제스처 계산(거리→배율, 가운데 점 기준 이동, 경계 제한)은 순수 함수 `src/utils/pinchZoom.ts`로 빼서 테스트한다. 테스트: 거리 2배 → 배율 2배, 3배 초과 제한, 1배 미만 제한, 가운데 점 고정, 이동 경계.
+- **악보 위 필기·그리기 기능은 만들지 않는다.** 위의 "다시 그린다"는 PDF 쪽을 화면에 표시한다는 뜻이다.
+- **아이폰 캔버스 한도:** 캔버스 한 장의 `width × height`가 16,000,000 픽셀을 넘지 않도록 `scale × devicePixelRatio`를 줄인다. 넘으면 흰 화면이 된다.
+- 쪽 이동은 스크롤 위치로 현재 쪽을 계산한다. ‹ › 버튼은 해당 쪽으로 스크롤한다.
+- 화면을 닫을 때 `doc.destroy()`를 부른다.
+- 테스트에서는 `vi.mock('pdfjs-dist', …)`로 대체한다.
+- 명세 §3-4의 "두 손가락 확대·축소"는 이 버튼 방식으로 대체한다(리뷰어 결정, 2026-11-22).
+
+#### §4-A-3. 유튜브 재생 감지 (곡 상세)
+
+두 가지를 함께 쓴다. ①은 비공식 방식이라 동작하지 않는 기기가 있을 수 있어서, ②를 반드시 같이 둔다.
+
+1. **iframe 메시지:**
+   - iframe `src`에 `enablejsapi=1&origin=${encodeURIComponent(location.origin)}`을 붙인다.
+   - iframe `onLoad`에서 `iframe.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: <영상 id>, channel: 'widget' }), 'https://www.youtube.com')`를 보낸다. 이걸 보내야 유튜브가 상태 메시지를 보내기 시작한다.
+   - `message` 이벤트에서 `event.origin === 'https://www.youtube.com'`만 받는다. `data`가 문자열이면 `JSON.parse`(실패하면 무시).
+   - 아래 둘 중 하나면 앱 플레이어 `pause()`:
+     - `{event:'onStateChange', info: 1}`
+     - `{event:'infoDelivery', info:{playerState: 1}}`
+2. **포커스 감지(예비):** `window`의 `blur` 이벤트에서 `document.activeElement`가 곡 상세의 유튜브 iframe 중 하나면 `pause()`. 사용자가 영상을 누르는 순간 포커스가 iframe으로 넘어가는 것을 이용한다.
+
+- 리스너는 곡 상세 언마운트 시 모두 해제한다.
+- **테스트:**
+  - 다른 출처 무시
+  - 두 메시지 형식 각각
+  - `blur` + `activeElement`
+  - 언마운트 후 해제
+
 ### V3-14 마무리
 
 1. `docs/ARCHITECTURE_RECOVERY.md`에 v3 항목을 추가한다(바뀐 탭 구조, 새 테이블 2개, 업로드 경로, 알려진 한계 §0-3).
@@ -354,7 +497,7 @@
 ## 6. 하지 말 것 (이번 작업 전체)
 
 - 운영 DB 실행, 사용자에게 SQL 실행 요청, PR 머지, `npm run deploy`, Cloudflare 배포
-- 승인 없는 npm 설치(Q1 `mediabunny`, Q2 `pdfjs-dist` 포함)
+- 승인된 2개(`mediabunny`, `pdfjs-dist`) 외의 npm 설치
 - 단원 본인 인증(Task 76) 관련 작업
 - 유튜브 재생 목록 기능, 원형 속도 다이얼, 길게 눌러 빨리감기
 - 명세에 없는 화면·문구·설정 항목 추가

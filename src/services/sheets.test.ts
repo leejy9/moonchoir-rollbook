@@ -370,6 +370,28 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     }
   });
 
+  it('normalizes string config values from the server snapshot (late grace "15" becomes 15)', async () => {
+    const originalFetch = globalThis.fetch;
+    const mockApiResponse = {
+      success: true,
+      data: {
+        members: [],
+        schedules: [],
+        rsvpVotes: [],
+        recentLogs: [],
+        config: { lateGraceMinutes: '15', customParts: '["소프라노","테너"]' },
+      },
+    };
+    globalThis.fetch = (async () => ({ ok: true, json: async () => mockApiResponse })) as unknown as typeof fetch;
+    try {
+      await service.fetchRemoteData('https://script.google.com/macros/s/TEST/exec');
+      expect(service.getConfig().lateGraceMinutes).toBe(15);
+      expect(service.getConfig().customParts).toEqual(['소프라노', '테너']);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('calculates cumulative attendance across multiple rehearsal sessions', () => {
     const { sessions, memberSummaries } = service.calculateCumulativeAttendance('2026-09-01', '2026-10-31');
 
