@@ -64,10 +64,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: 기준 브랜치 정하기
+      - name: 기준 정하기
+        # PR: 대상 브랜치와 비교 / 푸시: 직전에 올라와 있던 커밋과 비교
+        # (푸시를 main과 비교하면 아직 main에 안 들어간 앞 단계 PR의 파일까지 "새 파일"로 잘못 잡힌다)
         run: |
           if [ -n "${{ github.base_ref }}" ]; then
             echo "BASE_REF=origin/${{ github.base_ref }}" >> "$GITHUB_ENV"
+          elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${{ github.event.before }}^{commit}" 2>/dev/null; then
+            echo "BASE_REF=${{ github.event.before }}" >> "$GITHUB_ENV"
           else
             echo "BASE_REF=origin/main" >> "$GITHUB_ENV"
           fi
