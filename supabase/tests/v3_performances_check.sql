@@ -33,11 +33,10 @@ declare
   v_catalog jsonb;
   v_arch_res jsonb;
 begin
-  -- Fetch current admin token for test authentication
-  select coalesce(admin_hash, '') into v_token from app_config where id = 'default';
-  if v_token = '' then
-    v_token := 'mock_admin_token_for_check';
-  end if;
+  -- Create a valid admin session for test authentication (32+ chars)
+  v_token := 'test_admin_token_for_performances_check_32chars';
+  insert into admin_sessions (token_hash, tier, expires_at)
+  values (fn_admin_token_hash(v_token), 'admin', now() + interval '1 hour');
 
   -- Create dummy test practice pieces
   insert into practice_pieces (id, title) values (v_piece_1, '공연곡1') on conflict (id) do nothing;
