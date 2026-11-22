@@ -530,6 +530,9 @@ J6의 "직접 만드는 방식"은 하지 않는다. 쪽 배치, 화면 근처�
 - **구현 (`ScoreViewer.tsx`를 이 방식으로 다시 작성):**
   ```ts
   const pdfjs = await import('pdfjs-dist');
+  // 필수: pdf_viewer.mjs는 불러오는 순간 globalThis.pdfjsLib에서 값을 꺼낸다(6.5.438 기준 91행).
+  // 이 줄이 없으면 뷰어 import가 TypeError로 실패한다(2026-11-22 사용자 재현, 리뷰어 지시서 누락).
+  (globalThis as { pdfjsLib?: typeof pdfjs }).pdfjsLib = pdfjs;
   const viewerMod = await import('pdfjs-dist/web/pdf_viewer.mjs');
   await import('pdfjs-dist/web/pdf_viewer.css');           // 악보 청크에만 들어가야 함
   pdfjs.GlobalWorkerOptions.workerSrc = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
