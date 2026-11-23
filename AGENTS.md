@@ -44,6 +44,7 @@
   - 실수 기록은 `docs/agent/LESSONS.md`에 쌓는다.
   - 리뷰어가 명세·지시서를 쓸 때는 `docs/agent/SPEC_WRITING.md`의 순서와 점검표를 따른다(2026-11-23).
   - 명세 작성: 리뷰어는 `.claude/skills/spec-writer` 스킬로 쓰고 `.claude/agents/spec-auditor`로 독립 검토를 받는다. 개발 에이전트는 티켓 시작 전 `.agents/workflows/spec-check.md`(`/spec-check`)로 지시서를 코드에 대 보고, 어긋나면 시작하지 않고 보고한다.
+  - 데이터 관계·계산 검토: 배포 전이나 스키마·계산 로직을 바꾼 뒤 `.claude/skills/data-integrity-review` 절차로 연결부(병합 id, 시간대, 보관 상태, 단일 원천, 서버↔화면 계약)를 점검한다. v3 계획은 `docs/plans/18_v3_data_integrity_review.md`(2026-11-23).
 
 ## 3. 기술 스택 & 결정론적 명령어 (Tech Stack & Exact Commands)
 - **Frontend Core**: Vite + React 19 + TypeScript
