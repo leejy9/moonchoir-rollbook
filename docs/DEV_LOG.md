@@ -1370,5 +1370,26 @@ v3-A(PR #27) 검수 후속 작업 지시서(`check.md`)에 따라 운영진 연�
 4. **L4 (`fix(audio): L4 remove repeat all text from full player repeat button`)**:
    - `FullPlayer.tsx` 반복 버튼의 `{repeatOne ? '1곡' : '전체'}` 텍스트를 제거하고 아이콘만 유지하도록 수정함. 활성화 시 `--brand-lavender` + `aria-pressed="true"`, `aria-label="한 곡 반복"`, 비활성화 시 흐린 색상 + `aria-pressed="false"`를 적용함.
 
+---
+
+## [2026-11-23] V3-19 플레이어 v2 개편 (M1~M6)
+
+단원 UX v3 시안(Player, PlayerQueue, PlayerVideo, PlayerMini) 및 명세 V25, §3-1, §3-3, §4-2에 따라 플레이어 v2 디자인 개편, 공연 전체 재생(대표 음원), 3단계 반복, 이전/다음, 재생 목록 시트, 플레이어 안 유튜브 연동을 완료함.
+
+### 작업 요약 (티켓별 한 줄 요약)
+1. **M1 (`feat(v3): M1 practiceQueue pure functions and player color tokens`)**:
+   - `src/utils/practiceQueue.ts` 신설 (`getRepresentativeTrack`, `buildPieceQueue`, `buildPerformanceQueue`, `cycleRepeat`, `indexOnTrackEnd`, `indexOnNext`, `actionOnPrevious`, `nearestRate`) 및 `--player-gradient-top`, `--player-gradient-mid`, `--player-accent` CSS 변수 추가.
+2. **M2 (`feat(v3): M2 player repeatMode 3-step, playQueue and useMediaSession extraction`)**:
+   - `AudioPlayerProvider.tsx`에서 `repeatMode`('off'|'all'|'one'), `playQueue`, `previousTrack` 상태를 구현하고, 400줄 제한 준수를 위해 MediaSession 동기화 로직을 `useMediaSession.ts`로 분리함.
+3. **M3 (`feat(v3): M3 player v2 design, controls, piece tracks card, queue sheet`)**:
+   - 시안에 맞춰 `FullPlayer.tsx` 레이아웃 개편 및 `PlayerControls.tsx`, `PieceTracksCard.tsx`, `QueueSheet.tsx` 신설, CSS를 `pieceTracks.css`, `queueSheet.css`로 모듈화 분리함.
+4. **M4 (`feat(v3): M4 Studio play all button and admin representative track badge`)**:
+   - 연습실 공연 범위 선택 시 '전체 재생' 알약 버튼(44px) 추가 및 운영진 곡 편집 트랙 목록에서 `getRepresentativeTrack` 기반 '대표' 뱃지 표시 연동.
+5. **M5 (`feat(v3): M5 player YouTube integration, VideoStage, minimize hint toast, and lazy iframe api`)**:
+   - 유튜브 IFrame API 동적 로더(`youtubeIframeApi.ts`) 및 커버 위치 16:9 `VideoStage.tsx` 구현, 영상 재생 시 오디오 정지, 플레이어 축소 시 destroy 및 저장 위치 복구, `YT_MINIMIZE_HINT_COUNT` 기반 2회 한정 안내 토스트 연동 및 초기 번들 분리(초기 청크 내 `iframe_api` 부재).
+6. **M6 (`docs: V3-19 verification and release log`)**:
+   - 수용 기준 36~40 검증, 전체 빌드 및 가드 검사 통과 확인.
+
+
 
 

@@ -373,3 +373,22 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 - 적용 전 확인: `prevent_row_deletion()`을 쓰는 테이블은 카탈로그 5개(`practice_pieces`, `practice_tracks`, `practice_program_pieces`, `performances`, `practice_performance_pieces`)뿐이고, anon·authenticated는 이 테이블들을 직접 삭제할 권한이 없음.
 - 적용 후 확인: 삭제 함수 3개 생성, 트리거 함수에 트랜잭션 한정 우회 조건 반영, 토큰 없는 삭제는 `ADMIN_AUTH_REQUIRED`, 기존 데이터(곡 5, 트랙 2, 시즌 카드 연결 1) 그대로. 로컬 검증에서 함수 밖 직접 삭제는 계속 거부됨을 확인.
 - 참고: 우회 설정은 같은 트랜잭션 안에서는 함수가 끝난 뒤에도 남는다. PostgREST는 요청마다 트랜잭션이 따로라 실제 노출은 없음.
+
+## 2026-11-23 — 단원 UX v3 아키텍처 (v3-A, V3-01 ~ V3-19)
+
+- **바뀐 탭 구조:**
+  - 단원 화면 3개 탭: `home`(홈 — 주간/월간 캘린더 통합), `studio`(연습실 — 공연 드롭다운, 곡 목록, 곡 상세 읽기 전용, 인앱 악보 뷰어, 미니/전체화면 플레이어 v2), `profile`(내 활동 — 활동 기록, 출석률, 스티커 보드, 설정).
+  - 기존 `TodayTab`, `CalendarTab`은 `HomeTab`으로 통합되어 폐기됨.
+  - 전역 오디오 플레이어: `AudioPlayerProvider` 단일 오디오 인스턴스, `MiniPlayer` 고정 바, `FullPlayer` 전폭 오버레이, `QueueSheet`, `SpeedSheet`, YouTube 임베드 `VideoStage`.
+- **새 테이블 (2개):**
+  - `performances`: 공연 기본 정보 (`id`, `title`, `performance_date`, `venue`, `description`, `is_archived`, `created_at`, `updated_at`).
+  - `practice_performance_pieces`: 공연과 연습곡의 N:M 연결 및 정렬 순서 (`performance_id`, `piece_id`, `order_index`, `is_archived`, `created_at`, `updated_at`).
+  - 기존 시즌 카드(`program_cards`)와 연습곡 연결(`practice_program_pieces`)은 일정용으로 유지하되, 연습곡 관리 UI는 "공연" 기준으로 전환됨.
+- **업로드 경로:**
+  - Cloudflare Worker (`POST /upload`): 서명된 관리자 인증(Bearer 토큰)으로 R2 직접 스트리밍 업로드 (`mediaPublicBaseUrl` 연동).
+  - 클라이언트 다중 파일 일괄 업로드 (`MediaBatchList`, `uploadBatch.ts`): 순차적 큐 처리로 메모리 안정성 확보 및 Web Worker / mediabunny m4a 압축 지원.
+- **알려진 한계 (§0-3):**
+  - "본인만 보기"는 화면 수준이다. 단원 본인 인증(Task 76)이 이번 범위 밖이므로 출석·투표 원천 데이터는 전원분을 수신하며, 열정 온도와 스티커는 타인 화면에 그리지 않는 방식으로 보호한다.
+  - 업로드는 앱(탭)이 열려 있는 동안에만 진행되며, 탭을 닫으면 중단되고 재개 시 미완료 항목을 안내한다.
+  - 숨겨진 iframe으로 유튜브 백그라운드 재생은 지원하지 않으며, 플레이어를 내리면 비디오 플레이어가 파괴되고 저장 위치부터 복구된다.
+
