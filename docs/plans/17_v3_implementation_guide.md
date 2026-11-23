@@ -859,6 +859,21 @@ J6의 "직접 만드는 방식"은 하지 않는다. 쪽 배치, 화면 근처�
 - 화면 캡처는 "헤드리스라 불가"가 아니다. 리뷰어는 Playwright로 찍었다. `scripts/dev/capture-screens.mjs`(새 파일, npm 설치 없이 이미 있는 Playwright 사용 시도, 없으면 보고)를 만들어 가짜 응답으로 390×844 화면을 찍고, 보고서에 붙인다. Playwright를 쓸 수 없는 환경이면 그 사실과 시도한 명령을 적는다.
 - `docs/agent/LESSONS.md`에 이번 R2·R5·R12를 기록한다(원인 한 줄, 다시 안 하기 위한 규칙 한 줄).
 
+**R13. 독립 검토(spec-auditor)가 추가로 찾은 것 (2026-11-23 추가)** — `feat/v3-activity-2`, `feat/v3-profile`
+- **R3 보강 — 7일 전 계산은 데이터도 잘라야 한다:** `now − 7일` 이후의 일정만이 아니라 **출석 로그와 `rsvp_events`(`occurred_at`)도 제외**하고 계산한다(명세 §5-5). 테스트: 6일 전 들어온 24시간 전 투표는 7일 전 값에 없음 → `weeklyDelta`에 반영.
+- **공연 기본값 통일(V30):** `DEFAULT_PERFORMANCE_CATEGORIES = ['연주']` 상수 하나를 만들고 `ProfileTab.tsx`(지금 `['연주','녹음']`), `praiseStickers.ts`, 온도 엔진, `PerformanceCategoriesSettingSection.tsx`가 같이 쓴다. `grep -rn "'녹음'" src`로 남은 곳이 없는지 확인해 보고(설정 화면 예시 문구 제외).
+- **정렬:** 온도 창은 날짜가 아니라 시작 시점(`date`+`startTime`) 내림차순. 테스트: 같은 날 14:00·19:30 일정.
+- **경계 테스트 추가:** 병합 회원(두 id에 나뉜 로그·투표 합산), 사유 없는 불참 투표 후 결석 = 약속 지킴, 보관 일정 제외, 공연 지각도 공연 출석(+0.20).
+- **수동 출석(V29):** 관리자 수동 출석은 기록된 시각 그대로 정시 판정한다(지금 동작 유지). 테스트로 고정만 한다.
+
+**R14. 1차 수정 검토 결과 (2026-11-23, 리뷰어가 @45adb01·974f7c5·fb653d9를 가짜 데이터로 띄워 확인)**
+- **확인된 수정:** R1(390px에서 scrollWidth 390), R2(사유결석이 결석으로 안 잡힘, 정시 연속 정상), R3(이번 주 변화 표시), R9(정사각 커버·화살표 아이콘·왼쪽 정렬·어두운 시트), R10(온도 카드·출석 기록 행).
+- **R14-a. main 미반영:** 세 브랜치 모두 `origin/main`이 조상이 아니다. `feat/v3-member-ux` → `feat/v3-profile` → `feat/v3-activity-2` 순서로 `git merge origin/main`(규칙 16, `/spec-check`, 명세 V29·V30, R13 포함).
+- **R14-b. R13 미완료:** `DEFAULT_PERFORMANCE_CATEGORIES`가 `PerformanceCategoriesSettingSection.tsx` 안의 지역 상수다. 공용 모듈(예: `src/utils/performanceCategories.ts`)로 옮기고 `ProfileTab.tsx:157`(`['연주','녹음']`), `memberProgress.ts:144`(`['연주','녹음']`)도 이 상수를 쓰게 한다. R13 경계 테스트 4종(병합 회원, 사유 없는 불참, 보관 일정, 공연 지각)이 없으면 추가한다.
+- **R14-c. R5 여전히 실패:** 빈 저장소에서 처음 열면 단원 `신규 9`, 스태프 `신규 3`이 뜬다. `ProfileTab`의 `isDataReady = Boolean(activity)`가 **출석 데이터(스냅숏) 도착 전**에 참이 되어, 일부만 획득된 목록이 기준으로 저장된다. 준비 조건을 "활동 데이터 도착(스태프는 불필요) **그리고** 첫 원격 동기화 완료(`syncState.lastSyncedAt > 0`)"로 바꾼다. 테스트: 활동 먼저·스냅숏 나중 도착 순서에서 신규 0.
+- **R14-d. 스티커 미리보기:** 명세 §5-1-5는 **4칸(최근 획득 3 + 다음 잠긴 1)**인데, 지금은 획득 전부를 한 줄로 늘어놓아 오른쪽이 잘린다. 4칸 격자로 고친다.
+- **R14-e. 보고 정확성:** 보고 표의 PR 대상(Base)이 실제와 다르다(PR #27 → `fix/review-followups`, PR #45 → `feat/v3-member-ux`). 보고의 브랜치·PR 정보는 GitHub에서 확인한 값만 쓴다.
+
 **마무리:** 세 브랜치 모두 CI 초록 확인 → 보고(§5 형식, R1 scrollWidth 측정값, R12 캡처) → 멈춤. 머지·운영 DB 금지.
 
 ### V3-14 마무리
