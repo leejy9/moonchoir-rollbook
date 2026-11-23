@@ -1,0 +1,223 @@
+/**
+ * Score Viewer styles for Moonchoir Rollbook v3
+ * Compliant with R20 & R21.
+ */
+
+.score-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: var(--bg-card, #ffffff);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+}
+
+.score-viewer-header {
+  height: 52px;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+  background: var(--bg-card, #ffffff);
+  z-index: 10;
+}
+
+.score-viewer-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.score-viewer-back-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-main, #111827);
+  cursor: pointer;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 20px;
+  padding: 0;
+}
+
+.score-viewer-back-btn:hover {
+  background: var(--bg-hover, #f3f4f6);
+}
+
+.score-viewer-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main, #111827);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+
+.score-viewer-header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.score-viewer-zoom-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-main, #111827);
+  cursor: pointer;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 18px;
+  font-weight: 600;
+  padding: 0;
+}
+
+.score-viewer-zoom-btn:hover:not(:disabled) {
+  background: var(--bg-hover, #f3f4f6);
+}
+
+.score-viewer-zoom-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.score-viewer-body {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  width: 100%;
+  background: var(--bg-subtle, #f9fafb);
+  overflow: hidden;
+}
+
+.score-viewer-pdf-container {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.score-viewer-pdf-container .pdfViewer {
+  margin: 0 auto;
+  padding: 8px 0;
+}
+
+.score-viewer-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card, #ffffff);
+  color: var(--text-muted, #9ca3af);
+  font-size: 14px;
+  z-index: 5;
+}
+
+.score-viewer-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-subtle, #e5e7eb);
+  background: var(--bg-card, #ffffff);
+  z-index: 10;
+}
+
+.score-viewer-nav-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  background: var(--bg-card, #ffffff);
+  color: var(--text-main, #111827);
+  cursor: pointer;
+  border-radius: var(--radius-md, 8px);
+  font-size: 18px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.score-viewer-nav-btn:hover:not(:disabled) {
+  background: var(--bg-hover, #f3f4f6);
+}
+
+.score-viewer-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.score-viewer-page-info {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main, #111827);
+  min-width: 60px;
+  text-align: center;
+}
+
+.score-viewer-mini-spacer {
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
+  width: 100%;
+  flex-shrink: 0;
+}
+
+body:has(.score-viewer-overlay) .mini-player-container {
+  bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 260;
+}
+
+.score-viewer-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+}
+
+.score-viewer-error-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main, #111827);
+  margin: 0;
+}
+
+.score-viewer-error-btn {
+  min-height: 44px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--brand-primary, #7c3aed);
+  color: #ffffff;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.score-viewer-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted, #9ca3af);
+  font-size: 14px;
+}

@@ -26,6 +26,7 @@ export interface BackendActionResult {
   success: boolean;
   message?: string;
   error?: string;
+  code?: string;
   existingMemberId?: string;
   boundDeviceId?: string;
   data?: unknown;

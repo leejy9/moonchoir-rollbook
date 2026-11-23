@@ -11,13 +11,20 @@ import type {
   Schedule,
   ScheduleComment,
   ScheduleCommentEvent,
+  PracticeCatalog,
+  PracticePiece,
+  PracticeTrack,
+  MediaUsage,
+  ListenSessionPayload,
+  MemberActivity,
 } from '../types/rollbook';
 import {
   calculateCumulativeAttendanceWithLifecycle,
   isScheduleVisibleToMember,
-  reconcileSingleMemberAttendance,
   resolveMergedMemberIds,
 } from '../utils/attendanceStats';
+import { resolveMemberIdentity } from '../utils/memberIdentity';
+import { buildMemberScheduleRecords } from '../utils/memberRecords';
 import { getKSTTimestampString, getKSTDateString, addDaysKST, parseKSTDate } from '../utils/date';
 import { buildScheduleComments, createCommentEventId, normalizeCommentText } from '../utils/scheduleComments';
 import {
@@ -26,6 +33,7 @@ import {
   INITIAL_MEMBERS,
 } from './mockData';
 import {
+  parsePracticeCatalog,
   parseRemoteAttendanceLogs,
   parseRemoteCommentEvents,
   parseRemoteLocations,
@@ -36,10 +44,12 @@ import {
   resolveScheduleLocationFromPresets,
   serializeScheduleForSheet,
 } from './sheetsParser';
+import { parseMemberActivity } from '../utils/activityParser';
 import {
   STORAGE_KEYS,
   loadFromStorage,
   resetStorage,
+  clearDataCache,
   saveToStorage,
 } from './sheetsStorage';
 import type { RemoteBackend, RemoteSnapshot } from './backend/types';
@@ -48,7 +58,7 @@ import { GasBackend } from './backend/gasBackend';
 import { SupabaseBackend, type SupabaseConfig } from './backend/supabaseBackend';
 import { extractIssuedToken, getAdminToken, setAdminToken, type AdminTier } from './adminSession';
 
-export { resetStorage };
+export { resetStorage, clearDataCache };
 export type { RemoteBackend, RemoteSnapshot, SupabaseConfig };
 
 function createDefaultBackend(getUrl: () => string | undefined): RemoteBackend {
@@ -116,6 +126,12 @@ const WRITE_LABELS: Record<string, string> = {
   ADD_COMMENT: '댓글',
   EDIT_COMMENT: '댓글 수정',
   DELETE_COMMENT: '댓글 삭제',
+  SAVE_PRACTICE_PIECE: '연습곡 저장',
+  SET_PRACTICE_PIECE_ARCHIVED: '연습곡 보관',
+  SAVE_PRACTICE_TRACK: '트랙 저장',
+  SET_PRACTICE_TRACK_ARCHIVED: '트랙 보관',
+  SET_PROGRAM_PIECES: '시즌 곡 목록 저장',
+  REORDER_PRACTICE_TRACKS: '트랙 순서 변경',
 };
 
 /** 서버에서 읽기만 하는 요청: 성공해도 데이터가 바뀌지 않으므로 새로고침을 예약하지 않는다. */
@@ -123,6 +139,10 @@ const NON_MUTATING_ACTIONS = new Set([
   'VERIFY_ADMIN_PIN',
   'VERIFY_SUPER_ADMIN_PIN',
   'VERIFY_ON_SITE_PIN',
+  'GET_PRACTICE_CATALOG',
+  'GET_MEDIA_USAGE',
+  'GET_MEMBER_ACTIVITY',
+  'LOG_LISTEN_SESSION',
 ]);
 
 export class SheetsService {
@@ -134,6 +154,7 @@ export class SheetsService {
   private locations: LocationPreset[];
   private programCards: ProgramCard[];
   private commentEvents: ScheduleCommentEvent[];
+  private practiceCatalog: PracticeCatalog;
 
   // --- Sync state (refresh-on-navigation, write tracking, failure notices) ---
   private inFlightWrites = new Set<Promise<unknown>>();
@@ -163,6 +184,13 @@ export class SheetsService {
     this.locations = loadFromStorage(STORAGE_KEYS.LOCATIONS, []);
     this.programCards = loadFromStorage(STORAGE_KEYS.PROGRAM_CARDS, []);
     this.commentEvents = loadFromStorage(STORAGE_KEYS.COMMENTS, []);
+    this.practiceCatalog = loadFromStorage(STORAGE_KEYS.PRACTICE_CATALOG, {
+      pieces: [],
+      tracks: [],
+      programPieces: [],
+      performances: [],
+      performancePieces: [],
+    });
   }
 
   public isBackendActive(): boolean {
@@ -278,50 +306,40 @@ export class SheetsService {
    * 관리자 화면은 `getSchedules()`를 그대로 쓴다.
    */
   public getSchedulesForMember(memberId: string | undefined): Schedule[] {
+    const now = new Date();
     const schedules = this.getSchedules();
     if (!schedules.some((s) => s.visibility === 'TARGETS_ONLY')) return schedules;
 
-    let member = memberId ? this.members.find((m) => m.id === memberId) : undefined;
-    const visited = new Set<string>();
-    while (member?.mergedIntoId && !visited.has(member.id)) {
-      visited.add(member.id);
-      member = this.members.find((m) => m.id === member?.mergedIntoId) ?? member;
-      if (member.status !== 'MERGED') break;
-    }
+    const aliasIds = memberId ? resolveMergedMemberIds(memberId, this.members) : undefined;
+    const canonicalId = memberId
+      ? resolveMemberIdentity(memberId, this.members).canonicalId
+      : undefined;
+    const member = canonicalId ? this.members.find((m) => m.id === canonicalId) : undefined;
 
     return schedules.filter((s) => {
-      if (isScheduleVisibleToMember(member, s)) return true;
+      if (isScheduleVisibleToMember(member, s, aliasIds, this.members)) return true;
       if (!member) return false;
       // TARGETS_ONLY 일정이라도 해당 단원의 최종 출석이 실제로 인정된 경우에만 내역 보존을 위해 노출
       // (단순 raw 로그 존재나 취소/미인정 로그만 있는 비대상자에게는 절대 노출하지 않음)
-      const reconciled = this.reconcileMemberAttendance(member.id, s.id, member.name);
+      const reconciled = this.reconcileMemberAttendance(member.id, s.id, member.name, now);
       return Boolean(reconciled && (reconciled.finalStatus === '출석' || reconciled.finalStatus === '지각'));
     });
   }
 
   // --- Schedule comments (append-only event log, confirmed by the sheet before showing) ---
 
-  private canonicalMemberId(memberId: string): string {
-    let current = memberId;
-    const visited = new Set<string>();
-    while (!visited.has(current)) {
-      visited.add(current);
-      const member = this.members.find((m) => m.id === current);
-      if (!member?.mergedIntoId) break;
-      current = member.mergedIntoId;
-    }
-    return current;
-  }
-
   private isSameMember = (a: string, b: string): boolean =>
-    a === b || this.canonicalMemberId(a) === this.canonicalMemberId(b);
+    a === b ||
+    resolveMemberIdentity(a, this.members).canonicalId ===
+      resolveMemberIdentity(b, this.members).canonicalId;
 
   /**
    * 댓글에 보이는 이름·파트는 쓸 때의 값(스냅샷)이 아니라 작성자(통합된 단원은 대표 단원)의 현재 값을 우선한다.
    * 단원 기록이 없을 때만 쓸 때의 값을 쓴다. 시트의 원본 행은 바뀌지 않는다.
    */
   private withCurrentAuthor(comment: ScheduleComment): ScheduleComment {
-    const author = this.members.find((m) => m.id === this.canonicalMemberId(comment.memberId));
+    const canonicalId = resolveMemberIdentity(comment.memberId, this.members).canonicalId;
+    const author = this.members.find((m) => m.id === canonicalId);
     return author ? { ...comment, memberName: author.name, part: author.part } : comment;
   }
 
@@ -340,6 +358,14 @@ export class SheetsService {
       counts.set(comment.scheduleId, (counts.get(comment.scheduleId) ?? 0) + 1);
     }
     return counts;
+  }
+
+  public hasLocalScheduleRecords(scheduleId: string): boolean {
+    return (
+      this.logs.some((log) => log.scheduleId === scheduleId) ||
+      this.rsvpVotes.some((vote) => vote.scheduleId === scheduleId) ||
+      this.commentEvents.some((event) => event.scheduleId === scheduleId)
+    );
   }
 
   /** 통합 별칭까지 같은 사람인지 확인한다(내 댓글 표시용). */
@@ -517,6 +543,307 @@ export class SheetsService {
 
     this.programCards = this.programCards.filter((c) => c.id !== cardId);
     saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
+  }
+
+  // --- Practice Catalog Methods (MEMBER_UX_AUDIO_SPEC.md §4-3) ---
+
+  public getPracticeCatalog(): PracticeCatalog {
+    return {
+      pieces: [...this.practiceCatalog.pieces],
+      tracks: [...this.practiceCatalog.tracks],
+      programPieces: [...this.practiceCatalog.programPieces],
+      performances: [...(this.practiceCatalog.performances || [])],
+      performancePieces: [...(this.practiceCatalog.performancePieces || [])],
+    };
+  }
+
+  public async refreshPracticeCatalog(): Promise<PracticeCatalog> {
+    if (this.backend.kind === 'gas') {
+      return { pieces: [], tracks: [], programPieces: [], performances: [], performancePieces: [] };
+    }
+
+    const result = await this.sendToGoogleSheet('GET_PRACTICE_CATALOG', { includeArchived: true });
+    if (!result.success) {
+      throw new Error(result.message || '연습곡 목록을 불러오지 못했습니다.');
+    }
+
+    this.practiceCatalog = parsePracticeCatalog(result.data);
+    saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+    return this.getPracticeCatalog();
+  }
+
+  public async savePracticePiece(
+    piece: Partial<PracticePiece> & { title: string }
+  ): Promise<PracticePiece> {
+    const id = piece.id || `piece_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const target: PracticePiece = {
+      id,
+      title: piece.title,
+      composer: piece.composer ?? '',
+      arranger: piece.arranger ?? '',
+      scoreUrl: piece.scoreUrl ?? '',
+      scoreStorageKey: piece.scoreStorageKey ?? '',
+      scoreSizeBytes: piece.scoreSizeBytes,
+      notes: piece.notes ?? '',
+      isArchived: piece.isArchived ?? false,
+      createdAt: piece.createdAt ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = await this.sendToGoogleSheet('SAVE_PRACTICE_PIECE', target);
+    if (!result.success) {
+      throw new Error(result.message || '연습곡 저장에 실패했습니다.');
+    }
+
+    const finalId = (result as { id?: string }).id || target.id;
+    target.id = finalId;
+
+    const idx = this.practiceCatalog.pieces.findIndex((p) => p.id === finalId);
+    if (idx >= 0) {
+      this.practiceCatalog.pieces[idx] = { ...this.practiceCatalog.pieces[idx], ...target };
+    } else {
+      this.practiceCatalog.pieces.push(target);
+    }
+    saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+    return target;
+  }
+
+  public async setPracticePieceArchived(pieceId: string, isArchived: boolean): Promise<void> {
+    const result = await this.sendToGoogleSheet('SET_PRACTICE_PIECE_ARCHIVED', {
+      id: pieceId,
+      isArchived,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '연습곡 보관 상태 변경에 실패했습니다.');
+    }
+
+    const piece = this.practiceCatalog.pieces.find((p) => p.id === pieceId);
+    if (piece) {
+      piece.isArchived = isArchived;
+      piece.updatedAt = new Date().toISOString();
+      saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+    }
+  }
+
+  public async savePracticeTrack(
+    track: Partial<PracticeTrack> & { pieceId: string; label: string }
+  ): Promise<PracticeTrack> {
+    const id = track.id || `track_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const target: PracticeTrack = {
+      id,
+      pieceId: track.pieceId,
+      label: track.label,
+      kind: track.kind ?? '',
+      source: track.source ?? '',
+      url: track.url ?? '',
+      storageKey: track.storageKey ?? '',
+      mimeType: track.mimeType ?? '',
+      durationSeconds: track.durationSeconds,
+      sizeBytes: track.sizeBytes,
+      orderIndex:
+        track.orderIndex ??
+        this.practiceCatalog.tracks.filter((t) => t.pieceId === track.pieceId).length,
+      isArchived: track.isArchived ?? false,
+      createdAt: track.createdAt ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = await this.sendToGoogleSheet('SAVE_PRACTICE_TRACK', target);
+    if (!result.success) {
+      throw new Error(result.message || '트랙 저장에 실패했습니다.');
+    }
+
+    const finalId = (result as { id?: string }).id || target.id;
+    target.id = finalId;
+
+    const idx = this.practiceCatalog.tracks.findIndex((t) => t.id === finalId);
+    if (idx >= 0) {
+      this.practiceCatalog.tracks[idx] = { ...this.practiceCatalog.tracks[idx], ...target };
+    } else {
+      this.practiceCatalog.tracks.push(target);
+    }
+    saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+    return target;
+  }
+
+  public async setPracticeTrackArchived(trackId: string, isArchived: boolean): Promise<void> {
+    const result = await this.sendToGoogleSheet('SET_PRACTICE_TRACK_ARCHIVED', {
+      id: trackId,
+      isArchived,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '트랙 보관 상태 변경에 실패했습니다.');
+    }
+
+    const track = this.practiceCatalog.tracks.find((t) => t.id === trackId);
+    if (track) {
+      track.isArchived = isArchived;
+      track.updatedAt = new Date().toISOString();
+      saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+    }
+  }
+
+  public async setProgramPieces(programId: string, pieceIds: string[]): Promise<void> {
+    const result = await this.sendToGoogleSheet('SET_PROGRAM_PIECES', {
+      programId,
+      pieceIds,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '시즌 곡 목록 저장에 실패했습니다.');
+    }
+
+    for (const pp of this.practiceCatalog.programPieces) {
+      if (pp.programId === programId && !pieceIds.includes(pp.pieceId)) {
+        pp.isArchived = true;
+      }
+    }
+    pieceIds.forEach((pieceId, idx) => {
+      const existing = this.practiceCatalog.programPieces.find(
+        (pp) => pp.programId === programId && pp.pieceId === pieceId
+      );
+      if (existing) {
+        existing.orderIndex = idx;
+        existing.isArchived = false;
+      } else {
+        this.practiceCatalog.programPieces.push({
+          programId,
+          pieceId,
+          orderIndex: idx,
+          isArchived: false,
+        });
+      }
+    });
+    saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+  }
+
+  public async reorderPracticeTracks(pieceId: string, trackIds: string[]): Promise<void> {
+    const result = await this.sendToGoogleSheet('REORDER_PRACTICE_TRACKS', {
+      pieceId,
+      trackIds,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '트랙 순서 변경에 실패했습니다.');
+    }
+
+    trackIds.forEach((trackId, idx) => {
+      const track = this.practiceCatalog.tracks.find((t) => t.id === trackId);
+      if (track) {
+        track.orderIndex = idx;
+        track.updatedAt = new Date().toISOString();
+      }
+    });
+    saveToStorage(STORAGE_KEYS.PRACTICE_CATALOG, this.practiceCatalog);
+  }
+
+  public async savePerformance(performance: {
+    id?: string;
+    title: string;
+    performanceDate?: string;
+    venue?: string;
+  }): Promise<{ success: boolean; id?: string }> {
+    const result = await this.sendToGoogleSheet('SAVE_PERFORMANCE', performance);
+    if (!result.success) {
+      throw new Error(result.message || '공연 저장에 실패했습니다.');
+    }
+    const dataObj =
+      result.data && typeof result.data === 'object' ? (result.data as { id?: string }) : undefined;
+    const finalId = dataObj?.id || (result as { id?: string }).id;
+    return { success: true, id: finalId };
+  }
+
+  public async setPerformanceArchived(performanceId: string, archived: boolean): Promise<void> {
+    const result = await this.sendToGoogleSheet('SET_PERFORMANCE_ARCHIVED', {
+      performanceId,
+      archived,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '공연 보관 상태 변경에 실패했습니다.');
+    }
+  }
+
+  public async setPerformancePieces(performanceId: string, pieceIds: string[]): Promise<void> {
+    const result = await this.sendToGoogleSheet('SET_PERFORMANCE_PIECES', {
+      performanceId,
+      pieceIds,
+    });
+    if (!result.success) {
+      throw new Error(result.message || '공연 곡 목록 저장에 실패했습니다.');
+    }
+  }
+
+  public async deletePracticePiece(pieceId: string): Promise<{ success: boolean; storageKeys?: string[] }> {
+    const result = await this.sendToGoogleSheet('DELETE_PRACTICE_PIECE', { pieceId });
+    if (!result.success) {
+      throw new Error(result.message || '곡 삭제에 실패했습니다.');
+    }
+    const data = result.data as { storageKeys?: string[] } | undefined;
+    return { success: true, storageKeys: data?.storageKeys || (result as { storageKeys?: string[] }).storageKeys || [] };
+  }
+
+  public async deletePracticeTrack(trackId: string): Promise<{ success: boolean; storageKeys?: string[] }> {
+    const result = await this.sendToGoogleSheet('DELETE_PRACTICE_TRACK', { trackId });
+    if (!result.success) {
+      throw new Error(result.message || '트랙 삭제에 실패했습니다.');
+    }
+    const data = result.data as { storageKeys?: string[] } | undefined;
+    return { success: true, storageKeys: data?.storageKeys || (result as { storageKeys?: string[] }).storageKeys || [] };
+  }
+
+  public async deletePerformance(performanceId: string): Promise<void> {
+    const result = await this.sendToGoogleSheet('DELETE_PERFORMANCE', { performanceId });
+    if (!result.success) {
+      throw new Error(result.message || '공연 삭제에 실패했습니다.');
+    }
+  }
+
+  public async getMediaUsage(): Promise<MediaUsage | null> {
+    if (this.backend.kind === 'gas') {
+      return null;
+    }
+    const result = await this.sendToGoogleSheet('GET_MEDIA_USAGE', {});
+    if (!result.success || !result.data) {
+      return null;
+    }
+    const data = result.data as Record<string, unknown>;
+    return {
+      tracksBytes: Number(data.tracksBytes) || 0,
+      scoresBytes: Number(data.scoresBytes) || 0,
+      totalBytes: Number(data.totalBytes) || 0,
+    };
+  }
+
+  public async logListenSession(payload: ListenSessionPayload): Promise<boolean> {
+    if (this.backend.kind === 'gas') {
+      return false;
+    }
+    const result = await this.sendToGoogleSheet('LOG_LISTEN_SESSION', payload);
+    return result.success;
+  }
+
+  public async getMemberActivity(memberIds: string[] | string): Promise<MemberActivity | null> {
+    if (this.backend.kind === 'gas') {
+      return null;
+    }
+    const requestedIds = Array.isArray(memberIds) ? memberIds : [memberIds];
+    if (requestedIds.length === 0) {
+      return null;
+    }
+    const identity = resolveMemberIdentity(requestedIds[0], this.members);
+    const allIds = new Set([...identity.aliasIds, ...requestedIds]);
+    const orderedIds = [
+      identity.canonicalId,
+      ...[...allIds].filter((id) => id !== identity.canonicalId).sort((a, b) => a.localeCompare(b)),
+    ];
+    if (orderedIds.length > 20) {
+      console.warn('[SheetsService] Member activity aliases exceed the 20-ID server limit; truncating.');
+    }
+    const result = await this.sendToGoogleSheet('GET_MEMBER_ACTIVITY', {
+      memberIds: orderedIds.slice(0, 20),
+    });
+    if (!result.success || !result.data) {
+      return null;
+    }
+    return parseMemberActivity(result.data);
   }
 
   // --- Append-Only Write Operations (Idempotent by log.id) ---
@@ -963,6 +1290,16 @@ export class SheetsService {
     // 1. Preserve raw attendance logs' original memberId (Append-Only Event Sourcing Invariant)
     const affectedLogsCount = this.logs.filter((log) => log.memberId === secondaryId).length;
 
+    if (this.isBackendActive()) {
+      const result = await this.sendToGoogleSheet('MERGE_MEMBERS', {
+        canonicalId,
+        secondaryId,
+      });
+      if (!result.success) {
+        throw new Error(result.message || '단원 병합이 서버에서 거부되었습니다.');
+      }
+    }
+
     // 2. Consolidate current RSVP responses (keep canonical response if both exist for a schedule)
     let affectedRsvpCount = 0;
     const remainingVotes: RSVPVote[] = [];
@@ -1001,14 +1338,6 @@ export class SheetsService {
     }
 
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
-
-    // 4. Sync with Google Sheets backend
-    if (this.isBackendActive()) {
-      this.syncInBackground('MERGE_MEMBERS', {
-        canonicalId,
-        secondaryId,
-      });
-    }
 
     return { affectedLogsCount, affectedRsvpCount };
   }
@@ -1054,64 +1383,58 @@ export class SheetsService {
     return this.updateSchedule(scheduleId, { isCancelled: false });
   }
 
-  public async deleteSchedule(scheduleId: string, forceHardDelete: boolean = false): Promise<void> {
-    const hasActivity =
-      this.logs.some((l) => l.scheduleId === scheduleId) ||
-      this.rsvpVotes.some((v) => v.scheduleId === scheduleId);
-
-    if (hasActivity && !forceHardDelete) {
-      // 출석로그나 투표가 있는 경우 물리 삭제하지 않고 [연습 취소]로 보존
-      await this.updateSchedule(scheduleId, { isCancelled: true });
-      if (this.isBackendActive()) {
-        this.syncInBackground('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: false });
+  public async deleteSchedule(
+    scheduleId: string,
+    forceHardDelete: boolean = false
+  ): Promise<{ message: string }> {
+    let message = '일정이 삭제되었습니다.';
+    if (this.isBackendActive()) {
+      const result = await this.sendToGoogleSheet('DELETE_SCHEDULE', {
+        id: scheduleId,
+        forceHardDelete,
+      });
+      if (!result.success) {
+        throw new Error(result.message || '일정 삭제가 서버에서 거부되었습니다.');
       }
-    } else {
-      // 활동이 없거나, 관리자가 명시적으로 완전 영구 삭제를 요청한 경우
-      this.schedules = this.schedules.filter((s) => s.id !== scheduleId);
-      saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
-
-      if (this.isBackendActive()) {
-        this.syncInBackground('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: true });
-      }
+      message = result.message || message;
+    } else if (this.hasLocalScheduleRecords(scheduleId)) {
+      throw new Error('출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.');
     }
+
+    this.schedules = this.schedules.filter((s) => s.id !== scheduleId);
+    saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+    return { message };
   }
 
-  public async deleteSchedules(scheduleIds: string[], forceHardDelete: boolean = false): Promise<void> {
-    if (forceHardDelete) {
-      // 강제 영구 삭제 모드: 모든 지정 일정을 물리 삭제
-      const idsToDeleteSet = new Set(scheduleIds);
-      this.schedules = this.schedules.filter((s) => !idsToDeleteSet.has(s.id));
-      saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
-
-      if (this.isBackendActive()) {
-        this.syncInBackground('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: true });
-      }
-      return;
-    }
-
-    const activeScheduleIds = new Set(
-      scheduleIds.filter(
-        (sid) =>
-          this.logs.some((l) => l.scheduleId === sid) ||
-          this.rsvpVotes.some((v) => v.scheduleId === sid)
-      )
-    );
-
-    // 활동 있는 일정은 isCancelled=true로 갱신
-    if (activeScheduleIds.size > 0) {
-      await this.batchUpdateSchedules(Array.from(activeScheduleIds), { isCancelled: true });
-    }
-
-    // 활동 없는 일정만 물리 삭제
-    const idsToHardDelete = new Set(scheduleIds.filter((sid) => !activeScheduleIds.has(sid)));
-    if (idsToHardDelete.size > 0) {
-      this.schedules = this.schedules.filter((s) => !idsToHardDelete.has(s.id));
-      saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
-    }
-
+  public async deleteSchedules(
+    scheduleIds: string[],
+    forceHardDelete: boolean = false
+  ): Promise<{ message: string }> {
+    let message = '일정들이 일괄 삭제되었습니다.';
     if (this.isBackendActive()) {
-      this.syncInBackground('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: false });
+      const result = await this.sendToGoogleSheet('BATCH_DELETE_SCHEDULES', {
+        ids: scheduleIds,
+        forceHardDelete,
+      });
+      if (!result.success) {
+        throw new Error(result.message || '일정 일괄 삭제가 서버에서 거부되었습니다.');
+      }
+      message = result.message || message;
+    } else {
+      const blockedCount = [...new Set(scheduleIds)].filter((id) =>
+        this.hasLocalScheduleRecords(id)
+      ).length;
+      if (blockedCount > 0) {
+        throw new Error(
+          `기록이 있는 일정 ${blockedCount}개가 있어 삭제하지 않았어요. 보관하거나 취소해 주세요.`
+        );
+      }
     }
+
+    const idsToDelete = new Set(scheduleIds);
+    this.schedules = this.schedules.filter((s) => !idsToDelete.has(s.id));
+    saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+    return { message };
   }
 
   public async batchUpdateSchedules(scheduleIds: string[], updates: Partial<Schedule>): Promise<Schedule[]> {
@@ -1209,7 +1532,7 @@ export class SheetsService {
   }
 
   public updateConfig(newConfig: Partial<AppConfig>): AppConfig {
-    this.config = { ...this.config, ...newConfig };
+    this.config = { ...this.config, ...normalizeAppConfig(newConfig) };
     saveToStorage(STORAGE_KEYS.CONFIG, this.config);
 
     if (this.isBackendActive()) {
@@ -1219,10 +1542,11 @@ export class SheetsService {
     return { ...this.config };
   }
 
-  public async saveConfigConfirmed(newConfig: Partial<AppConfig>): Promise<AppConfig> {
+  public async saveConfigConfirmed(newConfig: Partial<AppConfig> | Record<string, unknown>): Promise<AppConfig> {
+    const rawUrl = 'sheetsWebAppUrl' in newConfig && typeof newConfig.sheetsWebAppUrl === 'string' ? newConfig.sheetsWebAppUrl : undefined;
     const nextEndpoint =
-      newConfig.sheetsWebAppUrl !== undefined
-        ? newConfig.sheetsWebAppUrl.trim()
+      rawUrl !== undefined
+        ? rawUrl.trim()
         : this.config.sheetsWebAppUrl;
     const endpoint = this.config.sheetsWebAppUrl || nextEndpoint;
     if (this.backend.kind === 'gas' && (!endpoint || !nextEndpoint)) {
@@ -1238,7 +1562,7 @@ export class SheetsService {
       throw new Error(result.message || '설정 저장이 구글 시트에서 확인되지 않았습니다.');
     }
 
-    this.config = { ...this.config, ...newConfig, sheetsWebAppUrl: nextEndpoint };
+    this.config = { ...this.config, ...normalizeAppConfig(newConfig), sheetsWebAppUrl: nextEndpoint };
     saveToStorage(STORAGE_KEYS.CONFIG, this.config);
     return { ...this.config };
   }
@@ -1487,14 +1811,16 @@ export class SheetsService {
     }
 
     const lateGraceMinutes = this.config.lateGraceMinutes ?? 10;
+    const now = new Date();
     const memberSummaries = calculateCumulativeAttendanceWithLifecycle(
       members,
       sessions,
       this.logs,
-      getKSTDateString(),
+      getKSTDateString(now),
       this.rsvpVotes,
       lateGraceMinutes,
-      this.members
+      this.members,
+      now
     );
 
     memberSummaries.sort(
@@ -1508,7 +1834,8 @@ export class SheetsService {
   public reconcileMemberAttendance(
     memberId: string,
     scheduleId: string,
-    _memberName?: string
+    _memberName?: string,
+    now: Date = new Date()
   ): AttendanceReconciliation | null {
     const schedule = this.schedules.find((s) => s.id === scheduleId);
     if (!schedule) return null;
@@ -1516,32 +1843,28 @@ export class SheetsService {
     const targetMember = this.members.find((m) => m.id === memberId);
     if (!targetMember) return null;
 
-    const aliasIds = resolveMergedMemberIds(targetMember.id, this.members);
-
-    const memberRsvp = this.rsvpVotes.find(
-      (v) => aliasIds.has(v.memberId) && v.scheduleId === scheduleId
-    );
-
-    const memberLogs = this.logs.filter(
-      (l) => aliasIds.has(l.memberId) && l.scheduleId === scheduleId
-    );
-
     const lateGraceMinutes = this.config.lateGraceMinutes ?? 10;
-    return reconcileSingleMemberAttendance(
-      targetMember,
-      schedule,
-      memberLogs,
-      memberRsvp,
-      lateGraceMinutes
+    return (
+      buildMemberScheduleRecords({
+        member: targetMember,
+        members: this.members,
+        schedules: [schedule],
+        logs: this.logs,
+        rsvpVotes: this.rsvpVotes,
+        now,
+        includeArchived: true,
+        includeCancelled: true,
+        lateGraceMinutes,
+      })[0] || null
     );
   }
 
-  public reconcileAttendance(scheduleId: string): AttendanceReconciliation[] {
+  public reconcileAttendance(scheduleId: string, now: Date = new Date()): AttendanceReconciliation[] {
     const schedule = this.schedules.find((s) => s.id === scheduleId);
     if (!schedule) return [];
 
     return this.getMembers().map((member) => {
-      const rec = this.reconcileMemberAttendance(member.id, scheduleId);
+      const rec = this.reconcileMemberAttendance(member.id, scheduleId, undefined, now);
       if (rec) return rec;
       return {
         memberId: member.id,

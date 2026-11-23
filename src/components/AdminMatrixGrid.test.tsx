@@ -71,4 +71,43 @@ describe('AdminMatrixGrid attendance reset display', () => {
     expect(html).not.toContain('>결석</span>');
     expect(html).not.toContain('>-</span>');
   });
+
+  it.each([
+    ['21:59', '미투표', '0'],
+    ['22:01', '결석', '1'],
+  ] as const)('shows today attendance correctly at %s', (clock, status, absentCount) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(`2026-10-22T${clock}:00+09:00`));
+
+    const member: Member = {
+      id: 'mem_test_pending',
+      name: '오늘 단원',
+      part: '베이스',
+      phoneLast4: '0000',
+      role: 'MEMBER',
+      createdAt: '2026-10-21T00:00:00Z',
+      status: 'ACTIVE',
+      joinedAt: '2026-10-21',
+      memberStatus: '정단원',
+    };
+    const schedule: Schedule = {
+      id: 'sch_test_pending',
+      title: '정기연습',
+      date: '2026-10-22',
+      startTime: '19:30',
+      endTime: '22:00',
+      locationName: '연습실',
+      category: '정기연습',
+      targetAudienceType: 'PARTS',
+      targetParts: ['베이스'],
+    };
+    sheetsService.seedTestData({ members: [member], schedules: [schedule], logs: [] });
+
+    const html = renderToString(
+      <AdminMatrixGrid members={[member]} schedules={[schedule]} onDataChanged={() => {}} />
+    );
+
+    expect(html).toContain(`>${status}</span>`);
+    expect(html).toContain(`col-abs">${absentCount}</td>`);
+  });
 });

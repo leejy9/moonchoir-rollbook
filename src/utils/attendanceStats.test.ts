@@ -85,6 +85,55 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
     expect(stats[0].attendanceRate).toBe(50);
   });
 
+  it('does not count an orphan attendance log in a member attendance rate', () => {
+    const member: Member = {
+      id: 'm_orphan_log',
+      name: '고아 로그 검증',
+      part: '소프라노',
+      phoneLast4: '1234',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      createdAt: '2026-01-01T00:00:00Z',
+      joinedAt: '2026-01-01',
+      memberStatus: '정단원',
+    };
+    const schedules = Array.from({ length: 8 }, (_, index) => ({
+      ...sampleSchedules[0],
+      id: `orphan_log_test_${index + 1}`,
+      date: `2026-10-${String(index + 1).padStart(2, '0')}`,
+    }));
+    const validLogs: RawAttendanceLog[] = schedules.slice(0, 7).map((schedule) => ({
+      id: `log_${schedule.id}`,
+      scheduleId: schedule.id,
+      memberId: member.id,
+      memberName: member.name,
+      part: member.part,
+      timestamp: `${schedule.date} 19:30:00`,
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    }));
+    const orphanLog: RawAttendanceLog = {
+      ...validLogs[0],
+      id: 'log_for_deleted_schedule',
+      scheduleId: 'deleted_schedule',
+    };
+
+    const stats = calculateCumulativeAttendanceWithLifecycle(
+      [member],
+      schedules,
+      [...validLogs, orphanLog],
+      '2026-11-15'
+    );
+
+    expect(stats[0].totalSessions).toBe(8);
+    expect(stats[0].attended).toBe(7);
+    expect(stats[0].absent).toBe(1);
+    expect(stats[0].attendanceRate).toBe(88);
+    expect(getGamifiedAttendanceLevel(stats[0].attended, member.part).currentLevelName).toBe(
+      '새싹 소프라노'
+    );
+  });
+
   it('입단 전 일정에 수동 결석 로그가 있어도 미참으로 처리한다', () => {
     const member: Member = {
       id: 'm_joined_later',
@@ -251,6 +300,45 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
     expect(stats[0].attended).toBe(1);
     expect(stats[0].absent).toBe(0);
     expect(stats[0].attendanceRate).toBe(100);
+  });
+
+  it('excludes an unfinished today schedule even when the member already checked in', () => {
+    const regularMember: Member = {
+      id: 'm_today',
+      name: '오늘 단원',
+      part: '테너',
+      phoneLast4: '1111',
+      role: 'MEMBER',
+      createdAt: '2026-01-01T00:00:00Z',
+      status: 'ACTIVE',
+      joinedAt: '2026-01-01',
+      memberStatus: '정단원',
+    };
+    const todaySchedule = sampleSchedules[0];
+    const todayLog: RawAttendanceLog = {
+      id: 'l_today',
+      scheduleId: todaySchedule.id,
+      memberId: regularMember.id,
+      memberName: regularMember.name,
+      part: regularMember.part,
+      timestamp: '2026-10-10 19:45:00',
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    };
+
+    const stats = calculateCumulativeAttendanceWithLifecycle(
+      [regularMember],
+      [todaySchedule],
+      [todayLog],
+      todaySchedule.date,
+      [],
+      10,
+      [regularMember],
+      new Date('2026-10-10T19:45:00+09:00')
+    );
+
+    expect(stats[0].totalSessions).toBe(0);
+    expect(stats[0].attended).toBe(0);
   });
 
   it('휴단원은 휴단일 이후 연습에 결석으로 처리되지 않아야 한다', () => {
@@ -584,6 +672,48 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
       // 테너단원은 비대상자이므로 모수 0회, 결석 0회
       expect(stats[1].totalSessions).toBe(0);
       expect(stats[1].absent).toBe(0);
+    });
+
+    it('대표 단원은 병합 별칭이 지정된 CUSTOM_MEMBERS 일정의 필참 대상이다', () => {
+      const canonicalMember: Member = { ...sopranoMember, id: 'canonical' };
+      const mergedMember: Member = {
+        ...tenorMember,
+        id: 'old',
+        status: 'MERGED',
+        mergedIntoId: canonicalMember.id,
+      };
+      const customSchedule: Schedule = {
+        id: 'sch_merged_target',
+        title: '병합 대상 연습',
+        date: '2026-10-14',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '제1연습실',
+        category: '추가연습',
+        targetAudienceType: 'CUSTOM_MEMBERS',
+        targetMemberIds: ['old'],
+      };
+
+      expect(
+        isMemberRequiredForSchedule(
+          canonicalMember,
+          customSchedule.date,
+          customSchedule,
+          new Set([canonicalMember.id, mergedMember.id])
+        )
+      ).toBe(true);
+
+      const stats = calculateCumulativeAttendanceWithLifecycle(
+        [canonicalMember],
+        [customSchedule],
+        [],
+        '2026-10-15',
+        [],
+        10,
+        [canonicalMember, mergedMember]
+      );
+      expect(stats[0].totalSessions).toBe(1);
+      expect(stats[0].absent).toBe(1);
     });
 
     it('관리자가 직접 지정(CUSTOM_MEMBERS)한 경우 휴단원도 필참으로 인정하되, 퇴단원은 실수로 지정해도 제외한다', () => {

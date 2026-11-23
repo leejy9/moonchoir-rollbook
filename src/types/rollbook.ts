@@ -302,6 +302,9 @@ export interface AppConfig {
   qrPrintSubtitle?: string;
   qrPrintNotice?: string;
   emergencyGpsBypassUntil?: string; // ISO 8601 timestamp until which GPS boundary check is bypassed
+  mediaPublicBaseUrl?: string; // Worker base URL (e.g. https://media.example.com)
+  practiceTrackKinds?: string[]; // Configurable track kinds taxonomy
+  performanceCategories?: string[]; // v3: 일정 중 공연에 해당하는 category 목록 (기본: ['연주'])
 }
 
 /**
@@ -315,3 +318,11 @@ export interface BoundDeviceProfile {
   boundAt: string; // ISO 8601
   deviceId?: string; // Client Unique Device UUID
 }
+
+/**
+ * 11. Practice Catalog, Performances & Studio Models (MEMBER_UX_AUDIO_SPEC.md §4-4, MEMBER_UX_V3_SPEC.md §7-5)
+ */
+export * from './practice';
+export * from './activity';
+
+

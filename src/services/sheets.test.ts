@@ -541,6 +541,79 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(service.getSchedules().some((s) => s.id === 'sch_batch_2')).toBe(false);
   });
 
+  it('keeps a schedule when the server rejects its deletion and preserves the server message', async () => {
+    const remoteService = new SheetsService(
+      new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'test-key' })
+    );
+    const schedule = TEST_MOCK_SCHEDULES[0];
+    remoteService.seedTestData({ schedules: [schedule], logs: [], rsvpVotes: [] });
+    const sendSpy = vi.spyOn(remoteService, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.',
+    });
+
+    await expect(remoteService.deleteSchedule(schedule.id)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
+
+    expect(remoteService.getSchedules()).toContainEqual(schedule);
+    expect(sendSpy).toHaveBeenCalledWith('DELETE_SCHEDULE', {
+      id: schedule.id,
+      forceHardDelete: false,
+    });
+  });
+
+  it('keeps every schedule when the server rejects a batch deletion', async () => {
+    const remoteService = new SheetsService(
+      new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'test-key' })
+    );
+    const schedules = TEST_MOCK_SCHEDULES.slice(0, 2);
+    remoteService.seedTestData({ schedules, logs: [], rsvpVotes: [] });
+    const sendSpy = vi.spyOn(remoteService, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '기록이 있는 일정 1개가 있어 삭제하지 않았어요. 보관하거나 취소해 주세요.',
+    });
+
+    await expect(
+      remoteService.deleteSchedules(schedules.map((schedule) => schedule.id))
+    ).rejects.toThrow(
+      '기록이 있는 일정 1개가 있어 삭제하지 않았어요. 보관하거나 취소해 주세요.'
+    );
+
+    expect(remoteService.getSchedules()).toEqual(schedules);
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy).toHaveBeenCalledWith('BATCH_DELETE_SCHEDULES', {
+      ids: schedules.map((schedule) => schedule.id),
+      forceHardDelete: false,
+    });
+  });
+
+  it('keeps a local schedule when its only known record is a comment event', async () => {
+    const schedule = TEST_MOCK_SCHEDULES[0];
+    service.seedTestData({
+      schedules: [schedule],
+      logs: [],
+      rsvpVotes: [],
+      comments: [
+        {
+          id: 'comment_only_record',
+          scheduleId: schedule.id,
+          memberId: 'mem_s01',
+          memberName: '단원',
+          part: '소프라노',
+          action: 'DELETE',
+          timestamp: '2026-11-24 19:00:00',
+        },
+      ],
+    });
+
+    await expect(service.deleteSchedule(schedule.id)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
+
+    expect(service.getSchedules()).toContainEqual(schedule);
+  });
+
   it('allows several browsers per member and keeps the first bound device id', async () => {
     const memberId = 'mem_s01'; // 김하은
     const device1 = 'device_uuid_phone_1';
@@ -853,6 +926,65 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it('keeps merge data unchanged when the server rejects the merge and preserves its message', async () => {
+    const remoteService = new SheetsService(
+      new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'test-key' })
+    );
+    const canonical: Member = {
+      id: 'merge_canonical',
+      name: '대표 단원',
+      part: '소프라노',
+      phoneLast4: '1234',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      createdAt: '2026-01-01T00:00:00Z',
+      joinedAt: '2026-01-01',
+    };
+    const secondary: Member = { ...canonical, id: 'merge_secondary', name: '보조 단원' };
+    const log: RawAttendanceLog = {
+      id: 'merge_log',
+      scheduleId: 'merge_schedule',
+      memberId: secondary.id,
+      memberName: secondary.name,
+      part: secondary.part,
+      timestamp: '2026-10-10 19:30:00',
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    };
+    const vote: RSVPVote = {
+      id: 'merge_vote',
+      scheduleId: 'merge_schedule',
+      memberId: secondary.id,
+      memberName: secondary.name,
+      part: secondary.part,
+      status: 'ATTEND',
+      timestamp: '2026-10-10 19:30:00',
+    };
+    remoteService.seedTestData({
+      members: [canonical, secondary],
+      logs: [log],
+      rsvpVotes: [vote],
+    });
+    const beforeMembers = remoteService.getMembers(true, true);
+    const beforeVotes = remoteService.getRSVPVotes();
+    const sendSpy = vi.spyOn(remoteService, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '대표 단원은 ACTIVE 상태여야 합니다.',
+    });
+
+    await expect(
+      remoteService.mergeDuplicateMembers(canonical.id, secondary.id)
+    ).rejects.toThrow('대표 단원은 ACTIVE 상태여야 합니다.');
+
+    expect(remoteService.getMembers(true, true)).toEqual(beforeMembers);
+    expect(remoteService.getRSVPVotes()).toEqual(beforeVotes);
+    expect(remoteService.getLogs()).toEqual([log]);
+    expect(sendSpy).toHaveBeenCalledWith('MERGE_MEMBERS', {
+      canonicalId: canonical.id,
+      secondaryId: secondary.id,
+    });
   });
 
   it('detects duplicate member groups and performs safe consolidation without log deletion', async () => {
@@ -1273,33 +1405,25 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(logs.some((l) => l.memberId === testMemberId)).toBe(true);
   });
 
-  it('일정 삭제 시 출석 기록이 있으면 isCancelled=true 로 소프트 취소하고 출결 판정 시 미참으로 안전 투영한다', async () => {
+  it('출석 기록이 있는 일정은 삭제하지 않고 서버 거부 문구를 보존한다', async () => {
     const targetScheduleId = 'sch_20261001';
-    // 출석 기록이 있는 일정 삭제 시도
-    await service.deleteSchedule(targetScheduleId);
+    await expect(service.deleteSchedule(targetScheduleId)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
 
     const schedule = service.getSchedules().find((s) => s.id === targetScheduleId);
     expect(schedule).toBeDefined();
-    expect(schedule?.isCancelled).toBe(true);
-
-    // 취소된 일정에 대한 출결 판정: 결석이 아닌 '미참'으로 안전 투영 (모수 분모 제외)
-    const reconciliations = service.reconcileAttendance(targetScheduleId);
-    expect(reconciliations.length).toBeGreaterThan(0);
-    expect(reconciliations.every((r) => r.finalStatus === '미참')).toBe(true);
-
-    // restoreSchedule 검증: 다시 복원 시 isCancelled = false
-    await service.restoreSchedule(targetScheduleId);
-    const restored = service.getSchedules().find((s) => s.id === targetScheduleId);
-    expect(restored?.isCancelled).toBe(false);
+    expect(schedule?.isCancelled).toBeFalsy();
   });
 
-  it('forceHardDelete=true 시 출석 기록이 있더라도 일정 목록에서 물리적으로 영구 삭제된다', async () => {
+  it('forceHardDelete=true does not bypass the record guard', async () => {
     const targetScheduleId = 'sch_20261001';
-    // 강제 영구 삭제 호출
-    await service.deleteSchedule(targetScheduleId, true);
+    await expect(service.deleteSchedule(targetScheduleId, true)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
 
     const schedule = service.getSchedules().find((s) => s.id === targetScheduleId);
-    expect(schedule).toBeUndefined();
+    expect(schedule).toBeDefined();
   });
 
   describe('단원용 일정 노출 범위 (visibility)', () => {
@@ -1902,4 +2026,186 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       );
     });
   });
+
+  describe('Practice Catalog & Media Management (P2a-04)', () => {
+    it('refreshPracticeCatalog returns empty catalog in GAS mode without making network requests', async () => {
+      const gasBackend = new GasBackend(() => 'https://script.google.com/test');
+      const gasService = new SheetsService(gasBackend);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      const catalog = await gasService.refreshPracticeCatalog();
+      expect(catalog).toEqual({
+        pieces: [],
+        tracks: [],
+        programPieces: [],
+        performances: [],
+        performancePieces: [],
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('refreshPracticeCatalog updates and caches catalog in Supabase mode', async () => {
+      const supaBackend = new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' });
+      const supaService = new SheetsService(supaBackend);
+
+      vi.spyOn(supaService, 'sendToGoogleSheet').mockResolvedValue({
+        success: true,
+        data: {
+          pieces: [{ id: 'p1', title: '아리랑', isArchived: false, createdAt: '2026-11-20', updatedAt: '2026-11-20' }],
+          tracks: [{ id: 't1', pieceId: 'p1', label: 'MR', kind: 'MR', source: 'r2', orderIndex: 0, isArchived: false, createdAt: '2026-11-20', updatedAt: '2026-11-20' }],
+          programPieces: [{ programId: 'card1', pieceId: 'p1', orderIndex: 0, isArchived: false }],
+        },
+      });
+
+      const catalog = await supaService.refreshPracticeCatalog();
+      expect(catalog.pieces).toHaveLength(1);
+      expect(catalog.pieces[0].title).toBe('아리랑');
+      expect(supaService.getPracticeCatalog().pieces).toHaveLength(1);
+    });
+
+    it('savePracticePiece throws error on failure and does not mutate local catalog', async () => {
+      const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+        success: false,
+        message: '서버 에러',
+      });
+
+      await expect(service.savePracticePiece({ title: '실패할 곡' })).rejects.toThrow('서버 에러');
+      expect(service.getPracticeCatalog().pieces).toHaveLength(0);
+      expect(sendSpy).toHaveBeenCalledWith('SAVE_PRACTICE_PIECE', expect.objectContaining({ title: '실패할 곡' }));
+    });
+
+    it('setPracticePieceArchived and setPracticeTrackArchived send archive actions only and never delete', async () => {
+      const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+
+      // Seed local piece and track
+      await service.savePracticePiece({ id: 'p1', title: '곡1' });
+      await service.savePracticeTrack({ id: 't1', pieceId: 'p1', label: '트랙1' });
+
+      await service.setPracticePieceArchived('p1', true);
+      expect(sendSpy).toHaveBeenCalledWith('SET_PRACTICE_PIECE_ARCHIVED', { id: 'p1', isArchived: true });
+      expect(service.getPracticeCatalog().pieces.find((p) => p.id === 'p1')?.isArchived).toBe(true);
+
+      await service.setPracticeTrackArchived('t1', true);
+      expect(sendSpy).toHaveBeenCalledWith('SET_PRACTICE_TRACK_ARCHIVED', { id: 't1', isArchived: true });
+      expect(service.getPracticeCatalog().tracks.find((t) => t.id === 't1')?.isArchived).toBe(true);
+
+      // Verify no DELETE actions were dispatched
+      const actions = sendSpy.mock.calls.map((c) => c[0]);
+      expect(actions.some((a) => a.includes('DELETE'))).toBe(false);
+    });
+
+    it('setProgramPieces and reorderPracticeTracks update local ordering upon server confirmation', async () => {
+      vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+
+      await service.setProgramPieces('card1', ['p1', 'p2']);
+      const catalog1 = service.getPracticeCatalog();
+      expect(catalog1.programPieces.map((pp) => pp.pieceId)).toEqual(['p1', 'p2']);
+      expect(catalog1.programPieces.map((pp) => pp.orderIndex)).toEqual([0, 1]);
+
+      // Archive p1 by excluding it
+      await service.setProgramPieces('card1', ['p2']);
+      const catalog2 = service.getPracticeCatalog();
+      expect(catalog2.programPieces.find((pp) => pp.pieceId === 'p1')?.isArchived).toBe(true);
+      expect(catalog2.programPieces.find((pp) => pp.pieceId === 'p2')?.isArchived).toBe(false);
+
+      // Reorder tracks
+      await service.savePracticeTrack({ id: 't1', pieceId: 'p2', label: '1번', orderIndex: 0 });
+      await service.savePracticeTrack({ id: 't2', pieceId: 'p2', label: '2번', orderIndex: 1 });
+
+      await service.reorderPracticeTracks('p2', ['t2', 't1']);
+      const tracks = service.getPracticeCatalog().tracks.filter((t) => t.pieceId === 'p2');
+      expect(tracks.find((t) => t.id === 't2')?.orderIndex).toBe(0);
+      expect(tracks.find((t) => t.id === 't1')?.orderIndex).toBe(1);
+    });
+
+    it('reorderPracticeTracks does not change local track order when server returns failure', async () => {
+      vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+      await service.savePracticeTrack({ id: 't1', pieceId: 'p2', label: '1번', orderIndex: 0 });
+      await service.savePracticeTrack({ id: 't2', pieceId: 'p2', label: '2번', orderIndex: 1 });
+
+      // Server rejects due to duplicate tracks or other error
+      vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+        success: false,
+        message: '중복된 트랙이 있습니다.',
+      });
+
+      await expect(service.reorderPracticeTracks('p2', ['t2', 't2'])).rejects.toThrow(
+        '중복된 트랙이 있습니다.'
+      );
+
+      const tracks = service.getPracticeCatalog().tracks.filter((t) => t.pieceId === 'p2');
+      expect(tracks.find((t) => t.id === 't1')?.orderIndex).toBe(0);
+      expect(tracks.find((t) => t.id === 't2')?.orderIndex).toBe(1);
+    });
+
+    it('savePracticePiece passes scoreStorageKey and scoreSizeBytes, savePracticeTrack passes sizeBytes', async () => {
+      const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+
+      await service.savePracticePiece({
+        id: 'p_media',
+        title: '미디어 곡',
+        scoreStorageKey: '2026/score/media1.pdf',
+        scoreSizeBytes: 2048,
+      });
+      expect(sendSpy).toHaveBeenCalledWith(
+        'SAVE_PRACTICE_PIECE',
+        expect.objectContaining({
+          scoreStorageKey: '2026/score/media1.pdf',
+          scoreSizeBytes: 2048,
+        })
+      );
+
+      await service.savePracticeTrack({
+        id: 't_media',
+        pieceId: 'p_media',
+        label: '트랙1',
+        sizeBytes: 10485760,
+      });
+      expect(sendSpy).toHaveBeenCalledWith(
+        'SAVE_PRACTICE_TRACK',
+        expect.objectContaining({
+          sizeBytes: 10485760,
+        })
+      );
+    });
+
+    it('getMediaUsage parses usage stats on Supabase and returns null on gas backend', async () => {
+      const gasBackend = new GasBackend(() => 'https://script.google.com/test');
+      const gasService = new SheetsService(gasBackend);
+      expect(await gasService.getMediaUsage()).toBeNull();
+
+      const supaBackend = new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' });
+      const supaService = new SheetsService(supaBackend);
+      vi.spyOn(supaService, 'sendToGoogleSheet').mockResolvedValue({
+        success: true,
+        data: {
+          tracksBytes: 5000000,
+          scoresBytes: 2000000,
+          totalBytes: 7000000,
+        },
+      });
+
+      const usage = await supaService.getMediaUsage();
+      expect(usage).toEqual({
+        tracksBytes: 5000000,
+        scoresBytes: 2000000,
+        totalBytes: 7000000,
+      });
+    });
+
+    it('savePerformance, setPerformanceArchived and setPerformancePieces delegate to sendToGoogleSheet', async () => {
+      const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true, data: { id: 'perf_1' } });
+
+      const res = await service.savePerformance({ title: '정기공연' });
+      expect(res).toEqual({ success: true, id: 'perf_1' });
+      expect(sendSpy).toHaveBeenCalledWith('SAVE_PERFORMANCE', { title: '정기공연' });
+
+      await service.setPerformanceArchived('perf_1', true);
+      expect(sendSpy).toHaveBeenCalledWith('SET_PERFORMANCE_ARCHIVED', { performanceId: 'perf_1', archived: true });
+
+      await service.setPerformancePieces('perf_1', ['p1', 'p2']);
+      expect(sendSpy).toHaveBeenCalledWith('SET_PERFORMANCE_PIECES', { performanceId: 'perf_1', pieceIds: ['p1', 'p2'] });
+    });
+  });
 });
+

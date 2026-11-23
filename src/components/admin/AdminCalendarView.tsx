@@ -7,6 +7,7 @@ import { ScheduleRsvpLogModal } from './ScheduleRsvpLogModal';
 export interface AdminCalendarViewProps {
   /** 일정별 댓글 개수 (있으면 일정 줄에 `댓글 N` 배지를 보인다) */
   commentCounts?: Map<string, number>;
+  hasScheduleRecords: (scheduleId: string) => boolean;
   members?: Member[];
   adminCalYear: number;
   adminCalMonth: number;
@@ -32,6 +33,7 @@ export interface AdminCalendarViewProps {
 
 export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
   commentCounts,
+  hasScheduleRecords,
   members = [],
   adminCalYear,
   adminCalMonth,
@@ -279,7 +281,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                             복원
                           </button>
                         )}
-                        {onDeleteScheduleSingle && (
+                        {onDeleteScheduleSingle && !hasScheduleRecords(sch.id) && (
                           <button
                             type="button"
                             onClick={() => {

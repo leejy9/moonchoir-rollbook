@@ -1,121 +1,80 @@
 import React from 'react';
-import type {
-  AttendanceReconciliation,
-  Member,
-  RSVPVote,
-  RawAttendanceLog,
-  Schedule,
-} from '../../types/rollbook';
-import { getKSTClock } from '../../utils/date';
-import type { CheckInWindowState } from '../../utils/timeWindow';
+import type { Schedule } from '../../types/rollbook';
+import type { TodayCtaState } from '../../utils/todayCta';
+import { buildKakaoMapLink } from '../../utils/kakaoMaps';
 import { IconClock, IconLocation, IconQrScan, IconVote } from '../Icons';
-import { LiquidGauge } from '../LiquidGauge';
-import { HomeRsvpTallySection } from './HomeRsvpTallySection';
-import { ScheduleComments } from './ScheduleComments';
 
-interface HomeActiveScheduleCardProps {
-  /** 댓글을 쓰는 단원(현재 로그인한 단원) */
-  commentAuthor: Pick<Member, 'id' | 'name' | 'part'>;
-  activeSchedule: Schedule;
-  activeDateSchedules: Schedule[];
-  activeScheduleIndex: number;
+export interface HomeActiveScheduleCardProps {
+  schedule: Schedule;
+  schedulesCount: number;
+  scheduleIndex: number;
   todayStr: string;
-  selectedDateStr: string;
-  homeViewTab: 'CALENDAR' | 'LIST';
-  isTargetMember: boolean;
-  attendRate: number;
-  isActuallyAttended: boolean;
-  isManuallyAbsent: boolean;
-  myReconciliation: AttendanceReconciliation | null;
-  myLog?: RawAttendanceLog;
-  myVote?: RSVPVote;
-  windowState: CheckInWindowState | null;
-  mandatoryAttendees: RSVPVote[];
-  onSiteAttendees: Member[];
-  mandatoryAbsentees: RSVPVote[];
-  voluntaryAttendees: RSVPVote[];
-  unvotedMembers: Member[];
-  totalTargetCount: number;
-  isRosterOpen: boolean;
-  onToggleRoster: () => void;
-  onPrevSchedule: () => void;
-  onNextSchedule: () => void;
-  onSelectScheduleId: (scheduleId: string) => void;
-  onTouchStart: (e: React.TouchEvent) => void;
-  onTouchEnd: (e: React.TouchEvent) => void;
-  onOpenQRScanner: (schedule?: Schedule) => void;
+  isToday: boolean;
+  dDay?: number;
+  isRequired: boolean;
+  cta: TodayCtaState;
+  checkedInCount?: number;
+  checkedInTimeStr?: string;
+  onPrevSchedule?: () => void;
+  onNextSchedule?: () => void;
+  onOpenQRScanner: (scheduleId: string) => void;
   onOpenRSVP: (schedule: Schedule) => void;
+  onOpenDetail?: (schedule: Schedule) => void;
 }
 
 export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
-  commentAuthor,
-  activeSchedule,
-  activeDateSchedules,
-  activeScheduleIndex,
-  todayStr,
-  selectedDateStr,
-  homeViewTab,
-  isTargetMember,
-  attendRate,
-  isActuallyAttended,
-  isManuallyAbsent,
-  myReconciliation,
-  myLog,
-  myVote,
-  windowState,
-  mandatoryAttendees,
-  onSiteAttendees,
-  mandatoryAbsentees,
-  voluntaryAttendees,
-  unvotedMembers,
-  totalTargetCount,
-  isRosterOpen,
-  onToggleRoster,
+  schedule,
+  schedulesCount,
+  scheduleIndex,
+  isToday,
+  dDay,
+  isRequired,
+  cta,
+  checkedInCount,
+  checkedInTimeStr,
   onPrevSchedule,
   onNextSchedule,
-  onSelectScheduleId,
-  onTouchStart,
-  onTouchEnd,
   onOpenQRScanner,
   onOpenRSVP,
+  onOpenDetail,
 }) => {
+  const kakaoMapLink = buildKakaoMapLink({
+    name: schedule.locationName,
+    lat: schedule.targetLat,
+    lon: schedule.targetLon,
+  });
+
   return (
-    <section
-      className="active-schedule-card"
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
-    >
+    <section className="active-schedule-card">
       {/* Multi-Schedule Carousel Switcher (Rendered only when 2+ schedules exist) */}
-      {activeDateSchedules.length > 1 && (
+      {schedulesCount > 1 && (
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: '#F8FAFC',
-            border: '1px solid #E2E8F0',
-            borderRadius: '10px',
-            padding: '6px 12px',
-            marginBottom: '14px',
+            background: 'var(--bg-subtle)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)',
+            padding: '8px 12px',
           }}
         >
           <button
             type="button"
             onClick={onPrevSchedule}
             style={{
-              background: '#FFFFFF',
-              border: '1px solid #CBD5E1',
-              borderRadius: '6px',
-              width: '32px',
-              height: '32px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)',
+              minWidth: '44px',
+              minHeight: '44px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: 800,
-              color: '#475569',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+              fontSize: '14px',
+              fontWeight: 700,
+              color: 'var(--text-sub)',
             }}
             title="이전 일정 보기"
             aria-label="이전 일정 보기"
@@ -123,27 +82,23 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
             ◀
           </button>
 
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B' }}>
-              {activeSchedule.date === todayStr ? '오늘' : activeSchedule.date} 일정 {activeScheduleIndex + 1}/
-              {activeDateSchedules.length}
-              <span style={{ color: '#4F46E5', marginLeft: '6px' }}>({activeSchedule.startTime})</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
+              {isToday ? '오늘' : schedule.date} 일정 {scheduleIndex + 1}/{schedulesCount}
+              <span style={{ color: 'var(--brand-primary)', marginLeft: '6px' }}>({schedule.startTime})</span>
             </span>
-            {/* Dot Indicators */}
-            <div style={{ display: 'flex', gap: '5px' }}>
-              {activeDateSchedules.map((sch, i) => (
+            {/* Dot Indicators (Decorative aria-hidden) */}
+            <div style={{ display: 'flex', gap: '5px' }} aria-hidden="true">
+              {Array.from({ length: schedulesCount }).map((_, i) => (
                 <span
-                  key={sch.id}
-                  onClick={() => onSelectScheduleId(sch.id)}
+                  key={i}
                   style={{
-                    width: i === activeScheduleIndex ? '16px' : '6px',
+                    width: i === scheduleIndex ? '16px' : '6px',
                     height: '6px',
                     borderRadius: '3px',
-                    background: i === activeScheduleIndex ? '#4F46E5' : '#CBD5E1',
-                    cursor: 'pointer',
+                    background: i === scheduleIndex ? 'var(--brand-primary)' : 'var(--border-subtle)',
                     transition: 'all 0.2s ease',
                   }}
-                  title={`${sch.title} (${sch.startTime})`}
                 />
               ))}
             </div>
@@ -153,19 +108,18 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
             type="button"
             onClick={onNextSchedule}
             style={{
-              background: '#FFFFFF',
-              border: '1px solid #CBD5E1',
-              borderRadius: '6px',
-              width: '32px',
-              height: '32px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)',
+              minWidth: '44px',
+              minHeight: '44px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: 800,
-              color: '#475569',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+              fontSize: '14px',
+              fontWeight: 700,
+              color: 'var(--text-sub)',
             }}
             title="다음 일정 보기"
             aria-label="다음 일정 보기"
@@ -175,259 +129,194 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
         </div>
       )}
 
-      <div
-        className="schedule-card-header"
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-      >
+      {/* Card Header: Category Badge + Requirement Badge + Date Badge */}
+      <div className="schedule-card-header">
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="schedule-category-badge">{activeSchedule.category}</span>
-          {!isTargetMember && (
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                color: '#047857',
-                background: '#ECFDF5',
-                border: '1px solid #A7F3D0',
-                padding: '2px 8px',
-                borderRadius: '999px',
-              }}
-            >
-              🌿 자율 참여 연습
-            </span>
-          )}
-          <span className={`schedule-date-badge ${activeSchedule.date === todayStr ? 'is-today' : ''}`}>
-            {activeSchedule.date === todayStr ? '오늘 연습' : activeSchedule.date}
+          <span className="schedule-category-badge">{schedule.category}</span>
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              color: isRequired ? 'var(--brand-primary)' : 'var(--status-success)',
+              background: isRequired ? 'var(--brand-primary-light)' : 'var(--status-success-light)',
+              border: `1px solid ${isRequired ? 'var(--brand-primary)' : 'var(--status-success)'}`,
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-full)',
+            }}
+          >
+            {isRequired ? '필참' : '자율 참여'}
           </span>
-          {homeViewTab === 'CALENDAR' && activeSchedule.date === selectedDateStr && (
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                color: '#4f46e5',
-                background: '#e0e7ff',
-                padding: '2px 8px',
-                borderRadius: '999px',
-              }}
-            >
-              선택한 날짜
-            </span>
-          )}
+          <span className={`schedule-date-badge ${isToday ? 'is-today' : ''}`}>
+            {dDay !== undefined && dDay > 0
+              ? `D-${dDay}`
+              : isToday
+              ? '오늘 연습'
+              : schedule.date}
+          </span>
         </div>
-        {/* Cute Liquid Wave Gauge (MYTURN Style) */}
-        <LiquidGauge percentage={attendRate} size={44} subText="참석" />
       </div>
 
-      <h2 className="schedule-card-title">{activeSchedule.title}</h2>
+      {/* Schedule Title */}
+      <h2 className="schedule-card-title">{schedule.title}</h2>
 
+      {/* Info: Time & Location with Kakao Maps Link */}
       <div className="schedule-info-grid">
         <div className="info-item">
           <span className="info-icon" aria-hidden="true">
             <IconClock size={16} />
           </span>
           <span className="info-text">
-            {activeSchedule.startTime} ~ {activeSchedule.endTime}
+            {schedule.startTime} ~ {schedule.endTime}
           </span>
         </div>
         <div className="info-item">
           <span className="info-icon" aria-hidden="true">
             <IconLocation size={16} />
           </span>
-          <span className="info-text">{activeSchedule.locationName}</span>
+          <span className="info-text">
+            {kakaoMapLink ? (
+              <a
+                href={kakaoMapLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: 'var(--brand-primary)',
+                  textDecoration: 'underline',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {schedule.locationName}
+              </a>
+            ) : (
+              schedule.locationName || '장소 미정'
+            )}
+          </span>
         </div>
       </div>
 
-      {activeSchedule.description && <p className="schedule-desc-box">{activeSchedule.description}</p>}
-
-      {/* Non-target member gentle notice banner */}
-      {!isTargetMember && (
-        <div
+      {/* Clamped Description (max 2 lines) */}
+      {schedule.description && (
+        <p
+          className="schedule-desc-box schedule-desc-clamped"
           style={{
-            background: '#F0FDF4',
-            border: '1px solid #BBF7D0',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            margin: '12px 0 4px',
-            fontSize: '12.5px',
-            color: '#166534',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            margin: '0',
           }}
         >
-          <span style={{ fontSize: '16px' }}>🌿</span>
-          <div>
-            <strong>필참 일정이 아닙니다.</strong>
-            <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: '#15803D' }}>
-              참관·개인 연습으로 참여할 수 있어요.
-            </p>
-          </div>
+          {schedule.description}
+        </p>
+      )}
+
+      {/* Attendance Count Line (rendered when check-in window opens) */}
+      {checkedInCount !== undefined && (
+        <div
+          className="checked-in-summary"
+          style={{
+            fontSize: '13px',
+            fontWeight: 600,
+            color: 'var(--text-sub)',
+            padding: '2px 0',
+          }}
+        >
+          현재 {checkedInCount}명 출석{checkedInTimeStr ? ` (${checkedInTimeStr} 기준)` : ''}
         </div>
       )}
 
-      {/* User's Check-in & RSVP Status Banner */}
-      {isActuallyAttended ? (
-        <div className={`my-status-banner checked-in ${myReconciliation?.finalStatus === '지각' ? 'late' : ''}`}>
-          <span className={`status-indicator-dot ${myReconciliation?.finalStatus === '지각' ? 'late' : 'checked'}`} />
-          <div>
-            <strong>
-              {myReconciliation?.finalStatus === '지각' ? '오늘 출석 (지각)' : '오늘 출석 체크 완료'}
-            </strong>
-            <p className="banner-subtext">
-              인증 시각:{' '}
-              {getKSTClock(myReconciliation?.checkInTime || myLog?.timestamp)}{' '}
-              ·{' '}
-              {myReconciliation?.authMethod === 'MANUAL_BY_ADMIN'
-                ? myReconciliation.adminNote || '관리자 수동 인정'
-                : myReconciliation?.isVerifiedLocation
-                ? '연습실 위치 확인됨'
-                : 'GPS 오차 범위'}
-            </p>
-          </div>
-        </div>
-      ) : isManuallyAbsent ? (
-        <div className="my-status-banner absent" style={{ background: '#fef2f2', borderColor: '#fca5a5' }}>
-          <span className="status-indicator-dot absent" />
-          <div>
-            <strong style={{ color: '#b91c1c' }}>관리자 확인: 결석 처리</strong>
-            <p className="banner-subtext" style={{ color: '#ef4444' }}>
-              {myReconciliation?.adminNote || '관리자에 의해 결석으로 처리되었습니다.'}
-            </p>
-          </div>
-        </div>
-      ) : windowState?.status === 'WINDOW_CLOSED' &&
-        myReconciliation?.finalStatus === '결석' &&
-        isTargetMember ? (
-        <div className="my-status-banner absent" style={{ background: '#f8fafc', borderColor: '#cbd5e1' }}>
-          <span className="status-indicator-dot" style={{ background: '#94a3b8' }} />
-          <div>
-            <strong style={{ color: '#475569' }}>출석 마감: 미출석 (일반 결석)</strong>
-            <p className="banner-subtext" style={{ color: '#64748b' }}>
-              공식 출석 시간이 종료되어 미출석으로 기록되었습니다.
-            </p>
-          </div>
-        </div>
-      ) : myVote ? (
-        <div className={`my-status-banner voted ${myVote.status.toLowerCase()}`}>
-          <span className={`status-indicator-dot ${myVote.status === 'ATTEND' ? 'attend' : 'absent'}`} />
-          <div>
-            <strong>사전 투표: {myVote.status === 'ATTEND' ? '참석 예정' : '불참'}</strong>
-            {myVote.reason && <p className="banner-subtext">사유: {myVote.reason}</p>}
-          </div>
-        </div>
-      ) : null}
-
-      {/* Action Buttons: Time Window Driven */}
+      {/* CTA Section */}
       <div className="action-buttons-stack">
-        {windowState?.isOpen ? (
-          <>
+        {cta.isButton ? (
+          cta.kind === 'CHECKIN_OPEN' ? (
             <button
               type="button"
               className="btn-qr-scan-primary"
-              onClick={() => onOpenQRScanner(activeSchedule)}
+              style={{ minHeight: '44px' }}
+              onClick={() => onOpenQRScanner(schedule.id)}
             >
-              <IconQrScan size={22} className="btn-icon" />
+              <IconQrScan size={20} className="btn-icon" />
               <div className="btn-text-block">
-                <span className="btn-main-label">
-                  {isActuallyAttended
-                    ? '다시 출석 체크하기'
-                    : !isTargetMember
-                    ? '개인 연습 출석 체크'
-                    : 'QR 출석 체크'}
-                </span>
+                <span className="btn-main-label">{cta.label}</span>
               </div>
             </button>
-
-            <div className="qr-locked-card" style={{ padding: '10px 14px', background: '#F8FAFC' }}>
-              <div className="qr-locked-info">
-                <span className="qr-lock-icon">🔒</span>
-                <div>
-                  <div className="qr-locked-title">사전 투표 마감</div>
-                  <div className="qr-locked-desc">
-                    {myVote
-                      ? `현재: ${myVote.status === 'ATTEND' ? '참석' : '불참'}`
-                      : '현장 QR/PIN 출석 가능'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        ) : windowState?.status === 'WINDOW_CLOSED' ? (
-          /* Concluded Schedule: Closed State */
-          <div className="qr-locked-card window-closed" style={{ borderLeft: '4px solid #94A3B8' }}>
-            <div className="qr-locked-info">
-              <span className="qr-lock-icon">🏁</span>
-              <div>
-                <div className="qr-locked-title">출석 마감 ({activeSchedule.date} 일정 종료)</div>
-                <div className="qr-locked-desc">
-                  {isActuallyAttended && myReconciliation?.checkInTime
-                    ? `출석 완료 (${getKSTClock(myReconciliation.checkInTime)}) · 정상 반영되었습니다.`
-                    : isManuallyAbsent
-                    ? `관리자에 의해 결석 처리되었습니다 (${myReconciliation?.adminNote || '관리자 결석'}).`
-                    : myReconciliation?.finalStatus === '사유결석'
-                    ? `사전 불참 사유가 등록되어 사유결석 처리되었습니다 (${
-                        myReconciliation?.rsvpReason || '사유 불참'
-                      }).`
-                    : !isTargetMember
-                    ? '공식 필참 대상이 아니므로 출결 통계 모수에서 제외되었습니다 (미참).'
-                    : '금일 연습의 공식 출석 체크가 마감되었습니다 (미출석).'}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* Default Primary Action: RSVP Pre-voting */}
+          ) : cta.kind === 'RSVP_NEW' || cta.kind === 'RSVP_EDIT' ? (
             <button
               type="button"
               className="btn-rsvp-primary"
-              onClick={() => onOpenRSVP(activeSchedule)}
+              style={{ minHeight: '44px' }}
+              onClick={() => onOpenRSVP(schedule)}
             >
-              <IconVote size={22} className="btn-icon" />
+              <IconVote size={20} className="btn-icon" />
               <div className="btn-text-block">
-                <span className="btn-main-label">
-                  {!isTargetMember
-                    ? myVote
-                      ? '투표 수정'
-                      : '투표하기'
-                    : myVote
-                      ? '투표 수정'
-                      : '투표하기'}
-                </span>
-                {myVote && (
-                  <span className="btn-sub-label">
-                    현재: {myVote.status === 'ATTEND' ? '참석' : '불참'}
-                  </span>
-                )}
+                <span className="btn-main-label">{cta.label}</span>
               </div>
             </button>
-
-            {/* Subordinate Locked QR Check-in Notice */}
-            <div className="qr-locked-card">
-              <div className="qr-locked-info">
-                <span className="qr-lock-icon">🔒</span>
-                <div>
-                  <div className="qr-locked-title">현장 QR 출석</div>
-                  <div className="qr-locked-desc">{windowState?.message}</div>
-                </div>
-              </div>
+          ) : (
+            /* OFFLINE */
+            <button
+              type="button"
+              className="btn-qr-scan-primary"
+              style={{
+                minHeight: '44px',
+                opacity: 0.6,
+                cursor: 'not-allowed',
+                background: 'var(--bg-subtle)',
+                color: 'var(--text-muted)',
+              }}
+              disabled
+            >
+              <span className="btn-main-label">{cta.label}</span>
+            </button>
+          )
+        ) : (
+          /* Non-button Status Text: ATTENDED, LATE, MANUAL_OK, MANUAL_ABSENT, EXCUSED, CLOSED_ABSENT, CLOSED_EXEMPT, CANCELLED */
+          <div
+            className={`my-status-banner ${
+              cta.kind === 'ATTENDED' || cta.kind === 'LATE' || cta.kind === 'MANUAL_OK'
+                ? 'checked-in'
+                : 'absent'
+            }`}
+            style={{ minHeight: '44px' }}
+          >
+            <span
+              className={`status-indicator-dot ${
+                cta.kind === 'ATTENDED' || cta.kind === 'MANUAL_OK'
+                  ? 'checked'
+                  : cta.kind === 'LATE'
+                  ? 'late'
+                  : 'absent'
+              }`}
+            />
+            <div>
+              <strong>{cta.label}</strong>
             </div>
-          </>
+          </div>
         )}
       </div>
 
-      {/* Realtime Attendance / RSVP Tally Bar */}
-      <HomeRsvpTallySection
-        mandatoryAttendees={mandatoryAttendees}
-        onSiteAttendees={onSiteAttendees}
-        mandatoryAbsentees={mandatoryAbsentees}
-        voluntaryAttendees={voluntaryAttendees}
-        unvotedMembers={unvotedMembers}
-        totalTargetCount={totalTargetCount}
-        isRosterOpen={isRosterOpen}
-        onToggleRoster={onToggleRoster}
-        footer={<ScheduleComments key={activeSchedule.id} scheduleId={activeSchedule.id} author={commentAuthor} />}
-      />
+      {/* Detail View Button */}
+      <button
+        type="button"
+        className="btn-detail-view"
+        style={{
+          minHeight: '44px',
+          width: '100%',
+          padding: '10px 14px',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--border-subtle)',
+          background: 'var(--bg-subtle)',
+          color: 'var(--text-main)',
+          fontSize: '14px',
+          fontWeight: 600,
+          cursor: 'pointer',
+          textAlign: 'center',
+          boxSizing: 'border-box',
+        }}
+        onClick={() => onOpenDetail?.(schedule)}
+      >
+        상세 보기
+      </button>
     </section>
   );
 };

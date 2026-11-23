@@ -1,4 +1,5 @@
-import type { Member, RSVPVote } from '../types/rollbook';
+import type { AttendanceReconciliation, Member, RSVPVote } from '../types/rollbook';
+import { resolveMemberIdentity } from './memberIdentity';
 
 export interface RsvpTallyInput {
   /** 이 일정의 출결 의무 대상 단원 */
@@ -52,3 +53,41 @@ export function buildRsvpTally({ targetMembers, votes, attendedMemberIds }: Rsvp
     attendTotal: votedAttendees.length + onSiteAttendees.length,
   };
 }
+
+/**
+ * 확정 판정(reconcileAttendance) 목록에서 출석·지각·운영진 인정인 대표 단원 ID 수를 계산합니다.
+ * - 병합된 단원 ID(mergedIntoId 체인)는 최상위 대표 ID로 합쳐 중복을 방지합니다.
+ * - 출결 취소(isAttendanceCleared) 상태는 제외합니다.
+ */
+export function countCheckedIn(
+  reconciled: AttendanceReconciliation[],
+  members: Member[]
+): number {
+  const canonicalByMemberId = new Map<string, string>();
+  const getCanonicalId = (id: string): string => {
+    const cached = canonicalByMemberId.get(id);
+    if (cached) return cached;
+
+    const identity = resolveMemberIdentity(id, members);
+    for (const aliasId of identity.aliasIds) {
+      canonicalByMemberId.set(aliasId, identity.canonicalId);
+    }
+    return identity.canonicalId;
+  };
+
+  const checkedInCanonicalIds = new Set<string>();
+
+  for (const rec of reconciled) {
+    if (rec.isAttendanceCleared) continue;
+    if (
+      rec.finalStatus === '출석' ||
+      rec.finalStatus === '지각' ||
+      rec.finalStatus === '수동인정'
+    ) {
+      checkedInCanonicalIds.add(getCanonicalId(rec.memberId));
+    }
+  }
+
+  return checkedInCanonicalIds.size;
+}
+

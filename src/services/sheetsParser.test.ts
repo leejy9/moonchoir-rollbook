@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseRemoteCommentEvents, parseRemoteMembers, parseRemoteSchedules } from './sheetsParser';
+import {
+  parseRemoteCommentEvents,
+  parseRemoteMembers,
+  parseRemoteSchedules,
+} from './sheetsParser';
 
 const baseSchedule = {
     title: '경찰의날 녹음',

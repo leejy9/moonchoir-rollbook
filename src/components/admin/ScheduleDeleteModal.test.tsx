@@ -20,6 +20,7 @@ describe('ScheduleDeleteModal Component', () => {
         scheduleToDelete={null}
         schedules={[mockSchedule]}
         programCards={[]}
+        hasScheduleRecords={() => false}
         forceHardDeleteSelected={false}
         setForceHardDeleteSelected={vi.fn()}
         onClose={vi.fn()}
@@ -36,6 +37,7 @@ describe('ScheduleDeleteModal Component', () => {
         scheduleToDelete={mockSchedule}
         schedules={[mockSchedule]}
         programCards={[]}
+        hasScheduleRecords={() => false}
         forceHardDeleteSelected={false}
         setForceHardDeleteSelected={vi.fn()}
         onClose={vi.fn()}
@@ -47,6 +49,7 @@ describe('ScheduleDeleteModal Component', () => {
     expect(html).toContain('일정 삭제 확인');
     expect(html).toContain('2026-10-18');
     expect(html).toContain('중앙 연습실');
+    expect(html).toContain('💥 영구 삭제');
   });
 
   it('renders repeating series options when companions exist', () => {
@@ -65,6 +68,7 @@ describe('ScheduleDeleteModal Component', () => {
         scheduleToDelete={mockSchedule}
         schedules={[mockSchedule, companionSchedule]}
         programCards={[]}
+        hasScheduleRecords={() => false}
         forceHardDeleteSelected={false}
         setForceHardDeleteSelected={vi.fn()}
         onClose={vi.fn()}
@@ -76,5 +80,28 @@ describe('ScheduleDeleteModal Component', () => {
     expect(html).toContain('이 회차만 삭제');
     expect(html).toContain('오늘 포함 이후 회차 일괄 삭제');
     expect(html).toContain('회차 모두 삭제');
+  });
+
+  it('hides permanent deletion when any schedule in the series has local records', () => {
+    const companionSchedule: Schedule = {
+      ...mockSchedule,
+      id: 'sch-2',
+      date: '2026-10-25',
+    };
+    const html = renderToString(
+      <ScheduleDeleteModal
+        scheduleToDelete={mockSchedule}
+        schedules={[mockSchedule, companionSchedule]}
+        programCards={[]}
+        hasScheduleRecords={(id) => id === companionSchedule.id}
+        forceHardDeleteSelected={false}
+        setForceHardDeleteSelected={vi.fn()}
+        onClose={vi.fn()}
+        onDeleteSingle={vi.fn()}
+        onDeleteSeries={vi.fn()}
+      />
+    );
+
+    expect(html).not.toContain('💥 영구 삭제</span>');
   });
 });

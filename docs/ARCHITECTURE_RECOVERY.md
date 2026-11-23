@@ -17,9 +17,11 @@ The complete phased plan, owner decision gates, and acceptance checks are in [Ar
 - **Production function contamination restored (2026-11-21):** Hand-written SQL relayed by the implementation agent (not the committed migration files) had been applied to production: `fn_reorder_practice_tracks` and `fn_unbind_member_device` were overwritten with versions calling a non-existent `fn_verify_admin_session()` and missing columns, and three functions that never existed in the repository were created (`fn_delete_practice_program_card`, `fn_reorder_practice_program_pieces`, a zero-argument `fn_get_practice_catalog()`). All failed before writing, so no data changed. The reviewer applied `20261122030000_drop_stray_catalog_functions.sql` and re-applied `20261122010000_review_followups.sql` verbatim, then verified that no stray or broken function remains and all token checks hold. Owner-confirmed rule: production SQL comes only from committed migration files, applied and verified by the reviewer through the Supabase connector; the implementation agent never runs SQL or asks the owner to.
 - **Super admin PIN save fix (2026-11-21, applied by the owner and verified):** Saving the super admin PIN reported success but did not change the login PIN: the production `fn_save_config__impl` was the older version that routed `superAdminPin` to the public `app_config` table (readable through `fn_get_initial_snapshot`) instead of `app_secrets`. `supabase/migrations/20261122020000_fix_save_config_secret_routing.sql` routes all four secret keys to `app_secrets`, deletes leaked secret keys from `app_config`, and adds a trigger that rejects secret keys in `app_config`. Any super admin PIN typed before the fix was publicly readable; set a new value that was never tried.
 - **Admin PIN length confirmed (2026-11-21):** Staff and super admin PINs stay 6-8 digits. The previously published 4-digit values must never be reused.
+- **2026-11 코드 리뷰 후속 수정(C2~C16) 완료 (2026-11-21):** 관리자 PIN 6~8자리 유지 확정, 비상 캐시 초기화는 데이터 캐시만 삭제.
 - **On-site PIN hotfix (2026-11-21):** The hardening migration read the on-site PIN from `inputPin`, but the client sends `checkInPin`; with the new empty-PIN rejection every `MANUAL_PIN` check-in failed in production. `supabase/migrations/20261121010000_fix_onsite_pin_payload_key.sql` reads `checkInPin` first (then `inputPin`) and clears the on-site failure counters. Applied to the production database by the owner on 2026-11-21.
 - **Verified security defects (2026-11-20, fixed in code by the hardening above; live until deployed):** With the public anon key, `fn_get_admin_secrets` returns all PINs, `fn_save_config` can overwrite them (`supabase/migrations/20261120000000_super_admin.sql`), and `fn_import_sheets_snapshot` can truncate every table including append-only attendance logs, bypassing the row-level protection triggers (`supabase/migrations/20261119000002_migration_function.sql`). Other admin write RPCs are also callable by anyone because admin status is only a browser-side timer. PIN values also appear in plain text in `docs/plans/1120_admin.md`. No Supabase-to-Sheets backup path exists in the code.
 - **Target-Only Schedule Visibility Rule Confirmed (2026-11-19):** For schedules marked `visibility: 'TARGETS_ONLY'`, non-target members are excluded from Home, Calendar, and Profile views. A non-target member only sees the schedule if they hold an actual confirmed attendance/late record (`reconciled.finalStatus === '출석' || '지각'`) to protect personal attendance history. Mere presence of raw, unconfirmed, or cleared logs (`[ATTENDANCE_CLEARED]`) does NOT expose target-only schedules.
+- **Member UX Revamp: Home Calendar Removal & Separate Calendar Tab Reversion (2026-11-20):** Reverts the previous decision (Task 16 / Plan 04) that embedded the calendar directly on the home screen. On rehearsal days, the primary task of the home screen is rapid on-site check-in within seconds. Having the full calendar grid on home forced critical check-in CTAs and today's schedule below the fold. The calendar is now promoted to a dedicated '일정' tab (`CalendarTab` + `MonthCalendarGrid`), keeping the '오늘' tab (`TodayTab`) lightweight, focused, and immediately actionable without scrolling. Legacy `CalendarView.tsx` (which had a hardcoded starting month and duplicate matching logic) was completely deleted in favor of `CalendarTab` and bottom sheet `ScheduleDetailSheet`.
 - Browser storage may cache data for display and temporarily hold writes that cannot yet reach the spreadsheet. It is not a second official record.
 - A write is not complete until the spreadsheet confirms it. The UI must distinguish saving, confirmed, and failed/pending states.
 - A check-in is not official attendance until the spreadsheet confirms it. If the same check-in is retried, it must retain the same unique ID so retries do not create duplicate records.
@@ -372,6 +374,35 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 - 적용 후 확인: 삭제 함수 3개 생성, 트리거 함수에 트랜잭션 한정 우회 조건 반영, 토큰 없는 삭제는 `ADMIN_AUTH_REQUIRED`, 기존 데이터(곡 5, 트랙 2, 시즌 카드 연결 1) 그대로. 로컬 검증에서 함수 밖 직접 삭제는 계속 거부됨을 확인.
 - 참고: 우회 설정은 같은 트랜잭션 안에서는 함수가 끝난 뒤에도 남는다. PostgREST는 요청마다 트랜잭션이 따로라 실제 노출은 없음.
 
+## 2026-11-23 — 단원 UX v3 아키텍처 (v3-A, V3-01 ~ V3-19)
+
+- **바뀐 탭 구조:**
+  - 단원 화면 3개 탭: `home`(홈 — 주간/월간 캘린더 통합), `studio`(연습실 — 공연 드롭다운, 곡 목록, 곡 상세 읽기 전용, 인앱 악보 뷰어, 미니/전체화면 플레이어 v2), `profile`(내 활동 — 활동 기록, 출석률, 스티커 보드, 설정).
+  - 기존 `TodayTab`, `CalendarTab`은 `HomeTab`으로 통합되어 폐기됨.
+  - 전역 오디오 플레이어: `AudioPlayerProvider` 단일 오디오 인스턴스, `MiniPlayer` 고정 바, `FullPlayer` 전폭 오버레이, `QueueSheet`, `SpeedSheet`, YouTube 임베드 `VideoStage`.
+- **새 테이블 (2개):**
+  - `performances`: 공연 기본 정보 (`id`, `title`, `performance_date`(빈 값 또는 `YYYY-MM-DD`), `venue`, `archived_at`, `created_at`, `updated_at`).
+  - `practice_performance_pieces`: 공연과 연습곡의 N:M 연결 및 정렬 순서 (`performance_id`, `piece_id`, `order_index`, `archived_at`, `created_at`; 삭제 규칙 양쪽 `on delete restrict`).
+  - 기존 시즌 카드(`program_cards`)와 연습곡 연결(`practice_program_pieces`)은 일정용으로 유지하되, 연습곡 관리 UI는 "공연" 기준으로 전환됨.
+- **업로드 경로:**
+  - Cloudflare Worker (`POST /upload`): `X-Admin-Token` 헤더의 관리자 세션 토큰을 Worker가 `fn_authorize_media_upload` RPC로 확인한 뒤 R2에 저장(Worker에는 anon 키만 있음, service_role 키 없음) (`mediaPublicBaseUrl` 연동).
+  - 클라이언트 다중 파일 일괄 업로드 (`MediaBatchList`, `uploadBatch.ts`): 한 번에 하나씩 처리하는 큐, 업로드 전 기기에서 `mediabunny`로 m4a(64kbps) 압축(운영진 화면에서만 동적 import).
+- **알려진 한계 (§0-3):**
+  - "본인만 보기"는 화면 수준이다. 단원 본인 인증(Task 76)이 이번 범위 밖이므로 출석·투표 원천 데이터는 전원분을 수신하며, 열정 온도와 스티커는 타인 화면에 그리지 않는 방식으로 보호한다.
+  - 업로드는 앱(탭)이 열려 있는 동안에만 진행되며, 탭을 닫으면 중단되고 재개 시 미완료 항목을 안내한다.
+  - 숨겨진 iframe으로 유튜브 백그라운드 재생은 지원하지 않으며, 플레이어를 내리면 비디오 플레이어가 파괴되고 저장 위치부터 복구된다.
+
+## 2026-11-23 — 활동 기록 및 게이미피케이션 엔진 (v3-C, V3-07 ~ V3-13)
+
+- **새 테이블 및 함수:**
+  - `rsvp_events`: 투표 변경 이력(Event Sourcing). 트리거 `trg_rsvp_votes_log`로 투표 생성·수정·삭제를 자동 기록하며, `trg_rsvp_events_no_update_delete`로 수정 및 삭제를 원천 차단함. 백필(`action = 'backfill'`) 행은 활동 통계에서 제외됨(V27).
+  - `practice_listen_sessions`: 실시간 청취 세션 원천 로그. 호출당 120초 상한 clamp, 1인 일일 21,600초(6시간) 상한 적용. `trg_practice_listen_sessions_no_update`로 수정 불가.
+  - RPC: `fn_log_listen_session` (음원 청취 기록), `fn_get_member_activity` (병합 회원 기준 투표 이벤트 및 청취 통계 집계).
+- **열정 온도 엔진 (`src/utils/passionTemperature.ts`):**
+  - 36.5°C 기본값, 최근 12회차 연습 윈도우 기준, 출석(정시/일찍/지각/결석/연속)/약속(24h전 투표, 지킴률, 노쇼, 직전변경)/공연 출석 델타 반영. 34.0~42.0°C 범위 클램프 및 1주 전 기준 주간 변화율(▲/▼/—) 산출.
+- **칭찬 스티커 엔진 (`src/utils/praiseStickers.ts`):**
+  - 24종 스티커 (꾸준함 6, 시간 약속 5, 약속 4, 연습실 5, 무대 4), 스태프는 8종 한정(V26, 분모 8).
+  - KST 기준 일자 계산, `SEEN_STICKERS` 기반 신규 배지 추적 및 첫 기기 열람 시 초기화 지원.
 
 ## 운영 주의: v3-C 이후 `fn_import_sheets_snapshot` 재실행 금지 (2026-11-23)
 - 이 함수는 `rsvp_votes`를 `TRUNCATE` 후 다시 넣는다. `TRUNCATE`는 행 트리거를 부르지 않아 `rsvp_events`의 기존 행은 남고, 다시 넣는 행마다 `action='insert'`, `occurred_at = 이관 시각` 이벤트가 생겨 약속 점수·스티커가 오염된다.

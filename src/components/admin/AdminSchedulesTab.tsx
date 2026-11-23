@@ -37,6 +37,8 @@ function getStatusPillClass(status: AttendanceStatus): string {
       return 'late';
     case '사유결석':
       return 'excused';
+    case '대기':
+      return 'pending';
     case '결석':
     default:
       return 'absent';
@@ -64,6 +66,7 @@ export interface AdminSchedulesTabProps {
   setEditingProgramCard: (card: ProgramCard | null) => void;
   selectedProgramCardId: string | null;
   scheduleSuccessMsg: string;
+  scheduleErrorMsg?: string;
   setScheduleSuccessMsg: (msg: string) => void;
   scheduleViewTab: 'CALENDAR' | 'ALL_LIST' | 'PROGRAM_CARDS';
   setScheduleViewTab: (tab: 'CALENDAR' | 'ALL_LIST' | 'PROGRAM_CARDS') => void;
@@ -98,8 +101,8 @@ export interface AdminSchedulesTabProps {
   setSelectedScheduleId: (id: string) => void;
   currentSchedule: Schedule | undefined;
   reconciledList: AttendanceReconciliation[];
-  sessionFilter: '전체' | '출석' | '지각' | '사유결석' | '결석';
-  setSessionFilter: (filter: '전체' | '출석' | '지각' | '사유결석' | '결석') => void;
+  sessionFilter: '전체' | '출석' | '지각' | '사유결석' | '결석' | '대기';
+  setSessionFilter: (filter: '전체' | '출석' | '지각' | '사유결석' | '결석' | '대기') => void;
   filteredSessionList: AttendanceReconciliation[];
   setOverrideTarget: (target: { id: string; name: string; part: string } | null) => void;
 
@@ -128,6 +131,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
   setEditingProgramCard,
   selectedProgramCardId,
   scheduleSuccessMsg,
+  scheduleErrorMsg,
   setScheduleSuccessMsg: _setScheduleSuccessMsg,
   scheduleViewTab,
   setScheduleViewTab,
@@ -500,6 +504,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
           </div>
 
           {scheduleSuccessMsg && <div className="success-banner">{scheduleSuccessMsg}</div>}
+          {scheduleErrorMsg && <div className="error-banner" role="alert">{scheduleErrorMsg}</div>}
 
           {/* Sub-tab 1: SESSION ATTENDANCE DETAIL & MANUAL OVERRIDE */}
           {scheduleSubTab === 'SESSION' && currentSchedule && (
@@ -566,7 +571,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
               {/* Members List */}
               <div className="toss-section-card">
                 <div className="toss-filter-row">
-                  {(['전체', '출석', '지각', '사유결석', '결석'] as const).map((tabName) => (
+                  {(['전체', '출석', '지각', '사유결석', '결석', '대기'] as const).map((tabName) => (
                     <button
                       key={tabName}
                       type="button"
@@ -803,6 +808,9 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
               {scheduleViewTab === 'CALENDAR' ? (
                 <AdminCalendarView
                   commentCounts={commentCounts}
+                  hasScheduleRecords={(scheduleId) =>
+                    sheetsService.hasLocalScheduleRecords(scheduleId)
+                  }
                   adminCalYear={adminCalYear}
                   adminCalMonth={adminCalMonth}
                   onPrevMonth={handleAdminPrevMonth}

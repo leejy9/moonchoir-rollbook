@@ -74,15 +74,23 @@ export class SupabaseBackend implements RemoteBackend {
         // 서버 세션이 끝났다: 저장된 토큰을 지워 화면이 관리자 모드에서 나가게 한다.
         clearAllAdminTokens();
       }
+      const okVal = (json as { ok?: boolean }).ok;
+      const isSuccess =
+        json.success !== undefined
+          ? json.success === true
+          : okVal !== undefined
+            ? okVal === true
+            : !json.error && !json.code;
       return {
-        success: json.success === true,
+        success: isSuccess,
         message:
           json.message ||
           json.error ||
-          (json.success === true ? '저장 완료' : '저장이 확인되지 않았습니다.'),
+          (isSuccess ? '완료' : '저장이 확인되지 않았습니다.'),
+        code: json.code,
         existingMemberId: json.existingMemberId,
         boundDeviceId: json.boundDeviceId,
-        data: json.data,
+        data: json.data !== undefined ? json.data : json,
       };
     } catch (err) {
       console.error('[Supabase API] RPC call failed:', err);
@@ -131,6 +139,8 @@ export class SupabaseBackend implements RemoteBackend {
         return 'fn_delete_member';
       case 'MERGE_MEMBERS':
         return 'fn_merge_members';
+      case 'UNBIND_DEVICE':
+        return 'fn_unbind_member_device';
       case 'CREATE_SCHEDULE':
       case 'REGISTER_SCHEDULE':
         return 'fn_create_schedule';
@@ -153,6 +163,38 @@ export class SupabaseBackend implements RemoteBackend {
         return 'fn_delete_program_card';
       case 'SAVE_CONFIG':
         return 'fn_save_config';
+      case 'GET_PRACTICE_CATALOG':
+        return 'fn_get_practice_catalog';
+      case 'SAVE_PRACTICE_PIECE':
+        return 'fn_save_practice_piece';
+      case 'SET_PRACTICE_PIECE_ARCHIVED':
+        return 'fn_set_practice_piece_archived';
+      case 'SAVE_PRACTICE_TRACK':
+        return 'fn_save_practice_track';
+      case 'SET_PRACTICE_TRACK_ARCHIVED':
+        return 'fn_set_practice_track_archived';
+      case 'SET_PROGRAM_PIECES':
+        return 'fn_set_program_pieces';
+      case 'SAVE_PERFORMANCE':
+        return 'fn_save_performance';
+      case 'SET_PERFORMANCE_ARCHIVED':
+        return 'fn_set_performance_archived';
+      case 'SET_PERFORMANCE_PIECES':
+        return 'fn_set_performance_pieces';
+      case 'REORDER_PRACTICE_TRACKS':
+        return 'fn_reorder_practice_tracks';
+      case 'GET_MEDIA_USAGE':
+        return 'fn_get_media_usage';
+      case 'DELETE_PRACTICE_PIECE':
+        return 'fn_delete_practice_piece';
+      case 'DELETE_PRACTICE_TRACK':
+        return 'fn_delete_practice_track';
+      case 'DELETE_PERFORMANCE':
+        return 'fn_delete_performance';
+      case 'LOG_LISTEN_SESSION':
+        return 'fn_log_listen_session';
+      case 'GET_MEMBER_ACTIVITY':
+        return 'fn_get_member_activity';
       default:
         return null;
     }
@@ -170,7 +212,7 @@ export class SupabaseBackend implements RemoteBackend {
           : { pin: String(payload || '') };
       return { p_pin: pinObj.pin };
     }
-    if (action === 'GET_ADMIN_SECRETS') {
+    if (action === 'GET_ADMIN_SECRETS' || action === 'GET_MEDIA_USAGE') {
       return { p_token: getActiveAdminToken() ?? '' };
     }
     if (action === 'ADMIN_LOGOUT') {
@@ -186,6 +228,32 @@ export class SupabaseBackend implements RemoteBackend {
           ? (payload as { config: Record<string, unknown> }).config
           : payload;
       return { p_payload: this.withAdminToken(configObj ?? {}) };
+    }
+    if (action === 'GET_PRACTICE_CATALOG') {
+      const includeArchived =
+        typeof payload === 'boolean'
+          ? payload
+          : Boolean(
+              payload &&
+                typeof payload === 'object' &&
+                ('includeArchived' in payload
+                  ? (payload as { includeArchived?: boolean }).includeArchived
+                  : 'p_include_archived' in payload
+                    ? (payload as { p_include_archived?: boolean }).p_include_archived
+                    : false)
+            );
+      return {
+        p_include_archived: includeArchived,
+        p_token: getActiveAdminToken() ?? null,
+      };
+    }
+    if (action === 'GET_MEMBER_ACTIVITY') {
+      const ids = Array.isArray(payload)
+        ? payload
+        : payload && typeof payload === 'object' && 'memberIds' in payload
+          ? (payload as { memberIds: string[] }).memberIds
+          : [];
+      return { p_member_ids: ids };
     }
     return { p_payload: this.withAdminToken(payload ?? {}) };
   }

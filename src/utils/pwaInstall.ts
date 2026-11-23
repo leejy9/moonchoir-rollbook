@@ -70,7 +70,11 @@ export async function promptInstall(): Promise<'accepted' | 'dismissed' | 'unava
 }
 
 export function isStandaloneDisplay(): boolean {
-  if (typeof window === 'undefined') return false;
-  const iosStandalone = (navigator as Navigator & { standalone?: boolean }).standalone === true;
-  return iosStandalone || window.matchMedia?.('(display-mode: standalone)').matches === true;
+  const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+  const iosStandalone = (nav as (Navigator & { standalone?: boolean }) | undefined)?.standalone === true;
+  if (iosStandalone) return true;
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    return window.matchMedia('(display-mode: standalone)').matches === true;
+  }
+  return false;
 }

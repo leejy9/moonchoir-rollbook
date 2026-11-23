@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { ProgramCard, ScheduleCategory, TargetAudienceType, LocationPreset, Member } from '../../types/rollbook';
 import { getKSTTimestampString } from '../../utils/date';
+import { NON_CHOIR_PART_KEYWORDS } from '../../utils/staff';
 import { RoundTimePicker } from '../RoundTimePicker';
 
 export interface AdminProgramCardFormProps {
@@ -26,7 +27,7 @@ export const AdminProgramCardForm: React.FC<AdminProgramCardFormProps> = ({
 }) => {
   const defaultChoirParts = React.useMemo(() => {
     const filtered = dynamicParts.filter(
-      (p) => !p.includes('선생님') && !p.includes('객원') && !p.includes('지휘') && !p.includes('반주')
+      (p) => !NON_CHOIR_PART_KEYWORDS.some((kw) => p.includes(kw))
     );
     return filtered.length > 0 ? filtered : dynamicParts;
   }, [dynamicParts]);

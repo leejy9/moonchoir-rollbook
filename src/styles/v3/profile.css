@@ -1,0 +1,1517 @@
+/* Moonchoir Rollbook - Profile Tab Styles (Spec §5, V3-11) */
+
+.profile-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  max-width: 480px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+/* 1. Profile Top Line */
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.profile-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-lavender) 0%, var(--brand-accent) 100%);
+  color: var(--text-white);
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px var(--brand-lavender-tint);
+  flex-shrink: 0;
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.profile-sub {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+/* 2. Hero 2-Card Row (Level 1.15 : Donut Ring 1, 150px) */
+.profile-hero-row {
+  display: flex;
+  gap: 12px;
+  height: 150px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.profile-level-card {
+  flex: 1.15 1 0;
+  background: linear-gradient(135deg, var(--brand-lavender) 0%, var(--brand-accent) 100%);
+  border-radius: 16px;
+  padding: 16px;
+  color: var(--text-white);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: left;
+  border: none;
+  min-height: 44px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.profile-level-card::after {
+  content: '';
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+
+.profile-level-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.profile-level-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+}
+
+.profile-level-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-level-num {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.profile-level-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-level-progress-bg {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.profile-level-progress-bar {
+  height: 100%;
+  background: var(--text-white);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.profile-level-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+}
+
+/* Attendance Donut Ring Card */
+.profile-ring-card {
+  flex: 1 1 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.profile-donut-svg {
+  width: 96px;
+  height: 96px;
+}
+
+.profile-ring-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+  margin-top: 4px;
+}
+
+/* Staff Title Card */
+.profile-staff-card {
+  width: 100%;
+  background: linear-gradient(135deg, var(--brand-lavender) 0%, var(--brand-accent) 100%);
+  border-radius: 16px;
+  padding: 20px 16px;
+  color: var(--text-white);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+}
+
+.profile-staff-title {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.profile-staff-tenure {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.profile-staff-records-btn {
+  width: 100%;
+  min-height: 48px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+/* 3. Three Number Cards */
+.profile-numbers-row {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.profile-number-card {
+  flex: 1 1 0;
+  min-width: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.profile-number-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--brand-lavender);
+}
+
+.profile-number-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-number-label {
+  font-size: 12px;
+  color: var(--text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 4. Passion Temperature Card */
+.profile-temp-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    135deg,
+    var(--brand-apricot-tint) 0%,
+    var(--bg-card) 68%,
+    var(--brand-lavender-tint) 100%
+  );
+  border: 1px solid var(--brand-apricot);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+  min-height: 44px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.profile-temp-card::before,
+.profile-temp-card::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.profile-temp-card::before {
+  width: 170px;
+  height: 170px;
+  top: -118px;
+  right: -48px;
+  background: var(--brand-apricot);
+  opacity: 0.14;
+}
+
+.profile-temp-card::after {
+  width: 84px;
+  height: 84px;
+  right: 24px;
+  top: 22px;
+  background: var(--brand-lavender);
+  opacity: 0.08;
+}
+
+.profile-temp-card:focus-visible {
+  outline: 3px solid var(--brand-lavender);
+  outline-offset: 2px;
+}
+
+.profile-temp-card:hover {
+  box-shadow: var(--shadow-elevated);
+  transform: translateY(-1px);
+}
+
+.profile-temp-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.profile-temp-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-temp-icon-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-apricot), var(--brand-apricot-text));
+  color: var(--text-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 6px 16px var(--brand-apricot-tint), 0 0 0 5px var(--bg-card);
+}
+
+.profile-temp-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-temp-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-apricot-text);
+}
+
+.profile-temp-value {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--brand-apricot-text);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.profile-temp-delta {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  line-height: 1.2;
+}
+
+.profile-temp-delta.up {
+  background: var(--brand-apricot);
+  color: var(--text-white);
+}
+
+.profile-temp-delta.down {
+  background: var(--status-danger-light);
+  color: var(--status-danger);
+}
+
+.profile-temp-bar-wrap {
+  width: 100%;
+  position: relative;
+  height: 10px;
+  z-index: 1;
+  background: var(--bg-card);
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 1px 2px var(--brand-apricot-tint);
+}
+
+.profile-temp-bar {
+  width: 100%;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--brand-apricot-tint) 0%, var(--brand-apricot) 72%, var(--brand-apricot-text) 100%);
+  box-sizing: border-box;
+}
+
+.profile-temp-tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 10px;
+  background: var(--brand-apricot-text);
+  opacity: 0.4;
+}
+
+.profile-temp-indicator {
+  position: absolute;
+  top: -2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 2px solid var(--brand-apricot-text);
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  box-shadow: 0 0 0 3px var(--brand-apricot-tint);
+}
+
+/* 5. Praise Stickers Card */
+.profile-stickers-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.profile-stickers-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.profile-stickers-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-stickers-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.profile-stickers-badge {
+  background: var(--brand-apricot);
+  color: var(--text-white);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.profile-stickers-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.profile-stickers-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.profile-sticker-slot {
+  height: 72px;
+  min-width: 0;
+  border-radius: 12px;
+  background: var(--bg-subtle, var(--bg-app));
+  border: 1px dashed var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.profile-sticker-slot.unlocked {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.profile-sticker-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.profile-sticker-new-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--brand-apricot);
+  color: var(--text-white);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 6px;
+}
+
+.profile-sticker-empty-text {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Sheets and Modals */
+.profile-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.profile-sheet-content {
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  background: var(--bg-card);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  padding: 20px 16px 32px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.profile-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.profile-sheet-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.profile-sheet-close-btn {
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  color: var(--text-sub);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+/* Attendance Records Sheet */
+.attendance-status-toggles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.attendance-status-btn {
+  min-height: 52px;
+  min-width: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-main);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.attendance-status-btn.active {
+  border: 1.5px solid var(--brand-apricot);
+  background: var(--brand-apricot-tint);
+  color: var(--brand-apricot-text);
+}
+
+.attendance-status-btn-count {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.attendance-status-btn-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.attendance-period-chips {
+  display: flex;
+  gap: 8px;
+}
+
+.attendance-period-chip {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-sub);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.attendance-period-chip.active {
+  background: var(--brand-primary);
+  color: var(--text-white);
+  border-color: var(--brand-primary);
+}
+
+.attendance-records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attendance-record-item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-subtle, var(--bg-app));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.attendance-record-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.attendance-record-header-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.attendance-record-date {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.attendance-record-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attendance-record-sub {
+  font-size: 12px;
+  color: var(--text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attendance-record-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.attendance-record-checkin {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Level Lineage Sheet */
+.level-lineage-current-box {
+  background: var(--brand-lavender-tint);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.level-lineage-current-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.level-lineage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.level-lineage-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+}
+
+.level-lineage-item.current {
+  border: 1.5px solid var(--brand-lavender);
+  background: var(--brand-lavender-tint);
+}
+
+.level-lineage-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.level-lineage-badge.done {
+  background: var(--brand-lavender);
+  color: var(--text-white);
+}
+
+.level-lineage-badge.current {
+  background: var(--brand-apricot);
+  color: var(--text-white);
+}
+
+.level-lineage-badge.locked {
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-muted);
+}
+
+/* Selected Filter Chip in AttendanceRecordSheet */
+.attendance-selected-filter-chip-row {
+  display: flex;
+  margin-bottom: 12px;
+}
+
+.attendance-selected-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--brand-apricot-tint);
+  color: var(--brand-apricot-text);
+  border: 1px solid var(--brand-apricot);
+  border-radius: 16px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.attendance-selected-filter-clear-btn {
+  background: transparent;
+  border: none;
+  color: var(--brand-apricot-text);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+/* Passion Temperature Sheet */
+.passion-sheet-hero-card {
+  background: var(--brand-apricot-tint);
+  border: 1px solid var(--brand-apricot);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.passion-sheet-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.passion-sheet-big-num {
+  font-size: 38px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--brand-apricot-text);
+}
+
+.passion-sheet-hero-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.passion-sheet-delta-pill {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 12px;
+}
+
+.passion-sheet-delta-pill.up {
+  background: var(--brand-apricot);
+  color: var(--text-white);
+}
+
+.passion-sheet-delta-pill.down {
+  background: var(--status-danger-light);
+  color: var(--status-danger);
+}
+
+.passion-sheet-delta-pill.zero {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+
+.passion-gauge-track {
+  position: relative;
+  height: 10px;
+  background: var(--bg-subtle);
+  border-radius: 5px;
+  overflow: visible;
+  margin-bottom: 6px;
+}
+
+.passion-gauge-fill {
+  height: 100%;
+  background: var(--brand-apricot);
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+.passion-gauge-base-marker {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 14px;
+  background: var(--text-muted);
+}
+
+.passion-gauge-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.passion-gauge-base-label {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.passion-sheet-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.passion-group-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.passion-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.passion-group-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.passion-group-total {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.passion-group-total.positive {
+  color: var(--brand-apricot-text);
+}
+
+.passion-group-total.negative {
+  color: var(--status-danger);
+}
+
+.passion-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.passion-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+  width: 100%;
+  padding: 8px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.passion-item-row:disabled {
+  cursor: default;
+}
+
+.passion-item-row:not(:disabled):hover {
+  background: var(--bg-subtle);
+}
+
+.passion-item-label {
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.passion-item-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.passion-item-score {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.passion-item-score.positive {
+  color: var(--brand-apricot-text);
+}
+
+.passion-item-score.negative {
+  color: var(--status-danger);
+}
+
+.passion-item-score.neutral {
+  color: var(--text-muted);
+}
+
+.passion-item-arrow {
+  font-size: 16px;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+/* ==========================================================================
+   Praise Stickers (V3-13 / Spec §5-6, §5-7)
+   ========================================================================== */
+
+.sticker-sheet-header-pill {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand-lavender-text);
+  background: var(--brand-lavender-tint);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.sticker-board-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.sticker-bundle-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.sticker-bundle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.sticker-bundle-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.sticker-bundle-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.sticker-bundle-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px 8px;
+}
+
+@media (max-width: 360px) {
+  .sticker-bundle-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.sticker-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100px;
+  text-align: center;
+}
+
+.sticker-card.locked .sticker-frame {
+  filter: grayscale(1);
+  opacity: 0.4;
+}
+
+.sticker-frame-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sticker-frame {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  transition: transform 0.2s ease;
+}
+
+.sticker-frame.shape-circle {
+  border-radius: 50%;
+}
+
+.sticker-frame.shape-rounded-square {
+  border-radius: 16px;
+}
+
+.sticker-frame.shape-diamond {
+  border-radius: 8px;
+  transform: rotate(45deg);
+}
+
+.sticker-frame.shape-diamond .sticker-image {
+  transform: rotate(-45deg);
+}
+
+.sticker-frame.shape-hexagon {
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  border-radius: 4px;
+}
+
+.sticker-frame.shape-star {
+  border-radius: 20px;
+}
+
+.sticker-frame.bundle-perseverance {
+  background: var(--brand-lavender-tint);
+}
+
+.sticker-frame.bundle-punctuality {
+  background: var(--brand-apricot-tint);
+}
+
+.sticker-frame.bundle-promise {
+  background: var(--status-info-light);
+}
+
+.sticker-frame.bundle-studio {
+  background: var(--brand-lavender-tint);
+}
+
+.sticker-frame.bundle-stage {
+  background: var(--sticker-stage-tint);
+}
+
+.sticker-card.earned .tier-bronze {
+  border: 2.5px solid var(--sticker-bronze);
+}
+
+.sticker-card.earned .tier-silver {
+  border: 2.5px solid var(--sticker-silver);
+}
+
+.sticker-card.earned .tier-gold {
+  border: 2.5px solid var(--sticker-gold);
+}
+
+.sticker-image {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.sticker-new-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--brand-apricot);
+  color: var(--text-white);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 8px;
+  line-height: 1;
+}
+
+.sticker-info {
+  margin-top: 6px;
+  width: 100%;
+}
+
+.sticker-name {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.sticker-date-or-cond {
+  display: block;
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1.2;
+  word-break: keep-all;
+}
+
+/* Profile Tab Sticker Preview */
+.profile-stickers-card {
+  appearance: none;
+  width: 100%;
+  color: var(--text-main);
+  font: inherit;
+  text-align: left;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 16px;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.profile-stickers-card:hover {
+  background: var(--bg-subtle);
+}
+
+.profile-stickers-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.profile-stickers-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-stickers-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.profile-stickers-new-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-white);
+  background: var(--brand-apricot);
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.profile-stickers-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.profile-stickers-preview-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.profile-sticker-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+}
+
+.profile-sticker-mini-frame {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.profile-sticker-mini-img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.profile-sticker-mini.locked .profile-sticker-mini-frame {
+  filter: grayscale(1);
+  opacity: 0.4;
+}
+
+.profile-sticker-mini-name {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+/* Compact settings menu */
+.profile-settings {
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+}
+
+.profile-settings-title {
+  margin: 0 0 4px;
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.profile-settings-menu {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-settings-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 4px 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-main);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.profile-settings-menu-row:first-child {
+  border-top: 0;
+}
+
+.profile-settings-select {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.profile-settings-switch {
+  position: relative;
+  width: 52px;
+  min-width: 52px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.profile-settings-switch::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 2px;
+  width: 48px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--border-subtle);
+  transition: background-color 0.18s ease;
+}
+
+.profile-settings-switch.is-on::before {
+  background: var(--brand-lavender);
+}
+
+.profile-settings-switch-knob {
+  position: absolute;
+  top: 12px;
+  left: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.18s ease;
+}
+
+.profile-settings-switch.is-on .profile-settings-switch-knob {
+  transform: translateX(20px);
+}
+
+.profile-settings-install-row .install-app-card {
+  flex-wrap: nowrap;
+  width: 100%;
+  min-height: 44px;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.profile-settings-install-row .install-app-text {
+  flex: 1 1 auto;
+}
+
+.profile-settings-install-row .install-app-text span {
+  display: none;
+}
+
+.profile-settings-install-row .install-app-button {
+  min-height: 44px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-sub);
+}
+
+.profile-settings-install-row .install-app-steps {
+  flex: 1 0 100%;
+}
+
+.profile-settings-action {
+  cursor: pointer;
+}
+
+.profile-settings-action:hover:not(:disabled) {
+  color: var(--brand-lavender-text);
+}
+
+.profile-settings-action:disabled {
+  cursor: wait;
+}
+
+.profile-settings-action.is-danger {
+  color: var(--status-danger);
+}
+
+.profile-settings-chevron {
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.profile-settings-action.is-danger .profile-settings-chevron {
+  color: inherit;
+}
+
+/* Sticker board popup */
+.sticker-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  box-sizing: border-box;
+}
+
+.sticker-modal-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 620px;
+  max-height: min(86vh, 760px);
+  max-height: min(86dvh, 760px);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-elevated);
+}
+
+.sticker-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.sticker-modal-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--bg-subtle);
+  color: var(--text-sub);
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.sticker-modal-content {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+}
+

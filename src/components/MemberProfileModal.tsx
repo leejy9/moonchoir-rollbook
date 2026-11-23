@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { Member, Schedule, RawAttendanceLog, PartType, MemberStatus, RoleType, MemberStatusHistory } from '../types/rollbook';
 import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString, addDaysKST, normalizeToKSTTimestamp } from '../utils/date';
 import { calculateCumulativeAttendanceWithLifecycle } from '../utils/attendanceStats';
@@ -45,6 +45,11 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
   logs: _logs = [],
 }) => {
   const [todayStr] = useState(getTodayDateString);
+  const [currentNow, setCurrentNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentNow(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
 
   const [formData, setFormData] = useState<Member>(() => {
     const rawPhone = member.phone ? String(member.phone) : '';
@@ -210,10 +215,11 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
       [formData],
       schedules,
       sheetsService.getLogs(),
-      getKSTDateString(),
+      getKSTDateString(currentNow),
       sheetsService.getRSVPVotes(),
       sheetsService.getConfig().lateGraceMinutes ?? 10,
-      sheetsService.getMembers(true, true)
+      sheetsService.getMembers(true, true),
+      currentNow
     );
     const summary = summaries[0];
     if (!summary) {
@@ -224,7 +230,7 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
       attendanceRate: summary.attendanceRate,
       totalPastSessions: summary.totalSessions,
     };
-  }, [schedules, formData]);
+  }, [schedules, formData, currentNow]);
 
   // 최신순 일정 정렬
   const sortedSchedules = useMemo(() => {
@@ -781,18 +787,25 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                 <div className="attendance-list-scroll-body">
                   {sortedSchedules.map((sch) => {
                     const headerDate = formatMatrixHeaderDate(sch.date);
-                    const rec = sheetsService.reconcileMemberAttendance(formData.id, sch.id);
+                    const rec = sheetsService.reconcileMemberAttendance(
+                      formData.id,
+                      sch.id,
+                      undefined,
+                      currentNow
+                    );
                     const status = rec?.finalStatus || '결석';
                     const isAttend = status === '출석' || status === '수동인정';
                     const isLate = status === '지각';
                     const isExcused = status === '사유결석';
                     const isExempt = status === '미참' || status === '모수제외';
+                    const isPending = status === '대기';
 
                     let badgeClass = 'badge-absent';
                     if (isAttend) badgeClass = 'badge-attend';
                     else if (isLate) badgeClass = 'badge-late';
                     else if (isExcused) badgeClass = 'badge-excused';
                     else if (isExempt) badgeClass = 'badge-exempt';
+                    else if (isPending) badgeClass = 'badge-pending';
 
                     const memberVote = sheetsService.getRSVPVotes(sch.id).find((v) => v.memberId === formData.id);
                     const voteTime = memberVote?.timestamp ? normalizeToKSTTimestamp(memberVote.timestamp) : '';
