@@ -207,8 +207,8 @@ begin
     values (v_sched_test, v_member_1, 'insert', 'ATTEND', now());
 
     -- Now insert a vote in rsvp_votes for the same schedule and member
-    insert into rsvp_votes (schedule_id, member_id, status, timestamp)
-    values (v_sched_test, v_member_1, 'ATTEND', '2026-11-20 19:00:00')
+    insert into rsvp_votes (id, schedule_id, member_id, status, timestamp)
+    values ('test_act_rsvp_r4', v_sched_test, v_member_1, 'ATTEND', '2026-11-20 19:00:00')
     on conflict do nothing;
 
     select count(*) into v_bf_before from rsvp_events where action = 'backfill';
