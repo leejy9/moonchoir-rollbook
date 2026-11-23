@@ -88,6 +88,7 @@
 | 14 | V3-12 | 열정 온도 엔진 + 내역 시트 | §5-5 | 새 `src/utils/passionTemperature.ts`(+테스트), `ProfileTab.tsx` | V3-07b, V3-11 |
 | 15 | V3-13 | 칭찬 스티커 엔진 + 보드 + 이미지 | §5-6 | 새 `src/utils/praiseStickers.ts`(+테스트), `public/stickers/*`, `ProfileTab.tsx` | V3-12 |
 | 16 | V3-14 | 마무리: 문서, PR | — | `docs/ARCHITECTURE_RECOVERY.md`, `docs/DEV_LOG.md` | 전부 |
+| v3-A 추가 | V3-19 | 플레이어 v2: 디자인 개편, 공연 전체 재생(대표 음원), 반복 3단계, 이전/다음, 재생 목록 시트, 플레이어 안 유튜브 | §3-1, §3-3, §4-2, §6, §9, §10-36~40 | 아래 상세 | **V3-18 완료 후** |
 | v3-A 추가 | V3-18 | 사용자 테스트 반영: 저장 공간 MB 표시, 음원 여러 파일 올리기, 새 화면 폭·비율, 반복 버튼 "전체" 표시 제거 | §4-4, §4-4b, §10-33~35 | 아래 상세 | V3-17 완료 후 |
 | v3-A 추가 | V3-17 | 곡·트랙·공연 삭제, 업로드 완료 후 목록 갱신, 악보 업로드 실패 표시, 받는 음원 형식, 악보 뒤집힘 | §4-2, §4-3, §7-7 | 아래 상세 | V3-16, H1·H2 완료 후 |
 | v3-A 추가 | V3-16 | 흐름 검토 반영: 관리자 설정 3칸, 음원 압축, 악보 앱 안 보기, 유튜브 재생 시 음원 일시정지, 미니 바 범위 | §3-3, §3-4, §4-4~4-6 | 아래 상세 | V3-15 완료 후 |
@@ -695,6 +696,67 @@ J6의 "직접 만드는 방식"은 하지 않는다. 쪽 배치, 화면 근처�
 - **테스트:** 반복 버튼에 "전체" 글자가 없다. 누르면 `aria-pressed`가 바뀐다.
 
 **마무리:** `docs/DEV_LOG.md`에 L1~L4 요약. PR #27에 푸시하고 멈춘다. 보고는 §5 형식 + L3 캡처.
+
+### V3-19 플레이어 v2 (v3-A, 2026-11-23 추가)
+
+> 명세 V25, §3-1 "전체 재생", §3-3 전체(새로 씀), §4-2 "대표" 표시, §6 토큰 3개, §9 `YT_MINIMIZE_HINT_COUNT`, 수용 기준 36~40.
+> **시안:** https://claude.ai/artifact/78R1NaARRVq6a9zKrpZM9r 의 `Player`, `PlayerQueue`, `PlayerVideo`, `PlayerMini`. 사용자가 확정한 화면이다. 값(크기·색·배치)은 시안과 명세를 따르고, 시안에만 있고 명세에 없는 글자(예: "↑ 유튜브 공식 플레이어 · 시안 표시용")는 넣지 않는다.
+> 브랜치 `feat/v3-member-ux`(PR #27). V3-18이 끝난 뒤 시작한다. 커밋은 M번호 하나에 하나.
+
+**M1. 재생 목록 순수 함수 + 토큰**
+- 새 파일 `src/utils/practiceQueue.ts`(+`practiceQueue.test.ts`). React 없이 순수 함수만.
+  - `getRepresentativeTrack(pieceId, tracks, config): PracticeTrack | null` — `filterPlayableAudioTracks`(기존, `src/utils/audioQueue.ts`)를 **재사용**하고 `orderIndex` 오름차순 첫 항목.
+  - `buildPieceQueue(pieceId, catalog, config)` / `buildPerformanceQueue(performanceId, catalog, config)` → `PlayableTrackItem[]`. 공연 곡 대상·순서는 §3-1 공연 목록을 만드는 기존 함수(`src/utils/practiceScope.ts` 등)를 **재사용**한다. 같은 규칙을 새로 쓰지 않는다(R2). 쓰는 함수 이름과 위치를 보고한다.
+  - `type RepeatMode = 'off' | 'all' | 'one'`, `cycleRepeat(mode)`(off→all→one→off).
+  - `indexOnTrackEnd(index, length, mode): number | null`(null = 정지), `indexOnNext(index, length, mode): number | null`, `actionOnPrevious(index, currentTime): { type: 'restart' } | { type: 'go'; index: number }`(3초 기준).
+- 토큰 `--player-gradient-top`, `--player-gradient-mid`, `--player-accent`을 `src/index.css`의 라이트·다크 양쪽에 추가(§6). 가드 테스트가 통과해야 한다.
+- **테스트:** 대표 음원(순서 1이 보관 → 순서 2, 유튜브만 있는 곡 → null), 공연 큐(영상만 있는 곡 제외, 순서), 반복 순환, 끝났을 때 3가지 모드 × 마지막/중간, 이전 3초 경계(3.0초는 이전 항목, 3.01초는 처음으로).
+
+**M2. 플레이어 상태 (`AudioPlayerProvider`)**
+- `repeatOne`·`autoNext`·`toggleRepeatOne`·`toggleAutoNext`를 **`repeatMode`·`cycleRepeat`로 바꾼다.** 기존 `getNextTrackIndex`(`audioQueue.ts`)는 M1 함수로 대체하고 지운다(테스트도 정리, R9 예외).
+- 추가: `queueSource: { kind: 'piece' | 'performance'; id: string; title: string } | null`, `playQueue(source, items, startIndex, repeatMode)`, `previousTrack()`, `playQueueIndex(index)`.
+- 곡 상세에서 음원을 누르면 `playQueue({kind:'piece'…}, buildPieceQueue(...), 그 트랙 위치, 'one')`.
+- Media Session: `previoustrack`/`nexttrack`은 큐 길이 2 이상일 때만 등록, 아니면 `null`로 해제.
+- **파일 크기:** `AudioPlayerProvider.tsx`가 이미 400줄을 넘는다. 더 늘리지 말고, Media Session 등록은 새 훅 `src/components/audio/useMediaSession.ts`로 옮긴다. 옮긴 뒤 줄 수를 보고한다.
+- **테스트:** 곡 출처 시작 시 `repeatMode === 'one'`, 공연 출처 시작 시 `'off'`, 트랙 끝 이벤트 3가지, 큐 길이 1이면 `nexttrack` 핸들러가 `null`.
+
+**M3. 전체 화면·미니 바·재생 목록 시트 디자인 (시안 `Player`, `PlayerQueue`)**
+- `FullPlayer.tsx`를 시안대로 다시 배치한다(§3-3-3). 새 파일:
+  - `src/components/audio/PlayerControls.tsx` (조작 1·2줄)
+  - `src/components/audio/PieceTracksCard.tsx` ("이 곡의 음원")
+  - `src/components/audio/QueueSheet.tsx` (§3-3-4)
+- CSS는 `src/styles/v3/fullPlayer.css`·`player.css`에만. 색은 토큰만(인라인 hex 금지, R7). 아이콘은 인라인 SVG.
+- 미니 바: "다음"은 큐 기준, × 유지(§3-3-2).
+- **새 문구(이것만):** "재생 목록", "이 곡의 음원", "영상", `곡`, `공연`, "전체 재생", "대표", "영상은 플레이어를 열어야 재생돼요", `aria-label` 목록은 명세 §3-3 표 그대로.
+- **테스트:** 반복 버튼 3번 누르면 `aria-label`이 명세 순서대로, 다음 버튼 비활성 조건, 재생 목록 시트 행 클릭 → `playQueueIndex`, 지나간 항목 흐림 클래스.
+
+**M4. 연습실 "전체 재생" + 운영진 "대표" 표시**
+- 연습실 목록: 범위가 공연이고 `buildPerformanceQueue` 결과가 1개 이상일 때만 버튼(§3-1). 누르면 `playQueue(..., 0, 'off')` 후 전체 화면 플레이어 열기(`navigate` OPEN player).
+- 운영진 곡 편집 트랙 목록: `getRepresentativeTrack`이 고른 행에 "대표"(§4-2). **같은 함수**를 쓴다.
+- **테스트:** 버튼 표시 조건(공연/전체 곡/공연 미정/대표 0개), 클릭 시 큐 내용과 순서, 트랙 순서를 바꾸면 "대표"가 옮겨 감.
+
+**M5. 플레이어 안 유튜브 (시안 `PlayerVideo`, `PlayerMini`, 명세 §3-3-5)**
+- 새 파일 `src/services/media/youtubeIframeApi.ts`: `loadYoutubeIframeApi(): Promise<YT>`. 스크립트 태그를 **한 번만** 넣고 `window.onYouTubeIframeAPIReady`를 기다린다. 이미 있으면 바로 돌려준다. 10초 안에 안 되면 실패로 돌려주고, 화면은 영상 대신 유튜브 앱으로 열기 버튼만 남긴다(`console.warn`, 빈 catch 금지).
+  - 타입은 **필요한 메서드만 직접 선언**한다(`@types/youtube` 설치 금지).
+- 새 컴포넌트 `src/components/audio/VideoStage.tsx`: 커버 자리에 `YT.Player` 생성, `playerVars`·`referrerPolicy`는 명세 그대로. 언마운트 시 `destroy()`.
+- 상태: Provider에 `activeVideo: { track: PracticeTrack; pieceTitle: string; resumeAt: number } | null`. 영상 시작 시 앱 음원 `pause`. 영상이 있는 동안 이전·다음·반복 비활성, Media Session 핸들러 해제.
+- 내릴 때: 위치 저장 → `destroy`. 다시 열면 저장 위치부터(명세 §3-3-5).
+- 토스트: 내릴 때 `readPreference(YT_MINIMIZE_HINT_COUNT)`가 2 미만이면 3초 표시 후 +1 저장. 저장 실패 시 보이지 않게(실패 값 2).
+- 속도: `getAvailablePlaybackRates()`에서 가장 가까운 값. 계산은 `practiceQueue.ts`에 `nearestRate(rates, target)`로 두고 테스트한다.
+- **테스트:**
+  - 스크립트 태그 1개만 생김(두 번 호출)
+  - 영상 시작 시 음원 `pause` 호출
+  - 내림 → `destroy`, 다시 열기 → 저장 위치로 `seekTo`
+  - 토스트 0→1→2회 후 안 보임, 저장 실패 시 안 보임
+  - `nearestRate([0.25,0.5,0.75,1,1.25,1.5,1.75,2], 0.8) === 0.75`
+  - 첫 화면 청크에 `iframe_api` 문자열 없음(빌드 결과 grep, 보고)
+
+**M6. 확인과 보고**
+- 수용 기준 36~40을 번호별로 통과/미확인 보고.
+- 캡처: 390×844로 전체 화면(음원), 재생 목록 시트, 영상 재생, 미니 바 + 토스트, 연습실 "전체 재생" 버튼, 운영진 "대표" 표시. 시안과 나란히 비교해 다른 점을 목록으로 적는다. 캡처를 못 했으면 "미확인"(R13).
+- 실제 유튜브 재생·전체 화면·잠금 화면 동작은 **사용자 휴대폰 확인 항목**으로 남긴다.
+
+**하지 말 것(V3-19):** 사용자 재생 목록(만들기·순서 바꾸기·저장), 공연별 대표 음원 지정 칸, 셔플, 숨긴 iframe으로 소리만 재생, DB 변경.
 
 ### V3-14 마무리
 
