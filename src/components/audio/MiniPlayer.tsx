@@ -1,11 +1,18 @@
 import React, { useRef } from 'react';
 import { useAudioPlayer, useAudioPosition } from './audioPlayerContext';
+import { indexOnNext } from '../../utils/practiceQueue';
 import '../../styles/v3/player.css';
 
 export interface MiniPlayerProps {
   onOpenFullPlayer?: () => void;
 }
 
+/**
+ * Mini Player bar (MEMBER_UX_V3_SPEC.md §3-3-2, 시안 PlayerMini).
+ * - 단원 화면의 모든 탭에서 하단 탭 위에 고정
+ * - 구성: 커버(라벤더 사각+음표, 영상이면 어두운 사각+영상), 트랙이름 / 곡이름(탭하면 전체화면)
+ * - 재생·일시정지, 다음(큐 기준), × 닫기(44px, aria-label="플레이어 닫기"), 맨 아래 2px 진행선
+ */
 export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onOpenFullPlayer }) => {
   const {
     currentTrack,
@@ -17,9 +24,9 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onOpenFullPlayer }) => {
     closePlayer,
     queue,
     currentIndex,
+    repeatMode,
+    activeVideo,
   } = useAudioPlayer();
-
-  const hasNext = Boolean(queue.length > 0 && currentIndex >= 0 && currentIndex < queue.length - 1);
 
   const { currentTime, duration } = useAudioPosition();
 
@@ -46,11 +53,18 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onOpenFullPlayer }) => {
     }
   };
 
-  if (!currentTrack) {
+  if (!currentTrack && !activeVideo) {
     return null;
   }
 
-  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+  const hasNext = !activeVideo && indexOnNext(currentIndex, queue.length, repeatMode) !== null;
+  const isVideo = Boolean(activeVideo);
+
+  const trackLabel = activeVideo ? activeVideo.track.label : currentTrack?.track.label || '';
+  const pieceTitle = activeVideo ? activeVideo.pieceTitle : currentTrack?.pieceTitle || '';
+
+  const progressPercent =
+    !isVideo && duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
 
   return (
     <div
@@ -61,27 +75,52 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onOpenFullPlayer }) => {
       onPointerUp={handlePointerUp}
       onClick={onOpenFullPlayer}
     >
-      {/* 1. Cover Art */}
-      <div className="mini-player-cover" aria-hidden="true">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 18V5l12-2v13" />
-          <circle cx="6" cy="18" r="3" />
-          <circle cx="18" cy="16" r="3" />
-        </svg>
+      {/* 1. Cover Art (Lavender + note, or dark + video) */}
+      <div
+        className={`mini-player-cover ${isVideo ? 'video' : 'audio'}`}
+        aria-hidden="true"
+        style={
+          isVideo
+            ? { background: 'var(--player-surface-full)', color: 'var(--text-white, #ffffff)' }
+            : undefined
+        }
+      >
+        {isVideo ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 18V5l12-2v13" />
+            <circle cx="6" cy="18" r="3" />
+            <circle cx="18" cy="16" r="3" />
+          </svg>
+        )}
       </div>
 
       {/* 2. Track & Piece Info (tap to open full player) */}
       <div className="mini-player-info">
-        <span className="mini-player-track-title">{currentTrack.track.label}</span>
-        <span className="mini-player-piece-title">{currentTrack.pieceTitle}</span>
+        <span className="mini-player-track-title">{trackLabel}</span>
+        <span className="mini-player-piece-title">{pieceTitle}</span>
       </div>
 
-      {/* 3. Controls (Play/Pause, Next Track) */}
+      {/* 3. Controls (Play/Pause, Next Track, Close X) */}
       <div
         className="mini-player-controls"
         onClick={(e) => e.stopPropagation()} // Prevent opening full player when tapping buttons
       >
-        {isBlocked ? (
+        {isVideo ? (
+          <button
+            type="button"
+            className="mini-player-btn"
+            onClick={onOpenFullPlayer}
+            aria-label="플레이어에서 이어 보기"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+          </button>
+        ) : isBlocked ? (
           <button
             type="button"
             className="mini-player-btn"

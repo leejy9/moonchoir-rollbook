@@ -1,0 +1,191 @@
+/**
+ * QueueSheet styles for FullPlayer
+ * (MEMBER_UX_V3_SPEC.md §3-3-4, V25)
+ */
+
+.queue-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 220;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.queue-sheet-card {
+  width: 100%;
+  max-width: 480px;
+  height: 72vh;
+  background: var(--bg-card);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.3);
+  animation: slideUpSheet 0.2s ease-out;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.queue-sheet-handle-row {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 4px 0;
+  cursor: grab;
+}
+
+.queue-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-subtle);
+}
+
+.queue-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.queue-sheet-header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.queue-sheet-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.queue-sheet-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.queue-sheet-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.queue-sheet-repeat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--brand-lavender-tint);
+  color: var(--brand-lavender-text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.queue-sheet-close-btn {
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: var(--radius-full);
+}
+
+.queue-sheet-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px calc(24px + env(safe-area-inset-bottom, 0px)) 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.queue-item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  cursor: pointer;
+  text-align: left;
+  box-sizing: border-box;
+  transition: opacity 0.2s ease, background 0.15s ease;
+}
+
+.queue-item-row:hover {
+  background: var(--bg-hover);
+}
+
+.queue-item-row.active {
+  background: var(--brand-lavender-tint);
+  color: var(--brand-lavender-text);
+}
+
+.queue-item-row.past {
+  opacity: 0.45;
+}
+
+.queue-item-idx-box {
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.queue-item-row.active .queue-item-idx-box {
+  color: var(--brand-lavender);
+}
+
+.queue-item-cover {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--brand-lavender-tint);
+  color: var(--brand-lavender);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.queue-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.queue-item-primary {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item-secondary {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

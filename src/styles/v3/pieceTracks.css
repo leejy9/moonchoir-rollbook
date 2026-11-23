@@ -1,0 +1,140 @@
+/**
+ * PieceTracksCard styles for FullPlayer
+ * (MEMBER_UX_V3_SPEC.md §3-3-3, V25)
+ */
+
+.piece-tracks-card {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-sizing: border-box;
+  margin-top: 8px;
+}
+
+.piece-tracks-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 12px 0;
+}
+
+.piece-tracks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.piece-track-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-white, #ffffff);
+  cursor: pointer;
+  text-align: left;
+  box-sizing: border-box;
+  transition: background 0.15s ease;
+}
+
+.piece-track-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.piece-track-row.active {
+  background: rgba(183, 176, 240, 0.14);
+}
+
+.piece-track-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.piece-track-thumb.audio {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-white, #ffffff);
+}
+
+.piece-track-thumb.video {
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--text-white, #ffffff);
+}
+
+.piece-track-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.piece-track-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.piece-track-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-white, #ffffff);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.piece-track-row.active .piece-track-label {
+  color: var(--player-accent);
+}
+
+.piece-track-sub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Playing Bars Animation */
+.piece-track-playing-badge,
+.queue-playing-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.playing-bar {
+  width: 2px;
+  background: var(--player-accent);
+  border-radius: 1px;
+  animation: bounceBar 0.8s ease-in-out infinite alternate;
+}
+
+.playing-bar.bar-1 {
+  height: 10px;
+}
+.playing-bar.bar-2 {
+  height: 6px;
+  animation-delay: 0.2s;
+}
+.playing-bar.bar-3 {
+  height: 12px;
+  animation-delay: 0.4s;
+}
+
+@keyframes bounceBar {
+  0% {
+    height: 4px;
+  }
+  100% {
+    height: 12px;
+  }
+}

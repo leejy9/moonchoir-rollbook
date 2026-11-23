@@ -12,8 +12,9 @@
   width: 100%;
   max-width: 480px;
   height: 56px;
-  background: var(--bg-card);
-  border-top: 1px solid var(--border-subtle);
+  background: var(--player-surface);
+  color: var(--text-white, #ffffff);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -37,8 +38,8 @@
   width: 40px;
   height: 40px;
   border-radius: var(--radius-md);
-  background: var(--brand-primary-light, #ede9fe);
-  color: var(--brand-primary, #7c3aed);
+  background: linear-gradient(135deg, var(--brand-lavender) 0%, var(--player-surface-full) 100%);
+  color: var(--text-white, #ffffff);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -58,7 +59,7 @@
 .mini-player-track-title {
   font-size: 13px;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--text-white, #ffffff);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -66,7 +67,7 @@
 
 .mini-player-piece-title {
   font-size: 11px;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -87,13 +88,13 @@
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--text-main);
+  color: var(--text-white, #ffffff);
   cursor: pointer;
   border-radius: var(--radius-full);
 }
 
 .mini-player-btn:hover {
-  background: var(--bg-hover);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .mini-player-btn:disabled {
@@ -107,7 +108,7 @@
   bottom: 0;
   left: 0;
   height: 2px;
-  background: var(--brand-primary);
+  background: var(--player-accent);
   pointer-events: none;
 }
 
