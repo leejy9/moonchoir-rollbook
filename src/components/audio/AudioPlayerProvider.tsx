@@ -19,6 +19,7 @@ import {
 } from './audioPlayerContext';
 import { useMediaSession } from './useMediaSession';
 import { useYtMinimizeHint } from './useYtMinimizeHint';
+import { useAudioListenLogger } from './useAudioListenLogger';
 
 export interface AudioPlayerProviderProps {
   children: React.ReactNode;
@@ -76,6 +77,8 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
       }
     };
   }, [currentTrack, activeVideo]);
+
+  const listenLoggerRef = useAudioListenLogger(currentTrack);
 
   const pause = useCallback(() => {
     audioRef.current?.pause();
@@ -265,6 +268,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
     const audio = audioRef.current;
     if (!audio) return;
 
+    listenLoggerRef.current?.onEnded();
     const nextIdx = indexOnTrackEnd(currentIndex, queue.length, repeatMode);
     if (nextIdx === currentIndex && currentTrack) {
       audio.currentTime = 0;
@@ -279,7 +283,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
       audio.currentTime = 0;
       setCurrentTime(0);
     }
-  }, [currentIndex, queue, repeatMode, currentTrack, playTrackInternal]);
+  }, [currentIndex, queue, repeatMode, currentTrack, playTrackInternal, listenLoggerRef]);
 
   useMediaSession({
     currentTrack,
@@ -349,7 +353,13 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
         <audio
           ref={audioRef}
           preload="metadata"
-          onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
+          onTimeUpdate={() => {
+            if (audioRef.current) {
+              const t = audioRef.current.currentTime;
+              setCurrentTime(t);
+              listenLoggerRef.current?.onTimeUpdate(t);
+            }
+          }}
           onLoadedMetadata={() => {
             if (audioRef.current) {
               setDuration(audioRef.current.duration || 0);
@@ -360,8 +370,12 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
           onPlay={() => {
             setIsPlaying(true);
             setIsBlocked(false);
+            listenLoggerRef.current?.onPlay();
           }}
-          onPause={() => setIsPlaying(false)}
+          onPause={() => {
+            setIsPlaying(false);
+            listenLoggerRef.current?.onPause();
+          }}
           onEnded={handleEnded}
           onError={() => {
             console.warn('[AudioPlayer] Audio element error');
