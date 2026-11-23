@@ -1204,18 +1204,18 @@
 }
 
 .profile-stickers-preview-row {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 4px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
 }
 
 .profile-sticker-mini {
   display: flex;
   flex-direction: column;
   align-items: center;
-  flex-shrink: 0;
-  width: 52px;
+  min-width: 0;
+  width: 100%;
 }
 
 .profile-sticker-mini-frame {

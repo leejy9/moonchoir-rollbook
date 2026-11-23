@@ -24,10 +24,12 @@ export const ProfileStickersPreviewCard: React.FC<ProfileStickersPreviewCardProp
   const totalCount = isStaff ? 8 : 24;
   const countText = `${earnedCount} / ${totalCount}`;
 
-  // Show earned stickers first, then unearned, up to 6
-  const previewList = [...stickers]
-    .sort((a, b) => (b.earned ? 1 : 0) - (a.earned ? 1 : 0))
-    .slice(0, 6);
+  const recentEarned = stickers
+    .filter((sticker) => sticker.earned)
+    .sort((a, b) => (b.earnedOn || '').localeCompare(a.earnedOn || ''))
+    .slice(0, 3);
+  const nextLocked = stickers.find((sticker) => !sticker.earned);
+  const previewList = nextLocked ? [...recentEarned, nextLocked] : recentEarned;
 
   return (
     <div
