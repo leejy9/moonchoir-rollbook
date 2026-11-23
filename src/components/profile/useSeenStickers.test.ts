@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React, { act, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { useSeenStickers, computeUnseenStickers } from './useSeenStickers';
+import { useSeenStickers, computeUnseenStickers, isStickerDataReady } from './useSeenStickers';
 import { PREFERENCE_KEYS, readPreference, resetStorage } from '../../services/sheetsStorage';
 
 class MockElement {
@@ -146,5 +146,68 @@ describe('useSeenStickers (V3-20 R5)', () => {
     // Stored stickers must now equal earned stickers
     const stored = readPreference<string[]>(PREFERENCE_KEYS.SEEN_STICKERS, (x): x is string[] => Array.isArray(x), []);
     expect(stored).toEqual(mockEarned);
+  });
+
+  it('활동 데이터가 원격 스냅숏보다 먼저 도착해도 부분 스티커 목록을 저장하지 않는다 (R14-c)', async () => {
+    const holder: { current: ReturnType<typeof useSeenStickers> | null } = { current: null };
+    const TestComp = ({
+      earned,
+      activityArrived,
+      lastSyncedAt,
+    }: {
+      earned: string[];
+      activityArrived: boolean;
+      lastSyncedAt: number;
+    }) => {
+      const isReady = isStickerDataReady(activityArrived, false, lastSyncedAt);
+      const hook = useSeenStickers(earned, isReady);
+      useEffect(() => {
+        holder.current = hook;
+      }, [hook]);
+      return null;
+    };
+
+    const rootEl = new MockElement('DIV');
+    const root = createRoot(rootEl as unknown as HTMLElement);
+    expect(isStickerDataReady(false, true, 0)).toBe(false);
+    expect(isStickerDataReady(false, true, 1)).toBe(true);
+
+    await act(async () => {
+      root.render(
+        React.createElement(TestComp, {
+          earned: [],
+          activityArrived: false,
+          lastSyncedAt: 0,
+        })
+      );
+    });
+
+    const partialEarned = Array.from({ length: 9 }, (_, i) => `sticker_${i + 1}`);
+    await act(async () => {
+      root.render(
+        React.createElement(TestComp, {
+          earned: partialEarned,
+          activityArrived: true,
+          lastSyncedAt: 0,
+        })
+      );
+    });
+
+    expect(store.get(PREFERENCE_KEYS.SEEN_STICKERS)).toBeUndefined();
+    expect(holder.current?.unseenCount).toBe(0);
+
+    const fullEarned = Array.from({ length: 12 }, (_, i) => `sticker_${i + 1}`);
+    await act(async () => {
+      root.render(
+        React.createElement(TestComp, {
+          earned: fullEarned,
+          activityArrived: true,
+          lastSyncedAt: 1,
+        })
+      );
+    });
+
+    expect(holder.current?.unseenCount).toBe(0);
+    expect(readPreference<string[]>(PREFERENCE_KEYS.SEEN_STICKERS, (x): x is string[] => Array.isArray(x), [])).toEqual(fullEarned);
   });
 });

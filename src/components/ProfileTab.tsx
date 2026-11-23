@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, MemberActivity, Schedule } from '../types/rollbook';
 import type { DisplayMode } from '../services/displayMode';
@@ -12,7 +12,7 @@ import {
 } from '../utils/memberProgress';
 import { computePassionTemperature } from '../utils/passionTemperature';
 import { evaluatePraiseStickers } from '../utils/praiseStickers';
-import { useSeenStickers } from './profile/useSeenStickers';
+import { isStickerDataReady, useSeenStickers } from './profile/useSeenStickers';
 import { ProfileSettingsSection } from './profile/ProfileSettingsSection';
 import { ProfileHeroCards } from './profile/ProfileHeroCards';
 import { ProfileNumbersRow } from './profile/ProfileNumbersRow';
@@ -60,6 +60,11 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   const [activity, setActivity] = useState<MemberActivity | null>(null);
 
   const todayStr = useMemo(() => getKSTDateString(), []);
+  const syncState = useSyncExternalStore(
+    (listener) => sheetsService.subscribeSync(listener),
+    () => sheetsService.getSyncState(),
+    () => sheetsService.getSyncState()
+  );
 
   // Reactive data sources
   const members = useMemo(() => {
@@ -223,7 +228,11 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     [evaluatedStickers]
   );
 
-  const isDataReady = Boolean(activity);
+  const isDataReady = isStickerDataReady(
+    Boolean(activity),
+    isStaff,
+    syncState.lastSyncedAt
+  );
   const { unseenIds, unseenCount, markAllSeen } = useSeenStickers(earnedStickerIds, isDataReady);
 
   const handleSyncRemote = async () => {
