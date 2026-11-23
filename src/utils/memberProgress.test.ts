@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { buildMemberScheduleRecords } from './memberRecords';
 import {
   computeMemberLevel,
   computeDaysTogether,
@@ -340,6 +341,56 @@ describe('memberProgress utilities (Spec §5-1 ~ §5-4, §5-7)', () => {
       expect(computePerformanceCount(records)).toBe(1);
       expect(computePerformanceCount(records, ['연주', '녹음'])).toBe(2);
     });
+
+    it('includes an archived attended performance in profile attendance and hour metrics', () => {
+      const member: Member = {
+        id: 'archived-member',
+        name: '보관 일정 단원',
+        part: 'Alto',
+        phoneLast4: '1234',
+        role: 'MEMBER',
+        status: 'ACTIVE',
+        createdAt: '2026-01-01',
+        joinedAt: '2026-01-01',
+        memberStatus: '정단원',
+      };
+      const schedule: Schedule = {
+        id: 'archived-performance',
+        title: '보관된 공연',
+        date: '2026-05-01',
+        startTime: '19:00',
+        endTime: '21:00',
+        locationName: '콘서트홀',
+        category: '연주',
+        isArchived: true,
+      };
+      const records = buildMemberScheduleRecords({
+        member,
+        members: [member],
+        schedules: [schedule],
+        logs: [{
+          id: 'archived-log',
+          memberId: member.id,
+          scheduleId: schedule.id,
+          memberName: member.name,
+          part: member.part,
+          authMethod: 'QR_WEB_CAM',
+          isVerifiedLocation: true,
+          timestamp: '2026-05-01 19:00:00',
+        }],
+        now: new Date('2026-05-02T12:00:00+09:00'),
+        includeArchived: true,
+      });
+      const attendedRecords = records.filter((r) =>
+        ['출석', '수동인정', '지각'].includes(r.finalStatus)
+      );
+      const level = computeMemberLevel(attendedRecords.length, member.part);
+
+      expect(attendedRecords).toHaveLength(1);
+      expect(level.progressPercent).toBe(10);
+      expect(computePracticeHours(records)).toBe(2);
+      expect(computePerformanceCount(records)).toBe(1);
+    });
   });
 
   describe('computeAttendance90Days (§5-2)', () => {
@@ -433,6 +484,42 @@ describe('memberProgress utilities (Spec §5-1 ~ §5-4, §5-7)', () => {
       });
 
       expect(result.totalSessions).toBe(0);
+      expect(result.attendanceRate).toBeNull();
+    });
+
+    it('excludes archived schedules from the 90-day attendance rate', () => {
+      const todayStr = '2026-05-02';
+      const archivedSchedule: Schedule = {
+        id: 's_archived',
+        title: '보관된 연주',
+        date: '2026-05-01',
+        startTime: '19:00',
+        endTime: '21:00',
+        locationName: '콘서트홀',
+        category: '연주',
+        isArchived: true,
+      };
+
+      const result = computeAttendance90Days({
+        member,
+        schedules: [archivedSchedule],
+        logs: [{
+          id: 'l_archived',
+          memberId: member.id,
+          scheduleId: archivedSchedule.id,
+          memberName: member.name,
+          part: member.part,
+          authMethod: 'QR_WEB_CAM',
+          isVerifiedLocation: true,
+          timestamp: '2026-05-01 19:00:00',
+        }],
+        rsvpVotes: [],
+        allMembers: [member],
+        todayStr,
+      });
+
+      expect(result.totalSessions).toBe(0);
+      expect(result.attended).toBe(0);
       expect(result.attendanceRate).toBeNull();
     });
   });

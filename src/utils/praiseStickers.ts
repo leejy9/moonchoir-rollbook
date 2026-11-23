@@ -3,6 +3,7 @@ import type {
   Member,
   MemberActivity,
   RawAttendanceLog,
+  RSVPVote,
   Schedule,
 } from '../types/rollbook';
 import {
@@ -36,8 +37,10 @@ export interface EvaluatePraiseStickersParams {
   member: Member | BoundDeviceProfile;
   schedules: Schedule[];
   logs?: RawAttendanceLog[];
+  rsvpVotes?: RSVPVote[];
   activity?: MemberActivity | null;
   performanceCategories?: string[];
+  lateGraceMinutes?: number;
   allMembers?: Member[];
   now?: Date;
   isStaff?: boolean;
@@ -48,8 +51,10 @@ export function evaluatePraiseStickers({
   member,
   schedules,
   logs = [],
+  rsvpVotes = [],
   activity = null,
   performanceCategories = DEFAULT_PERFORMANCE_CATEGORIES,
+  lateGraceMinutes = 10,
   allMembers = [],
   now = new Date(),
   isStaff,
@@ -84,15 +89,15 @@ export function evaluatePraiseStickers({
       members: allMembers,
       schedules,
       logs,
-      rsvpVotes: [],
+      rsvpVotes,
       now,
-      lateGraceMinutes: 10,
-      includeArchived: false,
+      lateGraceMinutes,
+      includeArchived: true,
     });
 
   // Filter and sort schedules ascending chronologically
   const activeRecords = allRecords
-    .filter((r) => !r.schedule.isCancelled && !r.schedule.isArchived)
+    .filter((r) => !r.schedule.isCancelled)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const activeSchedules = activeRecords.map((r) => r.schedule);

@@ -4,6 +4,7 @@ import type {
   MemberActivity,
   RawAttendanceLog,
   RsvpEvent,
+  RSVPVote,
   Schedule,
 } from '../types/rollbook';
 import {
@@ -11,6 +12,7 @@ import {
   STAFF_STICKER_IDS,
   STICKER_DEFINITIONS,
 } from './praiseStickers';
+import { buildMemberScheduleRecords } from './memberRecords';
 
 describe('Praise Stickers Engine (V3-13, Spec §5-6, §5-7, V26, V27)', () => {
   const baseMember: Member = {
@@ -431,5 +433,117 @@ describe('Praise Stickers Engine (V3-13, Spec §5-6, §5-7, V26, V27)', () => {
 
     expect(stageReady.earned).toBe(true);
     expect(stageReady.earnedOn).toBe('2026-07-02');
+  });
+
+  it('counts an archived attended performance through default and profile record paths', () => {
+    const now = new Date('2026-11-23T12:00:00+09:00');
+    const schedule: Schedule = {
+      ...createSchedule('archived-performance', '2026-11-20', '연주'),
+      isArchived: true,
+    };
+    const logs = [createLog('m1', schedule.id, '2026-11-20 19:20:00')];
+
+    const defaultPathStickers = evaluatePraiseStickers({
+      member: baseMember,
+      schedules: [schedule],
+      logs,
+      now,
+    });
+    const profileRecords = buildMemberScheduleRecords({
+      member: baseMember,
+      members: [baseMember],
+      schedules: [schedule],
+      logs,
+      now,
+      includeArchived: true,
+    });
+    const profilePathStickers = evaluatePraiseStickers({
+      member: baseMember,
+      schedules: [schedule],
+      logs,
+      scheduleRecords: profileRecords,
+      now,
+    });
+
+    for (const stickers of [defaultPathStickers, profilePathStickers]) {
+      expect(stickers.find((s) => s.id === 'first-stage')).toMatchObject({
+        earned: true,
+        earnedOn: '2026-11-20',
+        progress: 1,
+      });
+    }
+  });
+
+  it('includes an archived attendance in the consecutive on-time sticker streak', () => {
+    const schedules = [
+      createSchedule('late', '2026-05-01', '정기연습', '19:30'),
+      createSchedule('on-time-1', '2026-05-08', '정기연습', '19:30'),
+      {
+        ...createSchedule('archived-on-time', '2026-05-15', '정기연습', '19:30'),
+        isArchived: true,
+      },
+      createSchedule('on-time-2', '2026-05-22', '정기연습', '19:30'),
+    ];
+    const logs = [
+      createLog('m1', 'late', '2026-05-01 19:45:00'),
+      createLog('m1', 'on-time-1', '2026-05-08 19:25:00'),
+      createLog('m1', 'archived-on-time', '2026-05-15 19:25:00'),
+      createLog('m1', 'on-time-2', '2026-05-22 19:25:00'),
+    ];
+
+    const stickers = evaluatePraiseStickers({
+      member: baseMember,
+      schedules,
+      logs,
+      now: new Date('2026-06-01T12:00:00+09:00'),
+    });
+
+    expect(stickers.find((s) => s.id === 'back-on-time')).toMatchObject({
+      earned: true,
+      earnedOn: '2026-05-22',
+      progress: 1,
+    });
+  });
+
+  it('uses supplied RSVP votes in the default record path', () => {
+    const schedules = [
+      createSchedule('on-time-1', '2026-05-01', '정기연습', '19:30'),
+      createSchedule('on-time-2', '2026-05-08', '정기연습', '19:30'),
+      createSchedule('excused', '2026-05-15', '정기연습', '19:30'),
+      createSchedule('on-time-3', '2026-05-22', '정기연습', '19:30'),
+      createSchedule('on-time-4', '2026-05-29', '정기연습', '19:30'),
+      createSchedule('on-time-5', '2026-06-05', '정기연습', '19:30'),
+    ];
+    const logs = [
+      createLog('m1', 'on-time-1', '2026-05-01 19:25:00'),
+      createLog('m1', 'on-time-2', '2026-05-08 19:25:00'),
+      createLog('m1', 'on-time-3', '2026-05-22 19:25:00'),
+      createLog('m1', 'on-time-4', '2026-05-29 19:25:00'),
+      createLog('m1', 'on-time-5', '2026-06-05 19:25:00'),
+    ];
+    const rsvpVotes: RSVPVote[] = [{
+      id: 'vote-excused',
+      scheduleId: 'excused',
+      memberId: 'm1',
+      memberName: baseMember.name,
+      part: baseMember.part,
+      status: 'ABSENT',
+      reason: '병가',
+      timestamp: '2026-05-14T10:00:00+09:00',
+    }];
+
+    const stickers = evaluatePraiseStickers({
+      member: baseMember,
+      schedules,
+      logs,
+      rsvpVotes,
+      now: new Date('2026-06-10T12:00:00+09:00'),
+    });
+
+    expect(stickers.find((s) => s.id === 'ontime-5')).toMatchObject({
+      earned: true,
+      earnedOn: '2026-06-05',
+      progress: 1,
+    });
   });
 });
