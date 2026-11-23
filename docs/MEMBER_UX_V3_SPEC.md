@@ -378,8 +378,8 @@ flowchart LR
 
 | 항목 | 정의 |
 |---|---|
-| 함께한 날 | `members.joined_at`(없으면 첫 출석 로그 날짜)부터 오늘까지 KST 일수 + 1 |
-| 연습 시간 | 상태가 출석·수동인정·지각인 일정의 (`end_time` − `start_time`) 합. 시간 단위 내림 |
+| 함께한 날 | `members.joined_at`(text)부터 오늘까지 KST 일수 + 1. `joined_at`이 비었거나 `YYYY-MM-DD`로 읽히지 않거나 오늘보다 뒤면 첫 출석 로그 날짜, 그것도 없으면 0일(프로필 줄은 `파트`만) |
+| 연습 시간 | 상태가 출석·수동인정·지각인 일정의 (`end_time` − `start_time`) 합. 시간 단위 내림. `end_time`이 비었거나 형식이 틀리거나 시작보다 이르면 그 일정은 0분(자정을 넘는 일정은 없다고 본다) |
 | 공연 | 구분이 `performanceCategories`에 들어 있고 상태가 출석·수동인정·지각인 **일정** 수. `performances` 테이블과는 무관하다(V18: 공연과 일정은 연결하지 않음) |
 | 출석률 | 기존 엔진은 기간 옵션이 없으므로, **날짜가 `addDaysKST(오늘, -90)` 이상이고 오늘 이하인 일정만 걸러서** 엔진에 넘긴 결과의 `attendanceRate`. 그 기간의 모수(`totalSessions`)가 0이면 엔진이 100을 돌려주므로 **링에 "—"를 표시**하고 %를 그리지 않는다. 링 아래 표기 없음 |
 | 누적 출석 | 기존 엔진 `attended + late`(전체 기간). 레벨 계산에 쓴다 |
@@ -468,6 +468,9 @@ flowchart LR
 
 - 투영 값이다. 순수 함수 `src/utils/praiseStickers.ts`가 각 스티커의 `{ id, earned, earnedOn?, progress? }`를 돌려준다.
 - 획득일은 조건을 처음 만족한 날이다.
+  - 연습실 묶음: first-play = `listen.firstAt`, listen-1h/5h/20h = `daily`를 날짜순으로 더해 기준을 처음 넘은 날, explorer-10 = `perPiece`의 `reached60At`을 정렬해 10번째 날짜.
+  - 약속 묶음은 `rsvpEvents`, 나머지는 출석 기록에서 구한다.
+  - 모든 날짜는 KST로 표시한다.
 - **새로 얻은 스티커 표시 (2026-11-22):** 따로 팝업을 띄우지 않는다.
   - 스티커 보드에서 아직 본 적 없는 획득 스티커의 칸 오른쪽 위에 살구색 "신규" 표시를 붙인다(`--brand-apricot` 바탕, 흰 글자, 11px).
   - 내 활동의 스티커 미리보기 제목 옆에도 `신규 n`을 붙인다.
@@ -605,7 +608,7 @@ flowchart LR
 | 함수 | 권한 | 내용 |
 |---|---|---|
 | `fn_log_listen_session(p_payload jsonb)` | anon | 입력 `chunkId, memberId, pieceId, trackId, startedAt, listenedSeconds`. 검증: 회원·트랙 존재, 트랙이 곡에 속함, `listenedSeconds` 1~120으로 자름. 같은 회원의 당일(KST) 합계가 21,600초를 넘으면 무시. `on conflict (chunk_id) do nothing`. 반환 `{ok:true}` |
-| `fn_get_member_activity(p_member_id text)` | anon | 반환 `{ rsvpEvents: [...본인 것, 최근 400개], listen: { totalSeconds, perPiece: [{pieceId, seconds}], firstAt } }`. 원본 재생 행 목록은 반환하지 않는다 |
+| `fn_get_member_activity(p_member_ids text[])` | anon | **병합 회원 별칭 집합**을 받는다(클라이언트가 `resolveMergedMemberIds`로 만든 배열, 1~20개, 넘으면 `INVALID_INPUT`). 반환 `{ rsvpEvents: [...그 id들의 것, 최근 400개, occurred_at 오름차순], listen: { totalSeconds, firstAt, daily: [{date: 'YYYY-MM-DD'(KST), seconds}], perPiece: [{pieceId, seconds, reached60At}] } }`. `reached60At`은 그 곡 누적이 60초에 처음 닿은 묶음의 `received_at`(못 닿았으면 null). 원본 재생 행 목록은 반환하지 않는다 |
 | `fn_authorize_media_upload(p_token text)` | anon | `return fn_check_admin_token(p_token, 'admin')`. Worker 전용 |
 | `fn_get_media_usage(p_token text)` | anon | 관리자 토큰 검사 후 `practice_tracks.size_bytes` 합 + `practice_pieces.score_size_bytes` 합(보관 포함). 토큰이 틀리면 기존 관리자 RPC와 같은 오류 형식 |
 | `fn_save_practice_piece` | (기존) | `scoreStorageKey`, `scoreSizeBytes`를 받는다. **최신 정의(`20261122000000_practice_catalog.sql` 211행~)를 복사해서 해당 줄만 고친다** |
