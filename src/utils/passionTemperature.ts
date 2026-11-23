@@ -23,6 +23,7 @@ import {
   buildMemberScheduleRecords,
   type MemberScheduleRecord,
 } from './memberRecords';
+import { getKSTTimestampString, normalizeToKSTTimestamp } from './date';
 import { DEFAULT_PERFORMANCE_CATEGORIES } from './performanceCategories';
 
 export * from './passionRules';
@@ -51,6 +52,11 @@ function convertRsvpEventsToVotes(events: RsvpEvent[]): RSVPVote[] {
     reason: '',
     timestamp: ev.occurredAt,
   }));
+}
+
+function timestampAtOrBefore(value: string | undefined | null, cutoff: string): boolean {
+  const normalized = normalizeToKSTTimestamp(value);
+  return normalized !== '' && normalized <= cutoff;
 }
 
 export function computePassionTemperature(
@@ -185,15 +191,24 @@ export function computePassionTemperature(
   const shouldCalcWeekly = options?.includeWeeklyDelta ?? (!referenceDate);
   if (shouldCalcWeekly) {
     const sevenDaysAgo = new Date(refTimeMs - 7 * 24 * 60 * 60 * 1000);
+    const cutoff = getKSTTimestampString(sevenDaysAgo);
+    const historicalOptions: ComputePassionTemperatureOptions = {
+      ...options,
+      includeWeeklyDelta: false,
+      scheduleRecords: undefined,
+      rsvpVotes: options?.rsvpVotes?.filter((vote) =>
+        timestampAtOrBefore(vote.timestamp, cutoff)
+      ),
+    };
     const pastResult = computePassionTemperature(
       member,
       allMembers,
       schedules,
-      logs,
-      rsvpEvents,
+      logs.filter((log) => timestampAtOrBefore(log.timestamp, cutoff)),
+      rsvpEvents.filter((event) => timestampAtOrBefore(event.occurredAt, cutoff)),
       config,
       sevenDaysAgo,
-      { ...options, includeWeeklyDelta: false, scheduleRecords: undefined }
+      historicalOptions
     );
     weeklyDelta = Math.round((finalValue - pastResult.value) * 10) / 10;
   }

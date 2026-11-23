@@ -547,5 +547,94 @@ describe('computePassionTemperature (V3-12)', () => {
       expect(stageItem?.count).toBe(1);
       expect(stageItem?.delta).toBe(PASSION_RULES.DELTAS.STAGE_ATTEND);
     });
+
+    it('같은 날에는 시작 시각이 늦은 일정부터 온도 창에 포함한다 (R13)', () => {
+      const newerSchedules = Array.from({ length: 11 }, (_, i) =>
+        makeSchedule(
+          `s_newer_${i}`,
+          i < 6 ? '2026-11-22' : '2026-11-21'
+        )
+      );
+      const schedules = [
+        makeSchedule('s_same_day_14', '2026-11-20', '14:00'),
+        makeSchedule('s_same_day_1930', '2026-11-20', '19:30'),
+        ...newerSchedules,
+      ];
+      const logs = [
+        makeLog('l_same_day_14', 's_same_day_14', '2026-11-20 13:55:00'),
+        makeLog('l_same_day_1930', 's_same_day_1930', '2026-11-20 19:25:00'),
+        ...newerSchedules.map((schedule) =>
+          makeLog(`l_${schedule.id}`, schedule.id, `${schedule.date} 19:25:00`)
+        ),
+      ];
+
+      const res = computePassionTemperature(
+        mockMember,
+        [mockMember],
+        schedules,
+        logs,
+        [],
+        {},
+        new Date('2026-11-23T12:00:00+09:00')
+      );
+
+      const onTimeIds = res.groups.find((group) => group.key === 'attendance')?.items
+        .find((item) => item.key === 'ontime')?.scheduleIds;
+      expect(res.windowSize).toBe(12);
+      expect(onTimeIds).toContain('s_same_day_1930');
+      expect(onTimeIds).not.toContain('s_same_day_14');
+    });
+
+    it('관리자 수동 출석도 기록 시각을 유지해 정시 판정한다 (V29)', () => {
+      const schedule = makeSchedule('s_manual', '2026-11-20', '19:30');
+      const log = makeLog('l_manual', schedule.id, '2026-11-20 19:25:00');
+
+      const [record] = buildMemberScheduleRecords({
+        member: mockMember,
+        members: [mockMember],
+        schedules: [schedule],
+        logs: [log],
+        now: new Date('2026-11-23T12:00:00+09:00'),
+      });
+
+      expect(record.checkInTime).toBe('19:25');
+      expect(record.finalStatus).toBe('출석');
+    });
+
+    it('6일 전 24시간 전 투표는 7일 전 값에 포함하지 않는다 (R13)', () => {
+      const schedule = makeSchedule('s_recent_vote', '2026-11-17', '13:30');
+      const event = makeRsvp(1, schedule.id, 'ATTEND', '2026-11-16T13:00:00+09:00');
+
+      const res = computePassionTemperature(
+        mockMember,
+        [mockMember],
+        [schedule],
+        [],
+        [event],
+        {},
+        new Date('2026-11-23T12:00:00+09:00'),
+        { includeWeeklyDelta: true }
+      );
+
+      expect(res.weeklyDelta).toBe(-0.4);
+    });
+
+    it('주간 과거 값 계산 시 기준 시각 이후에 추가된 출석 로그를 제외한다 (R13)', () => {
+      const schedule = makeSchedule('s_old_schedule', '2026-11-15', '19:30');
+      const lateAddedLog = makeLog('l_late_added', schedule.id, '2026-11-17 19:25:00');
+
+      const res = computePassionTemperature(
+        mockMember,
+        [mockMember],
+        [schedule],
+        [lateAddedLog],
+        [],
+        {},
+        new Date('2026-11-23T12:00:00+09:00'),
+        { includeWeeklyDelta: true }
+      );
+
+      expect(res.weeklyDelta).toBe(0.5);
+    });
   });
 });
