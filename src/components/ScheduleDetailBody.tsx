@@ -22,7 +22,8 @@ export const ScheduleDetailBody: React.FC<ScheduleDetailBodyProps> = ({ schedule
     member,
     schedule.date,
     schedule,
-    memberAliasIds
+    memberAliasIds,
+    allMembers
   );
   const kakaoMapLink = buildKakaoMapLink({
     name: schedule.locationName,
@@ -38,7 +39,8 @@ export const ScheduleDetailBody: React.FC<ScheduleDetailBodyProps> = ({ schedule
         m,
         schedule.date,
         schedule,
-        resolveMergedMemberIds(m.id, allMembers)
+        resolveMergedMemberIds(m.id, allMembers),
+        allMembers
       )
   );
   const votes = sheetsService.getRSVPVotes(schedule.id);

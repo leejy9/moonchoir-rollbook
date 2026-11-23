@@ -275,4 +275,108 @@ describe('buildMemberScheduleRecords', () => {
 
     expect(records[0].finalStatus).toBe('결석');
   });
+
+  it('uses merged-member status history when the representative has no history', () => {
+    const canonicalMember: Member = { ...mockMember, id: 'mem_canonical' };
+    const mergedMember: Member = {
+      ...mockMember,
+      id: 'mem_merged',
+      status: 'MERGED',
+      mergedIntoId: canonicalMember.id,
+      statusHistory: [
+        {
+          id: 'history_leave',
+          memberId: 'mem_merged',
+          status: '휴단원',
+          part: mockMember.part,
+          startDate: '2026-10-01',
+          endDate: '2026-10-31',
+          createdAt: '2026-10-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const records = buildMemberScheduleRecords({
+      member: canonicalMember,
+      members: [canonicalMember, mergedMember],
+      schedules: [mockSchedules[1]],
+      now: mockNow,
+    });
+
+    expect(records[0].finalStatus).toBe('미참');
+  });
+
+  it('prefers representative status history over overlapping merged-member history', () => {
+    const canonicalMember: Member = {
+      ...mockMember,
+      id: 'mem_canonical',
+      statusHistory: [
+        {
+          id: 'history_active',
+          memberId: 'mem_canonical',
+          status: '정단원',
+          part: mockMember.part,
+          startDate: '2026-10-01',
+          endDate: '2026-10-31',
+          createdAt: '2026-10-01T00:00:00Z',
+        },
+      ],
+    };
+    const mergedMember: Member = {
+      ...mockMember,
+      id: 'mem_merged',
+      status: 'MERGED',
+      mergedIntoId: canonicalMember.id,
+      statusHistory: [
+        {
+          id: 'history_leave',
+          memberId: 'mem_merged',
+          status: '휴단원',
+          part: mockMember.part,
+          startDate: '2026-10-01',
+          endDate: '2026-10-31',
+          createdAt: '2026-10-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const records = buildMemberScheduleRecords({
+      member: canonicalMember,
+      members: [canonicalMember, mergedMember],
+      schedules: [mockSchedules[1]],
+      now: mockNow,
+    });
+
+    expect(records[0].finalStatus).toBe('결석');
+  });
+
+  it('excludes the representative when a merged member has a withdrawn history', () => {
+    const canonicalMember: Member = { ...mockMember, id: 'mem_canonical' };
+    const mergedMember: Member = {
+      ...mockMember,
+      id: 'mem_merged',
+      status: 'MERGED',
+      mergedIntoId: canonicalMember.id,
+      statusHistory: [
+        {
+          id: 'history_withdrawn',
+          memberId: 'mem_merged',
+          status: '퇴단원',
+          part: mockMember.part,
+          startDate: '2026-10-01',
+          endDate: '2026-10-31',
+          createdAt: '2026-10-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const records = buildMemberScheduleRecords({
+      member: canonicalMember,
+      members: [canonicalMember, mergedMember],
+      schedules: [mockSchedules[1]],
+      now: mockNow,
+    });
+
+    expect(records[0].finalStatus).toBe('미참');
+  });
 });

@@ -59,7 +59,8 @@ export const HomeUpcomingListSection: React.FC<HomeUpcomingListSectionProps> = (
                   m,
                   s.date,
                   s,
-                  aliasIdsByMemberId.get(m.id)
+                  aliasIdsByMemberId.get(m.id),
+                  members
                 )
             );
             const targetIdSet = new Set(targetForSch.map((tm) => tm.id));

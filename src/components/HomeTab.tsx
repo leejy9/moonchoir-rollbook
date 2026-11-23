@@ -142,11 +142,20 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       schedules,
       member: currentMember,
       memberAliasIds: currentMemberAliasIds,
+      identityMembers: allMembers,
       now: currentNow,
       todayStr,
       selectedId: selectedScheduleId,
     });
-  }, [schedules, currentMember, currentMemberAliasIds, currentNow, todayStr, selectedScheduleId]);
+  }, [
+    schedules,
+    currentMember,
+    currentMemberAliasIds,
+    allMembers,
+    currentNow,
+    todayStr,
+    selectedScheduleId,
+  ]);
 
   const handleToggleCalendarView = (view: 'week' | 'month') => {
     setCalendarView(view);
@@ -259,7 +268,8 @@ export const HomeTab: React.FC<HomeTabProps> = ({
             currentMember,
             focusResult.focus.date,
             focusResult.focus,
-            currentMemberAliasIds
+            currentMemberAliasIds,
+            allMembers
           )}
           cta={deriveTodayCta({
             schedule: focusResult.focus,
@@ -268,7 +278,8 @@ export const HomeTab: React.FC<HomeTabProps> = ({
               currentMember,
               focusResult.focus.date,
               focusResult.focus,
-              currentMemberAliasIds
+              currentMemberAliasIds,
+              allMembers
             ),
             myVote: sheetsService
               .getRSVPVotes(focusResult.focus.id)

@@ -94,7 +94,8 @@ export function buildMemberScheduleRecords({
       memberLogs,
       memberRsvp,
       lateGraceMinutes,
-      aliasIds
+      aliasIds,
+      members
     );
 
     const isPast = s.date < todayStr;

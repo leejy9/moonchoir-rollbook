@@ -17,28 +17,43 @@ import { resolveMemberIdentity } from './memberIdentity';
  */
 export function getEffectiveMemberStatus(
   member: Member,
-  date: string
+  date: string,
+  identityMembers: readonly Member[] = [member]
 ): { status: MemberStatus; part: PartType } {
-  if (member.statusHistory && member.statusHistory.length > 0) {
-    // 1. 최신 생성순(createdAt 내림차순) 및 최신 시작일순으로 정렬하여 탐색
-    const sorted = [...member.statusHistory].sort((a, b) => {
+  const memberById = new Map(identityMembers.map((candidate) => [candidate.id, candidate]));
+  memberById.set(member.id, member);
+  const identity = resolveMemberIdentity(member.id, [...memberById.values()]);
+  const representative = memberById.get(identity.canonicalId) || member;
+
+  const findMatchingHistory = (candidate: Member) => {
+    if (!candidate.statusHistory?.length) return undefined;
+    const sorted = [...candidate.statusHistory].sort((a, b) => {
       const timeA = a.createdAt || a.startDate || '';
       const timeB = b.createdAt || b.startDate || '';
       return timeB.localeCompare(timeA);
     });
+    return sorted.find((history) => history.startDate <= date && date <= history.endDate);
+  };
 
-    const matched = sorted.find(
-      (h) => h.startDate <= date && date <= h.endDate
-    );
-    if (matched) {
-      return { status: matched.status, part: matched.part };
+  const representativeHistory = findMatchingHistory(representative);
+  if (representativeHistory) {
+    return { status: representativeHistory.status, part: representativeHistory.part };
+  }
+
+  for (const aliasId of identity.aliasIds) {
+    if (aliasId === identity.canonicalId) continue;
+    const aliasMember = memberById.get(aliasId);
+    if (!aliasMember) continue;
+    const aliasHistory = findMatchingHistory(aliasMember);
+    if (aliasHistory) {
+      return { status: aliasHistory.status, part: aliasHistory.part };
     }
   }
 
-  // 2. Fallback: 기본 프로필 상태 사용
+  // 2. 대표 단원의 이력이 없는 기간은 대표 프로필 상태를 사용한다.
   return {
-    status: member.memberStatus || '정단원',
-    part: member.part || '소프라노',
+    status: representative.memberStatus || '정단원',
+    part: representative.part || '소프라노',
   };
 }
 
@@ -50,7 +65,8 @@ export function isMemberRequiredForSchedule(
   member: Member,
   scheduleDate: string,
   schedule?: Pick<Schedule, 'targetAudienceType' | 'targetParts' | 'targetMemberIds'>,
-  aliasIds: ReadonlySet<string> = new Set([member.id])
+  aliasIds: ReadonlySet<string> = new Set([member.id]),
+  identityMembers: readonly Member[] = [member]
 ): boolean {
   // 1. 입단일 이전의 일정은 출결 의무 없음 (모수 제외)
   if (member.joinedAt && scheduleDate < member.joinedAt) {
@@ -58,7 +74,7 @@ export function isMemberRequiredForSchedule(
   }
 
   // 2. 해당 일자 시점의 유효 회원 상태 판정
-  const effective = getEffectiveMemberStatus(member, scheduleDate);
+  const effective = getEffectiveMemberStatus(member, scheduleDate, identityMembers);
 
   // 2-1. 퇴단원은 관리자가 직접 지정에 실수로 넣었더라도 절대 의무 대상이 아님 (데이터 오염 및 탈퇴자 결석 방지)
   if (effective.status === '퇴단원') {
@@ -112,11 +128,12 @@ export function isMemberRequiredForSchedule(
 export function isScheduleVisibleToMember(
   member: Member | undefined,
   schedule: Pick<Schedule, 'date' | 'visibility' | 'targetAudienceType' | 'targetParts' | 'targetMemberIds'>,
-  aliasIds?: ReadonlySet<string>
+  aliasIds?: ReadonlySet<string>,
+  identityMembers?: readonly Member[]
 ): boolean {
   if (schedule.visibility !== 'TARGETS_ONLY') return true;
   if (!member) return false;
-  return isMemberRequiredForSchedule(member, schedule.date, schedule, aliasIds);
+  return isMemberRequiredForSchedule(member, schedule.date, schedule, aliasIds, identityMembers);
 }
 
 /**
@@ -206,7 +223,8 @@ export function reconcileSingleMemberAttendance(
   memberLogs: RawAttendanceLog[],
   memberRsvp?: RSVPVote,
   lateGraceMinutes: number = 10,
-  aliasIds: ReadonlySet<string> = new Set([member.id])
+  aliasIds: ReadonlySet<string> = new Set([member.id]),
+  identityMembers: readonly Member[] = [member]
 ): AttendanceReconciliation {
   if (schedule.isCancelled) {
     return {
@@ -230,7 +248,13 @@ export function reconcileSingleMemberAttendance(
   let finalStatus: AttendanceStatus = '결석';
   let checkInTime: string | undefined;
 
-  const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule, aliasIds);
+  const isRequired = isMemberRequiredForSchedule(
+    member,
+    schedule.date,
+    schedule,
+    aliasIds,
+    identityMembers
+  );
   const isExempt = !isRequired;
 
   // 1) 출결 취소(초기화) 로그인지 판별
@@ -336,7 +360,13 @@ export function calculateCumulativeAttendanceWithLifecycle(
 
     for (const schedule of activeSchedules) {
       const isPastOrToday = schedule.date <= todayStr;
-      const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule, aliasIds);
+      const isRequired = isMemberRequiredForSchedule(
+        member,
+        schedule.date,
+        schedule,
+        aliasIds,
+        rosterForMerge
+      );
 
       const memberLogs = rawLogs.filter(
         (log) => aliasIds.has(log.memberId) && log.scheduleId === schedule.id
@@ -351,7 +381,8 @@ export function calculateCumulativeAttendanceWithLifecycle(
         memberLogs,
         memberRsvp,
         lateGraceMinutes,
-        aliasIds
+        aliasIds,
+        rosterForMerge
       );
 
       const hasCheckedIn =

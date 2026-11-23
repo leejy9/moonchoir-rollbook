@@ -60,7 +60,8 @@ export const ScheduleRsvpLogModal: React.FC<ScheduleRsvpLogModalProps> = ({
         m,
         schedule.date,
         schedule,
-        resolveMergedMemberIds(m.id, allMembersForIdentity)
+        resolveMergedMemberIds(m.id, allMembersForIdentity),
+        allMembersForIdentity
       );
       const voteStatus: RSVPStatus | 'UNVOTED' = vote ? vote.status : 'UNVOTED';
       const reason = vote?.reason || '';

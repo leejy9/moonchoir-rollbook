@@ -110,7 +110,8 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           m,
           s.date,
           s,
-          aliasIdsByMemberId.get(m.id)
+          aliasIdsByMemberId.get(m.id),
+          allMembersForIdentity
         );
         const isPastOrToday = s.date <= todayStr;
         const status = item?.finalStatus || (isRequired ? '결석' : '미참');
@@ -144,7 +145,13 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
       map.set(m.id, { attended, late, excused, absent, exempt, rate });
     });
     return map;
-  }, [members, schedules, reconciliationsBySchedule, aliasIdsByMemberId]);
+  }, [
+    members,
+    schedules,
+    reconciliationsBySchedule,
+    aliasIdsByMemberId,
+    allMembersForIdentity,
+  ]);
 
   // Sorting
   const sortedMembers = React.useMemo(() => {
@@ -190,7 +197,8 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
       member,
       schedule.date,
       schedule,
-      aliasIdsByMemberId.get(member.id)
+      aliasIdsByMemberId.get(member.id),
+      allMembersForIdentity
     );
     const defaultStatus = getMatrixCellDisplay({ schedule, item, isRequired }).statusText;
 
@@ -479,7 +487,8 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                       m,
                       s.date,
                       s,
-                      aliasIdsByMemberId.get(m.id)
+                      aliasIdsByMemberId.get(m.id),
+                      allMembersForIdentity
                     );
                     const display = getMatrixCellDisplay({ schedule: s, item, isRequired });
 

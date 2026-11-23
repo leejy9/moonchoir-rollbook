@@ -100,7 +100,13 @@ export function evaluatePraiseStickers({
   // Pre-calculate per-schedule attendance outcomes
   const scheduleOutcomes: ScheduleOutcome[] = activeRecords.map((r) => {
     const s = r.schedule;
-    const isRequired = isMemberRequiredForSchedule(targetMember, r.date, s, aliasIds);
+    const isRequired = isMemberRequiredForSchedule(
+      targetMember,
+      r.date,
+      s,
+      aliasIds,
+      allMembers
+    );
     const isAttended = r.finalStatus === '출석' || r.finalStatus === '수동인정';
     const isLate = r.finalStatus === '지각';
 
