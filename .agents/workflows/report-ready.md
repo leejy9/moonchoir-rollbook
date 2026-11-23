@@ -25,4 +25,8 @@ description: 작업 완료 보고 전에 실제 명령을 실행하고 그 출�
    grep -n "<이름>" supabase/migrations/*.sql
    ```
 5. 푸시 후 GitHub PR 화면의 CI 결과(초록·빨강)를 적는다. 빨간불이면 보고하지 말고 고친다.
-6. `.agents/rules/recurring-mistakes.md`의 모든 항목(현재 15개)을 하나씩 확인하고, 해당 없음·지킴·어김을 적는다.
+   - PR 표(번호, 머리 브랜치, **대상 브랜치**, CI)는 아래 명령 출력에서 옮겨 적는다. 기억으로 쓰지 않는다.
+   ```bash
+   gh pr view <번호> --json number,headRefName,baseRefName,statusCheckRollup
+   ```
+6. `.agents/rules/recurring-mistakes.md`의 모든 항목(현재 17개)을 하나씩 확인하고, 해당 없음·지킴·어김을 적는다.
