@@ -1390,6 +1390,27 @@ v3-A(PR #27) 검수 후속 작업 지시서(`check.md`)에 따라 운영진 연�
 6. **M6 (`docs: V3-19 verification and release log`)**:
    - 수용 기준 36~40 검증, 전체 빌드 및 가드 검사 통과 확인.
 
+---
+
+## [2026-11-23] v3-C 활동 기록, 열정 온도 및 칭찬 스티커 (V3-07 ~ V3-14)
+
+단원 UX v3 명세 §5-5, §5-6, §5-7, §7 및 구현 지시서 v3-C 단계에 따라 활동 기록 DB 마이그레이션, 청취 세션 수집기, 열정 온도 계산 엔진, 칭찬 스티커 엔진 및 내 활동 시트 연동을 완료함.
+
+### 작업 요약 (티켓별 한 줄 요약)
+1. **V3-07 (`feat(v3): V3-07 activity migration, triggers, and RPCs`)**:
+   - `supabase/migrations/20261124000000_v3_activity.sql` 및 `supabase/tests/v3_activity_check.sql` 작성 (`rsvp_events`, `trg_rsvp_votes_log`, `trg_rsvp_events_no_update_delete`, 백필, `practice_listen_sessions`, `trg_practice_listen_sessions_no_update`, `fn_log_listen_session`, `fn_get_member_activity`).
+2. **V3-07b (`feat(v3): V3-07b activity types, parsers, and backend RPC mapping`)**:
+   - `src/types/activity.ts` 신설, `activityParser.ts` 작성, `sheets.ts` 및 `supabaseBackend.ts`에 `logListenSession`, `getMemberActivity` 연동 (GAS 백엔드는 `UNSUPPORTED_BACKEND`).
+3. **V3-10 (`feat(v3): V3-10 listen logger service and audio player hook integration`)**:
+   - `src/services/media/listenLogger.ts` 작성 (실제 청취 초 누적, 2초 초과 탐색 점프 배제, 30초 미만 보류, 60초 주기/일시정지/종료 플러시) 및 `useAudioListenLogger.ts` 훅 분리를 통한 `AudioPlayerProvider.tsx` 400줄 제한 준수.
+4. **V3-12 (`feat(v3): V3-12 passion temperature calculation engine, sheet, and attendance drill-down`)**:
+   - `passionRules.ts`, `passionCalculators.ts`, `passionTemperature.ts` 작성 (36.5 기본, 최근 12회 윈도우, 34.0~42.0 클램프, 주간 변화율), `PassionTemperatureSheet.tsx` 구현 및 출석 기록 시트 "선택한 일정만" 모드 연동.
+5. **V3-13 (`feat(v3): V3-13 praise sticker engine, assets, sticker board sheet, and profile preview`)**:
+   - Fluent 3D 이모지 원본 24개 이미지 다운로드(`public/stickers/*.png`, MIT 라이선스), `praiseStickerDefinitions.ts`, `praiseStickerEvaluators.ts`, `praiseStickers.ts` 분리 구현(24종, 스태프 8종 한정), `useSeenStickers.ts` 신규 배지 추적, `StickerBoardSheet.tsx` 및 `ProfileStickersPreviewCard.tsx` 구현.
+6. **V3-14 (`docs(v3): V3-14 architecture recovery and development log documentation`)**:
+   - `docs/ARCHITECTURE_RECOVERY.md` 및 `docs/DEV_LOG.md` 갱신, v3-C 전체 테스트 및 가드 검증.
+
+
 
 
 

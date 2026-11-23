@@ -392,3 +392,16 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
   - 업로드는 앱(탭)이 열려 있는 동안에만 진행되며, 탭을 닫으면 중단되고 재개 시 미완료 항목을 안내한다.
   - 숨겨진 iframe으로 유튜브 백그라운드 재생은 지원하지 않으며, 플레이어를 내리면 비디오 플레이어가 파괴되고 저장 위치부터 복구된다.
 
+## 2026-11-23 — 활동 기록 및 게이미피케이션 엔진 (v3-C, V3-07 ~ V3-13)
+
+- **새 테이블 및 함수:**
+  - `rsvp_events`: 투표 변경 이력(Event Sourcing). 트리거 `trg_rsvp_votes_log`로 투표 생성·수정·삭제를 자동 기록하며, `trg_rsvp_events_no_update_delete`로 수정 및 삭제를 원천 차단함. 백필(`action = 'backfill'`) 행은 활동 통계에서 제외됨(V27).
+  - `practice_listen_sessions`: 실시간 청취 세션 원천 로그. 호출당 120초 상한 clamp, 1인 일일 21,600초(6시간) 상한 적용. `trg_practice_listen_sessions_no_update`로 수정 불가.
+  - RPC: `fn_log_listen_session` (음원 청취 기록), `fn_get_member_activity` (병합 회원 기준 투표 이벤트 및 청취 통계 집계).
+- **열정 온도 엔진 (`src/utils/passionTemperature.ts`):**
+  - 36.5°C 기본값, 최근 12회차 연습 윈도우 기준, 출석(정시/일찍/지각/결석/연속)/약속(24h전 투표, 지킴률, 노쇼, 직전변경)/공연 출석 델타 반영. 34.0~42.0°C 범위 클램프 및 1주 전 기준 주간 변화율(▲/▼/—) 산출.
+- **칭찬 스티커 엔진 (`src/utils/praiseStickers.ts`):**
+  - 24종 스티커 (꾸준함 6, 시간 약속 5, 약속 4, 연습실 5, 무대 4), 스태프는 8종 한정(V26, 분모 8).
+  - KST 기준 일자 계산, `SEEN_STICKERS` 기반 신규 배지 추적 및 첫 기기 열람 시 초기화 지원.
+
+
