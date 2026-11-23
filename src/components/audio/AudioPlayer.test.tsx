@@ -131,7 +131,39 @@ describe('GlobalAudioPlayer & MiniPlayer & FullPlayer (V3-06, V3-06b)', () => {
     expect(html).toContain('−5초');
     expect(html).toContain('+5초');
     expect(html).toContain('악보 보기');
-    expect(html).toContain('1곡');
+    // L4: Repeat button has NO "전체" or "1곡" text, only icon with aria-label="한 곡 반복" and aria-pressed
+    const repeatBtnMatch = html.match(/<button[^>]*aria-label="한 곡 반복"[^>]*>([\s\S]*?)<\/button>/);
+    expect(repeatBtnMatch).not.toBeNull();
+    expect(repeatBtnMatch![1]).not.toContain('전체');
+    expect(repeatBtnMatch![1]).not.toContain('1곡');
+    expect(html).toContain('aria-pressed="true"');
+  });
+
+  it('L4: repeat button toggles aria-pressed when repeatOne state changes', () => {
+    function ToggleTester() {
+      const { toggleRepeatOne, repeatOne } = useAudioPlayer();
+      return (
+        <div>
+          <button type="button" onClick={toggleRepeatOne}>
+            Toggle Repeat
+          </button>
+          <span data-testid="repeat-val">{String(repeatOne)}</span>
+          <FullPlayer />
+        </div>
+      );
+    }
+
+    const html1 = renderToString(
+      <AudioPlayerProvider initialTrack={mockItem}>
+        <ToggleTester />
+      </AudioPlayerProvider>
+    );
+
+    const repeatBtnMatch = html1.match(/<button[^>]*aria-label="한 곡 반복"[^>]*>([\s\S]*?)<\/button>/);
+    expect(repeatBtnMatch).not.toBeNull();
+    expect(repeatBtnMatch![1]).not.toContain('전체');
+    expect(repeatBtnMatch![1]).not.toContain('1곡');
+    expect(html1).toContain('aria-pressed="true"');
   });
 
   it('SpeedSheet renders large display, range slider, +/- 0.05 step buttons, and presets', () => {

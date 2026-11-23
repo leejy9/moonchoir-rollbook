@@ -235,9 +235,9 @@
 }
 
 .full-player-toggle-btn.active {
-  background: var(--brand-primary-light);
-  color: var(--brand-primary);
-  border-color: var(--brand-primary);
+  background: var(--brand-lavender-tint, var(--brand-primary-light));
+  color: var(--brand-lavender);
+  border-color: var(--brand-lavender);
 }
 
 .full-player-siblings-section {

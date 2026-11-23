@@ -165,9 +165,15 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
               type="button"
               className={`full-player-toggle-btn ${repeatOne ? 'active' : ''}`}
               onClick={toggleRepeatOne}
-              aria-label={repeatOne ? '1곡 반복 켜짐' : '1곡 반복 꺼짐'}
+              aria-label="한 곡 반복"
+              aria-pressed={repeatOne}
             >
-              {repeatOne ? '1곡' : '전체'}
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m17 2 4 4-4 4" />
+                <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+                <path d="m7 22-4-4 4-4" />
+                <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+              </svg>
             </button>
 
             {/* 5s Back */}
