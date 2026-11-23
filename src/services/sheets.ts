@@ -1290,6 +1290,16 @@ export class SheetsService {
     // 1. Preserve raw attendance logs' original memberId (Append-Only Event Sourcing Invariant)
     const affectedLogsCount = this.logs.filter((log) => log.memberId === secondaryId).length;
 
+    if (this.isBackendActive()) {
+      const result = await this.sendToGoogleSheet('MERGE_MEMBERS', {
+        canonicalId,
+        secondaryId,
+      });
+      if (!result.success) {
+        throw new Error(result.message || '단원 병합이 서버에서 거부되었습니다.');
+      }
+    }
+
     // 2. Consolidate current RSVP responses (keep canonical response if both exist for a schedule)
     let affectedRsvpCount = 0;
     const remainingVotes: RSVPVote[] = [];
@@ -1328,14 +1338,6 @@ export class SheetsService {
     }
 
     saveToStorage(STORAGE_KEYS.MEMBERS, this.members);
-
-    // 4. Sync with Google Sheets backend
-    if (this.isBackendActive()) {
-      this.syncInBackground('MERGE_MEMBERS', {
-        canonicalId,
-        secondaryId,
-      });
-    }
 
     return { affectedLogsCount, affectedRsvpCount };
   }

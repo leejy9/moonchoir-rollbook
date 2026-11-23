@@ -928,6 +928,65 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     }
   });
 
+  it('keeps merge data unchanged when the server rejects the merge and preserves its message', async () => {
+    const remoteService = new SheetsService(
+      new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'test-key' })
+    );
+    const canonical: Member = {
+      id: 'merge_canonical',
+      name: '대표 단원',
+      part: '소프라노',
+      phoneLast4: '1234',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      createdAt: '2026-01-01T00:00:00Z',
+      joinedAt: '2026-01-01',
+    };
+    const secondary: Member = { ...canonical, id: 'merge_secondary', name: '보조 단원' };
+    const log: RawAttendanceLog = {
+      id: 'merge_log',
+      scheduleId: 'merge_schedule',
+      memberId: secondary.id,
+      memberName: secondary.name,
+      part: secondary.part,
+      timestamp: '2026-10-10 19:30:00',
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    };
+    const vote: RSVPVote = {
+      id: 'merge_vote',
+      scheduleId: 'merge_schedule',
+      memberId: secondary.id,
+      memberName: secondary.name,
+      part: secondary.part,
+      status: 'ATTEND',
+      timestamp: '2026-10-10 19:30:00',
+    };
+    remoteService.seedTestData({
+      members: [canonical, secondary],
+      logs: [log],
+      rsvpVotes: [vote],
+    });
+    const beforeMembers = remoteService.getMembers(true, true);
+    const beforeVotes = remoteService.getRSVPVotes();
+    const sendSpy = vi.spyOn(remoteService, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '대표 단원은 ACTIVE 상태여야 합니다.',
+    });
+
+    await expect(
+      remoteService.mergeDuplicateMembers(canonical.id, secondary.id)
+    ).rejects.toThrow('대표 단원은 ACTIVE 상태여야 합니다.');
+
+    expect(remoteService.getMembers(true, true)).toEqual(beforeMembers);
+    expect(remoteService.getRSVPVotes()).toEqual(beforeVotes);
+    expect(remoteService.getLogs()).toEqual([log]);
+    expect(sendSpy).toHaveBeenCalledWith('MERGE_MEMBERS', {
+      canonicalId: canonical.id,
+      secondaryId: secondary.id,
+    });
+  });
+
   it('detects duplicate member groups and performs safe consolidation without log deletion', async () => {
     // 1. Add duplicate member with same name and phone
     const memberA = await addMemberConfirmed({
