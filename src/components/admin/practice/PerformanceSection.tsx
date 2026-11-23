@@ -118,35 +118,25 @@ export const PerformanceSection: React.FC<PerformanceSectionProps> = ({
       <div
         key={perf.id}
         onClick={() => setSelectedPerformanceId(perf.id)}
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '14px 16px',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border-subtle)',
-          background: 'var(--bg-card)',
-          cursor: 'pointer',
-          opacity: perf.isArchived ? 0.65 : 1,
-          minHeight: '56px',
-        }}
+        className="performance-item-row"
+        style={{ opacity: perf.isArchived ? 0.65 : 1 }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
+        <div className="performance-item-info">
+          <div className="performance-item-title-row">
+            <span className="performance-item-title">
               {perf.title}
             </span>
             {perf.isArchived && (
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, flexShrink: 0 }}>
                 [보관됨]
               </span>
             )}
           </div>
-          <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+          <span className="performance-item-meta">
             {metaText}
           </span>
         </div>
-        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--brand-primary)' }}>
+        <span className="performance-item-count">
           곡 {pieceCount}
         </span>
       </div>
