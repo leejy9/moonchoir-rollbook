@@ -201,3 +201,12 @@ export function IconTag({ size = 20, ...props }: IconProps) {
   );
 }
 
+
+export function IconThermometer({ size = 20, ...props }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M14 14.76V4a2 2 0 0 0-4 0v10.76a4 4 0 1 0 4 0z" />
+      <line x1="12" y1="9" x2="12" y2="16" />
+    </svg>
+  );
+}

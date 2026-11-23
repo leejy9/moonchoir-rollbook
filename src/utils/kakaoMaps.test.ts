@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { KakaoLoadError, buildKakaoMapLink, describeKakaoLoadError } from './kakaoMaps';
+import {
+  KakaoLoadError,
+  buildKakaoMapLink,
+  describeKakaoLoadError,
+  findScheduleAddress,
+} from './kakaoMaps';
 
 describe('describeKakaoLoadError', () => {
   it('스크립트 자체를 못 받은 경우 차단·네트워크 안내와 함께, 카카오 거절(HTTP 오류)일 때의 확인 사항도 안내', () => {
@@ -69,3 +74,38 @@ describe('buildKakaoMapLink Pure Function', () => {
   });
 });
 
+
+describe('도로명 주소로 지도 열기', () => {
+  const road = '서울특별시 종로구 세종대로 175';
+
+  it('주소가 있으면 좌표·장소명보다 먼저 주소 검색 링크를 만든다', () => {
+    expect(buildKakaoMapLink({ address: road, name: '연습실', lat: 37.5, lon: 127 })).toBe(
+      `https://map.kakao.com/link/search/${encodeURIComponent(road)}`
+    );
+  });
+
+  it('주소가 공백뿐이면 기존 동작(좌표 길찾기·이름 검색)으로 돌아간다', () => {
+    expect(buildKakaoMapLink({ address: '   ', name: '강남 연습실' })).toBe(
+      `https://map.kakao.com/link/search/${encodeURIComponent('강남 연습실')}`
+    );
+  });
+
+  it('주소만 있고 장소명이 없어도 링크를 만든다', () => {
+    expect(buildKakaoMapLink({ address: road })).toBe(
+      `https://map.kakao.com/link/search/${encodeURIComponent(road)}`
+    );
+  });
+
+  it('findScheduleAddress: 장소 id가 같거나 이름이 정확히 같은 프리셋의 주소만 쓴다', () => {
+    const presets = [
+      { id: 'a', name: '제1연습실', address: road },
+      { id: 'b', name: '제2연습실', address: ' 부산 중구 1 ' },
+      { id: 'c', name: '주소 없는 곳' },
+    ];
+    expect(findScheduleAddress({ locationId: 'a', locationName: '아무 이름' }, presets)).toBe(road);
+    expect(findScheduleAddress({ locationName: ' 제2연습실 ' }, presets)).toBe('부산 중구 1');
+    expect(findScheduleAddress({ locationName: '주소 없는 곳' }, presets)).toBeUndefined();
+    // 기본 장소로 바꿔치기하지 않는다
+    expect(findScheduleAddress({ locationName: '모르는 곳' }, presets)).toBeUndefined();
+  });
+});

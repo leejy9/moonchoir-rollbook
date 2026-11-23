@@ -32,6 +32,8 @@ import {
 } from './services/realtime/supabaseRealtime';
 import {
   getDarkModePreference,
+  applyThemeToDocument,
+  subscribeSystemDarkMode,
   getDisplayModePreference,
   saveDarkModePreference,
   saveDisplayModePreference,
@@ -67,6 +69,12 @@ function MainApp() {
 
   const [displayMode, setDisplayMode] = useState<DisplayMode>(getDisplayModePreference);
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference);
+
+  // 직접 고른 값이 없으면 시스템 다크 모드 변경을 따라가고, 바깥(html·body)에도 같은 테마를 적용한다
+  useEffect(() => subscribeSystemDarkMode(setIsDarkMode), []);
+  useEffect(() => {
+    applyThemeToDocument(isDarkMode);
+  }, [isDarkMode]);
 
   // Modal states
   const [showAdminPinModal, setShowAdminPinModal] = useState(false);

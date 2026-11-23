@@ -56,7 +56,7 @@ export const WeekCalendarGrid: React.FC<WeekCalendarGridProps> = ({
             <span
               className="week-day-label"
               style={{
-                color: idx === 0 ? 'var(--status-danger)' : idx === 6 ? 'var(--brand-accent)' : undefined,
+                color: idx === 0 ? 'var(--status-danger)' : idx === 6 ? 'var(--brand-lavender-text)' : undefined,
               }}
             >
               {WEEKDAYS[idx]}

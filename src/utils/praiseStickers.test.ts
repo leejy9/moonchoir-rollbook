@@ -8,6 +8,7 @@ import type {
   Schedule,
 } from '../types/rollbook';
 import {
+  stickerImageUrl,
   evaluatePraiseStickers,
   STAFF_STICKER_IDS,
   STICKER_DEFINITIONS,
@@ -545,5 +546,20 @@ describe('Praise Stickers Engine (V3-13, Spec §5-6, §5-7, V26, V27)', () => {
       earnedOn: '2026-06-05',
       progress: 1,
     });
+  });
+});
+
+describe('stickerImageUrl', () => {
+  it('Vite BASE_URL을 앞에 붙여 하위 경로(GitHub Pages)에서도 파일을 찾는다', () => {
+    expect(stickerImageUrl('fire')).toBe(`${import.meta.env.BASE_URL}stickers/fire.png`);
+  });
+
+  it('모든 스티커 정의의 이미지 파일이 public/stickers에 실제로 있다', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    for (const def of STICKER_DEFINITIONS) {
+      const file = path.resolve('public', 'stickers', `${def.image}.png`);
+      expect(fs.existsSync(file), `${def.id}: ${file}`).toBe(true);
+    }
   });
 });

@@ -98,18 +98,26 @@ export function loadKakaoServices(): Promise<void> {
 }
 
 export interface BuildKakaoMapLinkInput {
+  /** 저장된 도로명 주소. 있으면 이 주소로 지도를 연다 */
+  address?: string | null;
   name?: string | null;
   lat?: number | null;
   lon?: number | null;
 }
 
 /**
- * 카카오맵 길찾기(좌표 있을 때) 또는 장소 검색(좌표 없을 때) 웹 링크를 생성합니다.
+ * 카카오맵 웹 링크를 생성합니다.
+ * - 도로명 주소가 있으면 https://map.kakao.com/link/search/{address} (주소 검색)
  * - 좌표가 둘 다 유한한 숫자면 https://map.kakao.com/link/to/{name},{lat},{lon}
  * - 좌표가 없거나 유효하지 않으면 https://map.kakao.com/link/search/{name}
- * - 이름이 비어 있으면 null
+ * - 주소·이름이 모두 비어 있으면 null
  */
 export function buildKakaoMapLink(input: BuildKakaoMapLinkInput): string | null {
+  const address = input.address?.trim();
+  if (address) {
+    return `https://map.kakao.com/link/search/${encodeURIComponent(address)}`;
+  }
+
   const trimmed = input.name?.trim();
   if (!trimmed) return null;
 
@@ -126,3 +134,18 @@ export function buildKakaoMapLink(input: BuildKakaoMapLinkInput): string | null 
   return `https://map.kakao.com/link/search/${encodeURIComponent(trimmed)}`;
 }
 
+
+/**
+ * 일정에 연결된 장소 프리셋의 도로명 주소를 찾는다. 장소 id가 같거나 이름이 정확히 같은 프리셋만 쓰고,
+ * 맞는 프리셋이 없으면 엉뚱한 기본 장소의 주소를 쓰지 않도록 undefined를 돌려준다.
+ */
+export function findScheduleAddress(
+  schedule: { locationId?: string; locationName?: string },
+  presets: ReadonlyArray<{ id: string; name: string; address?: string }>
+): string | undefined {
+  const name = schedule.locationName?.trim();
+  const matched =
+    (schedule.locationId ? presets.find((p) => p.id === schedule.locationId) : undefined) ||
+    (name ? presets.find((p) => p.name.trim() === name) : undefined);
+  return matched?.address?.trim() || undefined;
+}

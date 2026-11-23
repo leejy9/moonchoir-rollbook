@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Member, Schedule } from '../types/rollbook';
 import { isMemberRequiredForSchedule, resolveMergedMemberIds } from '../utils/attendanceStats';
-import { buildKakaoMapLink } from '../utils/kakaoMaps';
+import { buildKakaoMapLink, findScheduleAddress } from '../utils/kakaoMaps';
 import { buildRsvpTally } from '../utils/rsvpTally';
 import { sheetsService } from '../services/sheets';
 import { IconClock, IconLocation } from './Icons';
@@ -31,6 +31,7 @@ export const ScheduleDetailBody: React.FC<ScheduleDetailBodyProps> = ({ schedule
     allMembers
   );
   const kakaoMapLink = buildKakaoMapLink({
+    address: findScheduleAddress(schedule, sheetsService.getLocationPresets()),
     name: schedule.locationName,
     lat: schedule.targetLat,
     lon: schedule.targetLon,
@@ -111,7 +112,7 @@ export const ScheduleDetailBody: React.FC<ScheduleDetailBodyProps> = ({ schedule
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
-                  color: 'var(--brand-primary)',
+                  color: 'var(--brand-lavender-text)',
                   textDecoration: 'underline',
                   wordBreak: 'break-all',
                 }}

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getDarkModePreference,
   getDisplayModePreference,
+  hasSavedDarkModePreference,
   saveDarkModePreference,
   saveDisplayModePreference,
 } from './displayMode';
@@ -53,5 +54,24 @@ describe('display mode preference', () => {
 
     saveDarkModePreference(false);
     expect(getDarkModePreference()).toBe(false);
+  });
+
+  it('follows the system dark mode until the user picks one, then keeps the pick', () => {
+    vi.stubGlobal('window', { matchMedia: () => ({ matches: true }) });
+
+    expect(hasSavedDarkModePreference()).toBe(false);
+    expect(getDarkModePreference()).toBe(true);
+
+    saveDarkModePreference(false);
+    expect(hasSavedDarkModePreference()).toBe(true);
+    expect(getDarkModePreference()).toBe(false);
+  });
+
+  it('treats an unreadable stored value as "not chosen" and uses the system setting', () => {
+    vi.stubGlobal('window', { matchMedia: () => ({ matches: true }) });
+    localStorage.setItem('moonchoir_dark_mode_v1', 'maybe');
+
+    expect(hasSavedDarkModePreference()).toBe(false);
+    expect(getDarkModePreference()).toBe(true);
   });
 });
