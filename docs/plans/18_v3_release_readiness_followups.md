@@ -2,7 +2,7 @@
 
 > 관련 기준: [V3 명세](../MEMBER_UX_V3_SPEC.md), [V3 구현 지시서](./17_v3_implementation_guide.md)
 > 검토 기준 브랜치: `feat/v3-activity-2`, HEAD `0e6947e` (`origin/feat/v3-activity-2`와 동일)
-> 상태: READY-01~04 구현 완료. READY-05는 전역 동기화 확인은 했으나 활동 RPC 404와 새 HEAD CI가 남아 차단 상태.
+> 상태: READY-01~04 구현·푸시 완료. 코드 HEAD `1acb0f7`의 GitHub CI 3종 통과. READY-05는 활동 RPC 404로 차단.
 
 ## 0. 목적과 검토 근거
 
@@ -137,6 +137,6 @@
 - **로컬 검증:** `npm run typecheck && npm run lint && npm test && npm run build` 통과(122개 파일, 844개 테스트). `BASE_REF=origin/feat/v3-profile ./scripts/ci/guards.sh` 통과. `localhost:5173` 응답은 HTTP 200.
 - **빌드 경고:** 메인 JS 청크 1,187.80 kB, 500 kB 초과 경고가 남아 있다. 이전 확인값 1,187.03 kB 대비 0.77 kB 증가했다.
 - **READY-05 차단:** 실제 브라우저에서 전역 동기화 재시도는 성공했고 `✓ 방금 동기화됨`으로 바뀌었다. 그러나 `fn_get_member_activity` 요청은 HTTP 404를 반환했다(브라우저 Performance Resource Timing에서 확인). 저장소에는 이 RPC 정의가 [20261124000000_v3_activity.sql](../../supabase/migrations/20261124000000_v3_activity.sql)의 255행에 있다. 운영 DB에 접근하지 않았으므로 원인은 미확인(마이그레이션 미적용 여부 포함)이다. 전역 동기화 성공 표시만으로 활동 데이터까지 정상이라고 판정하면 안 된다.
-- 원격 PR #46은 OPEN이며 확인 당시 head는 `0e6947e5f2b3fc6409f2890b892498030215dcff`; 그 커밋의 GitHub CI 체크는 성공이었다. 현재 변경은 미커밋이어서 원격 CI에는 포함되지 않았다.
+- PR #46은 OPEN이며 base `feat/v3-profile`, code head `1acb0f725e3a3bdbaa6c99de39eb253f4be641a4`로 푸시됐다. Green Bar, DB 변경/검증, 반복 실수 검사 세 작업이 통과했다(워크플로 실행 45183652728 및 45183660204). 티켓별 코드 커밋은 `20d33ab`, `5a97a2c`, `b41be3b`, `1acb0f7`이다.
 - 실제 앱 브라우저: viewport/document width 390/390px, 설정 메뉴 5행, 36.5°C 기준점·표시점 중심 차이 0.5px. 스티커 팝업을 Enter로 열고 Tab/Escape로 닫아 포커스 복귀를 확인했다. 화면 계정은 ADMIN이며 본인 스티커 데이터가 0/24여서 일반 단원의 획득 이력은 검증하지 않았다.
-- 로컬 PostgreSQL 검사는 미실행: `psql`/`pg_isready`가 없고 Docker daemon 연결도 실패했다. 이번 변경에는 SQL/DB 파일 변경이 없다. 운영 RPC 적용 여부를 확인하거나 SQL을 실행하지 않는다.
+- 로컬 PostgreSQL 검사는 미실행: `psql`/`pg_isready`가 없고 Docker daemon 연결도 실패했다. 다만 새 code head에 대한 GitHub 빈 PostgreSQL DB 검사는 통과했다. 이번 변경에는 SQL/DB 파일 변경이 없다. 운영 RPC 적용 여부를 확인하거나 SQL을 실행하지 않는다.
