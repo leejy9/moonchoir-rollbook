@@ -3,7 +3,8 @@ import {
   computePassionTemperature,
   PASSION_RULES,
 } from './passionTemperature';
-import type { Member, RawAttendanceLog, RsvpEvent, Schedule } from '../types/rollbook';
+import type { Member, RawAttendanceLog, RSVPVote, RsvpEvent, Schedule } from '../types/rollbook';
+import { buildMemberScheduleRecords } from './memberRecords';
 
 const mockMember: Member = {
   id: 'mem_1',
@@ -420,6 +421,131 @@ describe('computePassionTemperature (V3-12)', () => {
       const promGroup = res.groups.find((g) => g.key === 'promise');
       const noShowItem = promGroup?.items.find((it) => it.key === 'noshow');
       expect(noShowItem).toBeUndefined();
+    });
+  });
+
+  describe('V3-20 R13 경계 사례', () => {
+    it('병합 회원의 로그와 투표 이벤트를 함께 집계한다 (R13)', () => {
+      const canonicalMember = { ...mockMember, id: 'mem_canonical' };
+      const mergedMember: Member = {
+        ...mockMember,
+        id: 'mem_merged',
+        status: 'MERGED',
+        mergedIntoId: canonicalMember.id,
+      };
+      const schedule = makeSchedule('s_merged', '2026-11-20');
+      const log = { ...makeLog('l_merged', schedule.id, '2026-11-20 19:25:00'), memberId: mergedMember.id };
+      const event = {
+        ...makeRsvp(1, schedule.id, 'ATTEND', '2026-11-19T10:00:00+09:00'),
+        memberId: canonicalMember.id,
+      };
+      const vote: RSVPVote = {
+        id: 'v_merged',
+        scheduleId: schedule.id,
+        memberId: mergedMember.id,
+        memberName: mergedMember.name,
+        part: 'SOPRANO',
+        status: 'ATTEND',
+        reason: '',
+        timestamp: '2026-11-19 10:00:00',
+      };
+
+      const res = computePassionTemperature(
+        canonicalMember,
+        [canonicalMember, mergedMember],
+        [schedule],
+        [log],
+        [event],
+        {},
+        new Date('2026-11-23T12:00:00+09:00'),
+        { rsvpVotes: [vote] }
+      );
+
+      expect(res.groups.find((group) => group.key === 'attendance')?.items
+        .find((item) => item.key === 'ontime')?.scheduleIds).toContain(schedule.id);
+      expect(res.groups.find((group) => group.key === 'promise')?.items
+        .find((item) => item.key === 'vote_rate')?.delta).toBe(0.3);
+    });
+
+    it('사유 없는 불참 투표 후 결석은 약속을 지킨 것으로 집계한다 (R13)', () => {
+      const schedule = makeSchedule('s_no_reason', '2026-11-20');
+      const vote: RSVPVote = {
+        id: 'v_no_reason',
+        scheduleId: schedule.id,
+        memberId: mockMember.id,
+        memberName: mockMember.name,
+        part: 'SOPRANO',
+        status: 'ABSENT',
+        reason: '',
+        timestamp: '2026-11-19 10:00:00',
+      };
+      const event = makeRsvp(1, schedule.id, 'ABSENT', '2026-11-19T10:00:00+09:00');
+
+      const res = computePassionTemperature(
+        mockMember,
+        [mockMember],
+        [schedule],
+        [],
+        [event],
+        {},
+        new Date('2026-11-23T12:00:00+09:00'),
+        { rsvpVotes: [vote] }
+      );
+
+      expect(res.groups.find((group) => group.key === 'promise')?.items
+        .find((item) => item.key === 'vote_rate')?.label).toBe('약속 지킴 100%');
+      expect(res.groups.find((group) => group.key === 'promise')?.items
+        .some((item) => item.key === 'noshow')).toBe(false);
+    });
+
+    it('보관 일정은 열정 온도와 공연 집계에서 제외한다 (R13)', () => {
+      const archivedSchedule = {
+        ...makeSchedule('s_archived', '2026-11-20', '19:30', '연주'),
+        isArchived: true,
+      };
+      const log = makeLog('l_archived', archivedSchedule.id, '2026-11-20 19:25:00');
+      const scheduleRecords = buildMemberScheduleRecords({
+        member: mockMember,
+        members: [mockMember],
+        schedules: [archivedSchedule],
+        logs: [log],
+        now: new Date('2026-11-23T12:00:00+09:00'),
+        includeArchived: true,
+      });
+
+      const res = computePassionTemperature(
+        mockMember,
+        [mockMember],
+        [archivedSchedule],
+        [log],
+        [],
+        {},
+        new Date('2026-11-23T12:00:00+09:00'),
+        { scheduleRecords }
+      );
+
+      expect(res.windowSize).toBe(0);
+      expect(res.groups.some((group) => group.key === 'stage')).toBe(false);
+    });
+
+    it('공연 일정에 지각해도 공연 출석으로 집계한다 (R13)', () => {
+      const schedule = makeSchedule('s_late_performance', '2026-11-20', '19:30', '연주');
+      const log = makeLog('l_late_performance', schedule.id, '2026-11-20 19:45:00');
+
+      const res = computePassionTemperature(
+        mockMember,
+        [mockMember],
+        [schedule],
+        [log],
+        [],
+        {},
+        new Date('2026-11-23T12:00:00+09:00')
+      );
+
+      const stageItem = res.groups.find((group) => group.key === 'stage')?.items
+        .find((item) => item.key === 'stage_attend');
+      expect(stageItem?.count).toBe(1);
+      expect(stageItem?.delta).toBe(PASSION_RULES.DELTAS.STAGE_ATTEND);
     });
   });
 });

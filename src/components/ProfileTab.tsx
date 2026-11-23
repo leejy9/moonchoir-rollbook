@@ -5,6 +5,7 @@ import type { DisplayMode } from '../services/displayMode';
 import { getKSTDateString, parseKSTDate } from '../utils/date';
 import { buildMemberScheduleRecords } from '../utils/memberRecords';
 import { isStaffMember, isActivityStaff } from '../utils/staff';
+import { DEFAULT_PERFORMANCE_CATEGORIES } from '../utils/performanceCategories';
 import {
   computeAttendance90Days, computeDaysTogether, computeMemberLevel,
   computePerformanceCount, computePracticeHours, formatStaffTenure,
@@ -154,7 +155,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   }, [scheduleRecords]);
 
   const performanceCount = useMemo(() => {
-    const categories = config.performanceCategories || ['연주', '녹음'];
+    const categories = config.performanceCategories || DEFAULT_PERFORMANCE_CATEGORIES;
     return computePerformanceCount(scheduleRecords, categories);
   }, [scheduleRecords, config.performanceCategories]);
 

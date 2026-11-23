@@ -23,6 +23,7 @@ import {
   buildMemberScheduleRecords,
   type MemberScheduleRecord,
 } from './memberRecords';
+import { DEFAULT_PERFORMANCE_CATEGORIES } from './performanceCategories';
 
 export * from './passionRules';
 
@@ -68,7 +69,9 @@ export function computePassionTemperature(
   const validMemberIds = resolveMergedMemberIds(member.id, allMembers);
   const memberRsvpEvents = rsvpEvents.filter((e) => validMemberIds.has(e.memberId));
 
-  const performanceCats = new Set(config?.performanceCategories || ['연주']);
+  const performanceCats = new Set(
+    config?.performanceCategories || DEFAULT_PERFORMANCE_CATEGORIES
+  );
 
   // Single source of attendance status: buildMemberScheduleRecords
   const allRecords =

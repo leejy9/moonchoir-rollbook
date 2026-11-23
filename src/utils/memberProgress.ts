@@ -7,6 +7,7 @@ import type {
 } from '../types/rollbook';
 import { calculateCumulativeAttendanceWithLifecycle, resolveMergedMemberIds } from './attendanceStats';
 import { addDaysKST, getKSTDateString } from './date';
+import { DEFAULT_PERFORMANCE_CATEGORIES } from './performanceCategories';
 import type { MemberScheduleRecord } from './memberRecords';
 
 export interface MemberLevelInfo {
@@ -141,7 +142,7 @@ export function computePracticeHours(records: MemberScheduleRecord[]): number {
  */
 export function computePerformanceCount(
   records: MemberScheduleRecord[],
-  performanceCategories: string[] = ['연주', '녹음']
+  performanceCategories: string[] = DEFAULT_PERFORMANCE_CATEGORIES
 ): number {
   let count = 0;
   for (const r of records) {

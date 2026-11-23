@@ -24,6 +24,7 @@ import {
   type StickerResult,
 } from './praiseStickerEvaluators';
 import { isActivityStaff } from './staff';
+import { DEFAULT_PERFORMANCE_CATEGORIES } from './performanceCategories';
 import {
   buildMemberScheduleRecords,
   type MemberScheduleRecord,
@@ -48,7 +49,7 @@ export function evaluatePraiseStickers({
   schedules,
   logs = [],
   activity = null,
-  performanceCategories = ['연주'],
+  performanceCategories = DEFAULT_PERFORMANCE_CATEGORIES,
   allMembers = [],
   now = new Date(),
   isStaff,

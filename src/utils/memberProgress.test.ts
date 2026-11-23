@@ -337,6 +337,7 @@ describe('memberProgress utilities (Spec §5-1 ~ §5-4, §5-7)', () => {
         },
       ];
 
+      expect(computePerformanceCount(records)).toBe(1);
       expect(computePerformanceCount(records, ['연주', '녹음'])).toBe(2);
     });
   });

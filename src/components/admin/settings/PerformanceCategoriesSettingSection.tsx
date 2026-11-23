@@ -2,14 +2,13 @@ import React, { useState } from 'react';
 import type { AppConfig } from '../../../types/rollbook';
 import { sheetsService } from '../../../services/sheets';
 import { serializeConfigForSave } from '../../../services/configNormalize';
+import { DEFAULT_PERFORMANCE_CATEGORIES } from '../../../utils/performanceCategories';
 
 interface PerformanceCategoriesSettingSectionProps {
   config: AppConfig;
   allCategories: string[];
   onSaved?: () => void;
 }
-
-const DEFAULT_PERFORMANCE_CATEGORIES = ['연주'];
 
 export const PerformanceCategoriesSettingSection: React.FC<PerformanceCategoriesSettingSectionProps> = ({
   config,

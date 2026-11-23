@@ -256,11 +256,11 @@ export function calculateStageGroup(
 
   for (const r of allRecords) {
     const s = r.schedule;
-    if (s.isCancelled || !s.category || !performanceCats.has(s.category)) continue;
+    if (s.isCancelled || s.isArchived || !s.category || !performanceCats.has(s.category)) continue;
     const sStartMs = getScheduleStartMs(s);
     if (sStartMs > refTimeMs || sStartMs < oneYearAgoMs) continue;
 
-    if (r.finalStatus === '출석' || r.finalStatus === '수동인정') {
+    if (r.finalStatus === '출석' || r.finalStatus === '수동인정' || r.finalStatus === '지각') {
       stageAttendedIds.push(s.id);
     }
   }
