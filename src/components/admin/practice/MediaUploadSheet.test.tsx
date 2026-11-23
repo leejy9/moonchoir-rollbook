@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { MediaUploadSheet } from './MediaUploadSheet';
+import { uploadQueue } from '../../../services/media/uploadQueue';
 import { createUploadSaveFn } from '../../../services/media/uploadSave';
 import { sheetsService } from '../../../services/sheets';
 import type { AppConfig, PracticePiece } from '../../../types/rollbook';
@@ -263,6 +264,74 @@ describe('MediaUploadSheet Component', () => {
       expect(html).toContain('audio/aiff');
       expect(html).toContain('audio/flac');
       expect(html).toContain('.wav,.aif,.aiff,.flac');
+    });
+
+    it('L2: has multiple attribute for new audio upload, but not for score or track replacement', () => {
+      // 1. New audio upload -> has multiple
+      const audioHtml = renderToString(
+        <MediaUploadSheet
+          pieceId="p1"
+          kind="audio"
+          config={dummyConfig}
+          onClose={vi.fn()}
+        />
+      );
+      expect(audioHtml).toMatch(/<input[^>]*type="file"[^>]*multiple/);
+
+      // 2. Score upload -> NO multiple attribute
+      const scoreHtml = renderToString(
+        <MediaUploadSheet
+          pieceId="p1"
+          kind="score"
+          config={dummyConfig}
+          onClose={vi.fn()}
+        />
+      );
+      expect(scoreHtml).not.toMatch(/<input[^>]*type="file"[^>]*multiple/);
+
+      // 3. Audio replacement -> NO multiple attribute
+      const replaceHtml = renderToString(
+        <MediaUploadSheet
+          pieceId="p1"
+          kind="audio"
+          replaceTrackId="trk_1"
+          config={dummyConfig}
+          onClose={vi.fn()}
+        />
+      );
+      expect(replaceHtml).not.toMatch(/<input[^>]*type="file"[^>]*multiple/);
+    });
+
+    it('L2: prepares batch and enqueues multiple items in selection order with filename as title', async () => {
+      const enqueueSpy = vi.spyOn(uploadQueue, 'enqueue').mockReturnValue('job_test');
+      const files = [
+        new File(['1'], 'soprano_lead.m4a', { type: 'audio/mp4' }),
+        new File(['2'], 'alto_harmony.m4a', { type: 'audio/mp4' }),
+        new File(['3'], 'bass_track.m4a', { type: 'audio/mp4' }),
+      ];
+
+      const { prepareUploadBatch } = await import('../../../services/media/uploadBatch');
+      const batch = prepareUploadBatch(files, { kind: 'audio', allowCompress: true });
+
+      expect(batch.accepted).toHaveLength(3);
+      expect(batch.accepted.map((b) => b.title)).toEqual(['soprano_lead', 'alto_harmony', 'bass_track']);
+
+      for (const item of batch.accepted) {
+        uploadQueue.enqueue({
+          pieceId: 'p1',
+          kind: 'audio',
+          title: item.title,
+          fileName: item.file.name,
+          file: item.file,
+          baseUrl: dummyConfig.mediaPublicBaseUrl || '',
+          saveFn: vi.fn(),
+        });
+      }
+
+      expect(enqueueSpy).toHaveBeenCalledTimes(3);
+      expect(enqueueSpy.mock.calls[0][0].title).toBe('soprano_lead');
+      expect(enqueueSpy.mock.calls[1][0].title).toBe('alto_harmony');
+      expect(enqueueSpy.mock.calls[2][0].title).toBe('bass_track');
     });
   });
 });
