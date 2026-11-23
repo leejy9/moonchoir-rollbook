@@ -51,7 +51,8 @@ begin
   insert into members (id, name) values (v_member_2, '활동단원2') on conflict (id) do nothing;
   insert into members (id, name) values (v_cascade_member, '삭제단원') on conflict (id) do nothing;
 
-  insert into schedules (id, date, start_time) values (v_sched_1, '2026-11-23', '19:30') on conflict (id) do nothing;
+  insert into schedules (id, title, date, start_time, end_time)
+  values (v_sched_1, '활동테스트일정', '2026-11-23', '19:30', '21:30') on conflict (id) do nothing;
 
   insert into practice_pieces (id, title) values (v_piece_1, '활동테스트곡1') on conflict (id) do nothing;
   insert into practice_pieces (id, title) values (v_piece_2, '활동테스트곡2') on conflict (id) do nothing;
