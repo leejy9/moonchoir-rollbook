@@ -8,8 +8,8 @@ describe('ProfileSettingsSection', () => {
       <ProfileSettingsSection
         displayMode="AUTO"
         onChangeDisplayMode={vi.fn()}
-        isDarkMode={false}
-        onChangeDarkMode={vi.fn()}
+        themeMode="SYSTEM"
+        onChangeThemeMode={vi.fn()}
         onChangeBinding={vi.fn()}
         onLogout={vi.fn()}
         isLoggingOut={false}
@@ -18,7 +18,10 @@ describe('ProfileSettingsSection', () => {
 
     expect(html.match(/profile-settings-menu-row/g)).toHaveLength(5);
     expect(html).toContain('화면 표시 모드');
-    expect(html).toContain('다크 모드');
+    expect(html).toContain('화면 테마');
+    expect(html).toContain('일반');
+    expect(html).toContain('다크');
+    expect(html).toContain('시스템');
     expect(html).toContain('앱처럼 설치하기');
     expect(html).toContain('브라우저 저장 단원 바꾸기');
     expect(html).toContain('로그아웃');
@@ -33,8 +36,8 @@ describe('ProfileSettingsSection', () => {
       <ProfileSettingsSection
         displayMode="AUTO"
         onChangeDisplayMode={vi.fn()}
-        isDarkMode={false}
-        onChangeDarkMode={vi.fn()}
+        themeMode="SYSTEM"
+        onChangeThemeMode={vi.fn()}
         onChangeBinding={vi.fn()}
         isLoggingOut={false}
       />
@@ -52,8 +55,8 @@ describe('ProfileSettingsSection', () => {
       <ProfileSettingsSection
         displayMode="AUTO"
         onChangeDisplayMode={vi.fn()}
-        isDarkMode={false}
-        onChangeDarkMode={vi.fn()}
+        themeMode="SYSTEM"
+        onChangeThemeMode={vi.fn()}
         onChangeBinding={vi.fn()}
         isLoggingOut={false}
       />

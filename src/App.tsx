@@ -31,13 +31,16 @@ import {
   stopSupabaseRealtime,
 } from './services/realtime/supabaseRealtime';
 import {
-  getDarkModePreference,
   applyThemeToDocument,
-  subscribeSystemDarkMode,
   getDisplayModePreference,
-  saveDarkModePreference,
+  getSystemPrefersDark,
+  getThemeModePreference,
+  resolveIsDark,
   saveDisplayModePreference,
+  saveThemeModePreference,
+  subscribeSystemDarkMode,
   type DisplayMode,
+  type ThemeMode,
 } from './services/displayMode';
 import type { BoundDeviceProfile } from './types/rollbook';
 import { parseRoute, type MemberTab } from './utils/route';
@@ -68,10 +71,12 @@ function MainApp() {
   }, [profile]);
 
   const [displayMode, setDisplayMode] = useState<DisplayMode>(getDisplayModePreference);
-  const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(getThemeModePreference);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(getSystemPrefersDark);
+  const isDarkMode = resolveIsDark(themeMode, systemPrefersDark);
 
-  // 직접 고른 값이 없으면 시스템 다크 모드 변경을 따라가고, 바깥(html·body)에도 같은 테마를 적용한다
-  useEffect(() => subscribeSystemDarkMode(setIsDarkMode), []);
+  // 시스템 다크 모드 변경을 항상 받아 두고, '시스템' 선택일 때만 반영한다. 바깥(html·body)에도 같은 테마를 적용한다
+  useEffect(() => subscribeSystemDarkMode(setSystemPrefersDark), []);
   useEffect(() => {
     applyThemeToDocument(isDarkMode);
   }, [isDarkMode]);
@@ -307,9 +312,9 @@ function MainApp() {
     setDisplayMode(mode);
   };
 
-  const handleDarkModeChange = (enabled: boolean) => {
-    saveDarkModePreference(enabled);
-    setIsDarkMode(enabled);
+  const handleThemeModeChange = (mode: ThemeMode) => {
+    saveThemeModePreference(mode);
+    setThemeMode(mode);
   };
 
   return (
@@ -376,9 +381,9 @@ function MainApp() {
             <ProfileTab
               profile={profile}
               displayMode={displayMode}
-              isDarkMode={isDarkMode}
+              themeMode={themeMode}
               onChangeDisplayMode={handleDisplayModeChange}
-              onChangeDarkMode={handleDarkModeChange}
+              onChangeThemeMode={handleThemeModeChange}
               onChangeBinding={() => setShowBindingModal(true)}
               onLogout={async () => {
                 closePlayer();

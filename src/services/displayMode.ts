@@ -1,6 +1,7 @@
 export type DisplayMode = 'AUTO' | 'MOBILE' | 'DESKTOP';
 
 const DISPLAY_MODE_KEY = 'moonchoir_display_mode_v1';
+/** 예전 다크 모드 스위치가 저장하던 키(true/false). 읽기만 한다 */
 const DARK_MODE_KEY = 'moonchoir_dark_mode_v1';
 
 export function getDisplayModePreference(): DisplayMode {
@@ -29,6 +30,10 @@ export function saveDisplayModePreference(mode: DisplayMode): void {
 }
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
+const THEME_MODE_KEY = 'moonchoir_theme_mode_v1';
+
+/** 화면 테마 선택: 일반(LIGHT) · 다크(DARK) · 시스템 설정 따라가기(SYSTEM) */
+export type ThemeMode = 'LIGHT' | 'DARK' | 'SYSTEM';
 
 /** 기기(시스템)가 다크 모드인지. matchMedia가 없는 환경에서는 false */
 export function getSystemPrefersDark(): boolean {
@@ -40,29 +45,37 @@ export function getSystemPrefersDark(): boolean {
   }
 }
 
-/** 사용자가 설정에서 다크 모드를 직접 골랐는지(저장값이 있는지). 읽기 실패는 "없음"으로 본다 */
-export function hasSavedDarkModePreference(): boolean {
+/**
+ * 저장된 테마 선택. 새 키가 없으면 예전 다크 모드 스위치 값(true/false)을 DARK/LIGHT로 읽고,
+ * 둘 다 없거나 읽을 수 없으면 SYSTEM(시스템 설정 따라가기)이다.
+ */
+export function getThemeModePreference(): ThemeMode {
   try {
-    if (typeof localStorage === 'undefined') return false;
-    const saved = localStorage.getItem(DARK_MODE_KEY);
-    return saved === 'true' || saved === 'false';
-  } catch {
-    return false;
+    if (typeof localStorage === 'undefined') return 'SYSTEM';
+    const saved = localStorage.getItem(THEME_MODE_KEY);
+    if (saved === 'LIGHT' || saved === 'DARK' || saved === 'SYSTEM') return saved;
+    const legacy = localStorage.getItem(DARK_MODE_KEY);
+    if (legacy === 'true') return 'DARK';
+    if (legacy === 'false') return 'LIGHT';
+    return 'SYSTEM';
+  } catch (err) {
+    console.warn('[Display mode] Failed to load theme preference:', err);
+    return 'SYSTEM';
   }
 }
 
-/** 직접 고른 값이 있으면 그 값, 없으면 시스템 설정(prefers-color-scheme)을 따른다 */
-export function getDarkModePreference(): boolean {
+export function saveThemeModePreference(mode: ThemeMode): void {
   try {
-    if (typeof localStorage !== 'undefined') {
-      const saved = localStorage.getItem(DARK_MODE_KEY);
-      if (saved === 'true') return true;
-      if (saved === 'false') return false;
-    }
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(THEME_MODE_KEY, mode);
   } catch (err) {
-    console.warn('[Display mode] Failed to load dark mode preference:', err);
+    console.warn('[Display mode] Failed to save theme preference:', err);
   }
-  return getSystemPrefersDark();
+}
+
+/** 선택값과 시스템 설정으로 실제 다크 여부를 정한다 */
+export function resolveIsDark(mode: ThemeMode, systemPrefersDark: boolean): boolean {
+  return mode === 'DARK' || (mode === 'SYSTEM' && systemPrefersDark);
 }
 
 /** html에도 같은 테마를 표시해, 앱 바깥(배경·스크롤바·입력 기본 색)이 앱 테마와 어긋나지 않게 한다 */
@@ -71,23 +84,12 @@ export function applyThemeToDocument(isDark: boolean): void {
   document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
 }
 
-/** 저장값이 없을 때만 시스템 다크 모드 변경을 따라가도록 구독한다. 해제 함수를 돌려준다 */
+/** 시스템 다크 모드가 바뀔 때마다 알려 준다. 해제 함수를 돌려준다 */
 export function subscribeSystemDarkMode(onChange: (isDark: boolean) => void): () => void {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {};
   const query = window.matchMedia(DARK_QUERY);
   if (typeof query.addEventListener !== 'function') return () => {};
-  const handler = (event: MediaQueryListEvent) => {
-    if (!hasSavedDarkModePreference()) onChange(event.matches);
-  };
+  const handler = (event: MediaQueryListEvent) => onChange(event.matches);
   query.addEventListener('change', handler);
   return () => query.removeEventListener('change', handler);
-}
-
-export function saveDarkModePreference(enabled: boolean): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(DARK_MODE_KEY, String(enabled));
-  } catch (err) {
-    console.warn('[Display mode] Failed to save dark mode preference:', err);
-  }
 }
