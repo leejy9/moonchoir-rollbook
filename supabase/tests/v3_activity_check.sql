@@ -169,13 +169,66 @@ begin
   from rsvp_votes v
   where not exists (
     select 1 from rsvp_events e
-    where e.action = 'backfill' and e.schedule_id = v.schedule_id and e.member_id = v.member_id
+    where e.schedule_id = v.schedule_id and e.member_id = v.member_id
   );
 
   select count(*) into v_backfill_count_2 from rsvp_events where action = 'backfill';
   if v_backfill_count_1 <> v_backfill_count_2 then
     raise exception 'Check 3 FAIL: backfill query must be idempotent (before %, after %)', v_backfill_count_1, v_backfill_count_2;
   end if;
+
+  -- ----------------------------------------------------------------------------
+  -- Check 3-B: R4 timezone parsing & backfill skip on existing event
+  -- ----------------------------------------------------------------------------
+  declare
+    v_parsed_kst timestamptz;
+    v_parsed_utc timestamptz;
+    v_expected_kst timestamptz := '2026-11-20 10:00:00+00';
+    v_expected_utc timestamptz := '2026-11-20 10:00:00+00';
+    v_sched_test text := 'sched_r4_test';
+    v_bf_before integer;
+    v_bf_after integer;
+  begin
+    v_parsed_kst := fn_safe_timestamptz('2026-11-20 19:00:00', now());
+    if v_parsed_kst <> v_expected_kst then
+      raise exception 'Check 3-B1 FAIL: expected % for KST naive, got %', v_expected_kst, v_parsed_kst;
+    end if;
+
+    v_parsed_utc := fn_safe_timestamptz('2026-11-20T10:00:00Z', now());
+    if v_parsed_utc <> v_expected_utc then
+      raise exception 'Check 3-B2 FAIL: expected % for UTC ISO, got %', v_expected_utc, v_parsed_utc;
+    end if;
+
+    -- Test backfill deduplication when a normal event exists
+    insert into schedules (id, title, date) values (v_sched_test, 'R4테스트일정', '2026-11-20') on conflict (id) do nothing;
+    insert into rsvp_events (schedule_id, member_id, action, status, occurred_at)
+    values (v_sched_test, v_member_1, 'insert', 'ATTEND', now());
+
+    -- Now insert a vote in rsvp_votes for the same schedule and member
+    insert into rsvp_votes (schedule_id, member_id, status, timestamp)
+    values (v_sched_test, v_member_1, 'ATTEND', '2026-11-20 19:00:00')
+    on conflict do nothing;
+
+    select count(*) into v_bf_before from rsvp_events where action = 'backfill';
+
+    -- Re-run backfill query
+    insert into rsvp_events (
+      schedule_id, member_id, action, status, prev_status, occurred_at
+    )
+    select
+      v.schedule_id, v.member_id, 'backfill', v.status, null,
+      coalesce(fn_safe_timestamptz(v.timestamp, v.received_at), v.received_at, now())
+    from rsvp_votes v
+    where not exists (
+      select 1 from rsvp_events e
+      where e.schedule_id = v.schedule_id and e.member_id = v.member_id
+    );
+
+    select count(*) into v_bf_after from rsvp_events where action = 'backfill';
+    if v_bf_before <> v_bf_after then
+      raise exception 'Check 3-B3 FAIL: backfill must skip schedules with existing events (before %, after %)', v_bf_before, v_bf_after;
+    end if;
+  end;
 
   -- ----------------------------------------------------------------------------
   -- Check 4: fn_log_listen_session
@@ -349,7 +402,7 @@ begin
     v_p1_reached timestamptz;
     v_p2_reached text;
   begin
-    select (elem->>'reached60At')::timestamptz into v_p1_reached
+    select (elem->>'reached60At')::timestamptz into v_p1_reached -- tz-checked (ISO format from jsonb)
     from jsonb_array_elements(v_activity->'listen'->'perPiece') elem
     where elem->>'pieceId' = v_piece_1;
 

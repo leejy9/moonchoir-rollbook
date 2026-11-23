@@ -17,17 +17,25 @@
 
 -- ------------------------------------------------------------------------------
 -- 1. Helper: Safe timestamptz parser (fallback on invalid text format)
+--    (V3-20 R4: timezone-aware parsing for KST naive strings and UTC timestamps)
 -- ------------------------------------------------------------------------------
 create or replace function fn_safe_timestamptz(p_text text, p_fallback timestamptz)
 returns timestamptz
 language plpgsql
-immutable
+stable
 as $$
+declare
+  v_trimmed text;
 begin
   if p_text is null or trim(p_text) = '' then
     return p_fallback;
   end if;
-  return p_text::timestamptz;
+  v_trimmed := trim(p_text);
+  if v_trimmed ~ '(Z|[+-][0-9]{2}(:[0-9]{2})?)$' then
+    return v_trimmed::timestamptz; -- tz-checked (has explicit timezone offset or Z)
+  else
+    return (v_trimmed::timestamp at time zone 'Asia/Seoul');
+  end if;
 exception when others then
   return p_fallback;
 end;
@@ -124,8 +132,7 @@ select
 from rsvp_votes v
 where not exists (
   select 1 from rsvp_events e
-  where e.action = 'backfill'
-    and e.schedule_id = v.schedule_id
+  where e.schedule_id = v.schedule_id
     and e.member_id = v.member_id
 );
 
