@@ -674,3 +674,228 @@
   border: 1px dashed var(--border-subtle);
   color: var(--text-muted);
 }
+
+/* Selected Filter Chip in AttendanceRecordSheet */
+.attendance-selected-filter-chip-row {
+  display: flex;
+  margin-bottom: 12px;
+}
+
+.attendance-selected-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--brand-apricot-tint);
+  color: var(--brand-apricot-text);
+  border: 1px solid var(--brand-apricot);
+  border-radius: 16px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.attendance-selected-filter-clear-btn {
+  background: transparent;
+  border: none;
+  color: var(--brand-apricot-text);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+/* Passion Temperature Sheet */
+.passion-sheet-hero-card {
+  background: var(--brand-apricot-tint);
+  border: 1px solid var(--brand-apricot);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.passion-sheet-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.passion-sheet-big-num {
+  font-size: 38px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--brand-apricot-text);
+}
+
+.passion-sheet-hero-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.passion-sheet-delta-pill {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 12px;
+}
+
+.passion-sheet-delta-pill.up {
+  background: var(--brand-apricot);
+  color: var(--text-white);
+}
+
+.passion-sheet-delta-pill.down {
+  background: var(--status-danger-light);
+  color: var(--status-danger);
+}
+
+.passion-sheet-delta-pill.zero {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+
+.passion-gauge-track {
+  position: relative;
+  height: 10px;
+  background: var(--bg-subtle);
+  border-radius: 5px;
+  overflow: visible;
+  margin-bottom: 6px;
+}
+
+.passion-gauge-fill {
+  height: 100%;
+  background: var(--brand-apricot);
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+.passion-gauge-base-marker {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 14px;
+  background: var(--text-muted);
+}
+
+.passion-gauge-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.passion-gauge-base-label {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.passion-sheet-empty {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.passion-sheet-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.passion-group-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.passion-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.passion-group-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.passion-group-total {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.passion-group-total.positive {
+  color: var(--brand-apricot-text);
+}
+
+.passion-group-total.negative {
+  color: var(--status-danger);
+}
+
+.passion-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.passion-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+  width: 100%;
+  padding: 8px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.passion-item-row:disabled {
+  cursor: default;
+}
+
+.passion-item-row:not(:disabled):hover {
+  background: var(--bg-subtle);
+}
+
+.passion-item-label {
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.passion-item-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.passion-item-score {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.passion-item-score.positive {
+  color: var(--brand-apricot-text);
+}
+
+.passion-item-score.negative {
+  color: var(--status-danger);
+}
+
+.passion-item-score.neutral {
+  color: var(--text-muted);
+}
+
+.passion-item-arrow {
+  font-size: 16px;
+  color: var(--text-muted);
+  line-height: 1;
+}

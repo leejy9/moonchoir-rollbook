@@ -7,28 +7,42 @@ import {
 } from '../../utils/memberProgress';
 import { formatShortDate, getKSTDateString } from '../../utils/date';
 
+export interface SelectedScheduleFilter {
+  itemLabel: string;
+  scheduleIds: string[];
+}
+
 export interface AttendanceRecordSheetProps {
   records: MemberScheduleRecord[];
   onClose: () => void;
   initialFilter?: 'ATTENDED' | 'LATE' | 'EXCUSED' | 'ABSENT' | null;
+  selectedScheduleFilter?: SelectedScheduleFilter | null;
 }
 
 export const AttendanceRecordSheet: React.FC<AttendanceRecordSheetProps> = ({
   records,
   onClose,
   initialFilter = null,
+  selectedScheduleFilter = null,
 }) => {
   const [activeCategory, setActiveCategory] = useState<
     'ATTENDED' | 'LATE' | 'EXCUSED' | 'ABSENT' | null
   >(initialFilter);
+  const [scheduleFilter, setScheduleFilter] = useState<SelectedScheduleFilter | null>(
+    selectedScheduleFilter
+  );
   const [period, setPeriod] = useState<AttendancePeriod>('3M');
 
   const todayStr = useMemo(() => getKSTDateString(), []);
 
-  // Filter records by selected period
+  // Filter records by selected schedule filter or period
   const periodRecords = useMemo(() => {
+    if (scheduleFilter) {
+      const allowed = new Set(scheduleFilter.scheduleIds);
+      return records.filter((r) => allowed.has(r.schedule.id));
+    }
     return filterRecordsByPeriod(records, period, todayStr);
-  }, [records, period, todayStr]);
+  }, [records, scheduleFilter, period, todayStr]);
 
   // Compute counts for the 4 status toggles based on current period
   const statusCounts = useMemo(() => {
@@ -83,6 +97,23 @@ export const AttendanceRecordSheet: React.FC<AttendanceRecordSheetProps> = ({
           </button>
         </div>
 
+        {/* Selected schedule filter chip (from passion temperature sheet) */}
+        {scheduleFilter && (
+          <div className="attendance-selected-filter-chip-row">
+            <span className="attendance-selected-filter-chip">
+              {scheduleFilter.itemLabel}
+              <button
+                type="button"
+                className="attendance-selected-filter-clear-btn"
+                onClick={() => setScheduleFilter(null)}
+                aria-label={`${scheduleFilter.itemLabel} 필터 해제`}
+              >
+                ×
+              </button>
+            </span>
+          </div>
+        )}
+
         {/* 4 Status Toggle Cards */}
         <div className="attendance-status-toggles">
           <button
@@ -130,22 +161,25 @@ export const AttendanceRecordSheet: React.FC<AttendanceRecordSheetProps> = ({
         <div className="attendance-period-chips">
           <button
             type="button"
-            className={`attendance-period-chip ${period === '3M' ? 'active' : ''}`}
-            onClick={() => setPeriod('3M')}
+            className={`attendance-period-chip ${!scheduleFilter && period === '3M' ? 'active' : ''}`}
+            onClick={() => !scheduleFilter && setPeriod('3M')}
+            disabled={Boolean(scheduleFilter)}
           >
             최근 3개월
           </button>
           <button
             type="button"
-            className={`attendance-period-chip ${period === 'YEAR' ? 'active' : ''}`}
-            onClick={() => setPeriod('YEAR')}
+            className={`attendance-period-chip ${!scheduleFilter && period === 'YEAR' ? 'active' : ''}`}
+            onClick={() => !scheduleFilter && setPeriod('YEAR')}
+            disabled={Boolean(scheduleFilter)}
           >
             올해
           </button>
           <button
             type="button"
-            className={`attendance-period-chip ${period === 'ALL' ? 'active' : ''}`}
-            onClick={() => setPeriod('ALL')}
+            className={`attendance-period-chip ${scheduleFilter || period === 'ALL' ? 'active' : ''}`}
+            onClick={() => !scheduleFilter && setPeriod('ALL')}
+            disabled={Boolean(scheduleFilter)}
           >
             전체
           </button>
@@ -169,7 +203,7 @@ export const AttendanceRecordSheet: React.FC<AttendanceRecordSheetProps> = ({
                   : 'status-absent';
 
               return (
-                <div key={r.id} className="attendance-record-item">
+                <div key={r.schedule.id} className="attendance-record-item">
                   <div className="attendance-record-left">
                     <span className="attendance-record-title">{r.title}</span>
                     <span className="attendance-record-date">
