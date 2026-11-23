@@ -40,6 +40,9 @@
   --sticker-stage-tint: #FFF4D6;
   --player-surface: #2E3352;
   --player-surface-full: #23273F;
+  --player-gradient-top: #6A63B5;
+  --player-gradient-mid: #3D3F70;
+  --player-accent: #B7B0F0;
 
   --status-success: #059669;
   --status-success-light: #ecfdf5;
@@ -292,6 +295,9 @@ a {
   --sticker-stage-tint: rgba(226, 179, 60, 0.16);
   --player-surface: #2E3352;
   --player-surface-full: #1A1D2E;
+  --player-gradient-top: #4E4893;
+  --player-gradient-mid: #2B2D52;
+  --player-accent: #B7B0F0;
 
   background-color: var(--bg-app);
   color: var(--text-main);

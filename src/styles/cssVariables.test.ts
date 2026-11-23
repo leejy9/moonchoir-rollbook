@@ -201,6 +201,9 @@ describe('CSS Variable Design Tokens (D2 / V3-01)', () => {
       '--sticker-stage-tint',
       '--player-surface',
       '--player-surface-full',
+      '--player-gradient-top',
+      '--player-gradient-mid',
+      '--player-accent',
     ];
 
     const definedVars = getDefinedCssVariables(indexCssPath);
