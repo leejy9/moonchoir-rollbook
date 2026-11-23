@@ -286,6 +286,57 @@ describe('SupabaseBackend', () => {
         })
       );
     });
+
+    it('maps LOG_LISTEN_SESSION to fn_log_listen_session with payload', async () => {
+      clearAllAdminTokens();
+      const backend = new SupabaseBackend(mockConfig);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+        Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      );
+
+      const payload = {
+        chunkId: 'c1',
+        memberId: 'm1',
+        pieceId: 'p1',
+        trackId: 't1',
+        startedAt: '2026-11-23T10:00:00+09:00',
+        listenedSeconds: 30,
+      };
+      const res = await backend.callAction('LOG_LISTEN_SESSION', payload);
+      expect(res.success).toBe(true);
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_log_listen_session',
+        expect.objectContaining({
+          body: JSON.stringify({ p_payload: payload }),
+        })
+      );
+    });
+
+    it('maps GET_MEMBER_ACTIVITY to fn_get_member_activity with p_member_ids', async () => {
+      const backend = new SupabaseBackend(mockConfig);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              rsvpEvents: [],
+              listen: { totalSeconds: 0, firstAt: null, daily: [], perPiece: [] },
+            }),
+            { status: 200 }
+          )
+        )
+      );
+
+      const res = await backend.callAction('GET_MEMBER_ACTIVITY', {
+        memberIds: ['m1', 'm2'],
+      });
+      expect(res.success).toBe(true);
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        'https://test.supabase.co/rest/v1/rpc/fn_get_member_activity',
+        expect.objectContaining({
+          body: JSON.stringify({ p_member_ids: ['m1', 'm2'] }),
+        })
+      );
+    });
   });
 });
 

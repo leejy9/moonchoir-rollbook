@@ -323,5 +323,6 @@ export interface BoundDeviceProfile {
  * 11. Practice Catalog, Performances & Studio Models (MEMBER_UX_AUDIO_SPEC.md §4-4, MEMBER_UX_V3_SPEC.md §7-5)
  */
 export * from './practice';
+export * from './activity';
 
 

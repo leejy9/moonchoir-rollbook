@@ -74,12 +74,19 @@ export class SupabaseBackend implements RemoteBackend {
         // 서버 세션이 끝났다: 저장된 토큰을 지워 화면이 관리자 모드에서 나가게 한다.
         clearAllAdminTokens();
       }
+      const okVal = (json as { ok?: boolean }).ok;
+      const isSuccess =
+        json.success !== undefined
+          ? json.success === true
+          : okVal !== undefined
+            ? okVal === true
+            : !json.error && !json.code;
       return {
-        success: json.success === true,
+        success: isSuccess,
         message:
           json.message ||
           json.error ||
-          (json.success === true ? '저장 완료' : '저장이 확인되지 않았습니다.'),
+          (isSuccess ? '완료' : '저장이 확인되지 않았습니다.'),
         code: json.code,
         existingMemberId: json.existingMemberId,
         boundDeviceId: json.boundDeviceId,
@@ -184,6 +191,10 @@ export class SupabaseBackend implements RemoteBackend {
         return 'fn_delete_practice_track';
       case 'DELETE_PERFORMANCE':
         return 'fn_delete_performance';
+      case 'LOG_LISTEN_SESSION':
+        return 'fn_log_listen_session';
+      case 'GET_MEMBER_ACTIVITY':
+        return 'fn_get_member_activity';
       default:
         return null;
     }
@@ -235,6 +246,14 @@ export class SupabaseBackend implements RemoteBackend {
         p_include_archived: includeArchived,
         p_token: getActiveAdminToken() ?? null,
       };
+    }
+    if (action === 'GET_MEMBER_ACTIVITY') {
+      const ids = Array.isArray(payload)
+        ? payload
+        : payload && typeof payload === 'object' && 'memberIds' in payload
+          ? (payload as { memberIds: string[] }).memberIds
+          : [];
+      return { p_member_ids: ids };
     }
     return { p_payload: this.withAdminToken(payload ?? {}) };
   }

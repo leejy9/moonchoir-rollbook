@@ -44,7 +44,9 @@ export class GasBackend implements RemoteBackend {
       action === 'GET_MEDIA_USAGE' ||
       action === 'SAVE_PERFORMANCE' ||
       action === 'SET_PERFORMANCE_ARCHIVED' ||
-      action === 'SET_PERFORMANCE_PIECES'
+      action === 'SET_PERFORMANCE_PIECES' ||
+      action === 'LOG_LISTEN_SESSION' ||
+      action === 'GET_MEMBER_ACTIVITY'
     ) {
       return {
         success: false,

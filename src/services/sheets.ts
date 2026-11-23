@@ -15,6 +15,8 @@ import type {
   PracticePiece,
   PracticeTrack,
   MediaUsage,
+  ListenSessionPayload,
+  MemberActivity,
 } from '../types/rollbook';
 import {
   calculateCumulativeAttendanceWithLifecycle,
@@ -41,6 +43,7 @@ import {
   resolveScheduleLocationFromPresets,
   serializeScheduleForSheet,
 } from './sheetsParser';
+import { parseMemberActivity } from '../utils/activityParser';
 import {
   STORAGE_KEYS,
   loadFromStorage,
@@ -137,6 +140,8 @@ const NON_MUTATING_ACTIONS = new Set([
   'VERIFY_ON_SITE_PIN',
   'GET_PRACTICE_CATALOG',
   'GET_MEDIA_USAGE',
+  'GET_MEMBER_ACTIVITY',
+  'LOG_LISTEN_SESSION',
 ]);
 
 export class SheetsService {
@@ -806,6 +811,29 @@ export class SheetsService {
       scoresBytes: Number(data.scoresBytes) || 0,
       totalBytes: Number(data.totalBytes) || 0,
     };
+  }
+
+  public async logListenSession(payload: ListenSessionPayload): Promise<boolean> {
+    if (this.backend.kind === 'gas') {
+      return false;
+    }
+    const result = await this.sendToGoogleSheet('LOG_LISTEN_SESSION', payload);
+    return result.success;
+  }
+
+  public async getMemberActivity(memberIds: string[] | string): Promise<MemberActivity | null> {
+    if (this.backend.kind === 'gas') {
+      return null;
+    }
+    const ids = Array.isArray(memberIds) ? memberIds : [memberIds];
+    if (ids.length === 0) {
+      return null;
+    }
+    const result = await this.sendToGoogleSheet('GET_MEMBER_ACTIVITY', { memberIds: ids });
+    if (!result.success || !result.data) {
+      return null;
+    }
+    return parseMemberActivity(result.data);
   }
 
   // --- Append-Only Write Operations (Idempotent by log.id) ---
