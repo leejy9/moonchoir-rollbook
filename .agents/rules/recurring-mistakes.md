@@ -18,4 +18,10 @@ trigger: always_on
 9. **새 파일 400줄 이하**, `src/index.css`·`src/services/sheets.ts`에 로직·스타일을 쌓지 않는다.
 10. **범위 밖 수정·설치·머지·배포를 하지 않는다.** 승인되지 않은 npm 패키지, `package.json` 수동 수정, PR 머지, `npm run deploy` 금지.
 
+11. **출결 상태를 직접 계산하지 않는다.** 일정별 상태는 `buildMemberScheduleRecords` 결과만 쓴다. 새 코드에서 `reconcileSingleMemberAttendance`를 직접 부르면 투표(사유결석)와 설정의 지각 기준이 빠진다(CI 검사).
+12. **시간대 없는 날짜 문자열은 KST다.** `rsvp_votes.timestamp` 같은 text 시각을 SQL에서 `::timestamptz`로 바로 읽지 않는다(UTC로 해석돼 9시간 밀림). `::timestamp at time zone 'Asia/Seoul'`. 꼭 필요하면 그 줄에 `-- tz-checked` 주석과 이유를 단다(CI 검사).
+13. **화면은 직접 띄워서 확인한다.** "헤드리스라 캡처 불가"는 이유가 아니다. `scripts/dev/capture-screens.mjs`로 390×844 화면을 찍고, `document.documentElement.scrollWidth`가 390인지 적는다.
+14. **데이터가 도착하기 전 상태를 저장하지 않는다.** 처음 렌더(빈 데이터)에서 "본 목록"·"횟수" 같은 기기 저장값을 초기화하지 않는다. 저장값이 "없음"과 "읽기 실패"는 다르게 처리한다.
+15. **PR 본문에는 코드에서 확인한 사실만 쓴다.** 숫자·열 이름·주기는 `grep`으로 확인한 값만. 확인하지 않은 설명을 지어 쓰면 PR 전체를 반려한다(V3-20 R12).
+
 보고하기 전에는 반드시 `/report-ready` 워크플로를 실행한다.

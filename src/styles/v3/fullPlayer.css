@@ -145,11 +145,12 @@
   align-items: center;
 }
 
-/* Cover Art */
+/* Cover Art (V3-20 R9: square aspect-ratio 1, width 100vw - 48px, max 340px) */
 .full-player-cover-box {
-  width: 100%;
+  width: calc(100vw - 48px);
   max-width: 340px;
   aspect-ratio: 1;
+  flex-shrink: 0;
   border-radius: 16px;
   background: linear-gradient(135deg, var(--brand-lavender) 0%, var(--player-surface) 100%);
   color: var(--text-white, #ffffff);
@@ -179,17 +180,17 @@
   text-overflow: ellipsis;
 }
 
-/* Titles */
+/* Titles (V3-20 R9: left aligned) */
 .full-player-titles {
   width: 100%;
-  text-align: center;
+  text-align: left;
   margin-bottom: 20px;
 }
 
 .full-player-title-row {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   margin-bottom: 4px;
 }

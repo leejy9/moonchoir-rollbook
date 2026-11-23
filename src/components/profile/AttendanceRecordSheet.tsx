@@ -5,7 +5,7 @@ import {
   classifyAttendanceStatus,
   filterRecordsByPeriod,
 } from '../../utils/memberProgress';
-import { formatShortDate, getKSTDateString } from '../../utils/date';
+import { formatRecordDate, getKSTDateString } from '../../utils/date';
 
 export interface SelectedScheduleFilter {
   itemLabel: string;
@@ -202,14 +202,23 @@ export const AttendanceRecordSheet: React.FC<AttendanceRecordSheetProps> = ({
                   ? 'status-excused'
                   : 'status-absent';
 
+              const subText =
+                r.finalStatus === '지각'
+                  ? `시작 ${r.schedule?.startTime || ''}`
+                  : r.voteStatus === 'ATTEND'
+                  ? '투표 참석'
+                  : r.voteStatus === 'ABSENT'
+                  ? `투표 불참${r.voteReason ? ` · ${r.voteReason}` : ''}`
+                  : '미투표';
+
               return (
                 <div key={r.schedule.id} className="attendance-record-item">
                   <div className="attendance-record-left">
-                    <span className="attendance-record-title">{r.title}</span>
-                    <span className="attendance-record-date">
-                      {formatShortDate(r.date)} {r.category ? `· ${r.category}` : ''}
-                      {r.checkInTime ? ` · ${r.checkInTime}` : ''}
-                    </span>
+                    <div className="attendance-record-header-line">
+                      <span className="attendance-record-date">{formatRecordDate(r.date)}</span>
+                      <span className="attendance-record-title">{r.title}</span>
+                    </div>
+                    <span className="attendance-record-sub">{subText}</span>
                   </div>
 
                   <div className="attendance-record-right">
@@ -235,6 +244,9 @@ export const AttendanceRecordSheet: React.FC<AttendanceRecordSheetProps> = ({
                     >
                       {r.finalStatus}
                     </span>
+                    {r.checkInTime ? (
+                      <span className="attendance-record-checkin">{r.checkInTime}</span>
+                    ) : null}
                   </div>
                 </div>
               );

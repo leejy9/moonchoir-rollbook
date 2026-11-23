@@ -128,8 +128,11 @@ describe('GlobalAudioPlayer & MiniPlayer & FullPlayer (V3-06, V3-06b)', () => {
     expect(html).toContain('full-player-overlay');
     expect(html).toContain('소프라노 파트');
     expect(html).toContain('바람이 불어오는 곳');
-    expect(html).toContain('−5초');
-    expect(html).toContain('+5초');
+    // V3-20 R9: 5s seek buttons use circular arrow with number 5 icon instead of literal text
+    expect(html).toContain('aria-label="5초 뒤로"');
+    expect(html).toContain('aria-label="5초 앞으로"');
+    expect(html).not.toContain('−5초');
+    expect(html).not.toContain('+5초');
     expect(html).toContain('악보 보기');
     // L4 / V3-19: Repeat button has NO "전체" or "1곡" text, only icon with aria-label="반복: 한 곡" and aria-pressed
     const repeatBtnMatch = html.match(/<button[^>]*aria-label="반복: 한 곡"[^>]*>([\s\S]*?)<\/button>/);

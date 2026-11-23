@@ -252,6 +252,18 @@ export function formatShortDate(dateStr: string): string {
 }
 
 /**
+ * 출석 기록 화면용 날짜(M/D 요일, 예: 11/14 토).
+ */
+export function formatRecordDate(dateStr: string): string {
+  const parts = (dateStr || '').split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
+  const [y, m, d] = parts;
+  const dateObj = new Date(y, m - 1, d, 12, 0, 0);
+  const weekday = KOREAN_DAY_NAMES[dateObj.getDay()] || '';
+  return `${m}/${d} ${weekday}`;
+}
+
+/**
  * targetDate('YYYY-MM-DD')와 now(Date) 사이의 KST 기준 D-Day 차이를 계산합니다.
  * targetDate > now 이면 양수 (예: 3일 후면 3, 오늘이면 0, 어제면 -1).
  */

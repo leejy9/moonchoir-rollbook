@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { AppConfig, PracticePiece, PracticeTrack } from '../../types/rollbook';
 import { useAudioPlayer, useAudioPosition } from './audioPlayerContext';
 import { buildPieceQueue, indexOnNext, nearestRate } from '../../utils/practiceQueue';
@@ -83,6 +83,21 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
 
   const isVideo = Boolean(activeVideo);
 
+  // R8: Track last saved resume position & trigger hint on unmount
+  const lastSavedResumeAtRef = useRef<number>(activeVideo?.resumeAt || 0);
+  const activeVideoRef = useRef(activeVideo);
+  useEffect(() => {
+    activeVideoRef.current = activeVideo;
+  });
+
+  useEffect(() => {
+    return () => {
+      if (activeVideoRef.current) {
+        triggerMinimizeHint?.();
+      }
+    };
+  }, [triggerMinimizeHint]);
+
   // Swipe-to-dismiss gesture handling
   const touchStartY = useRef<number | null>(null);
 
@@ -90,28 +105,13 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
     touchStartY.current = e.clientY;
   };
 
-  const handleClose = () => {
-    if (activeVideo && ytPlayerRef.current) {
-      const cur = ytPlayerRef.current.getCurrentTime() || 0;
-      setActiveVideo?.({ ...activeVideo, resumeAt: cur });
-      try {
-        ytPlayerRef.current.destroy();
-      } catch (err) {
-        console.warn('[FullPlayer] ytPlayer destroy error:', err);
-      }
-      ytPlayerRef.current = null;
-      triggerMinimizeHint?.();
-    }
-    onClose();
-  };
+  const handleClose = () => onClose();
 
   const handlePointerUp = (e: React.PointerEvent) => {
     if (touchStartY.current === null) return;
     const deltaY = e.clientY - touchStartY.current;
     touchStartY.current = null;
-    if (deltaY >= 80) {
-      handleClose();
-    }
+    if (deltaY >= 80) handleClose();
   };
 
   if (!currentTrack && !activeVideo) {
@@ -278,6 +278,10 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
               }}
               onPositionUpdate={(cur, dur) => {
                 setYtPosition({ currentTime: cur, duration: dur });
+                if (activeVideo && Math.abs(cur - lastSavedResumeAtRef.current) >= 1) {
+                  lastSavedResumeAtRef.current = cur;
+                  setActiveVideo?.({ ...activeVideo, resumeAt: cur });
+                }
               }}
             />
           ) : (
