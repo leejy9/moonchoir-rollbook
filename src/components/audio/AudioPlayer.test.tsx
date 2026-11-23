@@ -148,7 +148,7 @@ describe('GlobalAudioPlayer & MiniPlayer & FullPlayer (V3-06, V3-06b)', () => {
             Toggle Repeat
           </button>
           <span data-testid="repeat-val">{String(repeatOne)}</span>
-          <FullPlayer />
+          <FullPlayer onClose={() => {}} />
         </div>
       );
     }
