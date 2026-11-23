@@ -77,10 +77,8 @@ describe('computePassionTemperature (V3-12)', () => {
     expect(res.windowSize).toBe(0);
     expect(res.groups).toHaveLength(1);
     expect(res.groups[0].key).toBe('attendance');
-    // Late count is 0 but always present in attendance items
-    expect(res.groups[0].items).toHaveLength(1);
-    expect(res.groups[0].items[0].key).toBe('late');
-    expect(res.groups[0].items[0].count).toBe(0);
+    // 지각 0회는 항목을 만들지 않는다(명세 §5-5: 0이 아닌 항목만, 지각은 1회 이상일 때 점수 0으로 표시)
+    expect(res.groups[0].items).toHaveLength(0);
   });
 
   it('backfill 이벤트 무시: 백필 투표 이벤트는 점수와 약속 계산에서 제외된다', () => {

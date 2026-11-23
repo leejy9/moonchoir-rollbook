@@ -61,7 +61,7 @@ describe('PassionTemperatureSheet (V3-12)', () => {
     expect(html).toContain('▲ +0.1');
     expect(html).toContain('출석');
     expect(html).toContain('정시 9회');
-    expect(html).toContain('지각 0회');
+    expect(html).not.toContain('지각 0회'); // 지각 0회는 표시하지 않는다(명세 §5-5)
     expect(html).toContain('+1.35');
     expect(html).toContain('약속');
     expect(html).toContain('24시간 전 투표 7회');

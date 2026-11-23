@@ -102,10 +102,8 @@ export const PassionTemperatureSheet: React.FC<PassionTemperatureSheetProps> = (
         ) : (
           <div className="passion-sheet-groups">
             {groups.map((group) => {
-              // 0이 아닌 항목만 표시 (지각은 0이어도 표시)
-              const visibleItems = group.items.filter(
-                (item) => item.key === 'late' || item.count > 0 || item.delta !== 0
-              );
+              // 0이 아닌 항목만 표시. 지각은 점수가 0이어도 1회 이상이면 표시(명세 §5-5)
+              const visibleItems = group.items.filter((item) => item.count > 0 || item.delta !== 0);
               if (visibleItems.length === 0) return null;
 
               return (

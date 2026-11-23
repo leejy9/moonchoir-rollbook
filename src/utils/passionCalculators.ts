@@ -94,13 +94,16 @@ export function calculateAttendanceGroup(
       scheduleIds: onTimeIds.slice(0, 5),
     });
   }
-  items.push({
-    key: 'late',
-    label: PASSION_RULES.LABELS.LATE(lateIds.length),
-    count: lateIds.length,
-    delta: 0,
-    scheduleIds: lateIds,
-  });
+  // 지각은 점수가 0이어도 표시하지만, 0회면 항목 자체를 만들지 않는다(명세 §5-5 내역).
+  if (lateIds.length > 0) {
+    items.push({
+      key: 'late',
+      label: PASSION_RULES.LABELS.LATE(lateIds.length),
+      count: lateIds.length,
+      delta: 0,
+      scheduleIds: lateIds,
+    });
+  }
   if (absentIds.length > 0) {
     items.push({
       key: 'absent',
