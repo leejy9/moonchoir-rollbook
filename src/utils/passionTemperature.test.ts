@@ -392,5 +392,32 @@ describe('computePassionTemperature (V3-12)', () => {
 
       expect(res.weeklyDelta).toBe(0.1);
     });
+
+    it('백필 참석만 있는 일정에 결석 시 결석 -0.40이 적용된다 (R6, V27)', () => {
+      const s1 = makeSchedule('s1', '2026-11-10', '19:30');
+      // No log -> absent!
+      // Only backfill attend event exists
+      const backfillEvent = makeRsvp(1, 's1', 'ATTEND', '2026-11-09T10:00:00+09:00', 'backfill');
+
+      const res = computePassionTemperature(
+        mockMember,
+        [mockMember],
+        [s1],
+        [], // no check-in logs -> absent
+        [backfillEvent],
+        {},
+        new Date('2026-11-23T12:00:00+09:00')
+      );
+
+      const attGroup = res.groups.find((g) => g.key === 'attendance');
+      const absentItem = attGroup?.items.find((it) => it.key === 'absent');
+      expect(absentItem).toBeDefined();
+      expect(absentItem?.delta).toBe(-0.4);
+
+      // Must NOT be counted as no-show in promise group
+      const promGroup = res.groups.find((g) => g.key === 'promise');
+      const noShowItem = promGroup?.items.find((it) => it.key === 'noshow');
+      expect(noShowItem).toBeUndefined();
+    });
   });
 });
