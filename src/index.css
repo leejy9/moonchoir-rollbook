@@ -269,6 +269,7 @@ a {
   grid-template-columns: minmax(0, 1fr);
 }
 
+html[data-theme='dark'],
 .app-shell[data-theme='dark'] {
   color-scheme: dark;
   --bg-app: #101319;
@@ -466,10 +467,10 @@ a {
    Home Screen & Header
    ========================================================================== */
 .home-container {
-  padding: 16px 18px 48px;
+  padding: 12px 16px 48px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .home-header {
@@ -498,7 +499,7 @@ a {
 }
 
 .brand-title {
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-main);
   letter-spacing: -0.02em;
@@ -506,7 +507,7 @@ a {
 }
 
 .brand-subtitle {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0.04em;
@@ -565,12 +566,12 @@ a {
 .active-schedule-card {
   background: var(--bg-card);
   border-radius: var(--radius-xl);
-  padding: 22px 20px;
+  padding: 16px 16px;
   box-shadow: var(--shadow-card);
   border: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 .schedule-card-header {
@@ -580,16 +581,16 @@ a {
 }
 
 .schedule-category-badge {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
-  color: var(--brand-primary);
+  color: var(--brand-lavender-text);
   background: var(--brand-primary-light);
   padding: 4px 10px;
   border-radius: var(--radius-full);
 }
 
 .schedule-date-badge {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-sub);
   background: var(--bg-subtle);
@@ -604,7 +605,7 @@ a {
 }
 
 .schedule-card-title {
-  font-size: 21px;
+  font-size: 17px;
   font-weight: 800;
   color: var(--text-main);
   letter-spacing: -0.025em;
@@ -622,7 +623,7 @@ a {
   align-items: center;
   gap: 8px;
   color: var(--text-sub);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .info-icon {
@@ -705,15 +706,15 @@ a {
 
 .btn-qr-scan-primary {
   width: 100%;
-  min-height: 56px;
+  min-height: 48px;
   background: var(--brand-primary);
   color: var(--text-white);
   border-radius: var(--radius-lg);
-  padding: 10px 18px;
+  padding: 8px 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   font-weight: 700;
   box-shadow: var(--shadow-primary);
   transition: all var(--transition-fast);
@@ -736,7 +737,7 @@ a {
 }
 
 .btn-main-label {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -771,11 +772,11 @@ a {
 
 .btn-rsvp-primary {
   width: 100%;
-  min-height: 56px;
+  min-height: 48px;
   background: var(--brand-primary);
   color: var(--text-white);
   border-radius: var(--radius-lg);
-  padding: 10px 18px;
+  padding: 8px 16px;
   display: flex;
   align-items: center;
   justify-content: center;

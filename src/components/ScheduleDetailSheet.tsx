@@ -217,7 +217,7 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
                   padding: '8px 12px',
                   fontSize: '13px',
                   fontWeight: 600,
-                  color: 'var(--brand-primary)',
+                  color: 'var(--brand-lavender-text)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',

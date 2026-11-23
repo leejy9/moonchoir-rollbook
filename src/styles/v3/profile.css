@@ -20,12 +20,12 @@
 }
 
 .profile-avatar {
-  width: 56px;
-  height: 56px;
+  width: 45px;
+  height: 45px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--brand-lavender) 0%, var(--brand-accent) 100%);
   color: var(--text-white);
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -41,14 +41,14 @@
 }
 
 .profile-name {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-main);
   line-height: 1.2;
 }
 
 .profile-sub {
-  font-size: 13px;
+  font-size: 10px;
   color: var(--text-sub);
 }
 
@@ -56,7 +56,7 @@
 .profile-hero-row {
   display: flex;
   gap: 12px;
-  height: 150px;
+  height: 120px;
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
@@ -100,7 +100,7 @@
 }
 
 .profile-level-label {
-  font-size: 12px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
 }
@@ -113,13 +113,13 @@
 }
 
 .profile-level-num {
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 800;
   line-height: 1;
 }
 
 .profile-level-title {
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -142,7 +142,7 @@
 }
 
 .profile-level-hint {
-  font-size: 12px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.9);
   font-weight: 500;
 }
@@ -165,12 +165,12 @@
 }
 
 .profile-donut-svg {
-  width: 96px;
-  height: 96px;
+  width: 77px;
+  height: 77px;
 }
 
 .profile-ring-label {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-sub);
   margin-top: 4px;
@@ -190,13 +190,13 @@
 }
 
 .profile-staff-title {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 800;
   line-height: 1.2;
 }
 
 .profile-staff-tenure {
-  font-size: 14px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.9);
 }
 
@@ -210,7 +210,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-main);
   cursor: pointer;
@@ -241,13 +241,13 @@
 }
 
 .profile-number-icon {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
   color: var(--brand-lavender);
 }
 
 .profile-number-value {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 800;
   color: var(--text-main);
   line-height: 1.1;
@@ -257,7 +257,7 @@
 }
 
 .profile-number-label {
-  font-size: 12px;
+  font-size: 10px;
   color: var(--text-sub);
   white-space: nowrap;
   overflow: hidden;
@@ -341,8 +341,8 @@
 }
 
 .profile-temp-icon-circle {
-  width: 48px;
-  height: 48px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--brand-apricot), var(--brand-apricot-text));
   color: var(--text-white);
@@ -360,13 +360,13 @@
 }
 
 .profile-temp-title {
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--brand-apricot-text);
 }
 
 .profile-temp-value {
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 800;
   color: var(--brand-apricot-text);
   line-height: 1.1;
@@ -374,7 +374,7 @@
 }
 
 .profile-temp-delta {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 10px;
@@ -467,7 +467,7 @@
 }
 
 .profile-stickers-title {
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-main);
 }
@@ -475,14 +475,14 @@
 .profile-stickers-badge {
   background: var(--brand-apricot);
   color: var(--text-white);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 10px;
 }
 
 .profile-stickers-count {
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-sub);
   display: flex;
@@ -499,7 +499,7 @@
 }
 
 .profile-sticker-slot {
-  height: 72px;
+  height: 58px;
   min-width: 0;
   border-radius: 12px;
   background: var(--bg-subtle, var(--bg-app));
@@ -518,8 +518,8 @@
 }
 
 .profile-sticker-img {
-  width: 44px;
-  height: 44px;
+  width: 35px;
+  height: 35px;
   object-fit: contain;
 }
 
@@ -529,14 +529,14 @@
   right: 4px;
   background: var(--brand-apricot);
   color: var(--text-white);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   padding: 1px 4px;
   border-radius: 6px;
 }
 
 .profile-sticker-empty-text {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
 }
 
@@ -1189,7 +1189,7 @@
 
 .sticker-date-or-cond {
   display: block;
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-muted);
   margin-top: 2px;
   line-height: 1.2;
@@ -1229,13 +1229,13 @@
 }
 
 .profile-stickers-title {
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-main);
 }
 
 .profile-stickers-new-pill {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--text-white);
   background: var(--brand-apricot);
@@ -1247,7 +1247,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -1268,8 +1268,8 @@
 }
 
 .profile-sticker-mini-frame {
-  width: 44px;
-  height: 44px;
+  width: 35px;
+  height: 35px;
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -1278,8 +1278,8 @@
 }
 
 .profile-sticker-mini-img {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
 }
 
@@ -1310,7 +1310,7 @@
 .profile-settings-title {
   margin: 0 0 4px;
   color: var(--text-main);
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -1332,7 +1332,7 @@
   background: transparent;
   color: var(--text-main);
   font: inherit;
-  font-size: 14px;
+  font-size: 11px;
   text-align: left;
   box-sizing: border-box;
 }
@@ -1350,7 +1350,7 @@
   background: var(--bg-subtle);
   color: var(--text-main);
   font: inherit;
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -1447,7 +1447,7 @@
 
 .profile-settings-chevron {
   color: var(--text-muted);
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1;
 }
 

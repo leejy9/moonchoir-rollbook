@@ -1,5 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { EvaluatedSticker, StickerBundle } from '../../utils/praiseStickers';
+import {
+  stickerImageUrl,
+  type EvaluatedSticker,
+  type StickerBundle,
+} from '../../utils/praiseStickers';
 
 export interface StickerBoardSheetProps {
   stickers: EvaluatedSticker[];
@@ -142,7 +146,7 @@ export const StickerBoardSheet: React.FC<StickerBoardSheetProps> = ({
                           className={`sticker-frame ${shapeClass} ${bundleClass} ${tierClass}`}
                         >
                           <img
-                            src={`/stickers/${sticker.image}.png`}
+                            src={stickerImageUrl(sticker.image)}
                             alt={sticker.name}
                             className="sticker-image"
                             loading="lazy"

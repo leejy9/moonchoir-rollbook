@@ -30,8 +30,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           onContextMenu={logoHandlers.onContextMenu}
           title="우클릭(PC) 또는 3연타(모바일) 시 최고 관리자 메뉴를 엽니다"
           style={{
-            width: 38,
-            height: 38,
+            width: 30,
+            height: 30,
             borderRadius: '50%',
             objectFit: 'cover',
             cursor: 'pointer',

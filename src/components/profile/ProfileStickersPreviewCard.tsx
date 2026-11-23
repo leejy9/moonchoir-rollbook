@@ -1,5 +1,5 @@
 import React from 'react';
-import type { EvaluatedSticker } from '../../utils/praiseStickers';
+import { stickerImageUrl, type EvaluatedSticker } from '../../utils/praiseStickers';
 
 export interface ProfileStickersPreviewCardProps {
   stickers: EvaluatedSticker[];
@@ -78,7 +78,7 @@ export const ProfileStickersPreviewCard: React.FC<ProfileStickersPreviewCardProp
                 }}
               >
                 <img
-                  src={`/stickers/${sticker.image}.png`}
+                  src={stickerImageUrl(sticker.image)}
                   alt={sticker.name}
                   className="profile-sticker-mini-img"
                   loading="lazy"

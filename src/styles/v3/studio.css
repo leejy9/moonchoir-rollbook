@@ -16,7 +16,7 @@
 }
 
 .studio-title {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 800;
   color: var(--text-main);
   margin: 0;
@@ -248,15 +248,15 @@
 .studio-piece-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .studio-piece-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 56px;
-  padding: 12px 14px;
+  gap: 10px;
+  min-height: 48px;
+  padding: 7px 12px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
@@ -286,13 +286,13 @@
 .studio-piece-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   flex: 1;
   min-width: 0;
 }
 
 .studio-piece-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-main);
   white-space: nowrap;
@@ -301,7 +301,7 @@
 }
 
 .studio-piece-sub {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-sub);
   white-space: nowrap;
   overflow: hidden;
@@ -313,15 +313,15 @@
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .studio-badge {
   display: inline-flex;
   align-items: center;
-  padding: 1px 6px;
+  padding: 0 5px;
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   border: 1px solid var(--border-subtle);
   background: var(--bg-subtle);

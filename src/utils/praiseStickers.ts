@@ -33,6 +33,11 @@ import {
 
 export * from './praiseStickerDefinitions';
 
+/** 스티커 이미지 주소. Vite `base`(./)·GitHub Pages 하위 경로에서도 맞도록 BASE_URL을 앞에 붙인다. */
+export function stickerImageUrl(image: string): string {
+  return `${import.meta.env.BASE_URL}stickers/${image}.png`;
+}
+
 export interface EvaluatePraiseStickersParams {
   member: Member | BoundDeviceProfile;
   schedules: Schedule[];

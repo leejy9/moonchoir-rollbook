@@ -1,7 +1,8 @@
 import React from 'react';
 import type { Schedule } from '../../types/rollbook';
 import type { TodayCtaState } from '../../utils/todayCta';
-import { buildKakaoMapLink } from '../../utils/kakaoMaps';
+import { sheetsService } from '../../services/sheets';
+import { buildKakaoMapLink, findScheduleAddress } from '../../utils/kakaoMaps';
 import { IconClock, IconLocation, IconQrScan, IconVote } from '../Icons';
 
 export interface HomeActiveScheduleCardProps {
@@ -39,6 +40,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
   onOpenDetail,
 }) => {
   const kakaoMapLink = buildKakaoMapLink({
+    address: findScheduleAddress(schedule, sheetsService.getLocationPresets()),
     name: schedule.locationName,
     lat: schedule.targetLat,
     lon: schedule.targetLon,
@@ -85,7 +87,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
               {isToday ? '오늘' : schedule.date} 일정 {scheduleIndex + 1}/{schedulesCount}
-              <span style={{ color: 'var(--brand-primary)', marginLeft: '6px' }}>({schedule.startTime})</span>
+              <span style={{ color: 'var(--brand-lavender-text)', marginLeft: '6px' }}>({schedule.startTime})</span>
             </span>
             {/* Dot Indicators (Decorative aria-hidden) */}
             <div style={{ display: 'flex', gap: '5px' }} aria-hidden="true">
@@ -137,7 +139,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
             style={{
               fontSize: '11px',
               fontWeight: 700,
-              color: isRequired ? 'var(--brand-primary)' : 'var(--status-success)',
+              color: isRequired ? 'var(--brand-lavender-text)' : 'var(--status-success)',
               background: isRequired ? 'var(--brand-primary-light)' : 'var(--status-success-light)',
               border: `1px solid ${isRequired ? 'var(--brand-primary)' : 'var(--status-success)'}`,
               padding: '2px 8px',
@@ -180,7 +182,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
-                  color: 'var(--brand-primary)',
+                  color: 'var(--brand-lavender-text)',
                   textDecoration: 'underline',
                   wordBreak: 'break-all',
                 }}
@@ -307,7 +309,7 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
           border: '1px solid var(--border-subtle)',
           background: 'var(--bg-subtle)',
           color: 'var(--text-main)',
-          fontSize: '14px',
+          fontSize: '13px',
           fontWeight: 600,
           cursor: 'pointer',
           textAlign: 'center',

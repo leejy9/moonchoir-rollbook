@@ -8,7 +8,7 @@ import { COMMENT_MAX_LENGTH, COMMENT_PAGE_SIZE, createCommentEventId, formatComm
 interface ScheduleCommentsProps {
   scheduleId: string;
   author: Pick<Member, 'id' | 'name' | 'part'>;
-  /** 시험·시안에서 처음부터 펼쳐 둘 때만 사용 */
+  /** 처음 펼침 여부. 기본은 펼침이며, 사용자가 접기 버튼으로 닫을 수 있다 */
   defaultExpanded?: boolean;
 }
 
@@ -28,10 +28,10 @@ const ChevronIcon: React.FC = () => (
 );
 
 /**
- * 투표 현황 카드 맨 아래에 붙는 접고 펴는 댓글 영역.
+ * 일정 상세 맨 아래에 붙는 댓글 영역. 기본으로 펼쳐 보이고, 접기 버튼으로 전체를 닫을 수 있다.
  * 일정이 바뀌면 입력 중이던 상태가 남지 않도록 호출하는 쪽에서 `key={scheduleId}`를 준다.
  */
-export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, author, defaultExpanded = false }) => {
+export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, author, defaultExpanded = true }) => {
   const [, setTick] = useState(0);
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [showAll, setShowAll] = useState(false);

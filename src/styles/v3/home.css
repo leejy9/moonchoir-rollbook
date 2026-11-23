@@ -6,7 +6,7 @@
 .home-tab-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   padding-bottom: 24px;
 }
 
@@ -14,7 +14,7 @@
 .home-calendar-card {
   background: var(--bg-card);
   border-radius: var(--radius-xl);
-  padding: 16px;
+  padding: 12px 14px;
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-card);
 }
@@ -33,7 +33,7 @@
 }
 
 .home-calendar-title {
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 800;
   color: var(--text-main);
   margin: 0;
@@ -121,9 +121,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 56px;
+  min-height: 48px;
   min-width: 44px;
-  padding: 6px 2px;
+  padding: 4px 2px;
   border-radius: var(--radius-lg);
   cursor: pointer;
   border: 1px solid transparent;
@@ -224,4 +224,9 @@
 
 .home-upcoming-item:hover {
   background: var(--bg-hover);
+}
+
+/* 다크 모드: 오늘 배지는 밝은 바탕이므로 글자를 어둡게 (기본 흰 글자는 안 보임) */
+.app-shell[data-theme='dark'] .schedule-date-badge.is-today {
+  color: var(--bg-app);
 }
