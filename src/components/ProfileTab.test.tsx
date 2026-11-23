@@ -94,9 +94,9 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
     expect(html).toContain('연습');
     expect(html).toContain('공연');
 
-    // 4. Passion Temperature Card
+    // 4. Passion Temperature Card (1 unexcused absence -> 36.5 - 0.40 = 36.1°C)
     expect(html).toContain('열정 온도');
-    expect(html).toContain('36.5°C');
+    expect(html).toContain('36.1°C');
 
     // 5. Praise Stickers Preview (24 stickers for member)
     expect(html).toContain('칭찬 스티커');
@@ -137,8 +137,8 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
     expect(html).toContain('함께한 지');
     expect(html).toContain('출석 기록');
 
-    // Praise Stickers Preview (8 stickers for staff)
-    expect(html).toContain('0 / 8');
+    // Praise Stickers Preview (8 stickers for staff, earned 1y anniversary sticker)
+    expect(html).toContain('1 / 8');
 
     // Must NOT contain Level Card, Ring, or Temperature Card
     expect(html).not.toContain('내 레벨');

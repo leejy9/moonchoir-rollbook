@@ -1,0 +1,285 @@
+export type StickerBundle = 'perseverance' | 'punctuality' | 'promise' | 'studio' | 'stage';
+export type StickerFrame = 'circle' | 'rounded-square' | 'diamond' | 'hexagon' | 'star';
+export type StickerTier = 'bronze' | 'silver' | 'gold';
+
+export interface StickerDefinition {
+  id: string;
+  name: string;
+  bundle: StickerBundle;
+  bundleTitle: string;
+  frame: StickerFrame;
+  conditionDescription: string;
+  image: string;
+  tier?: StickerTier;
+  staffEligible: boolean;
+}
+
+export interface EvaluatedSticker extends StickerDefinition {
+  earned: boolean;
+  earnedOn?: string;
+  progress: number;
+}
+
+export const STICKER_DEFINITIONS: readonly StickerDefinition[] = [
+  // 1. 꾸준함 (원, 라벤더)
+  {
+    id: 'first-step',
+    name: '첫걸음',
+    bundle: 'perseverance',
+    bundleTitle: '꾸준함',
+    frame: 'circle',
+    conditionDescription: '누적 출석 1',
+    image: 'footprints',
+    staffEligible: true,
+  },
+  {
+    id: 'att-10',
+    name: '열 번째 노래',
+    bundle: 'perseverance',
+    bundleTitle: '꾸준함',
+    frame: 'circle',
+    conditionDescription: '누적 출석 10 · 동',
+    image: 'musical_note',
+    tier: 'bronze',
+    staffEligible: true,
+  },
+  {
+    id: 'att-50',
+    name: '반백',
+    bundle: 'perseverance',
+    bundleTitle: '꾸준함',
+    frame: 'circle',
+    conditionDescription: '누적 출석 50 · 은',
+    image: 'musical_notes',
+    tier: 'silver',
+    staffEligible: true,
+  },
+  {
+    id: 'att-100',
+    name: '백 번의 화음',
+    bundle: 'perseverance',
+    bundleTitle: '꾸준함',
+    frame: 'circle',
+    conditionDescription: '누적 출석 100 · 금',
+    image: 'hundred_points',
+    tier: 'gold',
+    staffEligible: true,
+  },
+  {
+    id: 'full-month',
+    name: '한 달 개근',
+    bundle: 'perseverance',
+    bundleTitle: '꾸준함',
+    frame: 'circle',
+    conditionDescription: '어떤 달의 필참 일정이 2개 이상이고 모두 출석·수동인정·지각·사유결석(출석 1개 이상)',
+    image: 'spiral_calendar',
+    staffEligible: false,
+  },
+  {
+    id: 'anniv-1y',
+    name: '1주년',
+    bundle: 'perseverance',
+    bundleTitle: '꾸준함',
+    frame: 'circle',
+    conditionDescription: '함께한 날 ≥ 366',
+    image: 'birthday_cake',
+    staffEligible: true,
+  },
+  // 2. 시간 약속 (둥근 사각, 살구)
+  {
+    id: 'ontime-5',
+    name: '정시 5연속',
+    bundle: 'punctuality',
+    bundleTitle: '시간 약속',
+    frame: 'rounded-square',
+    conditionDescription: '정시 연속 5 · 동',
+    image: 'alarm_clock',
+    tier: 'bronze',
+    staffEligible: false,
+  },
+  {
+    id: 'ontime-10',
+    name: '정시 10연속',
+    bundle: 'punctuality',
+    bundleTitle: '시간 약속',
+    frame: 'rounded-square',
+    conditionDescription: '정시 연속 10 · 은',
+    image: 'stopwatch',
+    tier: 'silver',
+    staffEligible: false,
+  },
+  {
+    id: 'early-5',
+    name: '일찍 온 사람',
+    bundle: 'punctuality',
+    bundleTitle: '시간 약속',
+    frame: 'rounded-square',
+    conditionDescription: '일찍 누적 5 · 동',
+    image: 'sunrise',
+    tier: 'bronze',
+    staffEligible: false,
+  },
+  {
+    id: 'early-20',
+    name: '얼리버드',
+    bundle: 'punctuality',
+    bundleTitle: '시간 약속',
+    frame: 'rounded-square',
+    conditionDescription: '일찍 누적 20 · 금',
+    image: 'bird',
+    tier: 'gold',
+    staffEligible: false,
+  },
+  {
+    id: 'back-on-time',
+    name: '다시 정시로',
+    bundle: 'punctuality',
+    bundleTitle: '시간 약속',
+    frame: 'rounded-square',
+    conditionDescription: '지각 바로 다음부터 정시 3연속',
+    image: 'seedling',
+    staffEligible: false,
+  },
+  // 3. 약속 (마름모, 네이비)
+  {
+    id: 'first-vote',
+    name: '첫 투표',
+    bundle: 'promise',
+    bundleTitle: '약속',
+    frame: 'diamond',
+    conditionDescription: '투표 이벤트 1',
+    image: 'ballot_box_with_ballot',
+    staffEligible: false,
+  },
+  {
+    id: 'quick-10',
+    name: '빠른 답장',
+    bundle: 'promise',
+    bundleTitle: '약속',
+    frame: 'diamond',
+    conditionDescription: '24시간 전 투표 누적 10',
+    image: 'high_voltage',
+    staffEligible: false,
+  },
+  {
+    id: 'kept-10',
+    name: '약속 지킴',
+    bundle: 'promise',
+    bundleTitle: '약속',
+    frame: 'diamond',
+    conditionDescription: '약속 지킴 10연속',
+    image: 'handshake',
+    staffEligible: false,
+  },
+  {
+    id: 'all-voted-month',
+    name: '빠짐없는 응답',
+    bundle: 'promise',
+    bundleTitle: '약속',
+    frame: 'diamond',
+    conditionDescription: '어떤 달의 필참 일정(2개 이상) 모두에 시작 전 투표',
+    image: 'check_mark_button',
+    staffEligible: false,
+  },
+  // 4. 연습실 (육각, 라벤더)
+  {
+    id: 'first-play',
+    name: '첫 재생',
+    bundle: 'studio',
+    bundleTitle: '연습실',
+    frame: 'hexagon',
+    conditionDescription: '재생 기록 1',
+    image: 'headphone',
+    staffEligible: false,
+  },
+  {
+    id: 'listen-1h',
+    name: '연습 1시간',
+    bundle: 'studio',
+    bundleTitle: '연습실',
+    frame: 'hexagon',
+    conditionDescription: '누적 재생 3,600초 · 동',
+    image: 'microphone',
+    tier: 'bronze',
+    staffEligible: false,
+  },
+  {
+    id: 'listen-5h',
+    name: '연습 5시간',
+    bundle: 'studio',
+    bundleTitle: '연습실',
+    frame: 'hexagon',
+    conditionDescription: '누적 18,000초 · 은',
+    image: 'studio_microphone',
+    tier: 'silver',
+    staffEligible: false,
+  },
+  {
+    id: 'listen-20h',
+    name: '연습 20시간',
+    bundle: 'studio',
+    bundleTitle: '연습실',
+    frame: 'hexagon',
+    conditionDescription: '누적 72,000초 · 금',
+    image: 'fire',
+    tier: 'gold',
+    staffEligible: false,
+  },
+  {
+    id: 'explorer-10',
+    name: '10곡 탐험가',
+    bundle: 'studio',
+    bundleTitle: '연습실',
+    frame: 'hexagon',
+    conditionDescription: '곡별 누적 60초 이상인 곡 10개',
+    image: 'compass',
+    staffEligible: false,
+  },
+  // 5. 무대 (별꽃, 금)
+  {
+    id: 'first-stage',
+    name: '첫 무대',
+    bundle: 'stage',
+    bundleTitle: '무대',
+    frame: 'star',
+    conditionDescription: '공연 출석 1',
+    image: 'performing_arts',
+    staffEligible: true,
+  },
+  {
+    id: 'stage-3',
+    name: '공연 3회',
+    bundle: 'stage',
+    bundleTitle: '무대',
+    frame: 'star',
+    conditionDescription: '공연 출석 3 · 동',
+    image: 'sparkles',
+    tier: 'bronze',
+    staffEligible: true,
+  },
+  {
+    id: 'stage-10',
+    name: '공연 10회',
+    bundle: 'stage',
+    bundleTitle: '무대',
+    frame: 'star',
+    conditionDescription: '공연 출석 10 · 금',
+    image: 'trophy',
+    tier: 'gold',
+    staffEligible: true,
+  },
+  {
+    id: 'stage-ready',
+    name: '무대 준비 완료',
+    bundle: 'stage',
+    bundleTitle: '무대',
+    frame: 'star',
+    conditionDescription: '어떤 공연 일정 직전 28일 안의 필참 일정(2개 이상)이 모두 출석·수동인정·지각',
+    image: 'glowing_star',
+    staffEligible: false,
+  },
+] as const;
+
+export const STAFF_STICKER_IDS = new Set(
+  STICKER_DEFINITIONS.filter((d) => d.staffEligible).map((d) => d.id)
+);

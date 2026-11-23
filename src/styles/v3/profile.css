@@ -899,3 +899,291 @@
   color: var(--text-muted);
   line-height: 1;
 }
+
+/* ==========================================================================
+   Praise Stickers (V3-13 / Spec §5-6, §5-7)
+   ========================================================================== */
+
+.sticker-sheet-header-pill {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand-lavender-text);
+  background: var(--brand-lavender-tint);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.sticker-board-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.sticker-bundle-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.sticker-bundle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.sticker-bundle-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.sticker-bundle-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.sticker-bundle-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px 8px;
+}
+
+@media (max-width: 360px) {
+  .sticker-bundle-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.sticker-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100px;
+  text-align: center;
+}
+
+.sticker-card.locked .sticker-frame {
+  filter: grayscale(1);
+  opacity: 0.4;
+}
+
+.sticker-frame-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sticker-frame {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  transition: transform 0.2s ease;
+}
+
+.sticker-frame.shape-circle {
+  border-radius: 50%;
+}
+
+.sticker-frame.shape-rounded-square {
+  border-radius: 16px;
+}
+
+.sticker-frame.shape-diamond {
+  border-radius: 8px;
+  transform: rotate(45deg);
+}
+
+.sticker-frame.shape-diamond .sticker-image {
+  transform: rotate(-45deg);
+}
+
+.sticker-frame.shape-hexagon {
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  border-radius: 4px;
+}
+
+.sticker-frame.shape-star {
+  border-radius: 20px;
+}
+
+.sticker-frame.bundle-perseverance {
+  background: var(--brand-lavender-tint);
+}
+
+.sticker-frame.bundle-punctuality {
+  background: var(--brand-apricot-tint);
+}
+
+.sticker-frame.bundle-promise {
+  background: var(--status-info-light);
+}
+
+.sticker-frame.bundle-studio {
+  background: var(--brand-lavender-tint);
+}
+
+.sticker-frame.bundle-stage {
+  background: var(--sticker-stage-tint);
+}
+
+.sticker-card.earned .tier-bronze {
+  border: 2.5px solid var(--sticker-bronze);
+}
+
+.sticker-card.earned .tier-silver {
+  border: 2.5px solid var(--sticker-silver);
+}
+
+.sticker-card.earned .tier-gold {
+  border: 2.5px solid var(--sticker-gold);
+}
+
+.sticker-image {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.sticker-new-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--brand-apricot);
+  color: var(--text-white);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 8px;
+  line-height: 1;
+}
+
+.sticker-info {
+  margin-top: 6px;
+  width: 100%;
+}
+
+.sticker-name {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.sticker-date-or-cond {
+  display: block;
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1.2;
+  word-break: keep-all;
+}
+
+/* Profile Tab Sticker Preview */
+.profile-stickers-card {
+  width: 100%;
+  text-align: left;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 16px;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.profile-stickers-card:hover {
+  background: var(--bg-subtle);
+}
+
+.profile-stickers-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.profile-stickers-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-stickers-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.profile-stickers-new-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-white);
+  background: var(--brand-apricot);
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.profile-stickers-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.profile-stickers-preview-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.profile-sticker-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 52px;
+}
+
+.profile-sticker-mini-frame {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.profile-sticker-mini-img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.profile-sticker-mini.locked .profile-sticker-mini-frame {
+  filter: grayscale(1);
+  opacity: 0.4;
+}
+
+.profile-sticker-mini-name {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+

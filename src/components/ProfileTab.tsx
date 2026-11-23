@@ -1,8 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
-import type { BoundDeviceProfile, Member, Schedule } from '../types/rollbook';
+import type {
+  BoundDeviceProfile,
+  Member,
+  MemberActivity,
+  Schedule,
+} from '../types/rollbook';
 import type { DisplayMode } from '../services/displayMode';
-import { getKSTDateString } from '../utils/date';
+import { getKSTDateString, parseKSTDate } from '../utils/date';
 import { buildMemberScheduleRecords } from '../utils/memberRecords';
 import { isStaffMember, isActivityStaff } from '../utils/staff';
 import {
@@ -13,10 +18,18 @@ import {
   computePracticeHours,
   formatStaffTenure,
 } from '../utils/memberProgress';
+import { computePassionTemperature } from '../utils/passionTemperature';
+import { evaluatePraiseStickers } from '../utils/praiseStickers';
+import { useSeenStickers } from './profile/useSeenStickers';
 import { ProfileSettingsSection } from './profile/ProfileSettingsSection';
 import { ProfileHeroCards } from './profile/ProfileHeroCards';
+import { ProfileNumbersRow } from './profile/ProfileNumbersRow';
+import { ProfilePassionTempCard } from './profile/ProfilePassionTempCard';
+import { ProfileStickersPreviewCard } from './profile/ProfileStickersPreviewCard';
 import { LevelLineageSheet } from './profile/LevelLineageSheet';
-import { AttendanceRecordSheet } from './profile/AttendanceRecordSheet';
+import { AttendanceRecordSheet, type SelectedScheduleFilter } from './profile/AttendanceRecordSheet';
+import { PassionTemperatureSheet } from './profile/PassionTemperatureSheet';
+import { StickerBoardSheet } from './profile/StickerBoardSheet';
 import '../styles/v3/profile.css';
 
 export interface ProfileTabProps {
@@ -50,6 +63,9 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   const [syncFeedback, setSyncFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [activeSheet, setActiveSheet] = useState<'NONE' | 'LEVEL' | 'ATTENDANCE' | 'TEMP' | 'STICKERS'>('NONE');
+  const [selectedScheduleFilter, setSelectedScheduleFilter] = useState<SelectedScheduleFilter | null>(null);
+
+  const [activity, setActivity] = useState<MemberActivity | null>(null);
 
   const todayStr = useMemo(() => getKSTDateString(), []);
 
@@ -83,6 +99,22 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   const memberPart = currentMember.part || profile.part;
   const memberName = currentMember.name || profile.name;
 
+  // Fetch member activity (listen sessions, rsvp events) on mount & refresh
+  useEffect(() => {
+    let isMounted = true;
+    sheetsService
+      .getMemberActivity([currentMember.id])
+      .then((act) => {
+        if (isMounted) setActivity(act);
+      })
+      .catch((err) => {
+        console.warn('[ProfileTab] Failed to fetch member activity:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [currentMember.id, refreshTrigger]);
+
   const schedules = useMemo(() => {
     void refreshTrigger;
     return sheetsService.getSchedulesForMember(profile.memberId);
@@ -99,16 +131,14 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   }, [refreshTrigger]);
 
   const lateGraceMinutes = config.lateGraceMinutes ?? 10;
-
-  // Staff check (Spec §5-7, V26)
-  const isStaff = useMemo(() => {
-    return isActivityStaff(currentMember, config, members);
-  }, [currentMember, config, members]);
-
-  // Admin menu permission check
-  const hasAdminMenuAccess = useMemo(() => {
-    return isStaffMember(currentMember, members);
-  }, [currentMember, members]);
+  const isStaff = useMemo(
+    () => isActivityStaff(currentMember, config, members),
+    [currentMember, config, members]
+  );
+  const hasAdminMenuAccess = useMemo(
+    () => isStaffMember(currentMember, members),
+    [currentMember, members]
+  );
 
   // Schedule records for practice hours & performance count
   const scheduleRecords = useMemo(() => {
@@ -167,6 +197,40 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     return computeMemberLevel(cumulativeAttendance, memberPart);
   }, [cumulativeAttendance, memberPart]);
 
+  // Passion Temperature (§5-5, Staff excludes this)
+  const passionResult = useMemo(() => {
+    if (isStaff) return null;
+    return computePassionTemperature(
+      currentMember,
+      members,
+      schedules,
+      allLogs,
+      activity?.rsvpEvents || [],
+      config,
+      todayStr ? parseKSTDate(todayStr) : undefined
+    );
+  }, [isStaff, currentMember, members, schedules, allLogs, activity, config, todayStr]);
+
+  // Praise Stickers (§5-6, §5-7)
+  const evaluatedStickers = useMemo(() => {
+    return evaluatePraiseStickers({
+      member: currentMember,
+      schedules,
+      logs: allLogs,
+      activity,
+      performanceCategories: config.performanceCategories,
+      allMembers: members,
+      isStaff,
+    });
+  }, [currentMember, schedules, allLogs, activity, config.performanceCategories, members, isStaff]);
+
+  const earnedStickerIds = useMemo(
+    () => evaluatedStickers.filter((s) => s.earned).map((s) => s.id),
+    [evaluatedStickers]
+  );
+
+  const { unseenIds, unseenCount, markAllSeen } = useSeenStickers(earnedStickerIds);
+
   const handleSyncRemote = async () => {
     setIsSyncing(true);
     setSyncFeedback(null);
@@ -215,125 +279,57 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       {/* 2. Staff View vs Member View */}
       {isStaff ? (
         <>
-          {/* Staff Title Card */}
           <section className="profile-staff-card">
             <div className="profile-staff-title">{`${memberName} 선생님`}</div>
             <div className="profile-staff-tenure">{formatStaffTenure(daysTogether)}</div>
           </section>
 
-          {/* Staff Attendance Record Action Row */}
           <button
             type="button"
             className="profile-staff-records-btn"
-            onClick={() => setActiveSheet('ATTENDANCE')}
+            onClick={() => {
+              setSelectedScheduleFilter(null);
+              setActiveSheet('ATTENDANCE');
+            }}
           >
             <span>출석 기록</span>
             <span style={{ fontSize: '18px', color: 'var(--text-sub)' }}>›</span>
           </button>
         </>
       ) : (
-        /* Member Hero 2-Card Row */
         <ProfileHeroCards
           levelInfo={levelInfo}
           attendanceRate={attendance90Days.attendanceRate}
           onOpenLevel={() => setActiveSheet('LEVEL')}
-          onOpenAttendance={() => setActiveSheet('ATTENDANCE')}
+          onOpenAttendance={() => {
+            setSelectedScheduleFilter(null);
+            setActiveSheet('ATTENDANCE');
+          }}
         />
       )}
 
       {/* 3. Three White Number Cards */}
-      <section className="profile-numbers-row">
-        <div className="profile-number-card">
-          <svg className="profile-number-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          <div className="profile-number-value">{daysTogether}일</div>
-          <div className="profile-number-label">함께한 날</div>
-        </div>
-
-        <div className="profile-number-card">
-          <svg className="profile-number-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          <div className="profile-number-value">{practiceHours}시간</div>
-          <div className="profile-number-label">연습</div>
-        </div>
-
-        <div className="profile-number-card">
-          <svg className="profile-number-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-            <line x1="12" y1="19" x2="12" y2="23" />
-            <line x1="8" y1="23" x2="16" y2="23" />
-          </svg>
-          <div className="profile-number-value">{performanceCount}번</div>
-          <div className="profile-number-label">공연</div>
-        </div>
-      </section>
+      <ProfileNumbersRow
+        daysTogether={daysTogether}
+        practiceHours={practiceHours}
+        performanceCount={performanceCount}
+      />
 
       {/* 4. Passion Temperature Card (Staff Excludes This) */}
-      {!isStaff && (
-        <section
-          className="profile-temp-card"
-          onClick={() => setActiveSheet('TEMP')}
-          role="button"
-          tabIndex={0}
-        >
-          <div className="profile-temp-top">
-            <div className="profile-temp-label-group">
-              <svg className="profile-temp-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2c1.1 0 2 .9 2 2 0 1.5-1 3.5-2 5-1-1.5-2-3.5-2-5 0-1.1.9-2 2-2zm6 9c0 3.3-2.7 6-6 6s-6-2.7-6-6c0-2.4 1.4-4.5 3.5-5.5-.3 1.2 0 2.5 1 3.2 1.2.9 2.8.9 4 0 1-.7 1.3-2 1-3.2 2.1 1 3.5 3.1 3.5 5.5z" />
-              </svg>
-              <span className="profile-temp-title">열정 온도</span>
-            </div>
-            <div className="profile-temp-value-row">
-              <span className="profile-temp-value">36.5°C</span>
-            </div>
-          </div>
-
-          <div className="profile-temp-bar-wrap">
-            <div className="profile-temp-bar" />
-            <div className="profile-temp-tick" style={{ left: '31.25%' }} />
-            <div className="profile-temp-indicator" style={{ left: '31.25%' }} />
-          </div>
-        </section>
+      {!isStaff && passionResult && (
+        <ProfilePassionTempCard
+          result={passionResult}
+          onOpen={() => setActiveSheet('TEMP')}
+        />
       )}
 
       {/* 5. Praise Stickers Preview Card */}
-      <section className="profile-stickers-card">
-        <button
-          type="button"
-          className="profile-stickers-header"
-          onClick={() => setActiveSheet('STICKERS')}
-        >
-          <div className="profile-stickers-title-group">
-            <span className="profile-stickers-title">칭찬 스티커</span>
-          </div>
-          <div className="profile-stickers-count">
-            <span>{`0 / ${isStaff ? 8 : 24}`}</span>
-            <span style={{ fontSize: '16px' }}>›</span>
-          </div>
-        </button>
-
-        <div className="profile-stickers-grid">
-          <div className="profile-sticker-slot">
-            <span className="profile-sticker-empty-text">미획득</span>
-          </div>
-          <div className="profile-sticker-slot">
-            <span className="profile-sticker-empty-text">미획득</span>
-          </div>
-          <div className="profile-sticker-slot">
-            <span className="profile-sticker-empty-text">미획득</span>
-          </div>
-          <div className="profile-sticker-slot">
-            <span className="profile-sticker-empty-text">미획득</span>
-          </div>
-        </div>
-      </section>
+      <ProfileStickersPreviewCard
+        stickers={evaluatedStickers}
+        isStaff={isStaff}
+        unseenCount={unseenCount}
+        onOpen={() => setActiveSheet('STICKERS')}
+      />
 
       {/* 6. Settings & Admin Section */}
       <ProfileSettingsSection
@@ -363,36 +359,35 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       {activeSheet === 'ATTENDANCE' && (
         <AttendanceRecordSheet
           records={scheduleRecords}
-          onClose={() => setActiveSheet('NONE')}
+          selectedScheduleFilter={selectedScheduleFilter}
+          onClose={() => {
+            setSelectedScheduleFilter(null);
+            setActiveSheet('NONE');
+          }}
         />
       )}
 
-      {(activeSheet === 'TEMP' || activeSheet === 'STICKERS') && (
-        <div
-          className="profile-sheet-overlay"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setActiveSheet('NONE')}
-        >
-          <div className="profile-sheet-content">
-            <div className="profile-sheet-header">
-              <h2 className="profile-sheet-title">
-                {activeSheet === 'TEMP' ? '열정 온도 내역' : '칭찬 스티커 보드'}
-              </h2>
-              <button
-                type="button"
-                className="profile-sheet-close-btn"
-                onClick={() => setActiveSheet('NONE')}
-                aria-label="닫기"
-              >
-                ×
-              </button>
-            </div>
-            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-sub)', fontSize: '14px' }}>
-              아직 기록이 없어요
-            </div>
-          </div>
-        </div>
+      {activeSheet === 'TEMP' && passionResult && (
+        <PassionTemperatureSheet
+          result={passionResult}
+          onClose={() => setActiveSheet('NONE')}
+          onSelectScheduleFilter={(itemLabel, scheduleIds) => {
+            setSelectedScheduleFilter({ itemLabel, scheduleIds });
+            setActiveSheet('ATTENDANCE');
+          }}
+        />
+      )}
+
+      {activeSheet === 'STICKERS' && (
+        <StickerBoardSheet
+          stickers={evaluatedStickers}
+          isStaff={isStaff}
+          unseenStickerIds={unseenIds}
+          onClose={() => {
+            markAllSeen();
+            setActiveSheet('NONE');
+          }}
+        />
       )}
     </div>
   );
