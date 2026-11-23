@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PREFERENCE_KEYS, readPreference, writePreference } from '../../services/sheetsStorage';
 
 function isStringArray(val: unknown): val is string[] {
@@ -7,10 +7,15 @@ function isStringArray(val: unknown): val is string[] {
 
 export function computeUnseenStickers(
   earnedIds: string[],
-  storedSeen: string[] | null
+  storedSeen: string[] | null,
+  isReady = true
 ): { unseenIds: Set<string>; nextSeen: string[]; shouldInitialize: boolean } {
   if (storedSeen === null) {
-    // First time on device: establish baseline, no new badges
+    if (!isReady) {
+      // Data not ready yet; defer initialization
+      return { unseenIds: new Set<string>(), nextSeen: [], shouldInitialize: false };
+    }
+    // First time on device & data ready: establish baseline, no new badges
     return { unseenIds: new Set<string>(), nextSeen: earnedIds, shouldInitialize: true };
   }
   const seenSet = new Set(storedSeen);
@@ -18,23 +23,36 @@ export function computeUnseenStickers(
   return { unseenIds: unseen, nextSeen: storedSeen, shouldInitialize: false };
 }
 
-export function useSeenStickers(earnedIds: string[]) {
+export function useSeenStickers(earnedIds: string[], isReady = true) {
   const [seenIds, setSeenIds] = useState<string[] | null>(() => {
+    try {
+      return readPreference<string[] | null>(
+        PREFERENCE_KEYS.SEEN_STICKERS,
+        isStringArray,
+        null
+      );
+    } catch {
+      return null;
+    }
+  });
+
+  // Delay baseline initialization on fresh devices until data has arrived (R5)
+  useEffect(() => {
+    if (!isReady) return;
     try {
       const stored = readPreference<string[] | null>(
         PREFERENCE_KEYS.SEEN_STICKERS,
         isStringArray,
         null
       );
-      const computed = computeUnseenStickers(earnedIds, stored);
-      if (computed.shouldInitialize) {
-        writePreference(PREFERENCE_KEYS.SEEN_STICKERS, computed.nextSeen);
+      if (stored === null) {
+        writePreference(PREFERENCE_KEYS.SEEN_STICKERS, earnedIds);
+        setSeenIds(earnedIds);
       }
-      return computed.nextSeen;
     } catch {
-      return earnedIds;
+      // ignore
     }
-  });
+  }, [isReady, earnedIds]);
 
   const unseenIds = useMemo(() => {
     if (seenIds === null) return new Set<string>();

@@ -222,7 +222,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     [evaluatedStickers]
   );
 
-  const { unseenIds, unseenCount, markAllSeen } = useSeenStickers(earnedStickerIds);
+  const isDataReady = Boolean(activity);
+  const { unseenIds, unseenCount, markAllSeen } = useSeenStickers(earnedStickerIds, isDataReady);
 
   const handleSyncRemote = async () => {
     setIsSyncing(true);
