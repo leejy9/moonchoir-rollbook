@@ -40,3 +40,4 @@
 |---|---|---|
 | 회원 병합·일정 일괄 삭제가 운영 서버에 한 번도 반영되지 않음(화면 `canonicalId/secondaryId`, `ids` ↔ 서버 `representativeId/mergedMemberIds`, `scheduleIds`) | 화면과 서버를 따로 만들고, 서버 테스트는 서버 쪽 이름으로만 호출. 로컬 캐시가 먼저 바뀌어 화면에서는 성공처럼 보임 | V3-21 Z0 계약 테스트(`rpcContract.test.ts`), 검증 스크립트는 화면이 보내는 payload 모양으로 호출 |
 | 리뷰어 지시서 초안이 함수 하나만 고치게 해 호출부 13곳·같은 버그가 있는 집계를 빠뜨림 | 계약 표에 정의만 적고 호출부를 안 셈 | spec-auditor 독립 검토로 발견. spec-writer 계약 표에 "호출부 전체" 열 추가 |
+| 보고서의 PR 대상 브랜치(Base)를 3회 잘못 적음(#27·#45 → `main`) | PR 정보를 조회하지 않고 기억으로 작성 | 규칙 17, `/report-ready`에 `gh pr view` 명령 추가 |
