@@ -787,6 +787,7 @@ J6의 "직접 만드는 방식"은 하지 않는다. 쪽 배치, 화면 근처�
 ### V3-20 리뷰어 전체 검토 반영 (2026-11-23)
 
 > 리뷰어가 `feat/v3-activity-2`(@2fa03d0)를 받아 Green Bar·로컬 PostgreSQL 검증(모두 통과)을 돌리고, **가짜 데이터로 실제 화면을 띄워** 확인했다(Playwright로 Supabase 요청을 가로채 가짜 응답, 운영 데이터 미사용).
+> **CI 가드가 추가됐다(규칙 11·12).** `git merge origin/main`을 하면 `feat/v3-activity-2`의 CI가 **빨간불이 되는 것이 정상**이다. 리뷰어가 같은 가드를 이 브랜치에 돌려 아래 위치를 확인했다: `passionCalculators.ts` 4곳, `passionTemperature.ts` 63행, `praiseStickers.ts` 76행(규칙 11), `v3_activity.sql`의 `p_text::timestamptz`, `v3_activity_check.sql`의 `reached60At ::timestamptz`(규칙 12). R2·R4를 끝내면 초록불이 된다. 검증 스크립트처럼 **이미 시간대가 붙은 ISO 문자열**을 읽는 줄은 `-- tz-checked: ISO 문자열에 시간대 포함`을 단다. 가드를 끄거나 우회하지 않는다.
 > 기능 대부분이 동작한다. 아래는 고쳐야 할 것이다. **R 순서대로, 항목 하나에 커밋 하나.** 수정 전 실패하는 테스트를 먼저 확인한다(R10).
 > 브랜치: 각 항목이 들어갈 브랜치에서 고치고 위 브랜치로 merge한다. P1~P3는 `feat/v3-member-ux` → `feat/v3-profile` → `feat/v3-activity-2` 순으로 merge, 나머지는 해당 브랜치.
 
