@@ -6,6 +6,7 @@
   width: calc(100vw - 32px);
   max-width: 448px;
   aspect-ratio: 16 / 9;
+  flex: 0 0 auto;
   border-radius: var(--radius-lg, 16px);
   overflow: hidden;
   background: var(--player-surface-full);

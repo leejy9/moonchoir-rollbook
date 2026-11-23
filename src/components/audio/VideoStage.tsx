@@ -29,7 +29,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayerInstance | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const [failedVideoId, setFailedVideoId] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const videoId = activeVideo.track.url ? getYoutubeVideoId(activeVideo.track.url) : null;
@@ -99,7 +99,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
             },
             onError: (err) => {
               console.warn('[VideoStage] YouTube player error:', err);
-              if (!isCancelled) setLoadError(true);
+              if (!isCancelled) setFailedVideoId(videoId);
             },
           },
         });
@@ -112,7 +112,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       })
       .catch((err) => {
         console.warn('[VideoStage] loadYoutubeIframeApi failed:', err);
-        if (!isCancelled) setLoadError(true);
+        if (!isCancelled) setFailedVideoId(videoId);
       });
 
     // Time polling interval (0.5s)
@@ -154,7 +154,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     }
   }, [playbackSpeed]);
 
-  if (loadError || !videoId) {
+  if (failedVideoId === videoId || !videoId) {
     return (
       <div className="full-player-video-stage fallback" role="region" aria-label="유튜브 영상">
         {activeVideo.track.url && (

@@ -72,6 +72,7 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
   const { currentTime, duration } = useAudioPosition();
   const [showSpeedSheet, setShowSpeedSheet] = useState(false);
   const [showQueueSheet, setShowQueueSheet] = useState(false);
+  const playerBodyRef = useRef<HTMLDivElement>(null);
 
   // YouTube player state
   const ytPlayerRef = useRef<YTPlayerInstance | null>(null);
@@ -82,6 +83,13 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
   });
 
   const isVideo = Boolean(activeVideo);
+  const activeVideoTrackId = activeVideo?.track.id;
+
+  useEffect(() => {
+    if (activeVideoTrackId) {
+      playerBodyRef.current?.scrollTo({ top: 0 });
+    }
+  }, [activeVideoTrackId]);
 
   // R8: Track last saved resume position & trigger hint on unmount
   const lastSavedResumeAtRef = useRef<number>(activeVideo?.resumeAt || 0);
@@ -264,7 +272,7 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
         </div>
 
         {/* Scrollable Body */}
-        <div className="full-player-body">
+        <div ref={playerBodyRef} className="full-player-body">
           {/* Cover Art or Video Stage */}
           {activeVideo ? (
             <VideoStage
