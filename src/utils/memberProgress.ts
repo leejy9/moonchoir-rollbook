@@ -168,6 +168,7 @@ export function computeAttendance90Days({
   lateGraceMinutes = 10,
   allMembers,
   todayStr = getKSTDateString(),
+  now,
 }: {
   member: Member;
   schedules: Schedule[];
@@ -176,6 +177,7 @@ export function computeAttendance90Days({
   lateGraceMinutes?: number;
   allMembers: Member[];
   todayStr?: string;
+  now?: Date;
 }): {
   attendanceRate: number | null;
   totalSessions: number;
@@ -196,7 +198,8 @@ export function computeAttendance90Days({
     todayStr,
     rsvpVotes,
     lateGraceMinutes,
-    allMembers
+    allMembers,
+    now
   );
 
   const summary = summaries[0];

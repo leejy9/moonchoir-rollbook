@@ -37,6 +37,8 @@ function getStatusPillClass(status: AttendanceStatus): string {
       return 'late';
     case '사유결석':
       return 'excused';
+    case '대기':
+      return 'pending';
     case '결석':
     default:
       return 'absent';
@@ -98,8 +100,8 @@ export interface AdminSchedulesTabProps {
   setSelectedScheduleId: (id: string) => void;
   currentSchedule: Schedule | undefined;
   reconciledList: AttendanceReconciliation[];
-  sessionFilter: '전체' | '출석' | '지각' | '사유결석' | '결석';
-  setSessionFilter: (filter: '전체' | '출석' | '지각' | '사유결석' | '결석') => void;
+  sessionFilter: '전체' | '출석' | '지각' | '사유결석' | '결석' | '대기';
+  setSessionFilter: (filter: '전체' | '출석' | '지각' | '사유결석' | '결석' | '대기') => void;
   filteredSessionList: AttendanceReconciliation[];
   setOverrideTarget: (target: { id: string; name: string; part: string } | null) => void;
 
@@ -566,7 +568,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
               {/* Members List */}
               <div className="toss-section-card">
                 <div className="toss-filter-row">
-                  {(['전체', '출석', '지각', '사유결석', '결석'] as const).map((tabName) => (
+                  {(['전체', '출석', '지각', '사유결석', '결석', '대기'] as const).map((tabName) => (
                     <button
                       key={tabName}
                       type="button"

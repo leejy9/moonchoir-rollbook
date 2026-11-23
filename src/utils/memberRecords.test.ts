@@ -173,6 +173,38 @@ describe('buildMemberScheduleRecords', () => {
     expect(future?.finalStatus).toBe('대기');
   });
 
+  it.each([
+    ['10:00', '대기'],
+    ['19:45', '대기'],
+    ['21:59', '대기'],
+    ['22:01', '결석'],
+  ] as const)('uses the end time for today attendance at %s', (clock, expected) => {
+    const todaySchedule = { ...mockSchedules[1], endTime: '22:00' };
+    const records = buildMemberScheduleRecords({
+      member: mockMember,
+      members: [mockMember],
+      schedules: [todaySchedule],
+      now: new Date(`2026-10-18T${clock}:00+09:00`),
+    });
+
+    expect(records[0].finalStatus).toBe(expected);
+  });
+
+  it.each([
+    ['21:29', '대기'],
+    ['21:31', '결석'],
+  ] as const)('uses start plus two hours when the end time is missing at %s', (clock, expected) => {
+    const todaySchedule = { ...mockSchedules[1], endTime: '' };
+    const records = buildMemberScheduleRecords({
+      member: mockMember,
+      members: [mockMember],
+      schedules: [todaySchedule],
+      now: new Date(`2026-10-18T${clock}:00+09:00`),
+    });
+
+    expect(records[0].finalStatus).toBe(expected);
+  });
+
   it('resolves merged member alias IDs when reconciling', () => {
     const canonicalMember: Member = {
       ...mockMember,

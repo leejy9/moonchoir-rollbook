@@ -1,4 +1,5 @@
 import type {
+  AttendanceReconciliation,
   AttendanceStatus,
   BoundDeviceProfile,
   Member,
@@ -10,6 +11,7 @@ import type {
 } from '../types/rollbook';
 import { reconcileSingleMemberAttendance, resolveMergedMemberIds } from './attendanceStats';
 import { getKSTClock, getKSTDateString, normalizeToKSTTimestamp } from './date';
+import { isScheduleOver } from './scheduleTiming';
 
 export interface MemberScheduleRecord {
   id: string;
@@ -28,6 +30,12 @@ export interface MemberScheduleRecord {
   isExempt: boolean;
 }
 
+export type BuiltMemberScheduleRecord = Omit<
+  AttendanceReconciliation,
+  'checkInTime' | 'finalStatus'
+> &
+  MemberScheduleRecord;
+
 export interface BuildMemberScheduleRecordsParams {
   member: Member | BoundDeviceProfile;
   members: Member[];
@@ -36,6 +44,7 @@ export interface BuildMemberScheduleRecordsParams {
   rsvpVotes?: RSVPVote[];
   now?: Date;
   includeArchived?: boolean;
+  includeCancelled?: boolean;
   lateGraceMinutes?: number;
 }
 
@@ -51,8 +60,9 @@ export function buildMemberScheduleRecords({
   rsvpVotes = [],
   now = new Date(),
   includeArchived = false,
+  includeCancelled = false,
   lateGraceMinutes = 10,
-}: BuildMemberScheduleRecordsParams): MemberScheduleRecord[] {
+}: BuildMemberScheduleRecordsParams): BuiltMemberScheduleRecord[] {
   const memberId = 'memberId' in member ? member.memberId : member.id;
   const memberName = 'name' in member ? member.name : '';
   const memberPart = 'part' in member ? member.part : '단원';
@@ -76,7 +86,7 @@ export function buildMemberScheduleRecords({
 
   // Filter out cancelled schedules, and optionally filter archived
   const filtered = schedules.filter((s) => {
-    if (s.isCancelled) return false;
+    if (!includeCancelled && s.isCancelled) return false;
     if (!includeArchived && s.isArchived) return false;
     return true;
   });
@@ -95,11 +105,13 @@ export function buildMemberScheduleRecords({
       memberRsvp,
       lateGraceMinutes,
       aliasIds,
-      members
+      members,
+      now
     );
 
     const isPast = s.date < todayStr;
     const isToday = s.date === todayStr;
+    const isTodayPending = isToday && !isScheduleOver(s, now);
     const isExempt = rec?.finalStatus === '미참' || rec?.finalStatus === '모수제외';
 
     let checkInTime = '-';
@@ -119,13 +131,18 @@ export function buildMemberScheduleRecords({
       finalStatus = rec?.finalStatus || '출석';
     } else if (isExempt) {
       finalStatus = rec?.finalStatus || '미참';
-    } else if (isPast) {
+    } else if (rec?.finalStatus === '사유결석') {
+      finalStatus = rec.finalStatus;
+    } else if (isTodayPending && !rec?.checkInTime) {
+      finalStatus = '대기';
+    } else if (isPast || isToday) {
       finalStatus = rec?.finalStatus || '결석';
     } else {
       finalStatus = '대기';
     }
 
     return {
+      ...rec,
       id: s.id,
       schedule: s,
       title: s.title,

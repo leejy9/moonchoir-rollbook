@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Member, Schedule } from '../types/rollbook';
 import { isMemberRequiredForSchedule, resolveMergedMemberIds } from '../utils/attendanceStats';
 import { buildKakaoMapLink } from '../utils/kakaoMaps';
@@ -15,6 +15,11 @@ export interface ScheduleDetailBodyProps {
 
 export const ScheduleDetailBody: React.FC<ScheduleDetailBodyProps> = ({ schedule, member }) => {
   const [isRosterOpen, setIsRosterOpen] = useState(false);
+  const [currentNow, setCurrentNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentNow(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
 
   const allMembers = sheetsService.getMembers(true, true);
   const memberAliasIds = resolveMergedMemberIds(member.id, allMembers);
@@ -44,7 +49,7 @@ export const ScheduleDetailBody: React.FC<ScheduleDetailBodyProps> = ({ schedule
       )
   );
   const votes = sheetsService.getRSVPVotes(schedule.id);
-  const reconciled = sheetsService.reconcileAttendance(schedule.id);
+  const reconciled = sheetsService.reconcileAttendance(schedule.id, currentNow);
   const attendedMemberIds = new Set(
     reconciled
       .filter((r) => r.finalStatus === '출석' || r.finalStatus === '지각' || r.finalStatus === '수동인정')

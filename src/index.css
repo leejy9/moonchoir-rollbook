@@ -2212,6 +2212,11 @@ a {
   color: var(--status-info);
 }
 
+.status-pill.status-pending {
+  background: var(--status-warning-light);
+  color: var(--status-warning);
+}
+
 .status-pill.status-absent {
   background: var(--status-danger-light);
   color: var(--status-danger);
@@ -4748,6 +4753,11 @@ a {
 .record-badge.badge-absent {
   background: #fee2e2;
   color: #b91c1c;
+}
+
+.record-badge.badge-pending {
+  background: var(--status-warning-light);
+  color: var(--status-warning);
 }
 
 .attendance-empty-box {

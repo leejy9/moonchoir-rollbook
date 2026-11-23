@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { useAttendanceAdmin, getPeriodRange, createManualLogMeta } from './useAttendanceAdmin';
 import type { Member, Schedule } from '../types/rollbook';
+import { resetStorage, sheetsService } from '../services/sheets';
 
 const mockMembers: Member[] = [
   {
@@ -41,6 +42,11 @@ const mockSchedules: Schedule[] = [
 ];
 
 describe('useAttendanceAdmin Hook', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    resetStorage();
+  });
+
   it('초기 상태 및 출결/단원/통계 관리 인터페이스를 온전히 제공한다', () => {
     let hookResult: ReturnType<typeof useAttendanceAdmin> | undefined;
 
@@ -101,5 +107,34 @@ describe('useAttendanceAdmin Hook', () => {
     const meta = createManualLogMeta();
     expect(meta.id.startsWith('log_manual_')).toBe(true);
     expect(typeof meta.timestamp).toBe('string');
+  });
+
+  it('exposes an unfinished current session as pending, not absent', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-18T20:00:00+09:00'));
+    sheetsService.seedTestData({
+      members: mockMembers,
+      schedules: mockSchedules,
+      logs: [],
+      rsvpVotes: [],
+    });
+
+    let hookResult: ReturnType<typeof useAttendanceAdmin> | undefined;
+    function TestHarness() {
+      // oxlint-disable-next-line react/globals
+      hookResult = useAttendanceAdmin({
+        schedules: mockSchedules,
+        members: mockMembers,
+        onDataChanged: vi.fn(),
+      });
+      return null;
+    }
+
+    renderToString(<TestHarness />);
+
+    expect(hookResult?.reconciledList.map((record) => record.finalStatus)).toEqual([
+      '대기',
+      '대기',
+    ]);
   });
 });

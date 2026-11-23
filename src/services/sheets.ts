@@ -21,10 +21,10 @@ import type {
 import {
   calculateCumulativeAttendanceWithLifecycle,
   isScheduleVisibleToMember,
-  reconcileSingleMemberAttendance,
   resolveMergedMemberIds,
 } from '../utils/attendanceStats';
 import { resolveMemberIdentity } from '../utils/memberIdentity';
+import { buildMemberScheduleRecords } from '../utils/memberRecords';
 import { getKSTTimestampString, getKSTDateString, addDaysKST, parseKSTDate } from '../utils/date';
 import { buildScheduleComments, createCommentEventId, normalizeCommentText } from '../utils/scheduleComments';
 import {
@@ -306,6 +306,7 @@ export class SheetsService {
    * 관리자 화면은 `getSchedules()`를 그대로 쓴다.
    */
   public getSchedulesForMember(memberId: string | undefined): Schedule[] {
+    const now = new Date();
     const schedules = this.getSchedules();
     if (!schedules.some((s) => s.visibility === 'TARGETS_ONLY')) return schedules;
 
@@ -320,7 +321,7 @@ export class SheetsService {
       if (!member) return false;
       // TARGETS_ONLY 일정이라도 해당 단원의 최종 출석이 실제로 인정된 경우에만 내역 보존을 위해 노출
       // (단순 raw 로그 존재나 취소/미인정 로그만 있는 비대상자에게는 절대 노출하지 않음)
-      const reconciled = this.reconcileMemberAttendance(member.id, s.id, member.name);
+      const reconciled = this.reconcileMemberAttendance(member.id, s.id, member.name, now);
       return Boolean(reconciled && (reconciled.finalStatus === '출석' || reconciled.finalStatus === '지각'));
     });
   }
@@ -1806,14 +1807,16 @@ export class SheetsService {
     }
 
     const lateGraceMinutes = this.config.lateGraceMinutes ?? 10;
+    const now = new Date();
     const memberSummaries = calculateCumulativeAttendanceWithLifecycle(
       members,
       sessions,
       this.logs,
-      getKSTDateString(),
+      getKSTDateString(now),
       this.rsvpVotes,
       lateGraceMinutes,
-      this.members
+      this.members,
+      now
     );
 
     memberSummaries.sort(
@@ -1827,7 +1830,8 @@ export class SheetsService {
   public reconcileMemberAttendance(
     memberId: string,
     scheduleId: string,
-    _memberName?: string
+    _memberName?: string,
+    now: Date = new Date()
   ): AttendanceReconciliation | null {
     const schedule = this.schedules.find((s) => s.id === scheduleId);
     if (!schedule) return null;
@@ -1835,34 +1839,28 @@ export class SheetsService {
     const targetMember = this.members.find((m) => m.id === memberId);
     if (!targetMember) return null;
 
-    const aliasIds = resolveMergedMemberIds(targetMember.id, this.members);
-
-    const memberRsvp = this.rsvpVotes.find(
-      (v) => aliasIds.has(v.memberId) && v.scheduleId === scheduleId
-    );
-
-    const memberLogs = this.logs.filter(
-      (l) => aliasIds.has(l.memberId) && l.scheduleId === scheduleId
-    );
-
     const lateGraceMinutes = this.config.lateGraceMinutes ?? 10;
-    return reconcileSingleMemberAttendance(
-      targetMember,
-      schedule,
-      memberLogs,
-      memberRsvp,
-      lateGraceMinutes,
-      aliasIds,
-      this.members
+    return (
+      buildMemberScheduleRecords({
+        member: targetMember,
+        members: this.members,
+        schedules: [schedule],
+        logs: this.logs,
+        rsvpVotes: this.rsvpVotes,
+        now,
+        includeArchived: true,
+        includeCancelled: true,
+        lateGraceMinutes,
+      })[0] || null
     );
   }
 
-  public reconcileAttendance(scheduleId: string): AttendanceReconciliation[] {
+  public reconcileAttendance(scheduleId: string, now: Date = new Date()): AttendanceReconciliation[] {
     const schedule = this.schedules.find((s) => s.id === scheduleId);
     if (!schedule) return [];
 
     return this.getMembers().map((member) => {
-      const rec = this.reconcileMemberAttendance(member.id, scheduleId);
+      const rec = this.reconcileMemberAttendance(member.id, scheduleId, undefined, now);
       if (rec) return rec;
       return {
         memberId: member.id,

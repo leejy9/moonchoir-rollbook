@@ -55,10 +55,10 @@ for f in $(git ls-files 'src/*.ts' 'src/*.tsx' | grep -v '\.test\.'); do
 done
 
 # 규칙 11: 출결 상태는 buildMemberScheduleRecords 결과만 쓴다 (LESSONS 2026-11-23, V3-20 R2)
-# 엔진 내부(attendanceStats.ts), 레코드 조립(memberRecords.ts), 기존 서비스(sheets.ts) 외에서 새로 직접 호출 금지.
+# 엔진 내부(attendanceStats.ts), 레코드 조립(memberRecords.ts) 외에서 새로 직접 호출 금지.
 for f in $changed; do
   is_prod_code "$f" || continue
-  [[ "$f" =~ src/utils/attendanceStats\.ts$|src/utils/memberRecords\.ts$|src/services/sheets\.ts$ ]] && continue
+  [[ "$f" =~ src/utils/attendanceStats\.ts$|src/utils/memberRecords\.ts$ ]] && continue
   git diff -U0 "$BASE" HEAD -- "$f" | grep -E '^\+[^+]' | grep -nE 'reconcileSingleMemberAttendance\(' \
     | while read -r line; do echo "FAIL [규칙 11 출결 직접 계산] $f: $line → buildMemberScheduleRecords 결과를 쓴다"; done
 done | tee /tmp/guards-reconcile.txt

@@ -58,6 +58,88 @@ describe('schedule targets for merged members', () => {
     });
   });
 
+  it.each([
+    ['10:00', '대기'],
+    ['19:45', '대기'],
+    ['21:59', '대기'],
+    ['22:01', '결석'],
+  ] as const)('uses the end time for attendance reconciliation at %s', (clock, expected) => {
+    const member: Member = {
+      id: 'member-today',
+      name: '오늘 단원',
+      part: '소프라노',
+      phoneLast4: '',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      createdAt: '',
+      joinedAt: '2020-01-01',
+      memberStatus: '정단원',
+    };
+    const todaySchedule: Schedule = {
+      id: 'today-schedule',
+      title: '오늘 연습',
+      date: '2026-10-10',
+      startTime: '19:30',
+      endTime: '22:00',
+      locationName: '연습실',
+      category: '정기연습',
+    };
+    const service = new SheetsService();
+    service.seedTestData({
+      members: [member],
+      schedules: [todaySchedule],
+      logs: [],
+      rsvpVotes: [],
+    });
+
+    expect(
+      service.reconcileAttendance(
+        todaySchedule.id,
+        new Date(`2026-10-10T${clock}:00+09:00`)
+      )[0]?.finalStatus
+    ).toBe(expected);
+  });
+
+  it.each([
+    ['21:29', '대기'],
+    ['21:31', '결석'],
+  ] as const)('uses start plus two hours when end time is missing at %s', (clock, expected) => {
+    const member: Member = {
+      id: 'member-no-end',
+      name: '종료 시각 없음',
+      part: '소프라노',
+      phoneLast4: '',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      createdAt: '',
+      joinedAt: '2020-01-01',
+      memberStatus: '정단원',
+    };
+    const scheduleWithoutEnd: Schedule = {
+      id: 'schedule-no-end',
+      title: '종료 시각 없는 연습',
+      date: '2026-10-10',
+      startTime: '19:30',
+      endTime: '',
+      locationName: '연습실',
+      category: '정기연습',
+    };
+    const service = new SheetsService();
+    service.seedTestData({
+      members: [member],
+      schedules: [scheduleWithoutEnd],
+      logs: [],
+      rsvpVotes: [],
+    });
+
+    expect(
+      service.reconcileAttendance(
+        scheduleWithoutEnd.id,
+        new Date(`2026-10-10T${clock}:00+09:00`)
+      )[0]?.finalStatus
+    ).toBe(expected);
+  });
+
   it('uses merged-member period status for schedule visibility and reconciliation', () => {
     const representative: Member = {
       id: 'representative',

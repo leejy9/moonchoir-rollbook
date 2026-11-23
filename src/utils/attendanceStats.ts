@@ -11,6 +11,7 @@ import type {
 } from '../types/rollbook';
 import { getKSTClock, getKSTDateString } from './date';
 import { resolveMemberIdentity } from './memberIdentity';
+import { isScheduleOver } from './scheduleTiming';
 
 /**
  * 특정 일자(date) 시점에 단원의 유효한 상태(Status)와 파트(Part)를 판정합니다.
@@ -224,7 +225,8 @@ export function reconcileSingleMemberAttendance(
   memberRsvp?: RSVPVote,
   lateGraceMinutes: number = 10,
   aliasIds: ReadonlySet<string> = new Set([member.id]),
-  identityMembers: readonly Member[] = [member]
+  identityMembers: readonly Member[] = [member],
+  now: Date = new Date()
 ): AttendanceReconciliation {
   if (schedule.isCancelled) {
     return {
@@ -299,6 +301,8 @@ export function reconcileSingleMemberAttendance(
       finalStatus = '미참';
     } else if (memberRsvp && memberRsvp.status === 'ABSENT' && memberRsvp.reason) {
       finalStatus = '사유결석';
+    } else if (!isScheduleOver(schedule, now)) {
+      finalStatus = '대기';
     } else {
       finalStatus = '결석';
     }
@@ -337,10 +341,16 @@ export function calculateCumulativeAttendanceWithLifecycle(
   referenceDate?: string,
   rsvpVotes: RSVPVote[] = [],
   lateGraceMinutes: number = 10,
-  allMembersForMergeResolution?: Member[]
+  allMembersForMergeResolution?: Member[],
+  now?: Date
 ): CumulativeMemberAttendance[] {
   const todayStr = referenceDate || getKSTDateString();
   const rosterForMerge = allMembersForMergeResolution || members;
+  const evaluationNow =
+    now ||
+    (getKSTDateString() === todayStr
+      ? new Date()
+      : new Date(`${todayStr}T23:59:59+09:00`));
 
   // 숨김(아카이브) 또는 취소되지 않은 일정만 모수 후보로 정렬
   const activeSchedules = schedules
@@ -360,6 +370,8 @@ export function calculateCumulativeAttendanceWithLifecycle(
 
     for (const schedule of activeSchedules) {
       const isPastOrToday = schedule.date <= todayStr;
+      const isUnfinishedToday =
+        schedule.date === todayStr && !isScheduleOver(schedule, evaluationNow);
       const isRequired = isMemberRequiredForSchedule(
         member,
         schedule.date,
@@ -382,7 +394,8 @@ export function calculateCumulativeAttendanceWithLifecycle(
         memberRsvp,
         lateGraceMinutes,
         aliasIds,
-        rosterForMerge
+        rosterForMerge,
+        evaluationNow
       );
 
       const hasCheckedIn =
@@ -391,7 +404,7 @@ export function calculateCumulativeAttendanceWithLifecycle(
         rec.finalStatus === '지각';
 
       if (isRequired) {
-        if (isPastOrToday || hasCheckedIn) {
+        if (!isUnfinishedToday && (isPastOrToday || hasCheckedIn)) {
           totalSessions += 1;
           recentStatusList.push(rec.finalStatus);
 
@@ -407,7 +420,7 @@ export function calculateCumulativeAttendanceWithLifecycle(
         }
       } else {
         // 비필참 일정(입단 전, 휴단/객원, 타 파트/미지정 소그룹): 자발적 출석 시에만 모수+1 및 출석 인정
-        if (hasCheckedIn) {
+        if (hasCheckedIn && !isUnfinishedToday) {
           totalSessions += 1;
           if (rec.finalStatus === '지각') {
             late += 1;

@@ -56,6 +56,11 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
   const [arrivalTime, setArrivalTime] = useState('');
   const [arrivalError, setArrivalError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [currentNow, setCurrentNow] = useState(() => new Date());
+  React.useEffect(() => {
+    const timer = setInterval(() => setCurrentNow(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
   const allMembersForIdentity = React.useMemo(
     () => {
       const combined = [...sheetsService.getMembers(true, true), ...members];
@@ -81,15 +86,17 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
     schedules.forEach((s) => {
       map.set(
         s.id,
-        sheetsService.reconcileAttendance(s.id).filter((record) => memberIds.has(record.memberId))
+        sheetsService
+          .reconcileAttendance(s.id, currentNow)
+          .filter((record) => memberIds.has(record.memberId))
       );
     });
     return map;
-  }, [members, schedules]);
+  }, [members, schedules, currentNow]);
 
   // Calculate cumulative stats for each member across filtered schedules
   const memberStats = React.useMemo(() => {
-    const todayStr = getKSTDateString();
+    const todayStr = getKSTDateString(currentNow);
     const map = new Map<
       string,
       { attended: number; late: number; excused: number; absent: number; exempt: number; rate: number }
@@ -115,12 +122,17 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
         );
         const isPastOrToday = s.date <= todayStr;
         const status = item?.finalStatus || (isRequired ? '결석' : '미참');
+        const isPending = status === '대기';
 
         const hasCheckedIn =
           status === '출석' || status === '수동인정' || status === '지각';
 
         // 취소된 일정은 출석률 통계 모수(분모)에서 제외, 비필참 일정도 자발적 출석 시 모수에 포함
-        if (!s.isCancelled && (isRequired ? (isPastOrToday || hasCheckedIn) : hasCheckedIn)) {
+        if (
+          !s.isCancelled &&
+          !isPending &&
+          (isRequired ? isPastOrToday || hasCheckedIn : hasCheckedIn)
+        ) {
           requiredSessions += 1;
         }
 
@@ -132,7 +144,12 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
           late += 1;
         } else if (status === '사유결석') {
           excused += 1;
-        } else if (status === '미참' || status === '모수제외' || (!isPastOrToday && !hasCheckedIn)) {
+        } else if (
+          isPending ||
+          status === '미참' ||
+          status === '모수제외' ||
+          (!isPastOrToday && !hasCheckedIn)
+        ) {
           exempt += 1;
         } else {
           absent += 1;
@@ -151,6 +168,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
     reconciliationsBySchedule,
     aliasIdsByMemberId,
     allMembersForIdentity,
+    currentNow,
   ]);
 
   // Sorting
@@ -200,7 +218,12 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
       aliasIdsByMemberId.get(member.id),
       allMembersForIdentity
     );
-    const defaultStatus = getMatrixCellDisplay({ schedule, item, isRequired }).statusText;
+    const defaultStatus = getMatrixCellDisplay({
+      schedule,
+      item,
+      isRequired,
+      now: currentNow,
+    }).statusText;
 
     setPopoverTarget({
       member,
@@ -490,7 +513,12 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                       aliasIdsByMemberId.get(m.id),
                       allMembersForIdentity
                     );
-                    const display = getMatrixCellDisplay({ schedule: s, item, isRequired });
+                    const display = getMatrixCellDisplay({
+                      schedule: s,
+                      item,
+                      isRequired,
+                      now: currentNow,
+                    });
 
                     return (
                       <td

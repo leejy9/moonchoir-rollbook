@@ -127,14 +127,15 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       const rec = sheetsService.reconcileMemberAttendance(
         profile.memberId,
         sch.id,
-        profile.name
+        profile.name,
+        currentNow
       );
       if (rec?.finalStatus === 'ATTENDED') {
         map.set(sch.id, true);
       }
     }
     return map;
-  }, [schedules, profile.memberId, profile.name, refreshTrigger]);
+  }, [schedules, profile.memberId, profile.name, refreshTrigger, currentNow]);
 
   // Top focus schedule
   const focusResult = useMemo(() => {
@@ -288,7 +289,8 @@ export const HomeTab: React.FC<HomeTabProps> = ({
               sheetsService.reconcileMemberAttendance(
                 profile.memberId,
                 focusResult.focus.id,
-                profile.name
+                profile.name,
+                currentNow
               ) || undefined,
             isOnline:
               typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean'
@@ -299,7 +301,10 @@ export const HomeTab: React.FC<HomeTabProps> = ({
             focusResult.focus.date === todayStr &&
             (getCheckInWindowState(focusResult.focus, currentNow).isOpen ||
               getCheckInWindowState(focusResult.focus, currentNow).status === 'WINDOW_CLOSED')
-              ? countCheckedIn(sheetsService.reconcileAttendance(focusResult.focus.id), allMembers)
+              ? countCheckedIn(
+                  sheetsService.reconcileAttendance(focusResult.focus.id, currentNow),
+                  allMembers
+                )
               : undefined
           }
           checkedInTimeStr={

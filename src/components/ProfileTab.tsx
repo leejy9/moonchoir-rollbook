@@ -54,7 +54,12 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
 
   const [activity, setActivity] = useState<MemberActivity | null>(null);
 
-  const todayStr = useMemo(() => getKSTDateString(), []);
+  const [currentNow, setCurrentNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentNow(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+  const todayStr = useMemo(() => getKSTDateString(currentNow), [currentNow]);
   const syncState = useSyncExternalStore(
     (listener) => sheetsService.subscribeSync(listener),
     () => sheetsService.getSyncState(),
@@ -141,10 +146,11 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       schedules,
       logs: allLogs,
       rsvpVotes: allRsvpVotes,
+      now: currentNow,
       lateGraceMinutes,
       includeArchived: true,
     });
-  }, [currentMember, members, schedules, allLogs, allRsvpVotes, lateGraceMinutes]);
+  }, [currentMember, members, schedules, allLogs, allRsvpVotes, lateGraceMinutes, currentNow]);
 
   // Cumulative numbers (§5-2)
   const daysTogether = useMemo(() => {
@@ -171,8 +177,19 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       lateGraceMinutes,
       allMembers: members,
       todayStr,
+      now: currentNow,
     });
-  }, [isStaff, currentMember, schedules, allLogs, allRsvpVotes, lateGraceMinutes, members, todayStr]);
+  }, [
+    isStaff,
+    currentMember,
+    schedules,
+    allLogs,
+    allRsvpVotes,
+    lateGraceMinutes,
+    members,
+    todayStr,
+    currentNow,
+  ]);
 
   // Cumulative attendance for Level (Staff excludes this)
   const cumulativeAttendance = useMemo(() => {
@@ -214,10 +231,21 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       activity,
       performanceCategories: config.performanceCategories,
       allMembers: members,
+      now: currentNow,
       isStaff,
       scheduleRecords,
     });
-  }, [currentMember, schedules, allLogs, activity, config.performanceCategories, members, isStaff, scheduleRecords]);
+  }, [
+    currentMember,
+    schedules,
+    allLogs,
+    activity,
+    config.performanceCategories,
+    members,
+    isStaff,
+    scheduleRecords,
+    currentNow,
+  ]);
 
   const earnedStickerIds = useMemo(
     () => evaluatedStickers.filter((s) => s.earned).map((s) => s.id),

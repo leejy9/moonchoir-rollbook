@@ -253,6 +253,45 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
     expect(stats[0].attendanceRate).toBe(100);
   });
 
+  it('excludes an unfinished today schedule even when the member already checked in', () => {
+    const regularMember: Member = {
+      id: 'm_today',
+      name: '오늘 단원',
+      part: '테너',
+      phoneLast4: '1111',
+      role: 'MEMBER',
+      createdAt: '2026-01-01T00:00:00Z',
+      status: 'ACTIVE',
+      joinedAt: '2026-01-01',
+      memberStatus: '정단원',
+    };
+    const todaySchedule = sampleSchedules[0];
+    const todayLog: RawAttendanceLog = {
+      id: 'l_today',
+      scheduleId: todaySchedule.id,
+      memberId: regularMember.id,
+      memberName: regularMember.name,
+      part: regularMember.part,
+      timestamp: '2026-10-10 19:45:00',
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    };
+
+    const stats = calculateCumulativeAttendanceWithLifecycle(
+      [regularMember],
+      [todaySchedule],
+      [todayLog],
+      todaySchedule.date,
+      [],
+      10,
+      [regularMember],
+      new Date('2026-10-10T19:45:00+09:00')
+    );
+
+    expect(stats[0].totalSessions).toBe(0);
+    expect(stats[0].attended).toBe(0);
+  });
+
   it('휴단원은 휴단일 이후 연습에 결석으로 처리되지 않아야 한다', () => {
     const onLeaveMember: Member = {
       id: 'm_leave',
