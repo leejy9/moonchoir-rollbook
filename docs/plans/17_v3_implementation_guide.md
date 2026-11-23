@@ -876,73 +876,98 @@ J6의 "직접 만드는 방식"은 하지 않는다. 쪽 배치, 화면 근처�
 
 **마무리:** 세 브랜치 모두 CI 초록 확인 → 보고(§5 형식, R1 scrollWidth 측정값, R12 캡처) → 멈춤. 머지·운영 DB 금지.
 
-### V3-21 데이터 관계 검토 반영 (2026-11-23)
+### V3-21 데이터 관계 검토 반영 (2026-11-23, spec-auditor 검토 반영판)
 
-> 근거: `docs/plans/18_v3_data_integrity_review.md`의 "검토 결과 (A·B 단계)"(개발 에이전트, 커밋 `fce0bed`)와 리뷰어의 운영 불변식 확인(C 단계, 같은 문서 아래 "C 단계 결과"). 명세 V31·V32·V33.
-> 브랜치 `feat/v3-activity-2`. **먼저 `/spec-check`로 아래 계약 표를 코드에 대 본다.** 항목 하나에 커밋 하나, 수정 전 실패 테스트 먼저.
+> 근거: `docs/plans/18_v3_data_integrity_review.md`의 "검토 결과 (A·B 단계)"(`fce0bed`), 리뷰어의 "C 단계 결과", spec-auditor 독립 검토(8건). 명세 V31~V34.
+> 브랜치 `feat/v3-activity-2`. **먼저 `/spec-check`.** 항목 하나에 커밋 하나, 수정 전 실패 테스트 먼저. **Z0부터 순서대로.**
+> 테스트는 함수 하나만 부르지 말고 **화면이 실제로 부르는 경로**(`buildMemberScheduleRecords`, `sheetsService.reconcileAttendance`, `getSchedulesForMember`, 실제 payload를 만드는 `sheetsService` 메서드)로 한다(LESSONS: 테스트가 실제 시나리오를 검사하지 않음).
 
-**기존 코드 계약 표 (리뷰어가 `feat/v3-activity-2`@`fce0bed`와 운영 DB에서 확인)**
+**Z0. 화면↔서버 인자 이름 전수 대조 (치명, 운영에서 지금 깨져 있음)**
+- 확인된 불일치(리뷰어 직접 확인):
+  - 병합: 화면 `sheets.ts:1324-1327` `{ canonicalId, secondaryId }` ↔ 서버 `fn_merge_members__impl`(`20261119000001_rpc_functions.sql:661-662`) `representativeId`, `mergedMemberIds` → **운영에서 병합이 서버에 반영되지 않음**(새로고침하면 되돌아감).
+  - 일괄 삭제: 화면 `sheets.ts:1404, :1430` `{ ids, forceHardDelete }` ↔ 서버 `:770` `scheduleIds` → **운영에서 일괄 삭제가 서버에 반영되지 않음**.
+- 할 일:
+  1. `src/services/backend/supabaseBackend.ts`의 `mapActionToRpc`에 있는 **모든 action**에 대해, 화면이 보내는 payload 키(실제 호출부)와 서버 함수가 읽는 키(`p_payload->>'…'`, `p_payload->'…'`, 최신 정의 기준)를 표로 만든다. 불일치는 전부 보고서에 적는다.
+  2. **계약 테스트** `src/services/backend/rpcContract.test.ts`(새 파일): 테스트가 `supabase/migrations/*.sql`에서 각 함수의 **가장 나중 정의**(`__impl`이 있으면 그것)를 읽어 `p_payload` 키를 뽑고, 화면 쪽 payload 키 목록(테스트 안 상수, 실제 호출부에서 옮겨 적음)과 비교한다. 서버가 읽는데 화면이 안 보내는 필수 키가 있으면 실패. 이번에 고칠 두 건은 수정 전 실패를 확인한다.
+  3. 고치는 방향: **서버가 화면 이름을 받는다**(화면 호출부는 그대로). `fn_merge_members__impl`은 `canonicalId`/`secondaryId`를 읽고, 옛 이름(`representativeId`/`mergedMemberIds`)도 계속 받는다. `fn_batch_delete_schedules__impl`은 `ids`를 읽고 옛 `scheduleIds`도 받는다. (Z6·Z7과 같은 마이그레이션 파일)
+  4. 다른 action에서 불일치가 더 나오면 **고치지 말고** 보고한다(리뷰어가 범위를 정함).
 
-| 이름 | 위치 | 지금 동작 | 고칠 점 |
+**계약 표 (spec-auditor 줄 번호 정정 반영, `feat/v3-activity-2`@`fce0bed`)**
+
+| 이름 | 위치 | 지금 동작 | 항목 |
 |---|---|---|---|
-| `resolveMergedMemberIds(canonicalId, members)` | `src/utils/attendanceStats.ts:187` | 대표 id → 옛 id 방향만 모은다. 옛 id를 넣으면 자기 자신만 나온다 | Z1 |
-| `isMemberRequiredForSchedule` | `src/utils/attendanceStats.ts:48-75` | `CUSTOM_MEMBERS`에서 `targetMemberIds.includes(member.id)`만 본다 | Z2 |
-| `getEffectiveMemberStatus` / `parseRemoteMembers` | `attendanceStats.ts:16-40`, `src/services/sheetsParser.ts:70-109` | 상태 이력을 회원 id별로만 붙인다 | Z3 |
-| `ProfileTab` 활동 조회 | `src/components/ProfileTab.tsx:97` | 기기 프로필 id 하나만 넘긴다 | Z1 |
-| `sheetsService.reconcileAttendance` | `src/services/sheets.ts:1826-1867` | `reconcileSingleMemberAttendance` 직접 호출(오늘 시작 전 = 결석) | Z4 |
-| 프로필 레코드 | `ProfileTab.tsx:131-183`(`includeArchived: true`), `memberProgress.ts:119-157`, 온도·스티커 | 스티커는 보관 제외, 레벨·시간·공연 수는 포함 | Z5 |
-| `fn_delete_schedule__impl`, `fn_batch_delete_schedules__impl` | 운영 본문 = `20261119000001_rpc_functions.sql:755-764`, `:765-775`(md5 일치 확인) | 무조건 삭제 | Z6 |
-| `fn_delete_member__impl` | 운영 본문 = `:628-654` | 출석·현재 투표만 보고 물리 삭제 여부 결정 | Z6 |
-| `fn_merge_members__impl` | 운영 본문 = `:656-673` | 대표 존재·상태 검사 없음 | Z7 |
-| 운영 데이터 | 병합 회원 0, 보관 일정 0, 취소 일정 0, 지정 대상 일정 9(병합 id 포함 0), 주인 없는 출석 10·투표 5(일정 삭제)·투표 2(회원 없음)·투표 이력 5, 회원별 투표 이력 최대 18 | — | — |
+| `resolveMergedMemberIds` → `Set<string>` | `attendanceStats.ts:187-203`, 호출부 `sheets.ts:1837`, `attendanceStats.ts:342`, `memberProgress.ts:95`, `memberRecords.ts:74`, `passionTemperature.ts:75`, `praiseStickers.ts:76` | 대표→옛 방향만 | Z1 |
+| 대표 판정 중복 | `sheets.ts:313-317`, `:331-341`, `HomeTab.tsx:97-98`(1단계만), `rsvpTally.ts:72` | 순환·다단 병합 처리가 제각각 | Z1 |
+| `getEffectiveMemberStatus` | `attendanceStats.ts:17-42`(호출 `:59`) | 회원 id별 이력만 | Z3 |
+| `isMemberRequiredForSchedule` | `attendanceStats.ts:48-101`(CUSTOM `:71-78`), 호출부 `attendanceStats.ts:116, :240, :346`, `praiseStickers.ts:103`, `todayFocus.ts:42`, `AdminMatrixGrid.tsx:92, :167, :451`, `HomeTab.tsx:255, :263`, `ScheduleDetailBody.tsx:19, :29`, `ScheduleRsvpLogModal.tsx:52`, `HomeUpcomingListSection.tsx:47`, 노출 `sheets.ts:320` | 대상 id 직접 비교 | Z2 |
+| `reconcileSingleMemberAttendance(member, schedule, logs, rsvp, grace)` | `attendanceStats.ts:211-217` | 오늘 일정도 결석 판정 | Z2·Z3·Z4 |
+| `reconcileMemberAttendance`(public) | `sheets.ts:1826`, 호출 `HomeTab.tsx:125, :272`, `MemberProfileModal.tsx:784`, `sheets.ts:324`, `:1857`(`reconcileAttendance`) | 위와 같음 | Z4 |
+| `calculateCumulativeAttendanceWithLifecycle` | `attendanceStats.ts:345-371`, 호출 `memberProgress.ts:192`(90일 출석률), `MemberProfileModal.tsx:209` | 오늘 시작 전도 모수 | Z4 |
+| `buildMemberScheduleRecords` | `memberRecords.ts:99-124` | 오늘이면 하루 종일 `대기` | Z4 |
+| `대기`를 결석으로 세는 곳 | `AdminMatrixGrid.tsx:91-116`, `rsvpTally`, `useAttendanceAdmin.ts:119`, `ScheduleDetailBody.tsx:32` | `else → absent` | Z4 |
+| 스티커 보관 제외 | `praiseStickers.ts:95`(필터), `:90`(기본 경로 `includeArchived:false`), 기본 경로 `:82-91`은 `rsvpVotes: []`, `lateGraceMinutes: 10` 고정 | | Z5 |
+| 보관 제외 유지할 곳 | 온도 `passionTemperature.ts:99`, `passionCalculators.ts:262` / 90일 출석률 `memberProgress.ts:189`, `attendanceStats.ts:330` | 그대로 | Z5 |
+| 삭제 흐름(화면) | `sheets.ts:1375-1384`(기록 판단은 logs·rsvpVotes만, 취소 후 DELETE도 전송), `:1409-1415`, `:1430`, `syncInBackground` `:2305-2314`(서버 메시지 버림), `AdminCalendarView.tsx:288`("영구 삭제"), `useScheduleAdmin.ts:177-181, :193-198, :236-238` | | Z6 |
+| `fn_delete_schedule__impl` / `fn_batch_delete_schedules__impl` / `fn_delete_member__impl` / `fn_merge_members__impl` | 운영 본문 = `20261119000001_rpc_functions.sql:755-764` / `:765-775` / `:628-654` / `:656-673`(md5 일치) | | Z0·Z6·Z7 |
 
-공용 래퍼 주의: `fn_delete_schedule` 등은 `20261121000000_security_hardening.sql` §5가 만든 **토큰 검사 래퍼**이고, 실제 본문은 `__impl`이다. 래퍼는 건드리지 말고 `__impl`만 `create or replace` 한다(복사 원본은 위 행, R3 diff 보고).
+**Z1. 어느 id로 보든 같은 사람 (V33)**
+- `src/utils/memberIdentity.ts`(새 파일): `resolveMemberIdentity(anyId, members): { canonicalId: string; aliasIds: string[] }`. `aliasIds`는 **대표가 맨 앞**, 나머지는 정렬. `merged_into_id`를 끝까지 따라 올라가 대표를 찾고(순환이면 시작 id를 대표로, `console.warn`), 대표로 병합된 id를 끝까지 내려가 모은다.
+- `resolveMergedMemberIds(id, members)`는 `new Set(resolveMemberIdentity(id, members).aliasIds)`를 돌려준다(반환 타입 `Set` 유지, 호출부 7곳 그대로).
+- 대표 판정 중복 4곳(`sheets.ts:313-317`, `:331-341`, `HomeTab.tsx:97-98`, `rsvpTally.ts:72`)을 이 함수로 바꾼다.
+- 활동 조회: `sheets.ts`의 `getMemberActivity`에서 별칭을 받아 **대표를 맨 앞에 두고 20개까지** 보낸다(초과 시 `console.warn`). `ProfileTab`의 effect 의존값은 `aliasIds.join(',')` 문자열로.
+- 재생 기록 **쓰기**는 기기 프로필 id 그대로(읽기에서 합침).
+- 테스트: 옛 id로 보면 대표 기록 포함 / 대표로 보면 옛 기록 포함 / 2단(a→b→c) / 순환(a↔b) / 별칭 21개면 대표 포함 20개 전송.
 
-**Z1. 어느 id로 보든 같은 사람 (F-1, V33)**
-- `src/utils/memberIdentity.ts`(새 파일)에 `resolveMemberIdentity(anyId, members): { canonicalId: string; aliasIds: string[] }`를 만든다.
-  - `merged_into_id`를 따라 끝까지 올라가 대표를 찾는다(순환이면 시작 id를 대표로 보고 `console.warn`).
-  - 대표로 병합된 모든 id를 끝까지 내려가 모은다(대표 포함, 정렬).
-- `resolveMergedMemberIds`는 이 함수의 `aliasIds`를 돌려주는 얇은 래퍼로 바꾼다(호출부는 그대로 두되, 옛 id가 들어와도 전체 집합이 나오게).
-- `ProfileTab`의 활동 조회 인자, 화면 계산의 회원 기준은 `canonicalId`와 `aliasIds`로 한다. 재생 기록 **쓰기**는 지금처럼 기기 프로필 id(V3-10)로 두고 읽기에서 합친다.
-- 테스트: 옛 id로 보면 대표 기록 포함 / 대표로 보면 옛 기록 포함 / 2단 병합(a→b→c) / 순환(a↔b) / 별칭 21개 이상이면 서버 상한(20) 때문에 앞 20개만 보내고 `console.warn`.
+**Z2. 지정 대상 일정의 병합 인식 (V33)**
+- `isMemberRequiredForSchedule(member, date, schedule, aliasIds?)`: `CUSTOM_MEMBERS`에서 `targetMemberIds` 중 하나라도 `aliasIds`(없으면 `[member.id]`)에 있으면 필참.
+- **선택 인자로 두되, 위 계약 표의 호출부를 전부 고쳐 별칭을 넘긴다.** `reconcileSingleMemberAttendance`와 노출 판정(`sheets.ts:320`의 `TARGETS_ONLY`)까지 전달한다. 고친 호출부 목록을 보고서에 적는다.
+- 대상 인원 세기(`ScheduleDetailBody.tsx:29`, `HomeUpcomingListSection.tsx:47`)는 `MERGED` 회원을 빼고 대표로 한 번만 센다.
+- 테스트(경로 테스트): 대상 `['old']`, 대표 `new` → `buildMemberScheduleRecords`·`reconcileAttendance`·`getSchedulesForMember` 모두 필참·노출 / 옛·대표 둘 다 목록에 있을 때 인원 1명.
 
-**Z2. 지정 대상 일정의 병합 인식 (F-2, V33)**
-- `isMemberRequiredForSchedule`가 `CUSTOM_MEMBERS`에서 `targetMemberIds` 중 하나라도 이 사람의 `aliasIds`에 있으면 필참으로 본다. 함수 서명에 `members`가 없으면 호출부에서 별칭 집합을 넘기는 선택 인자를 추가한다(기존 호출부 호환).
-- 테스트: 대상 `['old']`, 대표 `new` → 필참.
+**Z3. 기간 상태 이력 합치기 (V33)**
+- 유효 상태 계산 시 별칭 id 이력도 합친다. **겹치는 기간은 대표 자신의 이력 우선**, 대표 이력이 없는 기간만 별칭 이력. 파서에서 붙이지 말고 계산 시점에(원천 보존). `reconcileSingleMemberAttendance`까지 별칭을 넘긴다.
+- 테스트: 대표 무이력·옛 id 2026년 휴단원 → 휴단원 / 대표가 같은 기간 정단원 → 정단원 / 옛 id `퇴단원` 이력.
 
-**Z3. 기간 상태 이력 합치기 (F-3, V33)**
-- 대표 회원의 유효 상태를 구할 때 별칭 id들의 이력도 합친다. **겹치는 기간은 대표 자신의 이력이 우선**, 대표 이력이 없는 기간은 별칭 이력을 쓴다. 둘 다 없으면 지금처럼 기본 상태.
-- 파서에서 붙이지 말고 계산 시점에 합친다(원천 형태 보존).
-- 테스트: 대표 정단원(이력 없음)·옛 id 2026년 휴단원 → 2026년 일정은 휴단원 기준 / 대표가 같은 기간 정단원 이력 보유 → 정단원.
+**Z4. 오늘 일정 판정 통일 (V34: 종료 시각 전까지 대기)**
+- 규칙: 오늘 일정에 출석 기록이 없으면 **종료 시각(`end_time`, 없으면 시작+2시간) 전까지 `대기`, 종료 후 `결석`**(사유결석 등 다른 판정은 그대로). 미래 날짜는 `대기`. 과거는 지금과 같음.
+- 이 판정을 **한 함수**로 만든다: `src/utils/scheduleTiming.ts`(새 파일) `isScheduleOver(schedule, now): boolean`. `buildMemberScheduleRecords`와 `reconcileSingleMemberAttendance`(새 선택 인자 `now`) 둘 다 이것만 쓴다. "또는 다른 공용 함수" 같은 우회 없음.
+- `reconcileMemberAttendance`(public)와 그 호출부(`HomeTab.tsx:125, :272`, `MemberProfileModal.tsx:784`, `sheets.ts:324`, `:1857`) 모두 `now`를 넘긴다.
+- `calculateCumulativeAttendanceWithLifecycle`(90일 출석률, `MemberProfileModal`)는 끝나지 않은 오늘 일정을 모수·분자에서 뺀다.
+- `대기`를 결석으로 세는 곳(`AdminMatrixGrid.tsx:91-116`, `rsvpTally`, `useAttendanceAdmin.ts:119`, `ScheduleDetailBody.tsx:32`)은 `대기`를 따로 세거나 빼고, 결석 수에 넣지 않는다.
+- 성능: 관리자 매트릭스가 일정마다 회원 전체 레코드를 다시 만들지 않게, **일정 하나·회원 하나** 판정 함수를 공유하고 루프는 그대로 둔다.
+- 다 바뀌면 `scripts/ci/guards.sh` 규칙 11 예외에서 `src/services/sheets.ts`를 뺀다(좁히는 변경만).
+- 테스트(경로 테스트, 고정 KST): 같은 날 10:00·19:45·21:59 → `대기` / 22:01 → `결석` / 종료 시각 빈 일정 21:29(시작+2h 전) `대기`, 21:31 `결석` / 프로필·관리자·출석률이 같은 결과.
 
-**Z4. 관리자 출결 매트릭스도 단일 원천 (F-7)**
-- `sheetsService.reconcileAttendance`가 `buildMemberScheduleRecords`(또는 같은 오늘·미래 처리 규칙을 공유하는 공용 함수)를 거치게 한다. 오늘 시작 전 필참 일정은 `대기`.
-- 다 바뀌면 `scripts/ci/guards.sh` 규칙 11의 예외 목록에서 `src/services/sheets.ts`를 뺀다(규칙을 **좁히는** 변경만 허용).
-- 테스트: 2026-11-24 10:00 KST, 19:30 필참 일정, 로그 없음 → 프로필과 관리자 둘 다 `대기`.
+**Z5. 보관 일정 정책 (V31)**
+- 바꿀 곳: 스티커 `praiseStickers.ts:95`(보관 필터 제거 → 포함), `:90`(기본 경로도 포함). 기본 경로 `:82-91`이 `rsvpVotes: []`, `lateGraceMinutes: 10` 고정인 것도 호출부에서 받게 고친다(규칙 11 유형).
+- 유지할 곳(보관 제외): 온도 `passionTemperature.ts:99`, `passionCalculators.ts:262` / 90일 출석률 `memberProgress.ts:189`, `attendanceStats.ts:330`. 레벨·연습 시간·공연 수는 지금처럼 포함.
+- 테스트: 화면 경로(`ProfileTab`이 넘기는 `scheduleRecords`)와 기본 경로 둘 다 / 보관 출석 일정(연주, 2h) → 레벨 +1·2시간·공연 1·무대 스티커 진행 포함, 온도·출석률 제외 / 보관 일정을 사이에 둔 연속 출석 스티커.
 
-**Z5. 보관 일정 정책 (F-8, V31)**
-- 누적(포함): 레벨, 연습 시간, 공연 수, **칭찬 스티커 전부**(지금 스티커가 보관을 빼고 있음 → 포함으로).
-- 최근(제외): 90일 출석률, 열정 온도. 취소는 모든 지표에서 제외(지금과 같음).
-- 테스트: 보관된 출석 일정 1건(연주, 2시간) → 레벨 +1, 연습 2시간, 공연 1회, 무대 스티커 진행에 포함, 출석률·온도 창에는 없음.
+**Z6. 기록 있는 일정 삭제 거부 (V32)**
+- 서버: 새 마이그레이션 `supabase/migrations/20261124010000_v3_record_guards.sql` + `supabase/tests/v3_record_guards_check.sql`.
+  - 맨 앞에서 네 `__impl`(`fn_delete_schedule`, `fn_batch_delete_schedules`, `fn_delete_member`, `fn_merge_members`)이 **존재하지 않으면 `raise exception`**(래퍼 구조가 없는 상태에서 보호 없는 함수를 만들지 않기 위해).
+  - 네 함수 모두 `security definer`, `set search_path = public, extensions`. 끝에서 네 함수 모두 `revoke all on function … from public, anon, authenticated`.
+  - `fn_delete_schedule__impl`: `attendance_logs`, `rsvp_votes`, `rsvp_events`, `schedule_comment_events` 중 하나라도 있으면 거부 `{success:false, code:'SCHEDULE_HAS_RECORDS', message:'출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'}`.
+  - `fn_batch_delete_schedules__impl`: `ids`(옛 `scheduleIds`)를 읽는다. 빈 배열·없는 id·중복 id는 무시하고, 기록 있는 일정이 하나라도 있으면 **전부 지우지 않고** `message:'기록이 있는 일정 n개가 있어 삭제하지 않았어요. 보관하거나 취소해 주세요.'`.
+  - `fn_delete_member__impl`: 소프트 삭제 판단에 `rsvp_events`, `schedule_comment_events`, `practice_listen_sessions`, `schedules.target_member_ids`에 남은 id도 포함(물리 삭제 시 재생 기록 cascade 방지).
+- 화면(`sheets.ts`, `useScheduleAdmin.ts`, `AdminCalendarView.tsx`):
+  - 기록 판단을 서버에 맡긴다. 화면은 먼저 지우지 말고 **결과를 기다려(await)** 성공일 때만 목록에서 뺀다. 실패하면 서버 `message`를 그대로 한 줄로 보여 주고 목록은 그대로.
+  - 이미 취소 처리한 일정 id를 DELETE로 다시 보내지 않는다.
+  - "영구 삭제" 선택지는 **기록 없는 일정에만** 보이게 한다(기록 있는 일정은 서버가 어차피 거부). 성공 문구는 실제 결과(삭제 / 거부)에 맞게.
+  - 이 경로는 `syncInBackground`(메시지를 버리고 네트워크 오류 알림을 띄움)를 쓰지 않는다.
+- 검증 스크립트: 기록 없는 일정 삭제 성공 / 출석만·투표만·이력만·댓글만 있는 일정 각각 거부 / 일괄 삭제: 빈 배열, 없는 id, 중복 id, 1개 기록 섞임 → 전부 남음, `ids`와 옛 `scheduleIds` 둘 다 / 이력만 있는 회원 → 소프트 삭제 / anon이 네 `__impl`을 직접 실행 불가 / 래퍼(`fn_delete_schedule`)를 토큰 없이 부르면 `ADMIN_AUTH_REQUIRED`.
+- 이미 남은 주인 없는 기록은 지우지 않는다. 존재하지 않는 일정 id의 로그가 출석률·레벨에 안 들어감을 테스트로 고정.
 
-**Z6. 기록 있는 일정 삭제 거부 + 회원 삭제 판단 보강 (F-5, V32)**
-- 새 마이그레이션 `supabase/migrations/20261124010000_v3_record_guards.sql`(+ `supabase/tests/v3_record_guards_check.sql`).
-  - `fn_delete_schedule__impl`: 그 일정에 `attendance_logs`, `rsvp_votes`, `rsvp_events`, `schedule_comment_events` 중 하나라도 있으면 삭제하지 않고 `{success:false, code:'SCHEDULE_HAS_RECORDS', message:'출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'}`.
-  - `fn_batch_delete_schedules__impl`: 하나라도 기록이 있으면 **전체를 지우지 않고** 같은 코드와 `message:'기록이 있는 일정 n개가 있어 삭제하지 않았어요. 보관하거나 취소해 주세요.'`(n은 개수).
-  - `fn_delete_member__impl`: 소프트 삭제 판단에 `rsvp_events`, `schedule_comment_events`, `practice_listen_sessions`도 포함(지금은 출석·현재 투표만).
-  - `rsvp_events`·`practice_listen_sessions`는 `to_regclass` 없이 직접 참조해도 된다(v3_activity가 먼저 적용됨).
-- 화면: 일정 삭제·일괄 삭제가 이 코드로 실패하면 서버 메시지를 그대로 한 줄로 보여 준다(새 문구는 위 두 문장만).
-- 검증 스크립트: 기록 없는 일정 삭제 성공 / 출석 1건 있는 일정 거부 / 이력만 있는 일정 거부 / 일괄 삭제 중 1개 기록 → 전부 남음 / 이력만 있는 회원 → 소프트 삭제.
-- 이미 있는 주인 없는 기록은 **지우지 않는다**(원천 보존). 계산은 일정 목록 기준이라 영향 없음을 테스트 하나로 고정한다(존재하지 않는 일정 id의 로그가 출석률·레벨에 안 들어감).
+**Z7. 병합 검증 (V33)** — 같은 마이그레이션
+- `fn_merge_members__impl`: `canonicalId`/`secondaryId`(옛 `representativeId`/`mergedMemberIds`도)를 읽는다. 대표 없음 / 대표가 `ACTIVE` 아님 / 대표가 이미 병합됨 / 대상에 대표 포함 / 대상 중 없는 id / 병합 후 순환 → `{success:false, code:'INVALID_MERGE', message: 사유}`, 아무것도 안 바뀜. **별칭이 이미 붙은 회원을 다시 병합**(Y→X 상태에서 X→R)은 허용하고 Y는 그대로 X를 가리킨다(조회 시 Z1이 끝까지 따라감).
+- 화면: 병합 실패 시 서버 메시지를 보여 주고 로컬 변경을 되돌린다(Z6과 같은 방식).
+- 검증 스크립트: 위 6가지 거부 + 정상 1 + 재병합 1, **화면이 실제로 보내는 payload 모양**(`canonicalId`, `secondaryId`)으로 호출.
 
-**Z7. 병합 검증 (F-6, V33)** — 같은 마이그레이션 파일
-- `fn_merge_members__impl`: 대표가 없음 / 대표 상태가 `ACTIVE`가 아님 / 대표가 이미 병합됨 / 병합 대상에 대표 자신 포함 / 병합 대상 중 없는 id / 병합 후 순환이 생김 → `{success:false, code:'INVALID_MERGE', message: 사유}`, 아무것도 바꾸지 않는다.
-- 검증 스크립트에 위 6가지와 정상 병합 1가지.
+**Z8. 기록만 (F-4)** — 투표 이력 400건 제한은 명세 §0-3 알려진 한계에 리뷰어가 기록함. 개발 에이전트는 하지 않는다.
 
-**Z8. 기록만 (F-4)**
-- 투표 이력 400건 제한은 지금 최대 18건이라 배포를 막지 않는다. `docs/MEMBER_UX_V3_SPEC.md` §0-3 알려진 한계에 "투표 이력은 최근 400건까지만 보고 계산한다(장기 누적 스티커 최초일이 늦게 잡힐 수 있음)"를 리뷰어가 추가한다. 개발 에이전트는 하지 않는다.
+**운영 적용 주의(리뷰어):** `20261119000001_rpc_functions.sql`이나 `20261121000000_security_hardening.sql`을 다시 실행하면 가드 없는 원본으로 돌아간다(hardening `:309-318`). 그 경우 `20261124010000_v3_record_guards.sql`을 **그 뒤에 다시** 실행해야 한다. `supabase/all_in_one_setup.sql`도 같은 이유로 새 환경 구축용으로만 쓰고 운영에는 쓰지 않는다.
 
-**마무리:** `/report-ready`, 세 가지 CI 초록, 보고(§5 형식, Z6·Z7 검증 스크립트 결과). 새 마이그레이션은 리뷰어가 운영에 적용한다. 머지·배포·운영 DB 금지.
+**마무리:** `/report-ready`, 세 가지 CI 초록, 보고(§5 형식 + Z0 전수 표 + 고친 호출부 목록 + 검증 스크립트 결과). 마이그레이션 운영 적용은 리뷰어. 머지·배포·운영 DB 금지.
 
 ### V3-14 마무리
 
