@@ -4,6 +4,7 @@ import type { BoundDeviceProfile, Member, MemberActivity, Schedule } from '../ty
 import type { DisplayMode } from '../services/displayMode';
 import { getKSTDateString, parseKSTDate } from '../utils/date';
 import { buildMemberScheduleRecords } from '../utils/memberRecords';
+import { resolveMemberIdentity } from '../utils/memberIdentity';
 import { isActivityStaff } from '../utils/staff';
 import { DEFAULT_PERFORMANCE_CATEGORIES } from '../utils/performanceCategories';
 import {
@@ -72,7 +73,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   }, [refreshTrigger]);
 
   const currentMember = useMemo((): Member => {
-    const found = members.find((m) => m.id === profile.memberId);
+    const canonicalId = resolveMemberIdentity(profile.memberId, members).canonicalId;
+    const found = members.find((m) => m.id === canonicalId);
     if (found) return found;
     return {
       id: profile.memberId,
@@ -89,12 +91,17 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
 
   const memberPart = currentMember.part || profile.part;
   const memberName = currentMember.name || profile.name;
+  const activityAliasIds = useMemo(
+    () => resolveMemberIdentity(currentMember.id, members).aliasIds,
+    [currentMember.id, members]
+  );
+  const activityAliasIdsKey = activityAliasIds.join(',');
 
   // Fetch member activity (listen sessions, rsvp events) on mount & refresh
   useEffect(() => {
     let isMounted = true;
     sheetsService
-      .getMemberActivity([currentMember.id])
+      .getMemberActivity(activityAliasIds)
       .then((act) => {
         if (isMounted) setActivity(act);
       })
@@ -104,7 +111,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentMember.id, refreshTrigger]);
+  }, [activityAliasIds, activityAliasIdsKey, refreshTrigger]);
 
   const schedules = useMemo(() => {
     void refreshTrigger;

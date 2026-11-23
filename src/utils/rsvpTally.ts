@@ -1,4 +1,5 @@
 import type { AttendanceReconciliation, Member, RSVPVote } from '../types/rollbook';
+import { resolveMemberIdentity } from './memberIdentity';
 
 export interface RsvpTallyInput {
   /** 이 일정의 출결 의무 대상 단원 */
@@ -62,21 +63,16 @@ export function countCheckedIn(
   reconciled: AttendanceReconciliation[],
   members: Member[]
 ): number {
-  const memberMap = new Map<string, Member>(members.map((m) => [m.id, m]));
-
+  const canonicalByMemberId = new Map<string, string>();
   const getCanonicalId = (id: string): string => {
-    let curr = id;
-    const visited = new Set<string>([curr]);
-    while (true) {
-      const m = memberMap.get(curr);
-      if (m?.mergedIntoId && !visited.has(m.mergedIntoId)) {
-        curr = m.mergedIntoId;
-        visited.add(curr);
-      } else {
-        break;
-      }
+    const cached = canonicalByMemberId.get(id);
+    if (cached) return cached;
+
+    const identity = resolveMemberIdentity(id, members);
+    for (const aliasId of identity.aliasIds) {
+      canonicalByMemberId.set(aliasId, identity.canonicalId);
     }
-    return curr;
+    return identity.canonicalId;
   };
 
   const checkedInCanonicalIds = new Set<string>();

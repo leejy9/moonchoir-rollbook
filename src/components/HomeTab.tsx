@@ -3,6 +3,7 @@ import { sheetsService } from '../services/sheets';
 import { PREFERENCE_KEYS, readPreference, writePreference } from '../services/sheetsStorage';
 import type { BoundDeviceProfile, Member, Schedule } from '../types/rollbook';
 import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
+import { resolveMemberIdentity } from '../utils/memberIdentity';
 import { getCalendarGrid, groupSchedulesByDate } from '../utils/calendar';
 import {
   addDaysKST,
@@ -93,12 +94,9 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   }, [refreshTrigger]);
 
   const currentMember = useMemo<Member>(() => {
-    const direct = allMembers.find((m) => m.id === profile.memberId);
-    if (direct?.status === 'MERGED' && direct.mergedIntoId) {
-      const parent = allMembers.find((m) => m.id === direct.mergedIntoId);
-      if (parent) return parent;
-    }
-    return direct || {
+    const canonicalId = resolveMemberIdentity(profile.memberId, allMembers).canonicalId;
+    const canonicalMember = allMembers.find((m) => m.id === canonicalId);
+    return canonicalMember || {
       id: profile.memberId,
       name: profile.name,
       part: profile.part as Member['part'],

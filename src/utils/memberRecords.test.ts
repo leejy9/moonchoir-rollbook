@@ -209,4 +209,45 @@ describe('buildMemberScheduleRecords', () => {
     expect(records[0].finalStatus).toBe('출석');
     expect(records[0].checkInTime).toBe('19:20');
   });
+
+  it('resolves activity in both directions between an old ID and its representative', () => {
+    const canonicalMember: Member = { ...mockMember, id: 'mem_canonical' };
+    const mergedMember: Member = {
+      ...mockMember,
+      id: 'mem_merged',
+      status: 'MERGED',
+      mergedIntoId: 'mem_canonical',
+    };
+    const schedule = mockSchedules[1];
+    const canonicalLog: RawAttendanceLog = {
+      ...mockLogs[0],
+      id: 'log_canonical',
+      memberId: 'mem_canonical',
+      scheduleId: schedule.id,
+    };
+    const mergedLog: RawAttendanceLog = {
+      ...mockLogs[0],
+      id: 'log_merged',
+      memberId: 'mem_merged',
+      scheduleId: schedule.id,
+    };
+
+    const oldProfileRecords = buildMemberScheduleRecords({
+      member: mergedMember,
+      members: [canonicalMember, mergedMember],
+      schedules: [schedule],
+      logs: [canonicalLog],
+      now: mockNow,
+    });
+    const representativeRecords = buildMemberScheduleRecords({
+      member: canonicalMember,
+      members: [canonicalMember, mergedMember],
+      schedules: [schedule],
+      logs: [mergedLog],
+      now: mockNow,
+    });
+
+    expect(oldProfileRecords[0].finalStatus).toBe('출석');
+    expect(representativeRecords[0].finalStatus).toBe('출석');
+  });
 });

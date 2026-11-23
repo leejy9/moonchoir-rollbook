@@ -10,6 +10,7 @@ import type {
   PartType,
 } from '../types/rollbook';
 import { getKSTClock, getKSTDateString } from './date';
+import { resolveMemberIdentity } from './memberIdentity';
 
 /**
  * 특정 일자(date) 시점에 단원의 유효한 상태(Status)와 파트(Part)를 판정합니다.
@@ -188,18 +189,7 @@ export function resolveMergedMemberIds(
   canonicalMemberId: string,
   allMembers: Member[]
 ): Set<string> {
-  const result = new Set<string>([canonicalMemberId]);
-  let added = true;
-  while (added) {
-    added = false;
-    for (const m of allMembers) {
-      if (m.mergedIntoId && result.has(m.mergedIntoId) && !result.has(m.id)) {
-        result.add(m.id);
-        added = true;
-      }
-    }
-  }
-  return result;
+  return new Set(resolveMemberIdentity(canonicalMemberId, allMembers).aliasIds);
 }
 
 /**

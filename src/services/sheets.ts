@@ -24,6 +24,7 @@ import {
   reconcileSingleMemberAttendance,
   resolveMergedMemberIds,
 } from '../utils/attendanceStats';
+import { resolveMemberIdentity } from '../utils/memberIdentity';
 import { getKSTTimestampString, getKSTDateString, addDaysKST, parseKSTDate } from '../utils/date';
 import { buildScheduleComments, createCommentEventId, normalizeCommentText } from '../utils/scheduleComments';
 import {
@@ -308,13 +309,10 @@ export class SheetsService {
     const schedules = this.getSchedules();
     if (!schedules.some((s) => s.visibility === 'TARGETS_ONLY')) return schedules;
 
-    let member = memberId ? this.members.find((m) => m.id === memberId) : undefined;
-    const visited = new Set<string>();
-    while (member?.mergedIntoId && !visited.has(member.id)) {
-      visited.add(member.id);
-      member = this.members.find((m) => m.id === member?.mergedIntoId) ?? member;
-      if (member.status !== 'MERGED') break;
-    }
+    const canonicalId = memberId
+      ? resolveMemberIdentity(memberId, this.members).canonicalId
+      : undefined;
+    const member = canonicalId ? this.members.find((m) => m.id === canonicalId) : undefined;
 
     return schedules.filter((s) => {
       if (isScheduleVisibleToMember(member, s)) return true;
@@ -328,27 +326,18 @@ export class SheetsService {
 
   // --- Schedule comments (append-only event log, confirmed by the sheet before showing) ---
 
-  private canonicalMemberId(memberId: string): string {
-    let current = memberId;
-    const visited = new Set<string>();
-    while (!visited.has(current)) {
-      visited.add(current);
-      const member = this.members.find((m) => m.id === current);
-      if (!member?.mergedIntoId) break;
-      current = member.mergedIntoId;
-    }
-    return current;
-  }
-
   private isSameMember = (a: string, b: string): boolean =>
-    a === b || this.canonicalMemberId(a) === this.canonicalMemberId(b);
+    a === b ||
+    resolveMemberIdentity(a, this.members).canonicalId ===
+      resolveMemberIdentity(b, this.members).canonicalId;
 
   /**
    * 댓글에 보이는 이름·파트는 쓸 때의 값(스냅샷)이 아니라 작성자(통합된 단원은 대표 단원)의 현재 값을 우선한다.
    * 단원 기록이 없을 때만 쓸 때의 값을 쓴다. 시트의 원본 행은 바뀌지 않는다.
    */
   private withCurrentAuthor(comment: ScheduleComment): ScheduleComment {
-    const author = this.members.find((m) => m.id === this.canonicalMemberId(comment.memberId));
+    const canonicalId = resolveMemberIdentity(comment.memberId, this.members).canonicalId;
+    const author = this.members.find((m) => m.id === canonicalId);
     return author ? { ...comment, memberName: author.name, part: author.part } : comment;
   }
 
@@ -825,11 +814,22 @@ export class SheetsService {
     if (this.backend.kind === 'gas') {
       return null;
     }
-    const ids = Array.isArray(memberIds) ? memberIds : [memberIds];
-    if (ids.length === 0) {
+    const requestedIds = Array.isArray(memberIds) ? memberIds : [memberIds];
+    if (requestedIds.length === 0) {
       return null;
     }
-    const result = await this.sendToGoogleSheet('GET_MEMBER_ACTIVITY', { memberIds: ids });
+    const identity = resolveMemberIdentity(requestedIds[0], this.members);
+    const allIds = new Set([...identity.aliasIds, ...requestedIds]);
+    const orderedIds = [
+      identity.canonicalId,
+      ...[...allIds].filter((id) => id !== identity.canonicalId).sort((a, b) => a.localeCompare(b)),
+    ];
+    if (orderedIds.length > 20) {
+      console.warn('[SheetsService] Member activity aliases exceed the 20-ID server limit; truncating.');
+    }
+    const result = await this.sendToGoogleSheet('GET_MEMBER_ACTIVITY', {
+      memberIds: orderedIds.slice(0, 20),
+    });
     if (!result.success || !result.data) {
       return null;
     }
