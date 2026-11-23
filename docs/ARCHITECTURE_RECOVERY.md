@@ -408,3 +408,11 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 - 이 함수는 `rsvp_votes`를 `TRUNCATE` 후 다시 넣는다. `TRUNCATE`는 행 트리거를 부르지 않아 `rsvp_events`의 기존 행은 남고, 다시 넣는 행마다 `action='insert'`, `occurred_at = 이관 시각` 이벤트가 생겨 약속 점수·스티커가 오염된다.
 - 실행 권한은 `service_role`뿐이다(`20261121000000_security_hardening.sql:511`). 앱에서 부르는 곳은 없다. 다시 실행해야 하면 먼저 리뷰어와 트리거 처리 방법을 정한다.
 - 근거: spec-auditor 검토(`docs/agent/SPEC_WRITING.md`), `20261119000002_migration_function.sql:31, 173-186`.
+
+## 2026-11-23 — v3-C 활동 기록 DB 변경 운영 적용 (리뷰어)
+
+- 사용자 승인(배포 전 선적용) 후 `feat/v3-activity-2`에 커밋된 원본 그대로 적용: `20261124000000_v3_activity.sql`(sha256 `5ef9758b…1c32`, 마지막 수정 커밋 `74546fa`).
+- 적용 전 확인: 대상 객체(함수 6개, 테이블 2개, `rsvp_votes` 트리거) 모두 없음. `rsvp_votes.timestamp` 형식 분포는 시간대 없는 KST 문자열 88건, 시간대 포함 ISO 2건. 운영 세션 시간대 `UTC`.
+- 적용 후 확인: 함수 6개·트리거 생성, 백필 90건 = 투표 90건, 시간대 없는 KST 88건 모두 `occurred_at = timestamp at time zone 'Asia/Seoul'`과 일치(9시간 밀림 없음). 두 테이블 RLS 켜짐, anon 직접 조회 불가, anon RPC 실행 가능. HTTP `rpc/fn_get_member_activity`는 200(없는 id → 빈 결과), 빈 배열은 400(`INVALID_INPUT`).
+- 영향: 이 시점부터 투표 변경이 `rsvp_events`에 쌓인다(앱 배포 전이라 화면에는 아직 안 보임). 현재 배포된 앱은 새 함수를 쓰지 않는다. 되돌릴 때는 `drop trigger trg_rsvp_votes_log on rsvp_votes`만으로 기록이 멈춘다.
+- 실제 데이터 화면 확인: 로컬 개발 서버 + 운영 데이터(쓰기 RPC 차단)로 내 활동 화면이 열리고 활동 조회 200, 390px 넘침 없음. 백필만 있어 약속 묶음이 숨겨지는 것(V27)도 확인.
