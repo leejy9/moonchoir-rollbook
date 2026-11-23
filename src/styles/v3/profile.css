@@ -1,0 +1,676 @@
+/* Moonchoir Rollbook - Profile Tab Styles (Spec §5, V3-11) */
+
+.profile-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  max-width: 480px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* 1. Profile Top Line */
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.profile-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-lavender) 0%, var(--brand-accent) 100%);
+  color: var(--text-white);
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px var(--brand-lavender-tint);
+  flex-shrink: 0;
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.profile-sub {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+/* 2. Hero 2-Card Row (Level 1.15 : Donut Ring 1, 150px) */
+.profile-hero-row {
+  display: flex;
+  gap: 12px;
+  height: 150px;
+}
+
+.profile-level-card {
+  flex: 1.15;
+  background: linear-gradient(135deg, var(--brand-lavender) 0%, var(--brand-accent) 100%);
+  border-radius: 16px;
+  padding: 16px;
+  color: var(--text-white);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: left;
+  border: none;
+  min-height: 44px;
+  min-width: 44px;
+  box-sizing: border-box;
+}
+
+.profile-level-card::after {
+  content: '';
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+
+.profile-level-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.profile-level-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+}
+
+.profile-level-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.profile-level-num {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.profile-level-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-level-progress-bg {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.profile-level-progress-bar {
+  height: 100%;
+  background: var(--text-white);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.profile-level-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+}
+
+/* Attendance Donut Ring Card */
+.profile-ring-card {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 44px;
+  box-sizing: border-box;
+}
+
+.profile-donut-svg {
+  width: 96px;
+  height: 96px;
+}
+
+.profile-ring-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+  margin-top: 4px;
+}
+
+/* Staff Title Card */
+.profile-staff-card {
+  width: 100%;
+  background: linear-gradient(135deg, var(--brand-lavender) 0%, var(--brand-accent) 100%);
+  border-radius: 16px;
+  padding: 20px 16px;
+  color: var(--text-white);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+}
+
+.profile-staff-title {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.profile-staff-tenure {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.profile-staff-records-btn {
+  width: 100%;
+  min-height: 48px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+/* 3. Three Number Cards */
+.profile-numbers-row {
+  display: flex;
+  gap: 10px;
+}
+
+.profile-number-card {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+}
+
+.profile-number-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--brand-lavender);
+}
+
+.profile-number-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.1;
+}
+
+.profile-number-label {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+/* 4. Passion Temperature Card */
+.profile-temp-card {
+  background: var(--brand-apricot-tint);
+  border: 1px solid var(--brand-apricot);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+  min-height: 44px;
+  min-width: 44px;
+  box-sizing: border-box;
+}
+
+.profile-temp-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.profile-temp-label-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-temp-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--brand-apricot-text);
+}
+
+.profile-temp-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--brand-apricot-text);
+}
+
+.profile-temp-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.profile-temp-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--brand-apricot-text);
+  line-height: 1;
+}
+
+.profile-temp-delta {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  line-height: 1.2;
+}
+
+.profile-temp-delta.up {
+  background: var(--brand-apricot);
+  color: var(--text-white);
+}
+
+.profile-temp-delta.down {
+  background: var(--border-subtle);
+  color: var(--text-sub);
+}
+
+.profile-temp-bar-wrap {
+  width: 100%;
+  position: relative;
+  height: 8px;
+}
+
+.profile-temp-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--brand-apricot-tint) 0%, var(--brand-apricot) 100%);
+  border: 1px solid var(--brand-apricot);
+  box-sizing: border-box;
+}
+
+.profile-temp-tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 8px;
+  background: var(--brand-apricot-text);
+  opacity: 0.4;
+}
+
+.profile-temp-indicator {
+  position: absolute;
+  top: -3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 2px solid var(--brand-apricot-text);
+  transform: translateX(-50%);
+  box-sizing: border-box;
+}
+
+/* 5. Praise Stickers Card */
+.profile-stickers-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 44px;
+  box-sizing: border-box;
+}
+
+.profile-stickers-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.profile-stickers-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-stickers-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.profile-stickers-badge {
+  background: var(--brand-apricot);
+  color: var(--text-white);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.profile-stickers-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.profile-stickers-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.profile-sticker-slot {
+  height: 72px;
+  border-radius: 12px;
+  background: var(--bg-subtle, var(--bg-app));
+  border: 1px dashed var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-sticker-slot.unlocked {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.profile-sticker-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.profile-sticker-new-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--brand-apricot);
+  color: var(--text-white);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 6px;
+}
+
+.profile-sticker-empty-text {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Sheets and Modals */
+.profile-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.profile-sheet-content {
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  background: var(--bg-card);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  padding: 20px 16px 32px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.profile-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.profile-sheet-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.profile-sheet-close-btn {
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  color: var(--text-sub);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+/* Attendance Records Sheet */
+.attendance-status-toggles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.attendance-status-btn {
+  min-height: 52px;
+  min-width: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-main);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.attendance-status-btn.active {
+  border: 1.5px solid var(--brand-apricot);
+  background: var(--brand-apricot-tint);
+  color: var(--brand-apricot-text);
+}
+
+.attendance-status-btn-count {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.attendance-status-btn-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.attendance-period-chips {
+  display: flex;
+  gap: 8px;
+}
+
+.attendance-period-chip {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-sub);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.attendance-period-chip.active {
+  background: var(--brand-primary);
+  color: var(--text-white);
+  border-color: var(--brand-primary);
+}
+
+.attendance-records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attendance-record-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bg-subtle, var(--bg-app));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.attendance-record-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attendance-record-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.attendance-record-date {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.attendance-record-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Level Lineage Sheet */
+.level-lineage-current-box {
+  background: var(--brand-lavender-tint);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.level-lineage-current-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.level-lineage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.level-lineage-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+}
+
+.level-lineage-item.current {
+  border: 1.5px solid var(--brand-lavender);
+  background: var(--brand-lavender-tint);
+}
+
+.level-lineage-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.level-lineage-badge.done {
+  background: var(--brand-lavender);
+  color: var(--text-white);
+}
+
+.level-lineage-badge.current {
+  background: var(--brand-apricot);
+  color: var(--text-white);
+}
+
+.level-lineage-badge.locked {
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-muted);
+}

@@ -2,11 +2,22 @@ import React, { useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, Schedule } from '../types/rollbook';
 import type { DisplayMode } from '../services/displayMode';
-import { calculateCumulativeAttendanceWithLifecycle } from '../utils/attendanceStats';
-import { formatShortDate, getKSTDateString } from '../utils/date';
+import { getKSTDateString } from '../utils/date';
 import { buildMemberScheduleRecords } from '../utils/memberRecords';
-import { isStaffMember } from '../utils/staff';
-import { InstallAppCard } from './InstallAppCard';
+import { isStaffMember, isActivityStaff } from '../utils/staff';
+import {
+  computeAttendance90Days,
+  computeDaysTogether,
+  computeMemberLevel,
+  computePerformanceCount,
+  computePracticeHours,
+  formatStaffTenure,
+} from '../utils/memberProgress';
+import { ProfileSettingsSection } from './profile/ProfileSettingsSection';
+import { ProfileHeroCards } from './profile/ProfileHeroCards';
+import { LevelLineageSheet } from './profile/LevelLineageSheet';
+import { AttendanceRecordSheet } from './profile/AttendanceRecordSheet';
+import '../styles/v3/profile.css';
 
 export interface ProfileTabProps {
   profile: BoundDeviceProfile;
@@ -32,14 +43,13 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   onChangeBinding,
   onLogout,
   onRefreshData,
-  onOpenRSVP,
-  onOpenQRScanner,
   onOpenAdmin,
   refreshTrigger,
 }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [activeSheet, setActiveSheet] = useState<'NONE' | 'LEVEL' | 'ATTENDANCE' | 'TEMP' | 'STICKERS'>('NONE');
 
   const todayStr = useMemo(() => getKSTDateString(), []);
 
@@ -47,6 +57,11 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   const members = useMemo(() => {
     void refreshTrigger;
     return sheetsService.getMembers(true, true);
+  }, [refreshTrigger]);
+
+  const config = useMemo(() => {
+    void refreshTrigger;
+    return sheetsService.getConfig();
   }, [refreshTrigger]);
 
   const currentMember = useMemo((): Member => {
@@ -83,34 +98,19 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     return sheetsService.getRSVPVotes();
   }, [refreshTrigger]);
 
-  const lateGraceMinutes = sheetsService.getConfig().lateGraceMinutes ?? 10;
+  const lateGraceMinutes = config.lateGraceMinutes ?? 10;
 
-  // Cumulative attendance summary
-  const memberSummary = useMemo(() => {
-    const summaries = calculateCumulativeAttendanceWithLifecycle(
-      [currentMember],
-      schedules,
-      allLogs,
-      todayStr,
-      allRsvpVotes,
-      lateGraceMinutes,
-      members
-    );
-    return (
-      summaries[0] || {
-        attendanceRate: 100,
-        totalSessions: 0,
-        attended: 0,
-        late: 0,
-        excused: 0,
-        absent: 0,
-        badges: [],
-        guestAttended: 0,
-      }
-    );
-  }, [currentMember, schedules, allLogs, todayStr, allRsvpVotes, lateGraceMinutes, members]);
+  // Staff check (Spec §5-7, V26)
+  const isStaff = useMemo(() => {
+    return isActivityStaff(currentMember, config, members);
+  }, [currentMember, config, members]);
 
-  // Per-session records assembly (include archived schedules so past semesters remain visible in records)
+  // Admin menu permission check
+  const hasAdminMenuAccess = useMemo(() => {
+    return isStaffMember(currentMember, members);
+  }, [currentMember, members]);
+
+  // Schedule records for practice hours & performance count
   const scheduleRecords = useMemo(() => {
     return buildMemberScheduleRecords({
       member: currentMember,
@@ -123,10 +123,49 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     });
   }, [currentMember, members, schedules, allLogs, allRsvpVotes, lateGraceMinutes]);
 
-  // Staff check (pure function, zero hardcoding)
-  const isStaff = useMemo(() => {
-    return isStaffMember(currentMember, members);
-  }, [currentMember, members]);
+  // Cumulative numbers (§5-2)
+  const daysTogether = useMemo(() => {
+    return computeDaysTogether(currentMember, allLogs, todayStr, members);
+  }, [currentMember, allLogs, todayStr, members]);
+
+  const practiceHours = useMemo(() => {
+    return computePracticeHours(scheduleRecords);
+  }, [scheduleRecords]);
+
+  const performanceCount = useMemo(() => {
+    const categories = config.performanceCategories || ['연주', '녹음'];
+    return computePerformanceCount(scheduleRecords, categories);
+  }, [scheduleRecords, config.performanceCategories]);
+
+  // 90-day attendance rate for donut ring (Staff excludes this)
+  const attendance90Days = useMemo(() => {
+    if (isStaff) return { attendanceRate: null, totalSessions: 0 };
+    return computeAttendance90Days({
+      member: currentMember,
+      schedules,
+      logs: allLogs,
+      rsvpVotes: allRsvpVotes,
+      lateGraceMinutes,
+      allMembers: members,
+      todayStr,
+    });
+  }, [isStaff, currentMember, schedules, allLogs, allRsvpVotes, lateGraceMinutes, members, todayStr]);
+
+  // Cumulative attendance for Level (Staff excludes this)
+  const cumulativeAttendance = useMemo(() => {
+    if (isStaff) return 0;
+    let count = 0;
+    for (const r of scheduleRecords) {
+      if (r.finalStatus === '출석' || r.finalStatus === '수동인정' || r.finalStatus === '지각') {
+        count += 1;
+      }
+    }
+    return count;
+  }, [isStaff, scheduleRecords]);
+
+  const levelInfo = useMemo(() => {
+    return computeMemberLevel(cumulativeAttendance, memberPart);
+  }, [cumulativeAttendance, memberPart]);
 
   const handleSyncRemote = async () => {
     setIsSyncing(true);
@@ -148,515 +187,213 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
 
   const handleLogoutAction = async () => {
     if (!onLogout || isLoggingOut) return;
+    if (!window.confirm('정말 이 브라우저에서 로그아웃하시겠습니까?')) return;
     setIsLoggingOut(true);
-    setSyncFeedback(null);
     try {
       await onLogout();
-    } catch (err: unknown) {
-      setSyncFeedback({
-        type: 'error',
-        text: err instanceof Error ? err.message : '이 브라우저에서 로그아웃하지 못했습니다.',
-      });
     } finally {
       setIsLoggingOut(false);
     }
   };
 
   return (
-    <div
-      className="profile-tab"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        padding: '16px',
-        maxWidth: '720px',
-        margin: '0 auto',
-        width: '100%',
-        boxSizing: 'border-box',
-        paddingBottom: 'calc(var(--bottom-nav-h, 60px) + 24px + env(safe-area-inset-bottom, 0px))',
-      }}
-    >
-      {/* 1. Member Profile & Status Header */}
-      <section
-        style={{
-          border: '1px solid var(--border-subtle)',
-          borderRadius: '12px',
-          padding: '16px',
-          backgroundColor: 'var(--bg-card)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
-          <div>
-            <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-main)' }}>
-              {memberName}
-            </div>
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
-              <span
-                style={{
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  backgroundColor: 'var(--brand-primary-light)',
-                  color: 'var(--brand-primary)',
-                }}
-              >
-                {memberPart}
-              </span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                {currentMember.memberStatus || '정단원'}
-              </span>
-            </div>
-            {profile.phoneLast4 && (
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                전화번호 뒷자리: {profile.phoneLast4}
-                <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-muted, #94a3b8)' }}>
-                  (연락처 수정은 운영진에게 요청해 주세요)
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Staff Mode Access Button (Visible only to staff) */}
-          {isStaff && onOpenAdmin && (
-            <button
-              type="button"
-              onClick={onOpenAdmin}
-              title="운영진 관리자 모드 진입"
-              style={{
-                minHeight: '44px',
-                minWidth: '44px',
-                padding: '8px 16px',
-                backgroundColor: 'var(--brand-primary)',
-                color: 'var(--text-white, #ffffff)',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              운영진 모드
-            </button>
-          )}
+    <div className="profile-tab">
+      {/* 1. Profile Top Line */}
+      <section className="profile-header">
+        <div className="profile-avatar">
+          {memberName.trim().slice(0, 1) || '문'}
         </div>
-
-        {/* 2. Cumulative Attendance Summary */}
-        <div
-          style={{
-            borderTop: '1px solid var(--border-subtle)',
-            paddingTop: '12px',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-            gap: '8px',
-          }}
-        >
-          <div style={{ padding: '8px', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>이번 시즌 출석</div>
-            <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)' }}>
-              {memberSummary.attended}회
-            </div>
-          </div>
-          <div style={{ padding: '8px', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>누적 출석률</div>
-            <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--brand-primary)' }}>
-              {memberSummary.attendanceRate}%
-            </div>
-          </div>
-          <div style={{ padding: '8px', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>진행 회차</div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>
-              총 {memberSummary.totalSessions}회
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted, #94a3b8)' }}>
-              지각 {memberSummary.late} / 사유 {memberSummary.excused} / 결석 {memberSummary.absent}
-            </div>
+        <div className="profile-info">
+          <div className="profile-name">{memberName}</div>
+          <div className="profile-sub">
+            {memberPart || '단원'}
+            {daysTogether > 0 ? ` · ${daysTogether}일째` : ''}
           </div>
         </div>
       </section>
 
-      {/* Sync Feedback Message */}
-      {syncFeedback && (
-        <div
-          style={{
-            padding: '10px 14px',
-            borderRadius: '8px',
-            fontSize: '13px',
-            fontWeight: 600,
-            backgroundColor: syncFeedback.type === 'success' ? 'var(--status-success-light, #ecfdf5)' : 'var(--status-danger-light, #fff1f2)',
-            color: syncFeedback.type === 'success' ? 'var(--status-success, #065f46)' : 'var(--status-danger, #9f1239)',
-            border: `1px solid ${syncFeedback.type === 'success' ? 'var(--status-success, #a7f3d0)' : 'var(--status-danger, #fecdd3)'}`,
-          }}
-        >
-          {syncFeedback.text}
-        </div>
+      {/* 2. Staff View vs Member View */}
+      {isStaff ? (
+        <>
+          {/* Staff Title Card */}
+          <section className="profile-staff-card">
+            <div className="profile-staff-title">{`${memberName} 선생님`}</div>
+            <div className="profile-staff-tenure">{formatStaffTenure(daysTogether)}</div>
+          </section>
+
+          {/* Staff Attendance Record Action Row */}
+          <button
+            type="button"
+            className="profile-staff-records-btn"
+            onClick={() => setActiveSheet('ATTENDANCE')}
+          >
+            <span>출석 기록</span>
+            <span style={{ fontSize: '18px', color: 'var(--text-sub)' }}>›</span>
+          </button>
+        </>
+      ) : (
+        /* Member Hero 2-Card Row */
+        <ProfileHeroCards
+          levelInfo={levelInfo}
+          attendanceRate={attendance90Days.attendanceRate}
+          onOpenLevel={() => setActiveSheet('LEVEL')}
+          onOpenAttendance={() => setActiveSheet('ATTENDANCE')}
+        />
       )}
 
-      {/* 3. Section: 회차별 출결 기록 */}
-      <section
-        style={{
-          border: '1px solid var(--border-subtle)',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          backgroundColor: 'var(--bg-card)',
-        }}
-      >
-        <div
-          style={{
-            padding: '12px 16px',
-            borderBottom: '1px solid var(--border-subtle)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
-            회차별 출결 기록
-          </h3>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            총 {scheduleRecords.length}개 일정
-          </span>
+      {/* 3. Three White Number Cards */}
+      <section className="profile-numbers-row">
+        <div className="profile-number-card">
+          <svg className="profile-number-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+          <div className="profile-number-value">{daysTogether}일</div>
+          <div className="profile-number-label">함께한 날</div>
         </div>
 
-        {/* Column Headers */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(120px, 1.8fr) 70px 85px 85px',
-            background: 'var(--bg-subtle)',
-            padding: '10px 12px',
-            fontSize: '12px',
-            fontWeight: 700,
-            color: 'var(--text-muted)',
-            borderBottom: '1px solid var(--border-subtle)',
-          }}
-        >
-          <span>연습명칭</span>
-          <span>연습일</span>
-          <span style={{ textAlign: 'center' }}>투표 상태</span>
-          <span style={{ textAlign: 'right' }}>출결 시간</span>
+        <div className="profile-number-card">
+          <svg className="profile-number-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          <div className="profile-number-value">{practiceHours}시간</div>
+          <div className="profile-number-label">연습</div>
         </div>
 
-        {/* Rows */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {scheduleRecords.length === 0 ? (
-            <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted, #94a3b8)', fontSize: '13px' }}>
-              등록된 연습 일정이 없습니다.
-            </div>
-          ) : (
-            scheduleRecords.map((r) => (
-              <div
-                key={r.id}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(120px, 1.8fr) 70px 85px 85px',
-                  alignItems: 'center',
-                  padding: '10px 12px',
-                  borderBottom: '1px solid var(--border-subtle)',
-                  fontSize: '13px',
-                }}
-              >
-                {/* 1. 연습명칭 */}
-                <div>
-                  <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{r.title}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    {r.category}
-                  </div>
-                </div>
-
-                {/* 2. 연습일 */}
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  {formatShortDate(r.date)}
-                </div>
-
-                {/* 3. 투표 상태 */}
-                <div style={{ textAlign: 'center' }}>
-                  <button
-                    type="button"
-                    disabled={r.isPast || !onOpenRSVP}
-                    onClick={() => onOpenRSVP && onOpenRSVP(r.schedule)}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      padding: '4px',
-                      cursor: !r.isPast && onOpenRSVP ? 'pointer' : 'default',
-                      display: 'inline-block',
-                      minHeight: '44px',
-                      minWidth: '44px',
-                    }}
-                    title={!r.isPast && onOpenRSVP ? '클릭하여 참석/불참 투표 변경' : undefined}
-                  >
-                    {r.voteStatus === 'ATTEND' ? (
-                      <span
-                        style={{
-                          background: 'var(--status-success-light, #dcfce7)',
-                          color: 'var(--status-success, #15803d)',
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          fontWeight: 700,
-                          fontSize: '11.5px',
-                        }}
-                      >
-                        참석
-                      </span>
-                    ) : r.voteStatus === 'ABSENT' ? (
-                      <span
-                        style={{
-                          background: 'var(--status-warning-light, #ffedd5)',
-                          color: 'var(--status-warning, #c2410c)',
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          fontWeight: 700,
-                          fontSize: '11.5px',
-                        }}
-                        title={r.voteReason ? `사유: ${r.voteReason}` : undefined}
-                      >
-                        불참
-                      </span>
-                    ) : r.voteStatus === 'LATE' ? (
-                      <span
-                        style={{
-                          background: 'var(--status-warning-light, #fef3c7)',
-                          color: 'var(--status-warning, #b45309)',
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          fontWeight: 700,
-                          fontSize: '11.5px',
-                        }}
-                      >
-                        지각
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          background: !r.isPast ? 'var(--status-info-light, #e0e7ff)' : 'var(--bg-subtle, #f1f5f9)',
-                          color: !r.isPast ? 'var(--status-info, #4338ca)' : 'var(--text-muted, #94a3b8)',
-                          padding: '3px 7px',
-                          borderRadius: '6px',
-                          fontSize: '11px',
-                          fontWeight: !r.isPast ? 700 : 400,
-                        }}
-                      >
-                        {!r.isPast ? '투표하기' : '미투표'}
-                      </span>
-                    )}
-                  </button>
-                  {r.voteTimestamp && (
-                    <span
-                      style={{
-                        fontSize: '10px',
-                        color: 'var(--text-muted, #64748b)',
-                        marginTop: '2px',
-                        display: 'block',
-                        whiteSpace: 'nowrap',
-                      }}
-                      title={`투표 일시: ${r.voteTimestamp}`}
-                    >
-                      {r.voteTimestamp.slice(5, 16)}
-                    </span>
-                  )}
-                </div>
-
-                {/* 4. 출결 시간 */}
-                <div style={{ textAlign: 'right' }}>
-                  {r.isAttended ? (
-                    <span
-                      style={{
-                        color: 'var(--status-success, #16a34a)',
-                        fontWeight: 700,
-                        fontSize: '12px',
-                        fontFamily: 'monospace',
-                      }}
-                    >
-                      {r.checkInTime}
-                    </span>
-                  ) : r.isToday && onOpenQRScanner ? (
-                    <button
-                      type="button"
-                      onClick={() => onOpenQRScanner(r.schedule)}
-                      style={{
-                        background: 'var(--brand-primary)',
-                        color: 'var(--text-white, #ffffff)',
-                        border: 'none',
-                        borderRadius: '6px',
-                        padding: '6px 10px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        minHeight: '44px',
-                        minWidth: '44px',
-                      }}
-                    >
-                      QR 출석
-                    </button>
-                  ) : r.isExempt ? (
-                    <span style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '11px' }}>미참</span>
-                  ) : r.isPast ? (
-                    <span style={{ color: 'var(--status-danger, #dc2626)', fontWeight: 600, fontSize: '11.5px' }}>결석 (-)</span>
-                  ) : (
-                    <span style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '11.5px' }}>대기</span>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
+        <div className="profile-number-card">
+          <svg className="profile-number-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+          <div className="profile-number-value">{performanceCount}번</div>
+          <div className="profile-number-label">공연</div>
         </div>
       </section>
 
-      {/* 4. Section: 환경 설정 및 계정 관리 */}
-      <section
-        style={{
-          border: '1px solid var(--border-subtle)',
-          borderRadius: '12px',
-          padding: '16px',
-          backgroundColor: 'var(--bg-card)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '14px',
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
-          화면 설정 및 데이터 관리
-        </h3>
+      {/* 4. Passion Temperature Card (Staff Excludes This) */}
+      {!isStaff && (
+        <section
+          className="profile-temp-card"
+          onClick={() => setActiveSheet('TEMP')}
+          role="button"
+          tabIndex={0}
+        >
+          <div className="profile-temp-top">
+            <div className="profile-temp-label-group">
+              <svg className="profile-temp-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2c1.1 0 2 .9 2 2 0 1.5-1 3.5-2 5-1-1.5-2-3.5-2-5 0-1.1.9-2 2-2zm6 9c0 3.3-2.7 6-6 6s-6-2.7-6-6c0-2.4 1.4-4.5 3.5-5.5-.3 1.2 0 2.5 1 3.2 1.2.9 2.8.9 4 0 1-.7 1.3-2 1-3.2 2.1 1 3.5 3.1 3.5 5.5z" />
+              </svg>
+              <span className="profile-temp-title">열정 온도</span>
+            </div>
+            <div className="profile-temp-value-row">
+              <span className="profile-temp-value">36.5°C</span>
+            </div>
+          </div>
 
-        {/* Display Mode Selection */}
-        <div>
-          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-            화면 표시 모드
-          </label>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {(['AUTO', 'DESKTOP', 'MOBILE'] as DisplayMode[]).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => onChangeDisplayMode(mode)}
-                style={{
-                  flex: 1,
-                  minHeight: '44px',
-                  minWidth: '44px',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: `1px solid ${displayMode === mode ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
-                  backgroundColor: displayMode === mode ? 'var(--brand-primary-light, #e0e7ff)' : 'var(--bg-card, #ffffff)',
-                  color: displayMode === mode ? 'var(--brand-primary, #0047ff)' : 'var(--text-sub, #334155)',
-                  fontWeight: displayMode === mode ? 700 : 500,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                }}
-              >
-                {mode === 'AUTO' ? '자동' : mode === 'DESKTOP' ? '데스크톱' : '모바일'}
-              </button>
-            ))}
+          <div className="profile-temp-bar-wrap">
+            <div className="profile-temp-bar" />
+            <div className="profile-temp-tick" style={{ left: '31.25%' }} />
+            <div className="profile-temp-indicator" style={{ left: '31.25%' }} />
+          </div>
+        </section>
+      )}
+
+      {/* 5. Praise Stickers Preview Card */}
+      <section className="profile-stickers-card">
+        <button
+          type="button"
+          className="profile-stickers-header"
+          onClick={() => setActiveSheet('STICKERS')}
+        >
+          <div className="profile-stickers-title-group">
+            <span className="profile-stickers-title">칭찬 스티커</span>
+          </div>
+          <div className="profile-stickers-count">
+            <span>{`0 / ${isStaff ? 8 : 24}`}</span>
+            <span style={{ fontSize: '16px' }}>›</span>
+          </div>
+        </button>
+
+        <div className="profile-stickers-grid">
+          <div className="profile-sticker-slot">
+            <span className="profile-sticker-empty-text">미획득</span>
+          </div>
+          <div className="profile-sticker-slot">
+            <span className="profile-sticker-empty-text">미획득</span>
+          </div>
+          <div className="profile-sticker-slot">
+            <span className="profile-sticker-empty-text">미획득</span>
+          </div>
+          <div className="profile-sticker-slot">
+            <span className="profile-sticker-empty-text">미획득</span>
           </div>
         </div>
-
-        {/* Dark Mode Toggle */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
-          <span style={{ fontSize: '13px', fontWeight: 600 }}>다크 모드</span>
-          <button
-            type="button"
-            onClick={() => onChangeDarkMode(!isDarkMode)}
-            style={{
-              minHeight: '44px',
-              minWidth: '44px',
-              padding: '8px 16px',
-              borderRadius: '6px',
-              border: '1px solid var(--border-subtle)',
-              backgroundColor: isDarkMode ? 'var(--bg-subtle, #1e293b)' : 'var(--bg-card, #f8fafc)',
-              color: isDarkMode ? 'var(--text-white, #ffffff)' : 'var(--text-main, #1e293b)',
-              fontWeight: 600,
-              fontSize: '13px',
-              cursor: 'pointer',
-            }}
-          >
-            {isDarkMode ? '켜짐' : '꺼짐'}
-          </button>
-        </div>
-
-        {/* Google Sheets Sync Button */}
-        <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
-          <button
-            type="button"
-            onClick={() => void handleSyncRemote()}
-            disabled={isSyncing}
-            style={{
-              width: '100%',
-              minHeight: '44px',
-              padding: '10px 16px',
-              borderRadius: '6px',
-              border: '1px solid var(--border-subtle)',
-              backgroundColor: 'var(--bg-card, #f8fafc)',
-              color: 'var(--text-main)',
-              fontWeight: 600,
-              fontSize: '13px',
-              cursor: isSyncing ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {isSyncing ? '구글 시트 동기화 중...' : '구글 시트 최신 데이터와 동기화'}
-          </button>
-        </div>
-
-        {/* Install PWA App Card */}
-        <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
-          <InstallAppCard />
-        </div>
-
-        {/* Switch Bound Member & Logout */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            paddingTop: '8px',
-            borderTop: '1px solid var(--border-subtle)',
-          }}
-        >
-          <button
-            type="button"
-            onClick={onChangeBinding}
-            style={{
-              width: '100%',
-              minHeight: '44px',
-              padding: '10px 16px',
-              borderRadius: '6px',
-              border: '1px solid var(--border-subtle)',
-              backgroundColor: 'var(--bg-card, #ffffff)',
-              color: 'var(--text-main, #334155)',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            이 브라우저에 저장된 단원 바꾸기
-          </button>
-
-          {onLogout && (
-            <button
-              type="button"
-              onClick={() => void handleLogoutAction()}
-              disabled={isLoggingOut}
-              style={{
-                width: '100%',
-                minHeight: '44px',
-                padding: '10px 16px',
-                borderRadius: '6px',
-                border: '1px solid var(--status-danger-light, #fecdd3)',
-                backgroundColor: 'var(--status-danger-light, #fff1f2)',
-                color: 'var(--status-danger, #b91c1c)',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: isLoggingOut ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {isLoggingOut ? '로그아웃 처리 중...' : '이 브라우저에서 로그아웃'}
-            </button>
-          )}
-        </div>
       </section>
+
+      {/* 6. Settings & Admin Section */}
+      <ProfileSettingsSection
+        hasAdminMenuAccess={hasAdminMenuAccess}
+        onOpenAdmin={onOpenAdmin}
+        displayMode={displayMode}
+        onChangeDisplayMode={onChangeDisplayMode}
+        isDarkMode={isDarkMode}
+        onChangeDarkMode={onChangeDarkMode}
+        isSyncing={isSyncing}
+        syncFeedback={syncFeedback}
+        onSyncRemote={handleSyncRemote}
+        onChangeBinding={onChangeBinding}
+        onLogout={onLogout ? handleLogoutAction : undefined}
+        isLoggingOut={isLoggingOut}
+      />
+
+      {/* Sheets / Modals */}
+      {activeSheet === 'LEVEL' && (
+        <LevelLineageSheet
+          levelInfo={levelInfo}
+          part={memberPart}
+          onClose={() => setActiveSheet('NONE')}
+        />
+      )}
+
+      {activeSheet === 'ATTENDANCE' && (
+        <AttendanceRecordSheet
+          records={scheduleRecords}
+          onClose={() => setActiveSheet('NONE')}
+        />
+      )}
+
+      {(activeSheet === 'TEMP' || activeSheet === 'STICKERS') && (
+        <div
+          className="profile-sheet-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setActiveSheet('NONE')}
+        >
+          <div className="profile-sheet-content">
+            <div className="profile-sheet-header">
+              <h2 className="profile-sheet-title">
+                {activeSheet === 'TEMP' ? '열정 온도 내역' : '칭찬 스티커 보드'}
+              </h2>
+              <button
+                type="button"
+                className="profile-sheet-close-btn"
+                onClick={() => setActiveSheet('NONE')}
+                aria-label="닫기"
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-sub)', fontSize: '14px' }}>
+              아직 기록이 없어요
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

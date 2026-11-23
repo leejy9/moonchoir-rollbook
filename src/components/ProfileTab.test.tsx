@@ -3,8 +3,11 @@ import { renderToString } from 'react-dom/server';
 import { ProfileTab } from './ProfileTab';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, Schedule } from '../types/rollbook';
+import { LevelLineageSheet } from './profile/LevelLineageSheet';
+import { AttendanceRecordSheet } from './profile/AttendanceRecordSheet';
+import { computeMemberLevel } from '../utils/memberProgress';
 
-describe('ProfileTab Component (MEMBER_UX_AUDIO_SPEC §2-5)', () => {
+describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
   const mockProfile: BoundDeviceProfile = {
     memberId: 'mem_1',
     name: '김단원',
@@ -30,6 +33,18 @@ describe('ProfileTab Component (MEMBER_UX_AUDIO_SPEC §2-5)', () => {
     role: 'ADMIN',
   };
 
+  const teacherMember: Member = {
+    id: 'mem_teacher',
+    name: '박선생',
+    part: '반주',
+    phoneLast4: '9999',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    createdAt: '2025-01-01T00:00:00Z',
+    joinedAt: '2025-01-01',
+    memberStatus: '선생님',
+  };
+
   const mockSchedules: Schedule[] = [
     {
       id: 'sch_1',
@@ -50,7 +65,7 @@ describe('ProfileTab Component (MEMBER_UX_AUDIO_SPEC §2-5)', () => {
     vi.spyOn(sheetsService, 'getRSVPVotes').mockReturnValue([]);
   });
 
-  it('renders member profile, attendance table titled "회차별 출결 기록", and 5 core actions', () => {
+  it('renders member profile, 2 hero cards (level & ring), 3 number cards, passion temp, and stickers preview', () => {
     const html = renderToString(
       <ProfileTab
         profile={mockProfile}
@@ -64,20 +79,30 @@ describe('ProfileTab Component (MEMBER_UX_AUDIO_SPEC §2-5)', () => {
       />
     );
 
-    // Profile info
+    // 1. Profile line
     expect(html).toContain('김단원');
     expect(html).toContain('Soprano');
-    expect(html).toContain('1234');
-    expect(html).toContain('연락처 수정은 운영진에게 요청해 주세요');
 
-    // Attendance Table Title and Columns (Spec §2-5)
-    expect(html).toContain('회차별 출결 기록');
-    expect(html).toContain('연습명칭');
-    expect(html).toContain('연습일');
-    expect(html).toContain('투표 상태');
-    expect(html).toContain('출결 시간');
+    // 2. Hero cards (Level & Donut Ring)
+    expect(html).toContain('내 레벨');
+    expect(html).toContain('Lv.1');
+    expect(html).toContain('새내기 Soprano');
+    expect(html).toContain('Lv.2까지 10회');
 
-    // 5 Core Features
+    // 3. Three Number Cards
+    expect(html).toContain('함께한 날');
+    expect(html).toContain('연습');
+    expect(html).toContain('공연');
+
+    // 4. Passion Temperature Card
+    expect(html).toContain('열정 온도');
+    expect(html).toContain('36.5°C');
+
+    // 5. Praise Stickers Preview (24 stickers for member)
+    expect(html).toContain('칭찬 스티커');
+    expect(html).toContain('0 / 24');
+
+    // 6. Settings section
     expect(html).toContain('화면 표시 모드');
     expect(html).toContain('다크 모드');
     expect(html).toContain('구글 시트 최신 데이터와 동기화');
@@ -85,10 +110,20 @@ describe('ProfileTab Component (MEMBER_UX_AUDIO_SPEC §2-5)', () => {
     expect(html).toContain('이 브라우저에서 로그아웃');
   });
 
-  it('contains ZERO gamification level cards, titles, progress bars, or badge emojis (Spec §6-4 #2)', () => {
+  it('renders staff title card and hides level/ring/temperature DOM elements when isActivityStaff is true (Spec §5-7, V26)', () => {
+    vi.spyOn(sheetsService, 'getMembers').mockReturnValue([teacherMember]);
+
+    const teacherProfile: BoundDeviceProfile = {
+      memberId: 'mem_teacher',
+      name: '박선생',
+      part: '반주',
+      phoneLast4: '9999',
+      boundAt: '2025-01-01T00:00:00Z',
+    };
+
     const html = renderToString(
       <ProfileTab
-        profile={mockProfile}
+        profile={teacherProfile}
         displayMode="AUTO"
         isDarkMode={false}
         onChangeDisplayMode={vi.fn()}
@@ -97,19 +132,24 @@ describe('ProfileTab Component (MEMBER_UX_AUDIO_SPEC §2-5)', () => {
       />
     );
 
-    // Must NOT contain old gamification elements
-    expect(html).not.toContain('새싹');
-    expect(html).not.toContain('칭호:');
-    expect(html).not.toContain('다음 레벨까지');
-    expect(html).not.toContain('개인 대시보드');
+    // Staff Card
+    expect(html).toContain('박선생 선생님');
+    expect(html).toContain('함께한 지');
+    expect(html).toContain('출석 기록');
 
-    // Must NOT contain emojis
-    const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
-    expect(emojiRegex.test(html)).toBe(false);
+    // Praise Stickers Preview (8 stickers for staff)
+    expect(html).toContain('0 / 8');
+
+    // Must NOT contain Level Card, Ring, or Temperature Card
+    expect(html).not.toContain('내 레벨');
+    expect(html).not.toContain('Lv.1');
+    expect(html).not.toContain('새내기');
+    expect(html).not.toContain('출석률');
+    expect(html).not.toContain('열정 온도');
   });
 
-  it('renders staff mode button if and only if isStaffMember is true', () => {
-    // 1. Ordinary member -> No staff button
+  it('renders admin mode button if and only if isStaffMember is true', () => {
+    // 1. Ordinary member -> No admin mode button
     const ordinaryHtml = renderToString(
       <ProfileTab
         profile={mockProfile}
@@ -121,9 +161,9 @@ describe('ProfileTab Component (MEMBER_UX_AUDIO_SPEC §2-5)', () => {
         onOpenAdmin={vi.fn()}
       />
     );
-    expect(ordinaryHtml).not.toContain('운영진 모드');
+    expect(ordinaryHtml).not.toContain('운영진 모드로 전환');
 
-    // 2. Admin member -> Staff button rendered
+    // 2. Admin member -> Admin mode button rendered
     vi.spyOn(sheetsService, 'getMembers').mockReturnValue([adminMember]);
     const adminHtml = renderToString(
       <ProfileTab
@@ -136,7 +176,7 @@ describe('ProfileTab Component (MEMBER_UX_AUDIO_SPEC §2-5)', () => {
         onOpenAdmin={vi.fn()}
       />
     );
-    expect(adminHtml).toContain('운영진 모드');
+    expect(adminHtml).toContain('운영진 모드로 전환');
   });
 
   it('guarantees touch targets of at least 44px on clickable controls', () => {
@@ -156,49 +196,40 @@ describe('ProfileTab Component (MEMBER_UX_AUDIO_SPEC §2-5)', () => {
     expect(html).toContain('min-width:44px');
   });
 
-  it('renders archived past schedules in records table while keeping cumulative stats identical to admin calculation (Spec §2-5, §6-4 #1)', () => {
-    const schedulesWithArchived: Schedule[] = [
-      {
-        id: 'sch_active',
-        title: '현재 학기 정기연습',
-        date: '2026-10-18',
-        startTime: '19:30',
-        endTime: '21:30',
-        locationName: '연습실',
-        category: '정기연습',
-      },
-      {
-        id: 'sch_archived',
-        title: '지난 학기 보관된 연습',
-        date: '2026-05-01',
-        startTime: '19:30',
-        endTime: '21:30',
-        locationName: '연습실',
-        category: '정기연습',
-        isArchived: true,
-      },
-    ];
-
-    vi.spyOn(sheetsService, 'getSchedulesForMember').mockReturnValue(schedulesWithArchived);
-
+  it('renders LevelLineageSheet with current tier and 6 tiers list (Spec §5-3)', () => {
+    const levelInfo = computeMemberLevel(15, 'Tenor');
     const html = renderToString(
-      <ProfileTab
-        profile={mockProfile}
-        displayMode="AUTO"
-        isDarkMode={false}
-        onChangeDisplayMode={vi.fn()}
-        onChangeDarkMode={vi.fn()}
-        onChangeBinding={vi.fn()}
+      <LevelLineageSheet
+        levelInfo={levelInfo}
+        part="Tenor"
+        onClose={vi.fn()}
       />
     );
 
-    // 1. Archived past schedule must appear in the records table
-    expect(html).toContain('지난 학기 보관된 연습');
-    expect(html).toContain('현재 학기 정기연습');
+    expect(html).toContain('내 레벨 계보');
+    expect(html).toContain('Lv.2 첫걸음 Tenor');
+    expect(html).toContain('Lv.3까지 5회');
+    expect(html).toContain('달성');
+    expect(html).toContain('지금');
+    expect(html).toContain('문콰이어의 목소리');
+  });
 
-    // 2. Cross-screen contract check: cumulative stats calculation strictly excludes archived schedules
-    // Active schedule has no log -> absent 1, attendanceRate 0%
-    // If archived was counted, it would be 2 schedules
-    expect(html).toContain('0%');
+  it('renders AttendanceRecordSheet with 4 status toggles and 3 period chips (Spec §5-4)', () => {
+    const html = renderToString(
+      <AttendanceRecordSheet
+        records={[]}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('출석 기록');
+    expect(html).toContain('출석');
+    expect(html).toContain('지각');
+    expect(html).toContain('사유 결석');
+    expect(html).toContain('결석');
+    expect(html).toContain('최근 3개월');
+    expect(html).toContain('올해');
+    expect(html).toContain('전체');
+    expect(html).toContain('선택한 조건의 출결 기록이 없어요');
   });
 });
