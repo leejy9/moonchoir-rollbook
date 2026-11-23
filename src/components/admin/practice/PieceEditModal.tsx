@@ -255,6 +255,7 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
             onRetryJob={retryJob}
             onDismissJob={dismissJob}
             hasMediaBaseUrl={hasMediaBaseUrl}
+            config={config}
             onRemoveStagedTrack={(id) => setStagedTracks((prev) => prev.filter((t) => t.id !== id))}
             activeJob={activeJob}
             pieceId={currentPiece.id}

@@ -5,6 +5,8 @@ import { TrackEditModal } from './TrackEditModal';
 import { TrackRow } from './TrackRow';
 import { FailedJobsList } from './FailedJobsList';
 import { isVideoTrack } from '../../../utils/youtubeUrl';
+import { getRepresentativeTrack } from '../../../utils/practiceQueue';
+import { sheetsService } from '../../../services/sheets';
 
 export interface StagedTrack {
   id: string;
@@ -27,6 +29,7 @@ interface PieceTrackSectionProps {
   activeJob: UploadJob | null;
   pieceId?: string;
   hasMediaBaseUrl?: boolean;
+  config?: { mediaPublicBaseUrl?: string };
   availableKinds?: string[];
   onOpenUpload: (previousStorageKey?: string, replaceTrackId?: string) => void;
   onArchiveTrack: (track: PracticeTrack) => void;
@@ -48,6 +51,7 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
   activeJob,
   pieceId,
   hasMediaBaseUrl = true,
+  config,
   availableKinds = ['가이드', '파트음원', 'MR', '참고영상'],
   onOpenUpload,
   onArchiveTrack,
@@ -61,6 +65,13 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
     track: PracticeTrack;
     mode: 'label' | 'kind';
   } | null>(null);
+
+  const effectiveConfig = config || sheetsService.getConfig();
+  const repTrack = getRepresentativeTrack(
+    pieceId || (tracks[0]?.pieceId ?? ''),
+    tracks,
+    effectiveConfig
+  );
 
   const audioTracks = tracks.filter((t) => !isVideoTrack(t));
   const youtubeTracks = tracks.filter((t) => isVideoTrack(t));
@@ -160,6 +171,7 @@ export const PieceTrackSection: React.FC<PieceTrackSectionProps> = ({
               track={t}
               index={idx}
               totalCount={audioTracks.length}
+              isRepresentative={repTrack?.id === t.id}
               onMoveTrackOrder={onMoveTrackOrder}
               onOpenUpload={onOpenUpload}
               onEditLabel={(track) => setEditingModal({ track, mode: 'label' })}

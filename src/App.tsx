@@ -351,6 +351,9 @@ function MainApp() {
           {route.tab === 'studio' && profile && (
             <StudioTab
               onOpenAdmin={handleOpenAdmin}
+              onOpenFullPlayer={() => {
+                navigate({ type: 'OPEN', overlay: { kind: 'player' } });
+              }}
               onOpenScore={(piece) => {
                 if (piece.scoreStorageKey) {
                   navigate({ type: 'OPEN', overlay: { kind: 'score', pieceId: piece.id } });

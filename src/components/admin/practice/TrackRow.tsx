@@ -5,6 +5,7 @@ interface TrackRowProps {
   track: PracticeTrack;
   index: number;
   totalCount: number;
+  isRepresentative?: boolean;
   onMoveTrackOrder?: (trackId: string, direction: 'UP' | 'DOWN') => void;
   onOpenUpload?: (storageKey?: string, trackId?: string) => void;
   onEditLabel: (track: PracticeTrack) => void;
@@ -17,6 +18,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   track,
   index,
   totalCount,
+  isRepresentative,
   onMoveTrackOrder,
   onOpenUpload,
   onEditLabel,
@@ -58,11 +60,30 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           ↑
         </button>
         <div style={{ overflow: 'hidden' }}>
-          <span style={{ fontWeight: 600 }}>{track.label}</span>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>
-            {track.kind}
-            {track.sizeBytes ? ` · ${(track.sizeBytes / (1024 * 1024)).toFixed(1)}MB` : ''}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontWeight: 600 }}>{track.label}</span>
+            {isRepresentative && (
+              <span
+                className="track-rep-badge"
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: 'var(--brand-lavender-text)',
+                  backgroundColor: 'var(--brand-lavender-tint)',
+                  padding: '2px 6px',
+                  borderRadius: 'var(--radius-sm, 4px)',
+                  lineHeight: 1,
+                  flexShrink: 0,
+                }}
+              >
+                대표
+              </span>
+            )}
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              {track.kind}
+              {track.sizeBytes ? ` · ${(track.sizeBytes / (1024 * 1024)).toFixed(1)}MB` : ''}
+            </span>
+          </div>
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>

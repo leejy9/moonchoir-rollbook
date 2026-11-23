@@ -234,4 +234,65 @@ describe('StudioTab Component (MEMBER_UX_V3_SPEC §3-1, §3-2)', () => {
     expect(html).toContain('연습실 기능은 준비 중입니다');
     expect(refreshSpy).not.toHaveBeenCalled();
   });
+
+  describe('Play All ("전체 재생") button (V25, §3-1, §3-3-1)', () => {
+    it('displays "전체 재생" button when scope is a performance with representative audio tracks', () => {
+      writePreference(PREFERENCE_KEYS.STUDIO_SCOPE, 'perf_1');
+
+      const html = renderToString(
+        <AudioPlayerProvider>
+          <StudioTab />
+        </AudioPlayerProvider>
+      ).replace(/<!-- -->/g, '');
+
+      expect(html).toContain('aria-label="전체 재생"');
+      expect(html).toContain('전체 재생');
+      expect(html).toContain('studio-play-all-btn');
+    });
+
+    it('hides "전체 재생" button when scope is "ALL"', () => {
+      writePreference(PREFERENCE_KEYS.STUDIO_SCOPE, 'ALL');
+
+      const html = renderToString(
+        <AudioPlayerProvider>
+          <StudioTab />
+        </AudioPlayerProvider>
+      ).replace(/<!-- -->/g, '');
+
+      expect(html).not.toContain('aria-label="전체 재생"');
+      expect(html).not.toContain('studio-play-all-btn');
+    });
+
+    it('hides "전체 재생" button when scope is "UNASSIGNED"', () => {
+      writePreference(PREFERENCE_KEYS.STUDIO_SCOPE, 'UNASSIGNED');
+
+      const html = renderToString(
+        <AudioPlayerProvider>
+          <StudioTab />
+        </AudioPlayerProvider>
+      ).replace(/<!-- -->/g, '');
+
+      expect(html).not.toContain('aria-label="전체 재생"');
+      expect(html).not.toContain('studio-play-all-btn');
+    });
+
+    it('hides "전체 재생" button when performance has 0 representative audio tracks', () => {
+      // Mock catalog where piece_1 only has a YouTube track (no audio)
+      const videoOnlyCatalog: PracticeCatalog = {
+        ...mockCatalog,
+        tracks: [mockCatalog.tracks[1]], // trk_ext (youtube only)
+      };
+      vi.spyOn(sheetsService, 'getPracticeCatalog').mockReturnValue(videoOnlyCatalog);
+      writePreference(PREFERENCE_KEYS.STUDIO_SCOPE, 'perf_1');
+
+      const html = renderToString(
+        <AudioPlayerProvider>
+          <StudioTab />
+        </AudioPlayerProvider>
+      ).replace(/<!-- -->/g, '');
+
+      expect(html).not.toContain('aria-label="전체 재생"');
+      expect(html).not.toContain('studio-play-all-btn');
+    });
+  });
 });

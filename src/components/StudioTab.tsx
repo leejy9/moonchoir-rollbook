@@ -11,22 +11,27 @@ import {
 import { PieceDetail } from './studio/PieceDetail';
 import { PieceListItem } from './studio/PieceListItem';
 import { ProgramScopeMenu } from './studio/ProgramScopeMenu';
+import { useAudioPlayer } from './audio/audioPlayerContext';
+import { buildPerformanceQueue } from '../utils/practiceQueue';
 import '../styles/v3/studio.css';
 
 export interface StudioTabProps {
   onOpenAdmin?: () => void;
   onOpenScore?: (piece: PracticePiece) => void;
+  onOpenFullPlayer?: () => void;
 }
 
 /**
  * 단원 연습실 탭 화면 (MEMBER_UX_V3_SPEC.md §3-1, §3-2).
  * - 공연 드롭다운 (ProgramScopeMenu): 전체 곡 / 다가오는 공연 / 공연 미정 / 지난 공연
+ * - 공연 선택 시 "전체 재생" 버튼 (V25, §3-1, §3-3-1)
  * - 곡 이름, 작곡가, 편곡자, 공연명 실시간 검색 (searchPieces)
  * - 공연별 순서 선택 시 1부터 번호 (라벤더 색), 전체 곡/공연 미정은 created_at 내림차순
  * - 마지막 선택 범위 기기 기억 (PREFERENCE_KEYS.STUDIO_SCOPE)
  * - 단원 읽기 전용 곡 상세 (PieceDetail)
  */
-export const StudioTab: React.FC<StudioTabProps> = ({ onOpenScore }) => {
+export const StudioTab: React.FC<StudioTabProps> = ({ onOpenScore, onOpenFullPlayer }) => {
+  const audioPlayer = useAudioPlayer();
   const [catalog, setCatalog] = useState(() => sheetsService.getPracticeCatalog());
   const programCards = sheetsService.getProgramCards();
   const config = sheetsService.getConfig();
@@ -82,6 +87,31 @@ export const StudioTab: React.FC<StudioTabProps> = ({ onOpenScore }) => {
     setSelectedScopeId(scopeId);
     writePreference(PREFERENCE_KEYS.STUDIO_SCOPE, scopeId);
   }, []);
+
+  // Performance queue for "전체 재생" (V25, §3-1, §3-3-1)
+  const isPerformanceScope = effectiveScopeId !== 'ALL' && effectiveScopeId !== 'UNASSIGNED';
+
+  const perfQueue = useMemo(() => {
+    if (!isPerformanceScope) return [];
+    return buildPerformanceQueue(effectiveScopeId, catalog, config);
+  }, [isPerformanceScope, effectiveScopeId, catalog, config]);
+
+  const canPlayAll = isPerformanceScope && perfQueue.length > 0;
+
+  const handlePlayAll = useCallback(() => {
+    if (!isPerformanceScope || perfQueue.length === 0) return;
+    const perfTitle =
+      scopes.find((s) => s.id === effectiveScopeId)?.title ||
+      catalog.performances.find((p) => p.id === effectiveScopeId)?.title ||
+      '공연';
+    audioPlayer.playQueue(
+      { kind: 'performance', id: effectiveScopeId, title: perfTitle },
+      perfQueue,
+      0,
+      'off'
+    );
+    onOpenFullPlayer?.();
+  }, [isPerformanceScope, perfQueue, audioPlayer, effectiveScopeId, scopes, catalog.performances, onOpenFullPlayer]);
 
   // Filter and sort pieces by scope
   const scopedPieces = useMemo(() => {
@@ -226,12 +256,33 @@ export const StudioTab: React.FC<StudioTabProps> = ({ onOpenScore }) => {
         )}
       </div>
 
-      {/* 3. Program Scope Dropdown */}
-      <ProgramScopeMenu
-        scopes={scopes}
-        selectedScopeId={effectiveScopeId}
-        onSelectScope={handleSelectScope}
-      />
+      {/* 3. Program Scope Dropdown & Play All (V25, §3-1) */}
+      <div className="studio-scope-row">
+        <ProgramScopeMenu
+          scopes={scopes}
+          selectedScopeId={effectiveScopeId}
+          onSelectScope={handleSelectScope}
+        />
+        {canPlayAll && (
+          <button
+            type="button"
+            className="studio-play-all-btn"
+            onClick={handlePlayAll}
+            aria-label="전체 재생"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            <span>전체 재생</span>
+          </button>
+        )}
+      </div>
 
       {/* 4. Empty State */}
       {displayedPieces.length === 0 && (

@@ -74,7 +74,21 @@
   justify-content: center;
 }
 
-/* Scope Dropdown */
+/* Scope Dropdown & Play All (V25, §3-1) */
+.studio-scope-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.studio-scope-row .studio-scope-container {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
 .studio-scope-container {
   position: relative;
   margin-bottom: 16px;
@@ -95,6 +109,39 @@
   cursor: pointer;
   box-shadow: var(--shadow-sm);
   transition: background-color 0.15s ease, border-color 0.15s ease;
+  max-width: 100%;
+}
+
+.studio-scope-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-play-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--brand-primary);
+  color: var(--text-white);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.15s ease;
+}
+
+.studio-play-all-btn:hover {
+  opacity: 0.9;
+}
+
+.studio-play-all-btn:active {
+  transform: scale(0.98);
 }
 
 .studio-scope-btn:hover {
