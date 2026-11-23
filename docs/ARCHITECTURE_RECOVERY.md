@@ -371,3 +371,9 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 - 적용 전 확인: `prevent_row_deletion()`을 쓰는 테이블은 카탈로그 5개(`practice_pieces`, `practice_tracks`, `practice_program_pieces`, `performances`, `practice_performance_pieces`)뿐이고, anon·authenticated는 이 테이블들을 직접 삭제할 권한이 없음.
 - 적용 후 확인: 삭제 함수 3개 생성, 트리거 함수에 트랜잭션 한정 우회 조건 반영, 토큰 없는 삭제는 `ADMIN_AUTH_REQUIRED`, 기존 데이터(곡 5, 트랙 2, 시즌 카드 연결 1) 그대로. 로컬 검증에서 함수 밖 직접 삭제는 계속 거부됨을 확인.
 - 참고: 우회 설정은 같은 트랜잭션 안에서는 함수가 끝난 뒤에도 남는다. PostgREST는 요청마다 트랜잭션이 따로라 실제 노출은 없음.
+
+
+## 운영 주의: v3-C 이후 `fn_import_sheets_snapshot` 재실행 금지 (2026-11-23)
+- 이 함수는 `rsvp_votes`를 `TRUNCATE` 후 다시 넣는다. `TRUNCATE`는 행 트리거를 부르지 않아 `rsvp_events`의 기존 행은 남고, 다시 넣는 행마다 `action='insert'`, `occurred_at = 이관 시각` 이벤트가 생겨 약속 점수·스티커가 오염된다.
+- 실행 권한은 `service_role`뿐이다(`20261121000000_security_hardening.sql:511`). 앱에서 부르는 곳은 없다. 다시 실행해야 하면 먼저 리뷰어와 트리거 처리 방법을 정한다.
+- 근거: spec-auditor 검토(`docs/agent/SPEC_WRITING.md`), `20261119000002_migration_function.sql:31, 173-186`.
