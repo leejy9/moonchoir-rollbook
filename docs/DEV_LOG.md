@@ -1354,4 +1354,21 @@ v3-A(PR #27) 검수 후속 작업 지시서(`check.md`)에 따라 운영진 연�
    - **문제**: 컴포넌트 JSX 내 하드코딩된 raw hex 색상 리터럴(`'#...'`)이 정적 검사에서 검출되지 않아 다크 모드 및 테마 일관성 훼손 가능성 존재.
    - **해결**: `src/styles/cssVariables.test.ts`에 raw hex 색상 리터럴 검사기를 신설하여 `src/components/**/*.tsx` 내 미승인 hex 리터럴을 차단하고, 기존 355개 허용 항목을 `src/styles/hexColorAllowlist.json`으로 동결 관리함.
 
+---
+
+## [2026-11-23] V3-18 사용자 테스트 반영 (L1~L4)
+
+사용자 로컬 테스트 결과 피드백에 따라 저장 공간 단위 표시, 다중 음원 일괄 업로드, 화면 폭·비율 및 줄바꿈 보정, 전체 반복 버튼 텍스트 제거를 완료함.
+
+### 작업 요약 (티켓별 한 줄 요약)
+1. **L1 (`feat(media): L1 format storage usage in MB below 1GB`)**:
+   - `src/utils/formatStorage.ts` 신설 (1GB 미만 MB 1자리, 0 초과 0.1MB 미만 0.1MB 올림, 1GB 이상 GB 2자리) 및 `MediaUploadSheet.tsx`의 저장 공간 표시를 해당 함수로 교체하여 소수점 반올림으로 0.0GB로 표시되던 문제를 해결함.
+2. **L2 (`feat(media): L2 multi-file audio upload with MediaBatchList`)**:
+   - 음원 업로드 시트 신규 업로드에 `multiple` 속성(최대 20개)을 활성화하고, 파일 유효성 검사·제목 생성 순수 함수 `uploadBatch.ts` 및 목록 분리 컴포넌트 `MediaBatchList.tsx`, `TrackKindSelector.tsx`를 구현함. 기존 `uploadQueue.enqueue`를 항목별로 순차 호출하여 압축 메모리 부담 없이 안전하게 등록되도록 함.
+3. **L3 (`fix(style): L3 adjust admin practice container width and prevent text wrapping`)**:
+   - `.admin-practice-container`에 `width: 100%`를 적용하여 다른 운영진 탭(`.admin-tab-body`)과 일치하도록 폭 축소 현상을 해결하고, 공연 목록 행 및 순서 목록 행에 `min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;` 및 오른쪽 카운트에 `flex-shrink: 0; white-space: nowrap;`를 적용하여 "곡 n" 줄바꿈을 방지함. 모달/시트는 `@media (max-width: 600px)` 전폭, PC 최대 560px 중앙 정렬을 적용함.
+4. **L4 (`fix(audio): L4 remove repeat all text from full player repeat button`)**:
+   - `FullPlayer.tsx` 반복 버튼의 `{repeatOne ? '1곡' : '전체'}` 텍스트를 제거하고 아이콘만 유지하도록 수정함. 활성화 시 `--brand-lavender` + `aria-pressed="true"`, `aria-label="한 곡 반복"`, 비활성화 시 흐린 색상 + `aria-pressed="false"`를 적용함.
+
+
 
