@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { PREFERENCE_KEYS, readPreference, writePreference } from '../../services/sheetsStorage';
 
 function isStringArray(val: unknown): val is string[] {
@@ -37,22 +37,14 @@ export function useSeenStickers(earnedIds: string[], isReady = true) {
   });
 
   // Delay baseline initialization on fresh devices until data has arrived (R5)
-  useEffect(() => {
-    if (!isReady) return;
+  if (seenIds === null && isReady) {
     try {
-      const stored = readPreference<string[] | null>(
-        PREFERENCE_KEYS.SEEN_STICKERS,
-        isStringArray,
-        null
-      );
-      if (stored === null) {
-        writePreference(PREFERENCE_KEYS.SEEN_STICKERS, earnedIds);
-        setSeenIds(earnedIds);
-      }
+      writePreference(PREFERENCE_KEYS.SEEN_STICKERS, earnedIds);
     } catch {
       // ignore
     }
-  }, [isReady, earnedIds]);
+    setSeenIds(earnedIds);
+  }
 
   const unseenIds = useMemo(() => {
     if (seenIds === null) return new Set<string>();

@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
-import React from 'react';
 import { ProfilePassionTempCard } from './ProfilePassionTempCard';
 import type { PassionTemperatureResult } from '../../utils/passionTemperature';
 
@@ -9,7 +8,6 @@ const createMockResult = (delta: number, value = 36.5): PassionTemperatureResult
   weeklyDelta: delta,
   windowSize: 10,
   groups: [],
-  evaluatedAt: '2026-11-23T12:00:00+09:00',
 });
 
 describe('ProfilePassionTempCard (V3-20 R3, R10)', () => {

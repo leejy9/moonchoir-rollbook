@@ -44,6 +44,8 @@ function convertRsvpEventsToVotes(events: RsvpEvent[]): RSVPVote[] {
     id: `vote_${ev.seq}`,
     scheduleId: ev.scheduleId,
     memberId: ev.memberId,
+    memberName: '',
+    part: 'SOPRANO',
     status: ev.status as 'ATTEND' | 'ABSENT',
     reason: '',
     timestamp: ev.occurredAt,

@@ -323,6 +323,8 @@ describe('computePassionTemperature (V3-12)', () => {
           id: 'v2',
           scheduleId: 's2',
           memberId: 'mem_1',
+          memberName: '김단원',
+          part: 'SOPRANO' as const,
           status: 'ABSENT' as const,
           reason: '야근',
           timestamp: '2026-11-11 10:00:00',
