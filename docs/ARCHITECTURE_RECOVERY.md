@@ -416,3 +416,10 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 - 적용 후 확인: 함수 6개·트리거 생성, 백필 90건 = 투표 90건, 시간대 없는 KST 88건 모두 `occurred_at = timestamp at time zone 'Asia/Seoul'`과 일치(9시간 밀림 없음). 두 테이블 RLS 켜짐, anon 직접 조회 불가, anon RPC 실행 가능. HTTP `rpc/fn_get_member_activity`는 200(없는 id → 빈 결과), 빈 배열은 400(`INVALID_INPUT`).
 - 영향: 이 시점부터 투표 변경이 `rsvp_events`에 쌓인다(앱 배포 전이라 화면에는 아직 안 보임). 현재 배포된 앱은 새 함수를 쓰지 않는다. 되돌릴 때는 `drop trigger trg_rsvp_votes_log on rsvp_votes`만으로 기록이 멈춘다.
 - 실제 데이터 화면 확인: 로컬 개발 서버 + 운영 데이터(쓰기 RPC 차단)로 내 활동 화면이 열리고 활동 조회 200, 390px 넘침 없음. 백필만 있어 약속 묶음이 숨겨지는 것(V27)도 확인.
+
+## 2026-11-24 — v3 배포 완료 확인 (리뷰어 사후 점검)
+
+- 코드: 릴리스 PR #55(`feat/v3-activity-2` → main, 01:26 KST)와 UI 다듬기 PR #56(`fix/v3-ui-polish`, 01:46 KST)이 main에 합쳐짐. GitHub Pages(`gh-pages`)가 01:28·01:49 KST에 갱신됨.
+- 운영 DB: `20261124010000_v3_record_guards.sql`(sha256 `df530256…17e6`)이 2026-11-23 16:27 UTC(01:27 KST)에 커넥터로 적용됨(마이그레이션 이력 `v3_record_guards`). 리뷰어가 사후 확인: 네 `__impl` 함수(`fn_delete_schedule`, `fn_batch_delete_schedules`, `fn_delete_member`, `fn_merge_members`) 본문 md5가 커밋된 파일과 모두 일치, anon 직접 실행 불가, `SCHEDULE_HAS_RECORDS`·`INVALID_MERGE` 가드 포함.
+- 이로써 `docs/DEPLOY_RUNBOOK_v3.md`의 1~4단계는 완료 상태. 남은 일: 단원 공지(부록 A), 옛 PR(#14~#17, #20, #27, #45, #46) 정리, 사용자 휴대폰 확인(5-2).
+- 주의: 다시 `20261119000001_rpc_functions.sql`이나 `20261121000000_security_hardening.sql`을 실행하면 가드가 사라진다. 그 경우 `20261124010000_v3_record_guards.sql`을 그 뒤에 다시 적용한다.
