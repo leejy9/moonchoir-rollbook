@@ -204,9 +204,10 @@ begin
     'id', 'test_v3_rg_orphan_schedule',
     'adminToken', v_token
   ));
-  if v_result->>'success' is distinct from 'true'
+  if v_result->>'success' is distinct from 'false'
+     or v_result->>'code' is distinct from 'SCHEDULE_HAS_RECORDS'
      or not exists (select 1 from attendance_logs where id = 'test_v3_rg_orphan_log') then
-    raise exception 'FAIL: deleting an absent schedule must not remove its orphan log: %', v_result;
+    raise exception 'FAIL: an orphan log must be retained and block deletion: %', v_result;
   end if;
 
   insert into schedules (id, title, date, start_time, end_time)
