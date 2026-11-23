@@ -33,3 +33,4 @@ dist-ssr
 !.agents/workflows/
 .agents/workflows/*
 !.agents/workflows/report-ready.md
+!.agents/workflows/spec-check.md
