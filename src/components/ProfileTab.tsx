@@ -277,21 +277,18 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
 
       {/* 4. Passion Temperature Card (Staff Excludes This) */}
       {!isStaff && (
-        <section
-          className="profile-temp-card"
-          onClick={() => setActiveSheet('TEMP')}
-          role="button"
-          tabIndex={0}
-        >
+        <section className="profile-temp-card" onClick={() => setActiveSheet('TEMP')} role="button" tabIndex={0}>
           <div className="profile-temp-top">
-            <div className="profile-temp-label-group">
-              <svg className="profile-temp-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2c1.1 0 2 .9 2 2 0 1.5-1 3.5-2 5-1-1.5-2-3.5-2-5 0-1.1.9-2 2-2zm6 9c0 3.3-2.7 6-6 6s-6-2.7-6-6c0-2.4 1.4-4.5 3.5-5.5-.3 1.2 0 2.5 1 3.2 1.2.9 2.8.9 4 0 1-.7 1.3-2 1-3.2 2.1 1 3.5 3.1 3.5 5.5z" />
-              </svg>
-              <span className="profile-temp-title">열정 온도</span>
-            </div>
-            <div className="profile-temp-value-row">
-              <span className="profile-temp-value">36.5°C</span>
+            <div className="profile-temp-left">
+              <div className="profile-temp-icon-circle">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2c1.1 0 2 .9 2 2 0 1.5-1 3.5-2 5-1-1.5-2-3.5-2-5 0-1.1.9-2 2-2zm6 9c0 3.3-2.7 6-6 6s-6-2.7-6-6c0-2.4 1.4-4.5 3.5-5.5-.3 1.2 0 2.5 1 3.2 1.2.9 2.8.9 4 0 1-.7 1.3-2 1-3.2 2.1 1 3.5 3.1 3.5 5.5z" />
+                </svg>
+              </div>
+              <div className="profile-temp-info">
+                <span className="profile-temp-title">열정 온도</span>
+                <span className="profile-temp-value">36.5°C</span>
+              </div>
             </div>
           </div>
 

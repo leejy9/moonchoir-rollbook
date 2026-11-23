@@ -287,35 +287,41 @@
   align-items: center;
 }
 
-.profile-temp-label-group {
+.profile-temp-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
 }
 
-.profile-temp-icon {
-  width: 18px;
-  height: 18px;
-  color: var(--brand-apricot-text);
+.profile-temp-icon-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--brand-apricot);
+  color: var(--text-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.profile-temp-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .profile-temp-title {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--brand-apricot-text);
-}
-
-.profile-temp-value-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
 }
 
 .profile-temp-value {
   font-size: 28px;
   font-weight: 800;
   color: var(--brand-apricot-text);
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .profile-temp-delta {
@@ -609,36 +615,68 @@
 }
 
 .attendance-record-item {
-  padding: 12px;
+  padding: 12px 14px;
   border-radius: 12px;
   background: var(--bg-subtle, var(--bg-app));
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  box-sizing: border-box;
 }
 
 .attendance-record-left {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.attendance-record-header-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.attendance-record-date {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .attendance-record-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.attendance-record-date {
+.attendance-record-sub {
   font-size: 12px;
   color: var(--text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .attendance-record-right {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.attendance-record-checkin {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 /* Level Lineage Sheet */
