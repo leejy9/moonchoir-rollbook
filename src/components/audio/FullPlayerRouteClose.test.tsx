@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import React, { act } from 'react';
+import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FullPlayer } from './FullPlayer';
 import { AudioPlayerContext, type AudioPlayerContextValue, type ActiveVideoState } from './audioPlayerContext';
