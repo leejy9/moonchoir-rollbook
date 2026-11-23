@@ -48,32 +48,6 @@ export function buildAudioQueue(
 }
 
 /**
- * Calculate the next track index on track end.
- * Rules (MEMBER_UX_AUDIO_SPEC.md §3-4):
- * - Default: repeatOne = true, autoNext = false.
- * - When repeatOne is true, loop same track (return currentIndex).
- * - When repeatOne is false and autoNext is true, go to next track index if available, or -1 if end of queue.
- * - When repeatOne is false and autoNext is false, stop (return -1).
- */
-export function getNextTrackIndex(
-  currentIndex: number,
-  queueLength: number,
-  repeatOne: boolean,
-  autoNext: boolean
-): number {
-  if (queueLength === 0 || currentIndex < 0 || currentIndex >= queueLength) {
-    return -1;
-  }
-  if (repeatOne) {
-    return currentIndex;
-  }
-  if (autoNext) {
-    return currentIndex + 1 < queueLength ? currentIndex + 1 : -1;
-  }
-  return -1;
-}
-
-/**
  * Cycle through available playback speeds (0.8 -> 1.0 -> 1.2 -> 0.8).
  */
 export function getNextPlaybackSpeed(currentSpeed: PlaybackSpeed): PlaybackSpeed {

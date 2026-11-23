@@ -29,12 +29,12 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
     currentTrack,
     isPlaying,
     playbackSpeed,
-    repeatOne,
+    repeatMode,
     togglePlay,
     seekTo,
     seekRelative,
     setSpeed,
-    toggleRepeatOne,
+    cycleRepeat,
     playTrack,
     queue,
   } = useAudioPlayer();
@@ -160,19 +160,28 @@ export const FullPlayer: React.FC<FullPlayerProps> = ({
 
           {/* Control Buttons Row */}
           <div className="full-player-controls-row">
-            {/* Repeat One toggle */}
+            {/* Repeat Mode toggle (off -> all -> one -> off) */}
             <button
               type="button"
-              className={`full-player-toggle-btn ${repeatOne ? 'active' : ''}`}
-              onClick={toggleRepeatOne}
-              aria-label="한 곡 반복"
-              aria-pressed={repeatOne}
+              className={`full-player-toggle-btn ${repeatMode !== 'off' ? 'active' : ''}`}
+              onClick={cycleRepeat}
+              aria-label={
+                repeatMode === 'off'
+                  ? '반복: 끔'
+                  : repeatMode === 'all'
+                  ? '반복: 목록 전체'
+                  : '반복: 한 곡'
+              }
+              aria-pressed={repeatMode !== 'off'}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="m17 2 4 4-4 4" />
                 <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
                 <path d="m7 22-4-4 4-4" />
                 <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+                {repeatMode === 'one' && (
+                  <text x="12" y="15" fontSize="8" fill="currentColor" textAnchor="middle" stroke="none" fontWeight="bold">1</text>
+                )}
               </svg>
             </button>
 

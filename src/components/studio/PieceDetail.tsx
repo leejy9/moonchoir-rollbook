@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import type { AppConfig, Performance, PracticePiece, PracticeTrack, ProgramCard } from '../../types/rollbook';
+import type { AppConfig, Performance, PracticeCatalog, PracticePiece, PracticeTrack, ProgramCard } from '../../types/rollbook';
 import { useOptionalAudioPlayer } from '../audio/audioPlayerContext';
-import { buildAudioQueue } from '../../utils/audioQueue';
+import { buildPieceQueue } from '../../utils/practiceQueue';
 import { resolveTrackPlayback } from '../../utils/practiceMedia';
 import { isVideoTrack, getYoutubeVideoId } from '../../utils/youtubeUrl';
 import { createYoutubeBlurListener, createYoutubeMessageListener } from '../../utils/youtubeSync';
@@ -9,6 +9,7 @@ import { createYoutubeBlurListener, createYoutubeMessageListener } from '../../u
 export interface PieceDetailProps {
   piece: PracticePiece;
   tracks: PracticeTrack[];
+  catalog?: PracticeCatalog;
   programCards?: ProgramCard[];
   connectedProgramIds?: string[];
   performances?: Performance[];
@@ -22,6 +23,7 @@ export interface PieceDetailProps {
 export const PieceDetail: React.FC<PieceDetailProps> = ({
   piece,
   tracks = [],
+  catalog,
   programCards = [],
   connectedProgramIds = [],
   performances = [],
@@ -71,15 +73,26 @@ export const PieceDetail: React.FC<PieceDetailProps> = ({
 
   const handlePlay = (track: PracticeTrack) => {
     if (!audioPlayer) return;
-    const pieceMap = new Map([[piece.id, piece.title]]);
-    const queue = buildAudioQueue(audioTracks, pieceMap, config);
-    const item = queue.find((q) => q.track.id === track.id);
-    if (!item) return;
+    const effectiveCatalog: PracticeCatalog = catalog || {
+      pieces: [piece],
+      tracks,
+      performancePieces: [],
+      performances: [],
+      programPieces: [],
+    };
+    const pieceQueue = buildPieceQueue(piece.id, effectiveCatalog, config);
+    const targetIdx = pieceQueue.findIndex((q) => q.track.id === track.id);
+    if (targetIdx < 0) return;
 
     if (currentTrack?.track.id === track.id) {
       audioPlayer.togglePlay();
     } else {
-      audioPlayer.playTrack(item, queue);
+      audioPlayer.playQueue(
+        { kind: 'piece', id: piece.id, title: piece.title },
+        pieceQueue,
+        targetIdx,
+        'one'
+      );
     }
   };
 

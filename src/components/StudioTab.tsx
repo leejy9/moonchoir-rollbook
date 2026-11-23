@@ -176,6 +176,7 @@ export const StudioTab: React.FC<StudioTabProps> = ({ onOpenScore }) => {
         <PieceDetail
           piece={selectedPiece}
           tracks={tracksByPieceId.get(selectedPiece.id) || []}
+          catalog={catalog}
           programCards={programCards}
           connectedProgramIds={connectedProgramIdsByPieceId.get(selectedPiece.id) || []}
           performances={catalog.performances}

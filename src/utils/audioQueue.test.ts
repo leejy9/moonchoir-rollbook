@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   filterPlayableAudioTracks,
   buildAudioQueue,
-  getNextTrackIndex,
   getNextPlaybackSpeed,
   clampSeekTime,
 } from './audioQueue';
@@ -84,30 +83,6 @@ describe('audioQueue pure functions (MEMBER_UX_AUDIO_SPEC §3-4)', () => {
     expect(queue).toHaveLength(1);
     expect(queue[0].pieceTitle).toBe('바람이 불어오는 곳');
     expect(queue[0].playbackUrl).toBe('https://media.moonchoir.workers.dev/2026-season/soprano.m4a');
-  });
-
-  describe('getNextTrackIndex', () => {
-    it('returns same index when repeatOne is true (default single track loop)', () => {
-      expect(getNextTrackIndex(0, 3, true, false)).toBe(0);
-      expect(getNextTrackIndex(1, 3, true, false)).toBe(1);
-      expect(getNextTrackIndex(2, 3, true, true)).toBe(2);
-    });
-
-    it('advances to next index when repeatOne is false and autoNext is true', () => {
-      expect(getNextTrackIndex(0, 3, false, true)).toBe(1);
-      expect(getNextTrackIndex(1, 3, false, true)).toBe(2);
-      expect(getNextTrackIndex(2, 3, false, true)).toBe(-1); // End of queue
-    });
-
-    it('returns -1 (stops) when repeatOne is false and autoNext is false', () => {
-      expect(getNextTrackIndex(0, 3, false, false)).toBe(-1);
-    });
-
-    it('handles empty queue or out of bound index safely', () => {
-      expect(getNextTrackIndex(0, 0, true, false)).toBe(-1);
-      expect(getNextTrackIndex(-1, 3, true, false)).toBe(-1);
-      expect(getNextTrackIndex(5, 3, true, false)).toBe(-1);
-    });
   });
 
   describe('getNextPlaybackSpeed', () => {

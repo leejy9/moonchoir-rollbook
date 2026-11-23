@@ -1,16 +1,37 @@
 import React, { createContext, useContext } from 'react';
+import type { PracticeTrack } from '../../types/rollbook';
 import type { PlayableTrackItem } from '../../utils/audioQueue';
+import type { RepeatMode } from '../../utils/practiceQueue';
+
+export type QueueSource = {
+  kind: 'piece' | 'performance';
+  id: string;
+  title: string;
+} | null;
+
+export interface ActiveVideoState {
+  track: PracticeTrack;
+  pieceTitle: string;
+  resumeAt: number;
+}
 
 export interface AudioPlayerContextValue {
   currentTrack: PlayableTrackItem | null;
   queue: PlayableTrackItem[];
   currentIndex: number;
+  queueSource: QueueSource;
   isPlaying: boolean;
   isBlocked: boolean;
   playbackSpeed: number;
-  repeatOne: boolean;
-  autoNext: boolean;
+  repeatMode: RepeatMode;
   playTrack: (item: PlayableTrackItem, newQueue?: PlayableTrackItem[]) => void;
+  playQueue: (
+    source: { kind: 'piece' | 'performance'; id: string; title: string },
+    items: PlayableTrackItem[],
+    startIndex: number,
+    repeatMode: RepeatMode
+  ) => void;
+  playQueueIndex: (index: number) => void;
   togglePlay: () => void;
   pause: () => void;
   resume: () => void;
@@ -18,11 +39,13 @@ export interface AudioPlayerContextValue {
   seekRelative: (offsetSeconds: number) => void;
   setSpeed: (speed: number) => void;
   cycleSpeed: () => void;
-  toggleRepeatOne: () => void;
-  toggleAutoNext: () => void;
+  cycleRepeat: () => void;
+  previousTrack: () => void;
   nextTrack: () => void;
   closePlayer: () => void;
   audioElementRef: React.RefObject<HTMLAudioElement | null>;
+  activeVideo?: ActiveVideoState | null;
+  setActiveVideo?: (video: ActiveVideoState | null) => void;
 }
 
 export interface AudioPositionContextValue {
