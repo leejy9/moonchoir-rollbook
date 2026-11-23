@@ -28,11 +28,6 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
     memberStatus: '정단원',
   };
 
-  const adminMember: Member = {
-    ...ordinaryMember,
-    role: 'ADMIN',
-  };
-
   const teacherMember: Member = {
     id: 'mem_teacher',
     name: '박선생',
@@ -75,7 +70,6 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
         onChangeDarkMode={vi.fn()}
         onChangeBinding={vi.fn()}
         onLogout={vi.fn()}
-        onRefreshData={vi.fn()}
       />
     );
 
@@ -105,9 +99,11 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
     // 6. Settings section
     expect(html).toContain('화면 표시 모드');
     expect(html).toContain('다크 모드');
-    expect(html).toContain('구글 시트 최신 데이터와 동기화');
-    expect(html).toContain('이 브라우저에 저장된 단원 바꾸기');
-    expect(html).toContain('이 브라우저에서 로그아웃');
+    expect(html).toContain('앱처럼 설치하기');
+    expect(html).toContain('브라우저 저장 단원 바꾸기');
+    expect(html).toContain('로그아웃');
+    expect(html).not.toContain('구글 시트 최신 데이터와 동기화');
+    expect(html).not.toContain('운영진 모드로 전환');
   });
 
   it('renders staff title card and hides level/ring/temperature DOM elements when isActivityStaff is true (Spec §5-7, V26)', () => {
@@ -148,8 +144,7 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
     expect(html).not.toContain('열정 온도');
   });
 
-  it('renders admin mode button if and only if isStaffMember is true', () => {
-    // 1. Ordinary member -> No admin mode button
+  it('keeps admin mode controls out of the member settings list', () => {
     const ordinaryHtml = renderToString(
       <ProfileTab
         profile={mockProfile}
@@ -158,25 +153,9 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
         onChangeDisplayMode={vi.fn()}
         onChangeDarkMode={vi.fn()}
         onChangeBinding={vi.fn()}
-        onOpenAdmin={vi.fn()}
       />
     );
     expect(ordinaryHtml).not.toContain('운영진 모드로 전환');
-
-    // 2. Admin member -> Admin mode button rendered
-    vi.spyOn(sheetsService, 'getMembers').mockReturnValue([adminMember]);
-    const adminHtml = renderToString(
-      <ProfileTab
-        profile={mockProfile}
-        displayMode="AUTO"
-        isDarkMode={false}
-        onChangeDisplayMode={vi.fn()}
-        onChangeDarkMode={vi.fn()}
-        onChangeBinding={vi.fn()}
-        onOpenAdmin={vi.fn()}
-      />
-    );
-    expect(adminHtml).toContain('운영진 모드로 전환');
   });
 
   it('guarantees touch targets of at least 44px on clickable controls', () => {

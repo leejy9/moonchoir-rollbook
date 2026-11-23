@@ -5,7 +5,7 @@ export interface ProfileStickersPreviewCardProps {
   stickers: EvaluatedSticker[];
   isStaff: boolean;
   unseenCount: number;
-  onOpen: () => void;
+  onOpen: (trigger: HTMLButtonElement) => void;
 }
 
 const TIER_BORDER_COLOR: Record<string, string> = {
@@ -32,11 +32,10 @@ export const ProfileStickersPreviewCard: React.FC<ProfileStickersPreviewCardProp
   const previewList = nextLocked ? [...recentEarned, nextLocked] : recentEarned;
 
   return (
-    <div
+    <button
+      type="button"
       className="profile-stickers-card"
-      onClick={onOpen}
-      role="button"
-      tabIndex={0}
+      onClick={(event) => onOpen(event.currentTarget)}
       aria-label="칭찬 스티커 보기"
     >
       <div className="profile-stickers-header">
@@ -90,6 +89,6 @@ export const ProfileStickersPreviewCard: React.FC<ProfileStickersPreviewCardProp
           );
         })}
       </div>
-    </div>
+    </button>
   );
 };

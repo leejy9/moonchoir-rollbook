@@ -52,4 +52,18 @@ describe('ProfileStickersPreviewCard', () => {
     expect(html).not.toContain('오래된 획득');
     expect(html).not.toContain('그다음 잠김');
   });
+
+  it('uses a native button as the keyboard-operable opener', () => {
+    const html = renderToString(
+      <ProfileStickersPreviewCard
+        stickers={[]}
+        isStaff={false}
+        unseenCount={0}
+        onOpen={vi.fn()}
+      />
+    );
+
+    expect(html).toMatch(/^<button type="button" class="profile-stickers-card"/);
+    expect(html).not.toContain('role="button"');
+  });
 });

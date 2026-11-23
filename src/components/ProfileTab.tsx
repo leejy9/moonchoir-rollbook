@@ -4,7 +4,7 @@ import type { BoundDeviceProfile, Member, MemberActivity, Schedule } from '../ty
 import type { DisplayMode } from '../services/displayMode';
 import { getKSTDateString, parseKSTDate } from '../utils/date';
 import { buildMemberScheduleRecords } from '../utils/memberRecords';
-import { isStaffMember, isActivityStaff } from '../utils/staff';
+import { isActivityStaff } from '../utils/staff';
 import { DEFAULT_PERFORMANCE_CATEGORIES } from '../utils/performanceCategories';
 import {
   computeAttendance90Days, computeDaysTogether, computeMemberLevel,
@@ -32,10 +32,8 @@ export interface ProfileTabProps {
   onChangeDarkMode: (enabled: boolean) => void;
   onChangeBinding: () => void;
   onLogout?: () => Promise<void>;
-  onRefreshData?: () => void;
   onOpenRSVP?: (schedule: Schedule) => void;
   onOpenQRScanner?: (schedule: Schedule) => void;
-  onOpenAdmin?: () => void;
   refreshTrigger?: number;
 }
 
@@ -47,12 +45,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   onChangeDarkMode,
   onChangeBinding,
   onLogout,
-  onRefreshData,
-  onOpenAdmin,
   refreshTrigger,
 }) => {
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncFeedback, setSyncFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [activeSheet, setActiveSheet] = useState<'NONE' | 'LEVEL' | 'ATTENDANCE' | 'TEMP' | 'STICKERS'>('NONE');
   const [selectedScheduleFilter, setSelectedScheduleFilter] = useState<SelectedScheduleFilter | null>(null);
@@ -132,11 +126,6 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     () => isActivityStaff(currentMember, config, members),
     [currentMember, config, members]
   );
-  const hasAdminMenuAccess = useMemo(
-    () => isStaffMember(currentMember, members),
-    [currentMember, members]
-  );
-
   // Schedule records for practice hours & performance count
   const scheduleRecords = useMemo(() => {
     return buildMemberScheduleRecords({
@@ -235,24 +224,6 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   );
   const { unseenIds, unseenCount, markAllSeen } = useSeenStickers(earnedStickerIds, isDataReady);
 
-  const handleSyncRemote = async () => {
-    setIsSyncing(true);
-    setSyncFeedback(null);
-    try {
-      await sheetsService.fetchRemoteData();
-      if (onRefreshData) onRefreshData();
-      setSyncFeedback({ type: 'success', text: '구글 시트 최신 데이터와 동기화되었습니다.' });
-      setTimeout(() => setSyncFeedback(null), 3000);
-    } catch (err: unknown) {
-      setSyncFeedback({
-        type: 'error',
-        text: err instanceof Error ? err.message : '동기화 중 오류가 발생했습니다.',
-      });
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   const handleLogoutAction = async () => {
     if (!onLogout || isLoggingOut) return;
     if (!window.confirm('정말 이 브라우저에서 로그아웃하시겠습니까?')) return;
@@ -332,20 +303,18 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         stickers={evaluatedStickers}
         isStaff={isStaff}
         unseenCount={unseenCount}
-        onOpen={() => setActiveSheet('STICKERS')}
+        onOpen={(trigger) => {
+          trigger.focus();
+          setActiveSheet('STICKERS');
+        }}
       />
 
       {/* 6. Settings & Admin Section */}
       <ProfileSettingsSection
-        hasAdminMenuAccess={hasAdminMenuAccess}
-        onOpenAdmin={onOpenAdmin}
         displayMode={displayMode}
         onChangeDisplayMode={onChangeDisplayMode}
         isDarkMode={isDarkMode}
         onChangeDarkMode={onChangeDarkMode}
-        isSyncing={isSyncing}
-        syncFeedback={syncFeedback}
-        onSyncRemote={handleSyncRemote}
         onChangeBinding={onChangeBinding}
         onLogout={onLogout ? handleLogoutAction : undefined}
         isLoggingOut={isLoggingOut}

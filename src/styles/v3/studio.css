@@ -5,8 +5,10 @@
 
 .studio-container {
   padding: 16px 16px calc(var(--bottom-chrome-h, 60px) + 24px) 16px;
-  max-width: 480px;
+  width: 100%;
+  max-width: 720px;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .studio-header {

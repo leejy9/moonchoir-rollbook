@@ -378,7 +378,6 @@ function MainApp() {
                 setProfile(null);
                 navigate({ type: 'RESET' });
               }}
-              onRefreshData={triggerRefresh}
               onOpenRSVP={(sch) => {
                 navigate({ type: 'OPEN', overlay: { kind: 'rsvp', scheduleId: sch.id } });
               }}
@@ -389,7 +388,6 @@ function MainApp() {
                   navigate({ type: 'TAB', tab: 'home' });
                 }
               }}
-              onOpenAdmin={handleOpenAdmin}
               refreshTrigger={refreshKey}
             />
           )}

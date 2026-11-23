@@ -46,7 +46,7 @@ export const InstallAppCard: React.FC<InstallAppCardProps> = ({ compact = false 
         ? ['브라우저 오른쪽 위 메뉴(⋮)를 누르세요.', '[앱 설치] 또는 [홈 화면에 추가]를 선택하세요.']
         : ['주소창 오른쪽의 설치 아이콘을 누르거나, 브라우저 메뉴에서 [앱 설치]를 선택하세요.'];
 
-  return (
+  const installCard = (
     <section className={`install-app-card ${compact ? 'compact' : ''}`}>
       <div className="install-app-text">
         <strong>앱처럼 설치하기</strong>
@@ -85,4 +85,8 @@ export const InstallAppCard: React.FC<InstallAppCardProps> = ({ compact = false 
       )}
     </section>
   );
+
+  return compact ? (
+    <div className="profile-settings-menu-row profile-settings-install-row">{installCard}</div>
+  ) : installCard;
 };
