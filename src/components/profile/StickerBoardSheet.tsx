@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { EvaluatedSticker, StickerBundle } from '../../utils/praiseStickers';
 
 export interface StickerBoardSheetProps {
@@ -24,6 +24,9 @@ export const StickerBoardSheet: React.FC<StickerBoardSheetProps> = ({
 }) => {
   const earnedCount = useMemo(() => stickers.filter((s) => s.earned).length, [stickers]);
   const totalCount = stickers.length; // 24 for member, 8 for staff
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
   // Group stickers by bundle in order
   const groupedStickers = useMemo(() => {
@@ -40,36 +43,79 @@ export const StickerBoardSheet: React.FC<StickerBoardSheetProps> = ({
     })).filter((g) => g.items.length > 0);
   }, [stickers]);
 
+  useEffect(() => {
+    previousActiveElementRef.current = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus();
+    return () => previousActiveElementRef.current?.focus();
+  }, []);
+
+  const handleDialogKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+
+    if (event.key !== 'Tab' || !dialogRef.current) return;
+
+    const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialogRef.current.focus();
+      return;
+    }
+
+    const firstElement = focusable[0];
+    const lastElement = focusable[focusable.length - 1];
+    const activeElement = document.activeElement;
+    const focusOutside = !dialogRef.current.contains(activeElement);
+
+    if (event.shiftKey && (activeElement === firstElement || focusOutside)) {
+      event.preventDefault();
+      lastElement.focus();
+    } else if (!event.shiftKey && (activeElement === lastElement || focusOutside)) {
+      event.preventDefault();
+      firstElement.focus();
+    }
+  }, [onClose]);
+
   return (
     <div
-      className="profile-modal-overlay"
+      className="sticker-modal-overlay"
       role="dialog"
       aria-modal="true"
-      aria-label="칭찬 스티커 보드"
-      onClick={onClose}
+      aria-labelledby="sticker-modal-title"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
       <div
-        className="profile-sheet-container sticker-sheet-container"
-        onClick={(e) => e.stopPropagation()}
+        ref={dialogRef}
+        className="sticker-modal-container"
+        tabIndex={-1}
+        onKeyDown={handleDialogKeyDown}
       >
         {/* Header */}
-        <div className="profile-sheet-header">
-          <button
-            type="button"
-            className="profile-sheet-back-btn"
-            onClick={onClose}
-            aria-label="닫기"
-          >
-            ‹
-          </button>
-          <h2 className="profile-sheet-title">칭찬 스티커</h2>
+        <div className="sticker-modal-header">
+          <h2 id="sticker-modal-title" className="profile-sheet-title">칭찬 스티커</h2>
           <div className="sticker-sheet-header-pill">
             {`획득 ${earnedCount} / ${totalCount}`}
           </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            className="sticker-modal-close-btn"
+            onClick={onClose}
+            aria-label="닫기"
+          >
+            ×
+          </button>
         </div>
 
         {/* Content */}
-        <div className="profile-sheet-content sticker-board-scroll">
+        <div className="sticker-modal-content sticker-board-scroll">
           {groupedStickers.map((group) => (
             <section key={group.bundle} className="sticker-bundle-section">
               <div className="sticker-bundle-header">

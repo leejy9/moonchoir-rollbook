@@ -27,6 +27,8 @@ describe('StickerBoardSheet & computeUnseenStickers (V3-13, Spec §5-6, §5-7)',
     expect(html).toContain('첫걸음');
     expect(html).toContain('신규');
     expect(html).toContain('2026-05-01 획득');
+    expect(html).toContain('sticker-modal-overlay');
+    expect(html).toContain('sticker-modal-container');
   });
 
   it('renders staff board with 8 stickers (V26)', () => {
