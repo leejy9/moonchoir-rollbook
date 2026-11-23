@@ -66,6 +66,7 @@ export interface AdminSchedulesTabProps {
   setEditingProgramCard: (card: ProgramCard | null) => void;
   selectedProgramCardId: string | null;
   scheduleSuccessMsg: string;
+  scheduleErrorMsg?: string;
   setScheduleSuccessMsg: (msg: string) => void;
   scheduleViewTab: 'CALENDAR' | 'ALL_LIST' | 'PROGRAM_CARDS';
   setScheduleViewTab: (tab: 'CALENDAR' | 'ALL_LIST' | 'PROGRAM_CARDS') => void;
@@ -130,6 +131,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
   setEditingProgramCard,
   selectedProgramCardId,
   scheduleSuccessMsg,
+  scheduleErrorMsg,
   setScheduleSuccessMsg: _setScheduleSuccessMsg,
   scheduleViewTab,
   setScheduleViewTab,
@@ -502,6 +504,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
           </div>
 
           {scheduleSuccessMsg && <div className="success-banner">{scheduleSuccessMsg}</div>}
+          {scheduleErrorMsg && <div className="error-banner" role="alert">{scheduleErrorMsg}</div>}
 
           {/* Sub-tab 1: SESSION ATTENDANCE DETAIL & MANUAL OVERRIDE */}
           {scheduleSubTab === 'SESSION' && currentSchedule && (
@@ -805,6 +808,9 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
               {scheduleViewTab === 'CALENDAR' ? (
                 <AdminCalendarView
                   commentCounts={commentCounts}
+                  hasScheduleRecords={(scheduleId) =>
+                    sheetsService.hasLocalScheduleRecords(scheduleId)
+                  }
                   adminCalYear={adminCalYear}
                   adminCalMonth={adminCalMonth}
                   onPrevMonth={handleAdminPrevMonth}

@@ -360,6 +360,14 @@ export class SheetsService {
     return counts;
   }
 
+  public hasLocalScheduleRecords(scheduleId: string): boolean {
+    return (
+      this.logs.some((log) => log.scheduleId === scheduleId) ||
+      this.rsvpVotes.some((vote) => vote.scheduleId === scheduleId) ||
+      this.commentEvents.some((event) => event.scheduleId === scheduleId)
+    );
+  }
+
   /** 통합 별칭까지 같은 사람인지 확인한다(내 댓글 표시용). */
   public isOwnComment(comment: Pick<ScheduleComment, 'memberId'>, memberId: string): boolean {
     return this.isSameMember(comment.memberId, memberId);
@@ -1373,64 +1381,58 @@ export class SheetsService {
     return this.updateSchedule(scheduleId, { isCancelled: false });
   }
 
-  public async deleteSchedule(scheduleId: string, forceHardDelete: boolean = false): Promise<void> {
-    const hasActivity =
-      this.logs.some((l) => l.scheduleId === scheduleId) ||
-      this.rsvpVotes.some((v) => v.scheduleId === scheduleId);
-
-    if (hasActivity && !forceHardDelete) {
-      // 출석로그나 투표가 있는 경우 물리 삭제하지 않고 [연습 취소]로 보존
-      await this.updateSchedule(scheduleId, { isCancelled: true });
-      if (this.isBackendActive()) {
-        this.syncInBackground('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: false });
+  public async deleteSchedule(
+    scheduleId: string,
+    forceHardDelete: boolean = false
+  ): Promise<{ message: string }> {
+    let message = '일정이 삭제되었습니다.';
+    if (this.isBackendActive()) {
+      const result = await this.sendToGoogleSheet('DELETE_SCHEDULE', {
+        id: scheduleId,
+        forceHardDelete,
+      });
+      if (!result.success) {
+        throw new Error(result.message || '일정 삭제가 서버에서 거부되었습니다.');
       }
-    } else {
-      // 활동이 없거나, 관리자가 명시적으로 완전 영구 삭제를 요청한 경우
-      this.schedules = this.schedules.filter((s) => s.id !== scheduleId);
-      saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
-
-      if (this.isBackendActive()) {
-        this.syncInBackground('DELETE_SCHEDULE', { id: scheduleId, forceHardDelete: true });
-      }
+      message = result.message || message;
+    } else if (this.hasLocalScheduleRecords(scheduleId)) {
+      throw new Error('출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.');
     }
+
+    this.schedules = this.schedules.filter((s) => s.id !== scheduleId);
+    saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+    return { message };
   }
 
-  public async deleteSchedules(scheduleIds: string[], forceHardDelete: boolean = false): Promise<void> {
-    if (forceHardDelete) {
-      // 강제 영구 삭제 모드: 모든 지정 일정을 물리 삭제
-      const idsToDeleteSet = new Set(scheduleIds);
-      this.schedules = this.schedules.filter((s) => !idsToDeleteSet.has(s.id));
-      saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
-
-      if (this.isBackendActive()) {
-        this.syncInBackground('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: true });
-      }
-      return;
-    }
-
-    const activeScheduleIds = new Set(
-      scheduleIds.filter(
-        (sid) =>
-          this.logs.some((l) => l.scheduleId === sid) ||
-          this.rsvpVotes.some((v) => v.scheduleId === sid)
-      )
-    );
-
-    // 활동 있는 일정은 isCancelled=true로 갱신
-    if (activeScheduleIds.size > 0) {
-      await this.batchUpdateSchedules(Array.from(activeScheduleIds), { isCancelled: true });
-    }
-
-    // 활동 없는 일정만 물리 삭제
-    const idsToHardDelete = new Set(scheduleIds.filter((sid) => !activeScheduleIds.has(sid)));
-    if (idsToHardDelete.size > 0) {
-      this.schedules = this.schedules.filter((s) => !idsToHardDelete.has(s.id));
-      saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
-    }
-
+  public async deleteSchedules(
+    scheduleIds: string[],
+    forceHardDelete: boolean = false
+  ): Promise<{ message: string }> {
+    let message = '일정들이 일괄 삭제되었습니다.';
     if (this.isBackendActive()) {
-      this.syncInBackground('BATCH_DELETE_SCHEDULES', { ids: scheduleIds, forceHardDelete: false });
+      const result = await this.sendToGoogleSheet('BATCH_DELETE_SCHEDULES', {
+        ids: scheduleIds,
+        forceHardDelete,
+      });
+      if (!result.success) {
+        throw new Error(result.message || '일정 일괄 삭제가 서버에서 거부되었습니다.');
+      }
+      message = result.message || message;
+    } else {
+      const blockedCount = [...new Set(scheduleIds)].filter((id) =>
+        this.hasLocalScheduleRecords(id)
+      ).length;
+      if (blockedCount > 0) {
+        throw new Error(
+          `기록이 있는 일정 ${blockedCount}개가 있어 삭제하지 않았어요. 보관하거나 취소해 주세요.`
+        );
+      }
     }
+
+    const idsToDelete = new Set(scheduleIds);
+    this.schedules = this.schedules.filter((s) => !idsToDelete.has(s.id));
+    saveToStorage(STORAGE_KEYS.SCHEDULES, this.schedules);
+    return { message };
   }
 
   public async batchUpdateSchedules(scheduleIds: string[], updates: Partial<Schedule>): Promise<Schedule[]> {

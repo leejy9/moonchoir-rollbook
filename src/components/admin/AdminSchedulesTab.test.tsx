@@ -172,6 +172,17 @@ describe('AdminSchedulesTab Component', () => {
     expect(html).toContain('전체 구분');
   });
 
+  it('renders the server deletion rejection message as an error alert', () => {
+    const message = '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.';
+    const html = renderToString(
+      <AdminSchedulesTab {...createMockProps({ scheduleErrorMsg: message })} />
+    );
+
+    expect(html).toContain('class="error-banner"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain(message);
+  });
+
   it('renders card view when scheduleViewTab is PROGRAM_CARDS (only registered cards, no unclassified single schedules)', () => {
     const props = createMockProps({
       scheduleViewTab: 'PROGRAM_CARDS',

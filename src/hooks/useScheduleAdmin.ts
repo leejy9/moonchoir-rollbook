@@ -33,6 +33,7 @@ export function useScheduleAdmin({
   const [editingProgramCard, setEditingProgramCard] = useState<ProgramCard | null>(null);
   const [selectedProgramCardId, setSelectedProgramCardId] = useState<string>('');
   const [scheduleSuccessMsg, setScheduleSuccessMsg] = useState('');
+  const [scheduleErrorMsg, setScheduleErrorMsg] = useState('');
 
   // View & Batch Operations
   const [scheduleViewTab, setScheduleViewTab] = useState<'CALENDAR' | 'ALL_LIST' | 'PROGRAM_CARDS'>('CALENDAR');
@@ -43,6 +44,12 @@ export function useScheduleAdmin({
   const [scheduleToDelete, setScheduleToDelete] = useState<Schedule | null>(null);
   const [forceHardDeleteSelected, setForceHardDeleteSelected] = useState(false);
   const [cardGroupToDelete, setCardGroupToDelete] = useState<CardGroupToDelete | null>(null);
+
+  const setDeleteError = (error: unknown, fallback: string) => {
+    const message = error instanceof Error ? error.message : fallback;
+    setScheduleSuccessMsg('');
+    setScheduleErrorMsg(message.replace(/\s+/g, ' ').trim());
+  };
 
   // Form Navigation Helpers
   const handleOpenCreateProgramCard = () => {
@@ -171,34 +178,36 @@ export function useScheduleAdmin({
   // Deletion Operations
   const handleDeleteScheduleSingle = async (
     scheduleId: string,
-    title: string,
+    _title: string,
     forceHardDelete: boolean = false
   ) => {
-    await sheetsService.deleteSchedule(scheduleId, forceHardDelete);
-    setScheduleSuccessMsg(
-      forceHardDelete
-        ? `'${title}' 일정이 구글 시트 및 로컬에서 영구 삭제되었습니다.`
-        : `'${title}' 일정이 정상적으로 삭제되었습니다.`
-    );
-    setSelectedBatchScheduleIds((prev) => prev.filter((id) => id !== scheduleId));
-    onDataChanged();
-    setTimeout(() => setScheduleSuccessMsg(''), 3500);
+    setScheduleErrorMsg('');
+    try {
+      const result = await sheetsService.deleteSchedule(scheduleId, forceHardDelete);
+      setScheduleSuccessMsg(result.message);
+      setSelectedBatchScheduleIds((prev) => prev.filter((id) => id !== scheduleId));
+      onDataChanged();
+      setTimeout(() => setScheduleSuccessMsg(''), 3500);
+    } catch (error: unknown) {
+      setDeleteError(error, '일정 삭제에 실패했습니다.');
+    }
   };
 
   const handleDeleteScheduleSeries = async (
     matchingIds: string[],
-    title: string,
+    _title: string,
     forceHardDelete: boolean = false
   ) => {
-    await sheetsService.deleteSchedules(matchingIds, forceHardDelete);
-    setScheduleSuccessMsg(
-      forceHardDelete
-        ? `'${title}' 소속 ${matchingIds.length}개 일정이 영구 삭제되었습니다.`
-        : `'${title}' 소속 ${matchingIds.length}개 일정이 일괄 삭제되었습니다.`
-    );
-    setSelectedBatchScheduleIds((prev) => prev.filter((id) => !matchingIds.includes(id)));
-    onDataChanged();
-    setTimeout(() => setScheduleSuccessMsg(''), 3500);
+    setScheduleErrorMsg('');
+    try {
+      const result = await sheetsService.deleteSchedules(matchingIds, forceHardDelete);
+      setScheduleSuccessMsg(result.message);
+      setSelectedBatchScheduleIds((prev) => prev.filter((id) => !matchingIds.includes(id)));
+      onDataChanged();
+      setTimeout(() => setScheduleSuccessMsg(''), 3500);
+    } catch (error: unknown) {
+      setDeleteError(error, '일정 일괄 삭제에 실패했습니다.');
+    }
   };
 
   const handleRestoreScheduleSingle = async (scheduleId: string, title: string) => {
@@ -211,6 +220,8 @@ export function useScheduleAdmin({
   const handleDeleteSchedule = (scheduleId: string) => {
     const target = schedules.find((s) => s.id === scheduleId);
     if (target) {
+      setScheduleErrorMsg('');
+      setForceHardDeleteSelected(false);
       setScheduleToDelete(target);
     }
   };
@@ -227,17 +238,21 @@ export function useScheduleAdmin({
     if (selectedBatchScheduleIds.length === 0) return;
     if (
       !window.confirm(
-        `선택하신 ${selectedBatchScheduleIds.length}개의 일정을 일괄 삭제하시겠습니까?\n구글 스프레드시트에서도 모두 영구 삭제됩니다.`
+        `선택하신 ${selectedBatchScheduleIds.length}개의 일정을 일괄 삭제하시겠습니까?\n기록이 있는 일정이 포함되면 전체가 삭제되지 않습니다.`
       )
     ) {
       return;
     }
-    const count = selectedBatchScheduleIds.length;
-    await sheetsService.deleteSchedules(selectedBatchScheduleIds);
-    setSelectedBatchScheduleIds([]);
-    setScheduleSuccessMsg(`선택한 ${count}개 일정이 일괄 삭제되었습니다.`);
-    onDataChanged();
-    setTimeout(() => setScheduleSuccessMsg(''), 3500);
+    setScheduleErrorMsg('');
+    try {
+      const result = await sheetsService.deleteSchedules(selectedBatchScheduleIds);
+      setSelectedBatchScheduleIds([]);
+      setScheduleSuccessMsg(result.message);
+      onDataChanged();
+      setTimeout(() => setScheduleSuccessMsg(''), 3500);
+    } catch (error: unknown) {
+      setDeleteError(error, '일정 일괄 삭제에 실패했습니다.');
+    }
   };
 
   const handleToggleSelectSchedule = (id: string) => {
@@ -389,6 +404,7 @@ export function useScheduleAdmin({
     setSelectedProgramCardId,
     scheduleSuccessMsg,
     setScheduleSuccessMsg,
+    scheduleErrorMsg,
     scheduleViewTab,
     setScheduleViewTab,
     selectedBatchScheduleIds,

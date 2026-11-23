@@ -85,6 +85,55 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
     expect(stats[0].attendanceRate).toBe(50);
   });
 
+  it('does not count an orphan attendance log in a member attendance rate', () => {
+    const member: Member = {
+      id: 'm_orphan_log',
+      name: '고아 로그 검증',
+      part: '소프라노',
+      phoneLast4: '1234',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      createdAt: '2026-01-01T00:00:00Z',
+      joinedAt: '2026-01-01',
+      memberStatus: '정단원',
+    };
+    const schedules = Array.from({ length: 8 }, (_, index) => ({
+      ...sampleSchedules[0],
+      id: `orphan_log_test_${index + 1}`,
+      date: `2026-10-${String(index + 1).padStart(2, '0')}`,
+    }));
+    const validLogs: RawAttendanceLog[] = schedules.slice(0, 7).map((schedule) => ({
+      id: `log_${schedule.id}`,
+      scheduleId: schedule.id,
+      memberId: member.id,
+      memberName: member.name,
+      part: member.part,
+      timestamp: `${schedule.date} 19:30:00`,
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    }));
+    const orphanLog: RawAttendanceLog = {
+      ...validLogs[0],
+      id: 'log_for_deleted_schedule',
+      scheduleId: 'deleted_schedule',
+    };
+
+    const stats = calculateCumulativeAttendanceWithLifecycle(
+      [member],
+      schedules,
+      [...validLogs, orphanLog],
+      '2026-11-15'
+    );
+
+    expect(stats[0].totalSessions).toBe(8);
+    expect(stats[0].attended).toBe(7);
+    expect(stats[0].absent).toBe(1);
+    expect(stats[0].attendanceRate).toBe(88);
+    expect(getGamifiedAttendanceLevel(stats[0].attended, member.part).currentLevelName).toBe(
+      '새싹 소프라노'
+    );
+  });
+
   it('입단 전 일정에 수동 결석 로그가 있어도 미참으로 처리한다', () => {
     const member: Member = {
       id: 'm_joined_later',

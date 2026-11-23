@@ -541,6 +541,79 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(service.getSchedules().some((s) => s.id === 'sch_batch_2')).toBe(false);
   });
 
+  it('keeps a schedule when the server rejects its deletion and preserves the server message', async () => {
+    const remoteService = new SheetsService(
+      new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'test-key' })
+    );
+    const schedule = TEST_MOCK_SCHEDULES[0];
+    remoteService.seedTestData({ schedules: [schedule], logs: [], rsvpVotes: [] });
+    const sendSpy = vi.spyOn(remoteService, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.',
+    });
+
+    await expect(remoteService.deleteSchedule(schedule.id)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
+
+    expect(remoteService.getSchedules()).toContainEqual(schedule);
+    expect(sendSpy).toHaveBeenCalledWith('DELETE_SCHEDULE', {
+      id: schedule.id,
+      forceHardDelete: false,
+    });
+  });
+
+  it('keeps every schedule when the server rejects a batch deletion', async () => {
+    const remoteService = new SheetsService(
+      new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'test-key' })
+    );
+    const schedules = TEST_MOCK_SCHEDULES.slice(0, 2);
+    remoteService.seedTestData({ schedules, logs: [], rsvpVotes: [] });
+    const sendSpy = vi.spyOn(remoteService, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '기록이 있는 일정 1개가 있어 삭제하지 않았어요. 보관하거나 취소해 주세요.',
+    });
+
+    await expect(
+      remoteService.deleteSchedules(schedules.map((schedule) => schedule.id))
+    ).rejects.toThrow(
+      '기록이 있는 일정 1개가 있어 삭제하지 않았어요. 보관하거나 취소해 주세요.'
+    );
+
+    expect(remoteService.getSchedules()).toEqual(schedules);
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy).toHaveBeenCalledWith('BATCH_DELETE_SCHEDULES', {
+      ids: schedules.map((schedule) => schedule.id),
+      forceHardDelete: false,
+    });
+  });
+
+  it('keeps a local schedule when its only known record is a comment event', async () => {
+    const schedule = TEST_MOCK_SCHEDULES[0];
+    service.seedTestData({
+      schedules: [schedule],
+      logs: [],
+      rsvpVotes: [],
+      comments: [
+        {
+          id: 'comment_only_record',
+          scheduleId: schedule.id,
+          memberId: 'mem_s01',
+          memberName: '단원',
+          part: '소프라노',
+          action: 'DELETE',
+          timestamp: '2026-11-24 19:00:00',
+        },
+      ],
+    });
+
+    await expect(service.deleteSchedule(schedule.id)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
+
+    expect(service.getSchedules()).toContainEqual(schedule);
+  });
+
   it('allows several browsers per member and keeps the first bound device id', async () => {
     const memberId = 'mem_s01'; // 김하은
     const device1 = 'device_uuid_phone_1';
@@ -1273,33 +1346,25 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(logs.some((l) => l.memberId === testMemberId)).toBe(true);
   });
 
-  it('일정 삭제 시 출석 기록이 있으면 isCancelled=true 로 소프트 취소하고 출결 판정 시 미참으로 안전 투영한다', async () => {
+  it('출석 기록이 있는 일정은 삭제하지 않고 서버 거부 문구를 보존한다', async () => {
     const targetScheduleId = 'sch_20261001';
-    // 출석 기록이 있는 일정 삭제 시도
-    await service.deleteSchedule(targetScheduleId);
+    await expect(service.deleteSchedule(targetScheduleId)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
 
     const schedule = service.getSchedules().find((s) => s.id === targetScheduleId);
     expect(schedule).toBeDefined();
-    expect(schedule?.isCancelled).toBe(true);
-
-    // 취소된 일정에 대한 출결 판정: 결석이 아닌 '미참'으로 안전 투영 (모수 분모 제외)
-    const reconciliations = service.reconcileAttendance(targetScheduleId);
-    expect(reconciliations.length).toBeGreaterThan(0);
-    expect(reconciliations.every((r) => r.finalStatus === '미참')).toBe(true);
-
-    // restoreSchedule 검증: 다시 복원 시 isCancelled = false
-    await service.restoreSchedule(targetScheduleId);
-    const restored = service.getSchedules().find((s) => s.id === targetScheduleId);
-    expect(restored?.isCancelled).toBe(false);
+    expect(schedule?.isCancelled).toBeFalsy();
   });
 
-  it('forceHardDelete=true 시 출석 기록이 있더라도 일정 목록에서 물리적으로 영구 삭제된다', async () => {
+  it('forceHardDelete=true does not bypass the record guard', async () => {
     const targetScheduleId = 'sch_20261001';
-    // 강제 영구 삭제 호출
-    await service.deleteSchedule(targetScheduleId, true);
+    await expect(service.deleteSchedule(targetScheduleId, true)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
 
     const schedule = service.getSchedules().find((s) => s.id === targetScheduleId);
-    expect(schedule).toBeUndefined();
+    expect(schedule).toBeDefined();
   });
 
   describe('단원용 일정 노출 범위 (visibility)', () => {

@@ -5,6 +5,7 @@ export interface ScheduleDeleteModalProps {
   scheduleToDelete: Schedule | null;
   schedules: Schedule[];
   programCards: ProgramCard[];
+  hasScheduleRecords: (scheduleId: string) => boolean;
   forceHardDeleteSelected: boolean;
   setForceHardDeleteSelected: (force: boolean) => void;
   onClose: () => void;
@@ -16,6 +17,7 @@ export const ScheduleDeleteModal: React.FC<ScheduleDeleteModalProps> = ({
   scheduleToDelete,
   schedules,
   programCards,
+  hasScheduleRecords,
   forceHardDeleteSelected,
   setForceHardDeleteSelected,
   onClose,
@@ -40,6 +42,9 @@ export const ScheduleDeleteModal: React.FC<ScheduleDeleteModalProps> = ({
 
   const futureCompanions = companions.filter((c) => c.date >= scheduleToDelete.date);
   const isRepeating = companions.length > 0;
+  const hasRecordsInSeries = [scheduleToDelete, ...companions].some((schedule) =>
+    hasScheduleRecords(schedule.id)
+  );
   const attachedCard = scheduleToDelete.programId
     ? programCards.find((c) => c.id === scheduleToDelete.programId)
     : null;
@@ -103,36 +108,37 @@ export const ScheduleDeleteModal: React.FC<ScheduleDeleteModalProps> = ({
           </div>
         </div>
 
-        {/* 영구 삭제 옵션 체크박스 */}
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: '13px',
-            color: forceHardDeleteSelected ? '#DC2626' : '#64748B',
-            background: forceHardDeleteSelected ? '#FEF2F2' : '#F8FAFC',
-            border: `1px solid ${forceHardDeleteSelected ? '#FECACA' : '#E2E8F0'}`,
-            borderRadius: '6px',
-            padding: '8px 10px',
-            cursor: 'pointer',
-            marginBottom: '12px',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={forceHardDeleteSelected}
-            onChange={(e) => setForceHardDeleteSelected(e.target.checked)}
-          />
-          <span style={{ fontWeight: forceHardDeleteSelected ? 700 : 500 }}>💥 영구 삭제</span>
-        </label>
+        {!hasRecordsInSeries && (
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '13px',
+              color: forceHardDeleteSelected ? '#DC2626' : '#64748B',
+              background: forceHardDeleteSelected ? '#FEF2F2' : '#F8FAFC',
+              border: `1px solid ${forceHardDeleteSelected ? '#FECACA' : '#E2E8F0'}`,
+              borderRadius: '6px',
+              padding: '8px 10px',
+              cursor: 'pointer',
+              marginBottom: '12px',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={forceHardDeleteSelected}
+              onChange={(e) => setForceHardDeleteSelected(e.target.checked)}
+            />
+            <span style={{ fontWeight: forceHardDeleteSelected ? 700 : 500 }}>💥 영구 삭제</span>
+          </label>
+        )}
 
         {!isRepeating ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#64748B' }}>
               {forceHardDeleteSelected
                 ? '일정을 완전히 영구 삭제합니다.'
-                : '출결이나 투표 기록이 있으면 기록 보존을 위해 [취소] 처리되며, 없으면 영구 삭제됩니다.'}
+                : '기록이 있는 일정은 삭제할 수 없습니다. 기록은 보관하거나 일정을 취소해 주세요.'}
             </p>
             <button
               type="button"

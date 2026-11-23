@@ -131,6 +131,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     selectedProgramCardId,
     scheduleSuccessMsg,
     setScheduleSuccessMsg,
+    scheduleErrorMsg,
     scheduleViewTab,
     setScheduleViewTab,
     selectedBatchScheduleIds,
@@ -363,6 +364,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           selectedProgramCardId={selectedProgramCardId}
           scheduleSuccessMsg={scheduleSuccessMsg}
           setScheduleSuccessMsg={setScheduleSuccessMsg}
+          scheduleErrorMsg={scheduleErrorMsg}
           scheduleViewTab={scheduleViewTab}
           setScheduleViewTab={setScheduleViewTab}
           selectedBatchScheduleIds={selectedBatchScheduleIds}
@@ -505,6 +507,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         scheduleToDelete={scheduleToDelete}
         schedules={schedules}
         programCards={programCards}
+        hasScheduleRecords={(scheduleId) =>
+          sheetsService.hasLocalScheduleRecords(scheduleId)
+        }
         forceHardDeleteSelected={forceHardDeleteSelected}
         setForceHardDeleteSelected={setForceHardDeleteSelected}
         onClose={() => {
