@@ -200,7 +200,9 @@ begin
     end if;
 
     -- Test backfill deduplication when a normal event exists
-    insert into schedules (id, title, date) values (v_sched_test, 'R4테스트일정', '2026-11-20') on conflict (id) do nothing;
+    insert into schedules (id, title, date, start_time, end_time)
+    values (v_sched_test, 'R4테스트일정', '2026-11-20', '19:30', '21:30')
+    on conflict (id) do nothing;
     insert into rsvp_events (schedule_id, member_id, action, status, occurred_at)
     values (v_sched_test, v_member_1, 'insert', 'ATTEND', now());
 
