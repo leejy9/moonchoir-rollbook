@@ -44,6 +44,7 @@
   - 실수 기록은 `docs/agent/LESSONS.md`에 쌓는다.
   - 리뷰어가 명세·지시서를 쓸 때는 `docs/agent/SPEC_WRITING.md`의 순서와 점검표를 따른다(2026-11-23).
   - 명세 작성: 리뷰어는 `.claude/skills/spec-writer` 스킬로 쓰고 `.claude/agents/spec-auditor`로 독립 검토를 받는다. 개발 에이전트는 티켓 시작 전 `.agents/workflows/spec-check.md`(`/spec-check`)로 지시서를 코드에 대 보고, 어긋나면 시작하지 않고 보고한다.
+  - 화면 구현·시안: `frontend-design` 스킬(Anthropic, Apache-2.0, `.claude/skills/frontend-design`)을 참고한다. 단 **명세·확정 시안·디자인 토큰(3색, §6)이 항상 우선**이고, 이 스킬은 정해진 디자인을 템플릿처럼 보이지 않게 정성 들여 구현하는 데 쓴다. 새 색·글꼴·레이아웃을 임의로 도입하지 않는다(2026-11-23).
 
 ## 3. 기술 스택 & 결정론적 명령어 (Tech Stack & Exact Commands)
 - **Frontend Core**: Vite + React 19 + TypeScript
