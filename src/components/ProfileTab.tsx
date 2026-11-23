@@ -1,22 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
-import type {
-  BoundDeviceProfile,
-  Member,
-  MemberActivity,
-  Schedule,
-} from '../types/rollbook';
+import type { BoundDeviceProfile, Member, MemberActivity, Schedule } from '../types/rollbook';
 import type { DisplayMode } from '../services/displayMode';
 import { getKSTDateString, parseKSTDate } from '../utils/date';
 import { buildMemberScheduleRecords } from '../utils/memberRecords';
 import { isStaffMember, isActivityStaff } from '../utils/staff';
 import {
-  computeAttendance90Days,
-  computeDaysTogether,
-  computeMemberLevel,
-  computePerformanceCount,
-  computePracticeHours,
-  formatStaffTenure,
+  computeAttendance90Days, computeDaysTogether, computeMemberLevel,
+  computePerformanceCount, computePracticeHours, formatStaffTenure,
 } from '../utils/memberProgress';
 import { computePassionTemperature } from '../utils/passionTemperature';
 import { evaluatePraiseStickers } from '../utils/praiseStickers';
@@ -207,9 +198,10 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       allLogs,
       activity?.rsvpEvents || [],
       config,
-      todayStr ? parseKSTDate(todayStr) : undefined
+      todayStr ? parseKSTDate(todayStr) : undefined,
+      { scheduleRecords, includeWeeklyDelta: true }
     );
-  }, [isStaff, currentMember, members, schedules, allLogs, activity, config, todayStr]);
+  }, [isStaff, currentMember, members, schedules, allLogs, activity, config, todayStr, scheduleRecords]);
 
   // Praise Stickers (§5-6, §5-7)
   const evaluatedStickers = useMemo(() => {
@@ -221,8 +213,9 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       performanceCategories: config.performanceCategories,
       allMembers: members,
       isStaff,
+      scheduleRecords,
     });
-  }, [currentMember, schedules, allLogs, activity, config.performanceCategories, members, isStaff]);
+  }, [currentMember, schedules, allLogs, activity, config.performanceCategories, members, isStaff, scheduleRecords]);
 
   const earnedStickerIds = useMemo(
     () => evaluatedStickers.filter((s) => s.earned).map((s) => s.id),

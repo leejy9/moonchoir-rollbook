@@ -1,11 +1,5 @@
-import type {
-  Member,
-  RawAttendanceLog,
-  RsvpEvent,
-  Schedule,
-} from '../types/rollbook';
-import { reconcileSingleMemberAttendance } from './attendanceStats';
-import { getKSTClock } from './date';
+import type { RsvpEvent } from '../types/rollbook';
+import type { MemberScheduleRecord } from './memberRecords';
 import {
   PASSION_RULES,
   getScheduleStartMs,
@@ -16,9 +10,7 @@ import {
 } from './passionRules';
 
 export function calculateAttendanceGroup(
-  member: Member,
-  windowSchedules: Schedule[],
-  memberLogs: RawAttendanceLog[],
+  windowRecords: MemberScheduleRecord[],
   noShowScheduleIds: Set<string>
 ): { items: PassionItem[]; onTimeStreak: number } {
   const onTimeIds: string[] = [];
@@ -26,46 +18,38 @@ export function calculateAttendanceGroup(
   const lateIds: string[] = [];
   const absentIds: string[] = [];
 
-  for (const s of windowSchedules) {
-    const schedLogs = memberLogs.filter((l) => l.scheduleId === s.id);
-    const rec = reconcileSingleMemberAttendance(member, s, schedLogs);
-    const startMin = parseClockMinutes(s.startTime || '19:30') ?? 19 * 60 + 30;
+  for (const r of windowRecords) {
+    const startMin = parseClockMinutes(r.schedule.startTime || '19:30') ?? 19 * 60 + 30;
 
-    if (rec.finalStatus === '출석' || rec.finalStatus === '수동인정') {
-      const checkInLog = schedLogs[schedLogs.length - 1];
-      const checkInClock = checkInLog ? getKSTClock(checkInLog.timestamp) : s.startTime;
-      const checkInMin = parseClockMinutes(checkInClock) ?? startMin;
+    if (r.finalStatus === '출석' || r.finalStatus === '수동인정') {
+      const checkInMin = parseClockMinutes(r.checkInTime) ?? startMin;
 
       if (checkInMin <= startMin) {
-        onTimeIds.push(s.id);
+        onTimeIds.push(r.id);
         if (checkInMin <= startMin - 10) {
-          earlyIds.push(s.id);
+          earlyIds.push(r.id);
         }
       }
-    } else if (rec.finalStatus === '지각') {
-      lateIds.push(s.id);
-    } else if (rec.finalStatus === '결석') {
-      if (!noShowScheduleIds.has(s.id)) {
-        absentIds.push(s.id);
+    } else if (r.finalStatus === '지각') {
+      lateIds.push(r.id);
+    } else if (r.finalStatus === '결석') {
+      if (!noShowScheduleIds.has(r.id)) {
+        absentIds.push(r.id);
       }
     }
   }
 
   // Consecutive on-time streak
   let onTimeStreak = 0;
-  for (const s of windowSchedules) {
-    const schedLogs = memberLogs.filter((l) => l.scheduleId === s.id);
-    const rec = reconcileSingleMemberAttendance(member, s, schedLogs);
-    const startMin = parseClockMinutes(s.startTime || '19:30') ?? 19 * 60 + 30;
+  for (const r of windowRecords) {
+    const startMin = parseClockMinutes(r.schedule.startTime || '19:30') ?? 19 * 60 + 30;
 
-    if (rec.finalStatus === '사유결석') {
+    if (r.finalStatus === '사유결석') {
       continue;
     }
 
-    if (rec.finalStatus === '출석' || rec.finalStatus === '수동인정') {
-      const checkInLog = schedLogs[schedLogs.length - 1];
-      const checkInClock = checkInLog ? getKSTClock(checkInLog.timestamp) : s.startTime;
-      const checkInMin = parseClockMinutes(checkInClock) ?? startMin;
+    if (r.finalStatus === '출석' || r.finalStatus === '수동인정') {
+      const checkInMin = parseClockMinutes(r.checkInTime) ?? startMin;
       if (checkInMin <= startMin) {
         onTimeStreak += 1;
         continue;
@@ -131,9 +115,7 @@ export function calculateAttendanceGroup(
 }
 
 export function calculatePromiseGroup(
-  member: Member,
-  windowSchedules: Schedule[],
-  memberLogs: RawAttendanceLog[],
+  windowRecords: MemberScheduleRecord[],
   memberRsvpEvents: RsvpEvent[],
   noShowScheduleIds: Set<string>
 ): PassionItem[] {
@@ -146,7 +128,8 @@ export function calculatePromiseGroup(
   let totalPromiseKeptSchedules = 0;
   const promiseTargetScheduleIds: string[] = [];
 
-  for (const s of windowSchedules) {
+  for (const r of windowRecords) {
+    const s = r.schedule;
     const schedEvents = nonBackfillEvents.filter((e) => e.scheduleId === s.id);
     if (schedEvents.length === 0) continue;
     promiseTargetScheduleIds.push(s.id);
@@ -182,17 +165,15 @@ export function calculatePromiseGroup(
 
     if (lastVote) {
       totalPromiseVotedSchedules += 1;
-      const schedLogs = memberLogs.filter((l) => l.scheduleId === s.id);
-      const rec = reconcileSingleMemberAttendance(member, s, schedLogs);
 
       const votedAttend = isAttendStatus(lastVote.status);
       const resultAttended =
-        rec.finalStatus === '출석' ||
-        rec.finalStatus === '수동인정' ||
-        rec.finalStatus === '지각';
+        r.finalStatus === '출석' ||
+        r.finalStatus === '수동인정' ||
+        r.finalStatus === '지각';
 
       const votedAbsent = isAbsentStatus(lastVote.status);
-      const resultAbsent = rec.finalStatus === '사유결석' || rec.finalStatus === '결석';
+      const resultAbsent = r.finalStatus === '사유결석' || r.finalStatus === '결석';
 
       if ((votedAttend && resultAttended) || (votedAbsent && resultAbsent)) {
         totalPromiseKeptSchedules += 1;
@@ -266,23 +247,20 @@ export function calculatePromiseGroup(
 }
 
 export function calculateStageGroup(
-  member: Member,
-  schedules: Schedule[],
-  memberLogs: RawAttendanceLog[],
+  allRecords: MemberScheduleRecord[],
   performanceCats: Set<string>,
   refTimeMs: number
 ): PassionItem[] {
   const oneYearAgoMs = refTimeMs - PASSION_RULES.STAGE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
   const stageAttendedIds: string[] = [];
 
-  for (const s of schedules) {
+  for (const r of allRecords) {
+    const s = r.schedule;
     if (s.isCancelled || !s.category || !performanceCats.has(s.category)) continue;
     const sStartMs = getScheduleStartMs(s);
     if (sStartMs > refTimeMs || sStartMs < oneYearAgoMs) continue;
 
-    const schedLogs = memberLogs.filter((l) => l.scheduleId === s.id);
-    const rec = reconcileSingleMemberAttendance(member, s, schedLogs);
-    if (rec.finalStatus === '출석' || rec.finalStatus === '수동인정') {
+    if (r.finalStatus === '출석' || r.finalStatus === '수동인정') {
       stageAttendedIds.push(s.id);
     }
   }

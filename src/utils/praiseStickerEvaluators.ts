@@ -13,7 +13,7 @@ import { computeDaysTogether } from './memberProgress';
 
 export interface ScheduleOutcome {
   schedule: Schedule;
-  rec: AttendanceReconciliation;
+  rec: { finalStatus: string };
   isRequired: boolean;
   isAttended: boolean;
   isLate: boolean;

@@ -299,4 +299,78 @@ describe('computePassionTemperature (V3-12)', () => {
 
     expect(res.value).toBe(38.2);
   });
+
+  describe('V3-20 R2: buildMemberScheduleRecords 단일 원천 검증', () => {
+    it('사유 있는 불참은 결석(-0.40)이 되지 않고 0점이며 연속 정시를 유지한다', () => {
+      // 5 on-time schedules and 1 excused absence in the middle
+      const schedules = [
+        makeSchedule('s1', '2026-11-10', '19:30'),
+        makeSchedule('s2', '2026-11-12', '19:30'), // excused
+        makeSchedule('s3', '2026-11-14', '19:30'),
+        makeSchedule('s4', '2026-11-16', '19:30'),
+        makeSchedule('s5', '2026-11-18', '19:30'),
+        makeSchedule('s6', '2026-11-20', '19:30'),
+      ];
+      const logs = [
+        makeLog('l1', 's1', '2026-11-10 19:25:00'),
+        makeLog('l3', 's3', '2026-11-14 19:25:00'),
+        makeLog('l4', 's4', '2026-11-16 19:25:00'),
+        makeLog('l5', 's5', '2026-11-18 19:25:00'),
+        makeLog('l6', 's6', '2026-11-20 19:25:00'),
+      ];
+      const rsvpVotes = [
+        {
+          id: 'v2',
+          scheduleId: 's2',
+          memberId: 'mem_1',
+          status: 'ABSENT' as const,
+          reason: '야근',
+          timestamp: '2026-11-11 10:00:00',
+        },
+      ];
+      const rsvpEvents: RsvpEvent[] = [
+        makeRsvp(2, 's2', 'ABSENT', '2026-11-11T10:00:00+09:00'),
+      ];
+
+      const res = computePassionTemperature(
+        mockMember,
+        [mockMember],
+        schedules,
+        logs,
+        rsvpEvents,
+        {},
+        new Date('2026-11-23T12:00:00+09:00'),
+        { rsvpVotes }
+      );
+
+      const attGroup = res.groups.find((g) => g.key === 'attendance');
+      const absentItem = attGroup?.items.find((it) => it.key === 'absent');
+      expect(absentItem).toBeUndefined(); // 사유결석이므로 결석(-0.40)에 포함되지 않아야 함!
+
+      const streakItem = attGroup?.items.find((it) => it.key === 'streak');
+      expect(streakItem).toBeDefined(); // 사유결석이 정시 5연속을 끊지 않아야 함!
+    });
+
+    it('오늘 19:30 일정이 12:00 기준 계산에 포함되지 않는다', () => {
+      const todaySched = makeSchedule('s_today', '2026-11-23', '19:30');
+      const pastSched = makeSchedule('s_past', '2026-11-20', '19:30');
+      const log = makeLog('l_past', 's_past', '2026-11-20 19:20:00');
+
+      const res = computePassionTemperature(
+        mockMember,
+        [mockMember],
+        [pastSched, todaySched],
+        [log],
+        [],
+        {},
+        new Date('2026-11-23T12:00:00+09:00')
+      );
+
+      // Only s_past should be in window (today at 12:00 has not started yet!)
+      expect(res.windowSize).toBe(1);
+      const attGroup = res.groups.find((g) => g.key === 'attendance');
+      const absentItem = attGroup?.items.find((it) => it.key === 'absent');
+      expect(absentItem).toBeUndefined(); // todaySched must NOT be counted as absent!
+    });
+  });
 });

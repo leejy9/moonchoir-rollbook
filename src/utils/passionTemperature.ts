@@ -2,15 +2,11 @@ import type {
   AppConfig,
   Member,
   RawAttendanceLog,
+  RSVPVote,
   RsvpEvent,
   Schedule,
 } from '../types/rollbook';
-import {
-  isMemberRequiredForSchedule,
-  reconcileSingleMemberAttendance,
-  resolveMergedMemberIds,
-} from './attendanceStats';
-import { getKSTDateString } from './date';
+import { resolveMergedMemberIds } from './attendanceStats';
 import {
   PASSION_RULES,
   getScheduleStartMs,
@@ -23,8 +19,36 @@ import {
   calculatePromiseGroup,
   calculateStageGroup,
 } from './passionCalculators';
+import {
+  buildMemberScheduleRecords,
+  type MemberScheduleRecord,
+} from './memberRecords';
 
 export * from './passionRules';
+
+export interface ComputePassionTemperatureOptions {
+  scheduleRecords?: MemberScheduleRecord[];
+  rsvpVotes?: RSVPVote[];
+  includeWeeklyDelta?: boolean;
+}
+
+function convertRsvpEventsToVotes(events: RsvpEvent[]): RSVPVote[] {
+  const sorted = [...events].sort(
+    (a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime()
+  );
+  const bySched = new Map<string, RsvpEvent>();
+  for (const ev of sorted) {
+    bySched.set(ev.scheduleId, ev);
+  }
+  return Array.from(bySched.values()).map((ev) => ({
+    id: `vote_${ev.seq}`,
+    scheduleId: ev.scheduleId,
+    memberId: ev.memberId,
+    status: ev.status as 'ATTEND' | 'ABSENT',
+    reason: '',
+    timestamp: ev.occurredAt,
+  }));
+}
 
 export function computePassionTemperature(
   member: Member,
@@ -33,76 +57,79 @@ export function computePassionTemperature(
   logs: RawAttendanceLog[],
   rsvpEvents: RsvpEvent[],
   config?: Partial<AppConfig>,
-  referenceDate?: Date
+  referenceDate?: Date,
+  options?: ComputePassionTemperatureOptions
 ): PassionTemperatureResult {
   const refDate = referenceDate ?? new Date();
-  const refDateStr = getKSTDateString(refDate);
   const refTimeMs = refDate.getTime();
 
   const validMemberIds = resolveMergedMemberIds(member.id, allMembers);
-  const memberLogs = logs.filter((l) => validMemberIds.has(l.memberId));
   const memberRsvpEvents = rsvpEvents.filter((e) => validMemberIds.has(e.memberId));
 
   const performanceCats = new Set(config?.performanceCategories || ['연주']);
 
-  // 1. Qualifying schedules for calculation window
-  const qualifyingSchedules = schedules
-    .filter((s) => {
-      if (s.isCancelled) return false;
-      if (s.date > refDateStr) return false;
-
-      const schedLogs = memberLogs.filter((l) => l.scheduleId === s.id);
-      const isMandatory = isMemberRequiredForSchedule(member, s.date, s);
-      const hasCheckedIn = schedLogs.length > 0;
-      return isMandatory || hasCheckedIn;
-    })
-    .sort((a, b) => {
-      const msA = getScheduleStartMs(a);
-      const msB = getScheduleStartMs(b);
-      return msB - msA;
+  // Single source of attendance status: buildMemberScheduleRecords
+  const allRecords =
+    options?.scheduleRecords ??
+    buildMemberScheduleRecords({
+      member,
+      members: allMembers,
+      schedules,
+      logs,
+      rsvpVotes: options?.rsvpVotes ?? convertRsvpEventsToVotes(rsvpEvents),
+      now: refDate,
+      lateGraceMinutes: config?.lateGraceMinutes ?? 10,
+      includeArchived: false,
     });
 
-  const windowSchedules = qualifyingSchedules.slice(0, PASSION_RULES.WINDOW_SIZE);
+  // 1. Qualifying records for calculation window
+  const qualifyingRecords = allRecords
+    .filter((r) => {
+      if (r.schedule.isCancelled || r.schedule.isArchived) return false;
+      if (r.finalStatus === '대기' || r.finalStatus === '미참' || r.finalStatus === '모수제외') return false;
+      const sStartMs = getScheduleStartMs(r.schedule);
+      if (sStartMs > refTimeMs) return false;
+      return true;
+    })
+    .sort((a, b) => getScheduleStartMs(b.schedule) - getScheduleStartMs(a.schedule));
 
-  // 2. Identify no-shows
+  const windowRecords = qualifyingRecords.slice(0, PASSION_RULES.WINDOW_SIZE);
+
+  // 2. Identify no-shows (only non-backfill events considered, Spec V27)
   const noShowScheduleIds = new Set<string>();
-  for (const s of windowSchedules) {
-    const schedLogs = memberLogs.filter((l) => l.scheduleId === s.id);
-    const rec = reconcileSingleMemberAttendance(member, s, schedLogs);
-
-    if (rec.finalStatus === '결석') {
-      const sStartMs = getScheduleStartMs(s);
+  for (const r of windowRecords) {
+    if (r.finalStatus === '결석') {
+      const sStartMs = getScheduleStartMs(r.schedule);
       const eventsBeforeStart = memberRsvpEvents
-        .filter((e) => e.scheduleId === s.id && new Date(e.occurredAt).getTime() <= sStartMs)
+        .filter(
+          (e) =>
+            e.scheduleId === r.id &&
+            e.action !== 'backfill' &&
+            new Date(e.occurredAt).getTime() <= sStartMs
+        )
         .sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
 
       const lastVote = eventsBeforeStart[eventsBeforeStart.length - 1];
       if (lastVote && isAttendStatus(lastVote.status)) {
-        noShowScheduleIds.add(s.id);
+        noShowScheduleIds.add(r.id);
       }
     }
   }
 
   // 3. Calculate 3 groups
   const { items: attendanceItems } = calculateAttendanceGroup(
-    member,
-    windowSchedules,
-    memberLogs,
+    windowRecords,
     noShowScheduleIds
   );
 
   const promiseItems = calculatePromiseGroup(
-    member,
-    windowSchedules,
-    memberLogs,
+    windowRecords,
     memberRsvpEvents,
     noShowScheduleIds
   );
 
   const stageItems = calculateStageGroup(
-    member,
-    schedules,
-    memberLogs,
+    allRecords,
     performanceCats,
     refTimeMs
   );
@@ -148,9 +175,10 @@ export function computePassionTemperature(
   );
   const finalValue = Math.round(clampedValue * 10) / 10;
 
-  // Weekly delta: recalculate with refDate - 7 days
+  // Weekly delta: recalculate with refDate - 7 days (R3)
   let weeklyDelta = 0;
-  if (!referenceDate) {
+  const shouldCalcWeekly = options?.includeWeeklyDelta ?? (!referenceDate);
+  if (shouldCalcWeekly) {
     const sevenDaysAgo = new Date(refTimeMs - 7 * 24 * 60 * 60 * 1000);
     const pastResult = computePassionTemperature(
       member,
@@ -159,7 +187,8 @@ export function computePassionTemperature(
       logs,
       rsvpEvents,
       config,
-      sevenDaysAgo
+      sevenDaysAgo,
+      { ...options, includeWeeklyDelta: false, scheduleRecords: undefined }
     );
     weeklyDelta = Math.round((finalValue - pastResult.value) * 10) / 10;
   }
@@ -167,7 +196,7 @@ export function computePassionTemperature(
   return {
     value: finalValue,
     weeklyDelta,
-    windowSize: windowSchedules.length,
+    windowSize: windowRecords.length,
     groups,
   };
 }
