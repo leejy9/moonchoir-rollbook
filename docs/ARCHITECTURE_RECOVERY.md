@@ -392,3 +392,7 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
   - 업로드는 앱(탭)이 열려 있는 동안에만 진행되며, 탭을 닫으면 중단되고 재개 시 미완료 항목을 안내한다.
   - 숨겨진 iframe으로 유튜브 백그라운드 재생은 지원하지 않으며, 플레이어를 내리면 비디오 플레이어가 파괴되고 저장 위치부터 복구된다.
 
+## 운영 주의: v3-C 이후 `fn_import_sheets_snapshot` 재실행 금지 (2026-11-23)
+- 이 함수는 `rsvp_votes`를 `TRUNCATE` 후 다시 넣는다. `TRUNCATE`는 행 트리거를 부르지 않아 `rsvp_events`의 기존 행은 남고, 다시 넣는 행마다 `action='insert'`, `occurred_at = 이관 시각` 이벤트가 생겨 약속 점수·스티커가 오염된다.
+- 실행 권한은 `service_role`뿐이다(`20261121000000_security_hardening.sql:511`). 앱에서 부르는 곳은 없다. 다시 실행해야 하면 먼저 리뷰어와 트리거 처리 방법을 정한다.
+- 근거: spec-auditor 검토(`docs/agent/SPEC_WRITING.md`), `20261119000002_migration_function.sql:31, 173-186`.
