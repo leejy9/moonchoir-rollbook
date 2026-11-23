@@ -381,12 +381,12 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
   - 기존 `TodayTab`, `CalendarTab`은 `HomeTab`으로 통합되어 폐기됨.
   - 전역 오디오 플레이어: `AudioPlayerProvider` 단일 오디오 인스턴스, `MiniPlayer` 고정 바, `FullPlayer` 전폭 오버레이, `QueueSheet`, `SpeedSheet`, YouTube 임베드 `VideoStage`.
 - **새 테이블 (2개):**
-  - `performances`: 공연 기본 정보 (`id`, `title`, `performance_date`, `venue`, `description`, `is_archived`, `created_at`, `updated_at`).
-  - `practice_performance_pieces`: 공연과 연습곡의 N:M 연결 및 정렬 순서 (`performance_id`, `piece_id`, `order_index`, `is_archived`, `created_at`, `updated_at`).
+  - `performances`: 공연 기본 정보 (`id`, `title`, `performance_date`(빈 값 또는 `YYYY-MM-DD`), `venue`, `archived_at`, `created_at`, `updated_at`).
+  - `practice_performance_pieces`: 공연과 연습곡의 N:M 연결 및 정렬 순서 (`performance_id`, `piece_id`, `order_index`, `archived_at`, `created_at`; 삭제 규칙 양쪽 `on delete restrict`).
   - 기존 시즌 카드(`program_cards`)와 연습곡 연결(`practice_program_pieces`)은 일정용으로 유지하되, 연습곡 관리 UI는 "공연" 기준으로 전환됨.
 - **업로드 경로:**
-  - Cloudflare Worker (`POST /upload`): 서명된 관리자 인증(Bearer 토큰)으로 R2 직접 스트리밍 업로드 (`mediaPublicBaseUrl` 연동).
-  - 클라이언트 다중 파일 일괄 업로드 (`MediaBatchList`, `uploadBatch.ts`): 순차적 큐 처리로 메모리 안정성 확보 및 Web Worker / mediabunny m4a 압축 지원.
+  - Cloudflare Worker (`POST /upload`): `X-Admin-Token` 헤더의 관리자 세션 토큰을 Worker가 `fn_authorize_media_upload` RPC로 확인한 뒤 R2에 저장(Worker에는 anon 키만 있음, service_role 키 없음) (`mediaPublicBaseUrl` 연동).
+  - 클라이언트 다중 파일 일괄 업로드 (`MediaBatchList`, `uploadBatch.ts`): 한 번에 하나씩 처리하는 큐, 업로드 전 기기에서 `mediabunny`로 m4a(64kbps) 압축(운영진 화면에서만 동적 import).
 - **알려진 한계 (§0-3):**
   - "본인만 보기"는 화면 수준이다. 단원 본인 인증(Task 76)이 이번 범위 밖이므로 출석·투표 원천 데이터는 전원분을 수신하며, 열정 온도와 스티커는 타인 화면에 그리지 않는 방식으로 보호한다.
   - 업로드는 앱(탭)이 열려 있는 동안에만 진행되며, 탭을 닫으면 중단되고 재개 시 미완료 항목을 안내한다.

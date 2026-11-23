@@ -189,7 +189,7 @@ export const AttendanceRecordSheet: React.FC<AttendanceRecordSheetProps> = ({
         <div className="attendance-records-list">
           {displayedRecords.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
-              선택한 조건의 출결 기록이 없어요
+              이 기간에는 없어요
             </div>
           ) : (
             displayedRecords.map((r) => {

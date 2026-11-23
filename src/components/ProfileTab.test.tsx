@@ -209,6 +209,6 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
     expect(html).toContain('최근 3개월');
     expect(html).toContain('올해');
     expect(html).toContain('전체');
-    expect(html).toContain('선택한 조건의 출결 기록이 없어요');
+    expect(html).toContain('이 기간에는 없어요');
   });
 });

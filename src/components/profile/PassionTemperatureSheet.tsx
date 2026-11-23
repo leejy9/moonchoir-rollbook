@@ -94,12 +94,8 @@ export const PassionTemperatureSheet: React.FC<PassionTemperatureSheetProps> = (
           </div>
         </div>
 
-        {/* Empty state message when no schedules */}
-        {windowSize === 0 ? (
-          <div className="passion-sheet-empty">
-            <p>아직 출결 및 활동 기록이 없어요.</p>
-          </div>
-        ) : (
+        {/* 기록이 없으면 위 큰 숫자 아래 "아직 기록이 없어요" 한 줄만 보인다(명세 §5-5). 묶음 영역은 그리지 않는다. */}
+        {windowSize === 0 ? null : (
           <div className="passion-sheet-groups">
             {groups.map((group) => {
               // 0이 아닌 항목만 표시. 지각은 점수가 0이어도 1회 이상이면 표시(명세 §5-5)
