@@ -54,6 +54,24 @@ for f in $(git ls-files 'src/*.ts' 'src/*.tsx' | grep -v '\.test\.'); do
   fi
 done
 
+# 규칙 11: 출결 상태는 buildMemberScheduleRecords 결과만 쓴다 (LESSONS 2026-11-23, V3-20 R2)
+# 엔진 내부(attendanceStats.ts), 레코드 조립(memberRecords.ts), 기존 서비스(sheets.ts) 외에서 새로 직접 호출 금지.
+for f in $changed; do
+  is_prod_code "$f" || continue
+  [[ "$f" =~ src/utils/attendanceStats\.ts$|src/utils/memberRecords\.ts$|src/services/sheets\.ts$ ]] && continue
+  git diff -U0 "$BASE" HEAD -- "$f" | grep -E '^\+[^+]' | grep -nE 'reconcileSingleMemberAttendance\(' \
+    | while read -r line; do echo "FAIL [규칙 11 출결 직접 계산] $f: $line → buildMemberScheduleRecords 결과를 쓴다"; done
+done | tee /tmp/guards-reconcile.txt
+[[ -s /tmp/guards-reconcile.txt ]] && fail=1
+
+# 규칙 12: 시간대 없는 KST 문자열을 ::timestamptz로 바로 읽지 않는다 (LESSONS 2026-11-23, V3-20 R4)
+for f in $changed; do
+  [[ "$f" =~ ^supabase/(migrations|tests)/.*\.sql$ ]] || continue
+  git diff -U0 "$BASE" HEAD -- "$f" | grep -E '^\+[^+]' | grep -E '::timestamptz' | grep -vE "tz-checked|at time zone|[+-][0-9]{2}(:[0-9]{2})?'::timestamptz|Z'::timestamptz" \
+    | while read -r line; do echo "FAIL [규칙 12 시간대] $f: $line → ::timestamp at time zone 'Asia/Seoul' 또는 -- tz-checked(이유)"; done
+done | tee /tmp/guards-tz.txt
+[[ -s /tmp/guards-tz.txt ]] && fail=1
+
 # R18: 패키지 파일 변경은 사람이 확인 (실패는 아님)
 if git diff --name-only "$BASE" HEAD | grep -qE '^package(-lock)?\.json$'; then
   echo "NOTE [R18] package.json / package-lock.json이 바뀌었다. 승인된 패키지인지 리뷰어가 확인한다."

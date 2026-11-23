@@ -58,7 +58,7 @@
 
 1. **원천 로그는 추가만 한다.** 출석 로그(`attendance_logs`), 투표 이력(`rsvp_events`), 재생 기록(`practice_listen_sessions`)은 수정하거나 지우지 않는다. 단, 단원 삭제 시 재생 기록 연쇄 삭제는 V13에 따른 예외다.
 2. **화면 숫자는 모두 투영 값이다.** 레벨, 온도, 스티커, 출석률은 원천 로그에서 매번 계산한다. 계산 결과를 DB에 저장하지 않는다.
-3. **출결 판정은 기존 단일 엔진을 쓴다.** `src/utils/attendanceStats.ts`의 `reconcileSingleMemberAttendance`, `calculateCumulativeAttendanceWithLifecycle`, `resolveMergedMemberIds`. 새로 판정 로직을 만들지 않는다. 병합된 단원(`merged_into_id`)의 기록은 별칭 집합으로 합산한다.
+3. **출결 판정은 기존 단일 엔진을 쓴다.** 일정별 상태는 **`buildMemberScheduleRecords`(`src/utils/memberRecords.ts`) 결과**를, 누적·기간 합계는 `calculateCumulativeAttendanceWithLifecycle`를 쓴다. 이 둘이 투표(사유결석), 설정의 `lateGraceMinutes`, 병합 별칭, 오늘·미래 일정(`대기`)을 처리한다. **`reconcileSingleMemberAttendance`를 새 코드에서 직접 부르지 않는다**(투표·지각 기준을 빠뜨리기 쉬움, 2026-11-23 V3-20 R2. CI가 검사). 새로 판정 로직을 만들지 않는다.
 4. **시간은 KST 헬퍼로만 다룬다**(`src/utils/date.ts`의 `getKSTDateString`, `getKSTClock`, `parseKSTDate`, `addDaysKST`). `toISOString().slice(0,10)`이나 `new Date('YYYY-MM-DD')` 직접 비교는 쓰지 않는다.
 5. **설정값은 하드코딩하지 않는다.** 파트, 일정 구분, 트랙 종류는 설정이나 데이터의 원문을 그대로 쓴다. 공연 여부는 `AppConfig.performanceCategories`(신규, 선택 필드, 기본값 `['연주']`)로 판단한다.
 6. **터치 타깃 44px 이상.** 아이콘 버튼은 아이콘이 작아도 클릭 영역은 44×44.
@@ -430,7 +430,7 @@ flowchart LR
 
 **계산 창**
 
-- 대상 일정: 기존 엔진의 모수와 같다. 필참이면서 오늘 이전인 일정과, 비필참이지만 체크인한 일정. 취소·보관·`미참`은 제외한다.
+- 대상 일정: `buildMemberScheduleRecords` 결과에서 상태가 `대기`·`미참`이 아닌 일정(필참이면서 시작 시각이 지난 일정 + 비필참이지만 체크인한 일정). 취소·보관은 제외한다. 오늘 일정은 시작 시각이 지난 뒤에만 들어간다(2026-11-23 V3-20 R2).
 - 시작 시각이 늦은 순으로 **최근 12개**를 쓴다.
 - 공연 항목만 최근 365일 기준이다.
 
@@ -584,7 +584,7 @@ flowchart LR
   - update는 `status`가 바뀔 때만 기록한다.
   - 클라이언트와 RPC는 고치지 않는다(모든 경로가 자동 기록됨).
 - **백필:** 마이그레이션 안에서 기존 `rsvp_votes` 각 행을 `action='backfill'`로 1회 넣는다.
-  - `occurred_at`은 `timestamp`를 `timestamptz`로 바꿀 수 있으면 그 값, 안 되면 `received_at`.
+  - `occurred_at`은 `timestamp`(text)에서 만든다. **이 문자열은 시간대 없는 KST**(`fn_get_kst_now_string()` 형식 `YYYY-MM-DD HH24:MI:SS`)일 수 있다. 시간대 표기가 있으면 그대로, 없으면 `::timestamp at time zone 'Asia/Seoul'`로 읽는다. 읽을 수 없으면 `received_at`. (2026-11-23 V3-20 R4: 그냥 `::timestamptz`로 읽으면 UTC로 해석돼 9시간 밀린다)
   - 다시 실행해도 중복되지 않게 `not exists`로 막는다.
 - **보호:** RLS 켜고 직접 정책은 없다. update/delete를 막는 트리거를 건다. **`prevent_row_deletion`은 재사용하지 않는다**(V22에서 카탈로그 삭제용 우회 장치가 생겼으므로). `rsvp_events` 전용 차단 함수를 새로 만든다.
 - 인덱스: `(member_id, schedule_id, occurred_at)`.

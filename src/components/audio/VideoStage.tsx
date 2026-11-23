@@ -74,7 +74,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
               playerRef.current = event.target;
               callbacksRef.current.onPlayerReady?.(event.target);
 
-              // Set iframe referrerpolicy
+              // Set iframe referrerpolicy fallback
               const iframe = containerRef.current?.querySelector('iframe');
               if (iframe) {
                 iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
@@ -103,6 +103,12 @@ export const VideoStage: React.FC<VideoStageProps> = ({
             },
           },
         });
+
+        // V3-20 R11: Set iframe referrerpolicy immediately before onReady if iframe was created
+        const immediateIframe = containerRef.current?.querySelector('iframe');
+        if (immediateIframe) {
+          immediateIframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+        }
       })
       .catch((err) => {
         console.warn('[VideoStage] loadYoutubeIframeApi failed:', err);
@@ -150,10 +156,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
 
   if (loadError || !videoId) {
     return (
-      <div className="full-player-video-stage fallback" role="region" aria-label="영상 재생 실패">
-        <p style={{ color: 'var(--text-white, #ffffff)', fontSize: '13px', marginBottom: '8px' }}>
-          영상을 불러올 수 없습니다
-        </p>
+      <div className="full-player-video-stage fallback" role="region" aria-label="유튜브 영상">
         {activeVideo.track.url && (
           <a
             href={activeVideo.track.url}
@@ -162,7 +165,10 @@ export const VideoStage: React.FC<VideoStageProps> = ({
             className="full-player-yt-open-btn"
             aria-label="유튜브 앱으로 열기"
           >
-            유튜브 앱으로 열기 ↗
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+            </svg>
+            <span>↗</span>
           </a>
         )}
       </div>
