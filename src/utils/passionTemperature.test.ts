@@ -372,5 +372,25 @@ describe('computePassionTemperature (V3-12)', () => {
       const absentItem = attGroup?.items.find((it) => it.key === 'absent');
       expect(absentItem).toBeUndefined(); // todaySched must NOT be counted as absent!
     });
+
+    it('7일 사이 정시 1회 추가 시 weeklyDelta === 0.1을 반환한다 (R3)', () => {
+      const s1 = makeSchedule('s1', '2026-11-10', '19:30');
+      const s2 = makeSchedule('s2', '2026-11-20', '19:30');
+      const l1 = makeLog('l1', 's1', '2026-11-10 19:25:00');
+      const l2 = makeLog('l2', 's2', '2026-11-20 19:25:00');
+
+      const res = computePassionTemperature(
+        mockMember,
+        [mockMember],
+        [s1, s2],
+        [l1, l2],
+        [],
+        {},
+        new Date('2026-11-23T12:00:00+09:00'),
+        { includeWeeklyDelta: true }
+      );
+
+      expect(res.weeklyDelta).toBe(0.1);
+    });
   });
 });
