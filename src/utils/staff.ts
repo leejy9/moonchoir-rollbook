@@ -1,4 +1,15 @@
-import type { BoundDeviceProfile, Member } from '../types/rollbook';
+import type { AppConfig, BoundDeviceProfile, Member } from '../types/rollbook';
+
+/**
+ * 활동 대시보드(내 활동)에서 '스태프(지도진/반주진)'로 분류하는 파트 키워드 목록.
+ * 객원은 노래하는 단원이므로 스태프가 아님.
+ */
+export const ACTIVITY_STAFF_PART_KEYWORDS = ['선생님', '지휘', '반주'] as const;
+
+/**
+ * 기본 합창 파트 필터링(신규 일정·프로그램 카드 생성 시 비합창 파트 제외용) 키워드 목록.
+ */
+export const NON_CHOIR_PART_KEYWORDS = ['선생님', '지휘', '반주', '객원'] as const;
 
 /**
  * 운영진 메뉴/버튼 노출 여부를 판정하는 순수 함수.
@@ -38,3 +49,53 @@ export function isStaffMember(
     status === '운영진'
   );
 }
+
+/**
+ * 내 활동(ProfileTab)에서 단원 대신 '스태프 화면'(지도진/반주진)을 적용할지 판정하는 순수 함수 (Spec §5-7, V26).
+ *
+ * 판정 기준:
+ * - memberStatus가 '선생님'
+ * - 또는 part에 '선생님', '지휘', '반주' 키워드가 포함된 경우
+ *
+ * 주의:
+ * - 객원은 노래하는 단원이므로 스태프가 아닙니다.
+ * - role이 ADMIN/MASTER이더라도 파트가 알토/소프라노 등 합창 단원이면 노래하는 단원이므로 false를 반환합니다.
+ */
+export function isActivityStaff(
+  member?: Member | BoundDeviceProfile | null,
+  _config?: AppConfig | null,
+  allMembers?: Member[]
+): boolean {
+  if (!member) return false;
+
+  let memberStatus: string | undefined;
+  let part: string | undefined;
+
+  if ('role' in member) {
+    memberStatus = member.memberStatus;
+    part = member.part;
+  } else if ('memberId' in member && allMembers) {
+    const found = allMembers.find((m) => m.id === member.memberId);
+    if (found) {
+      memberStatus = found.memberStatus;
+      part = found.part;
+    } else {
+      part = member.part;
+    }
+  } else if ('part' in member) {
+    part = member.part;
+  }
+
+  if (memberStatus === '선생님') return true;
+
+  if (part) {
+    for (const kw of ACTIVITY_STAFF_PART_KEYWORDS) {
+      if (part.includes(kw)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
