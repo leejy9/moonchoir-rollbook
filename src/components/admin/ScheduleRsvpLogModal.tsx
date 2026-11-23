@@ -2,7 +2,10 @@ import React, { useMemo, useState } from 'react';
 import type { Member, Schedule, RSVPVote, RSVPStatus } from '../../types/rollbook';
 import { sheetsService } from '../../services/sheets';
 import { normalizeToKSTTimestamp } from '../../utils/date';
-import { isMemberRequiredForSchedule } from '../../utils/attendanceStats';
+import {
+  isMemberRequiredForSchedule,
+  resolveMergedMemberIds,
+} from '../../utils/attendanceStats';
 
 export interface ScheduleRsvpLogModalProps {
   schedule: Schedule;
@@ -42,6 +45,10 @@ export const ScheduleRsvpLogModal: React.FC<ScheduleRsvpLogModalProps> = ({
     votes.forEach((v) => map.set(v.memberId, v));
     return map;
   }, [votes]);
+  const allMembersForIdentity = useMemo(() => {
+    const combined = [...sheetsService.getMembers(true, true), ...members];
+    return [...new Map(combined.map((member) => [member.id, member])).values()];
+  }, [members]);
 
   // 3. 대상 단원 여부 판정 및 전체 단원 투표 상태 매핑
   const allRows: MemberVoteRow[] = useMemo(() => {
@@ -49,7 +56,12 @@ export const ScheduleRsvpLogModal: React.FC<ScheduleRsvpLogModalProps> = ({
 
     return activeMembers.map((m) => {
       const vote = votesByMemberId.get(m.id);
-      const isTarget = isMemberRequiredForSchedule(m, schedule.date, schedule);
+      const isTarget = isMemberRequiredForSchedule(
+        m,
+        schedule.date,
+        schedule,
+        resolveMergedMemberIds(m.id, allMembersForIdentity)
+      );
       const voteStatus: RSVPStatus | 'UNVOTED' = vote ? vote.status : 'UNVOTED';
       const reason = vote?.reason || '';
       const timestamp = vote?.timestamp ? normalizeToKSTTimestamp(vote.timestamp) : '';
@@ -65,7 +77,7 @@ export const ScheduleRsvpLogModal: React.FC<ScheduleRsvpLogModalProps> = ({
         isTarget,
       };
     });
-  }, [members, votesByMemberId, schedule]);
+  }, [members, votesByMemberId, schedule, allMembersForIdentity]);
 
   // 4. 통계 카운트 계산
   const tally = useMemo(() => {

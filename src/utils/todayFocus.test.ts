@@ -52,6 +52,23 @@ describe('selectTodayFocus Pure Function', () => {
     expect(getSchedulePriorityScore(schOpen, memberSoprano, nowDuring1930)).toBe(350);
   });
 
+  it('treats a representative as a priority target when the old ID is selected', () => {
+    const targeted = createSchedule({
+      id: 'sch_merged_target',
+      targetAudienceType: 'CUSTOM_MEMBERS',
+      targetMemberIds: ['old'],
+    });
+
+    expect(
+      getSchedulePriorityScore(
+        targeted,
+        memberSoprano,
+        nowDuring1930,
+        new Set([memberSoprano.id, 'old'])
+      )
+    ).toBe(350);
+  });
+
   it('selects single schedule for today in TODAY mode', () => {
     const single = createSchedule({
       id: 'sch_1',

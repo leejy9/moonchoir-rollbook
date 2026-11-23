@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import { PREFERENCE_KEYS, readPreference, writePreference } from '../services/sheetsStorage';
 import type { BoundDeviceProfile, Member, Schedule } from '../types/rollbook';
-import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
+import { isMemberRequiredForSchedule, resolveMergedMemberIds } from '../utils/attendanceStats';
 import { resolveMemberIdentity } from '../utils/memberIdentity';
 import { getCalendarGrid, groupSchedulesByDate } from '../utils/calendar';
 import {
@@ -107,6 +107,10 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       createdAt: profile.boundAt || '',
     };
   }, [allMembers, profile.memberId, profile.name, profile.part, profile.phoneLast4, profile.boundAt]);
+  const currentMemberAliasIds = useMemo(
+    () => resolveMergedMemberIds(currentMember.id, allMembers),
+    [currentMember.id, allMembers]
+  );
 
   const schedulesByDate = useMemo(() => {
     return groupSchedulesByDate(schedules);
@@ -137,11 +141,12 @@ export const HomeTab: React.FC<HomeTabProps> = ({
     return selectTodayFocus({
       schedules,
       member: currentMember,
+      memberAliasIds: currentMemberAliasIds,
       now: currentNow,
       todayStr,
       selectedId: selectedScheduleId,
     });
-  }, [schedules, currentMember, currentNow, todayStr, selectedScheduleId]);
+  }, [schedules, currentMember, currentMemberAliasIds, currentNow, todayStr, selectedScheduleId]);
 
   const handleToggleCalendarView = (view: 'week' | 'month') => {
     setCalendarView(view);
@@ -253,7 +258,8 @@ export const HomeTab: React.FC<HomeTabProps> = ({
           isRequired={isMemberRequiredForSchedule(
             currentMember,
             focusResult.focus.date,
-            focusResult.focus
+            focusResult.focus,
+            currentMemberAliasIds
           )}
           cta={deriveTodayCta({
             schedule: focusResult.focus,
@@ -261,7 +267,8 @@ export const HomeTab: React.FC<HomeTabProps> = ({
             isRequired: isMemberRequiredForSchedule(
               currentMember,
               focusResult.focus.date,
-              focusResult.focus
+              focusResult.focus,
+              currentMemberAliasIds
             ),
             myVote: sheetsService
               .getRSVPVotes(focusResult.focus.id)

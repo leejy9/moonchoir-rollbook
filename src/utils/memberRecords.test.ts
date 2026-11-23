@@ -250,4 +250,29 @@ describe('buildMemberScheduleRecords', () => {
     expect(oldProfileRecords[0].finalStatus).toBe('출석');
     expect(representativeRecords[0].finalStatus).toBe('출석');
   });
+
+  it('counts a representative as required when only an old ID is explicitly targeted', () => {
+    const canonicalMember: Member = { ...mockMember, id: 'mem_canonical' };
+    const mergedMember: Member = {
+      ...mockMember,
+      id: 'mem_merged',
+      status: 'MERGED',
+      mergedIntoId: 'mem_canonical',
+    };
+    const customSchedule: Schedule = {
+      ...mockSchedules[1],
+      targetAudienceType: 'CUSTOM_MEMBERS',
+      targetMemberIds: ['mem_merged'],
+    };
+
+    const records = buildMemberScheduleRecords({
+      member: canonicalMember,
+      members: [canonicalMember, mergedMember],
+      schedules: [customSchedule],
+      logs: [],
+      now: mockNow,
+    });
+
+    expect(records[0].finalStatus).toBe('결석');
+  });
 });

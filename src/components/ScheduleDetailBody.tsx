@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Member, Schedule } from '../types/rollbook';
-import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
+import { isMemberRequiredForSchedule, resolveMergedMemberIds } from '../utils/attendanceStats';
 import { buildKakaoMapLink } from '../utils/kakaoMaps';
 import { buildRsvpTally } from '../utils/rsvpTally';
 import { sheetsService } from '../services/sheets';
@@ -16,7 +16,14 @@ export interface ScheduleDetailBodyProps {
 export const ScheduleDetailBody: React.FC<ScheduleDetailBodyProps> = ({ schedule, member }) => {
   const [isRosterOpen, setIsRosterOpen] = useState(false);
 
-  const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
+  const allMembers = sheetsService.getMembers(true, true);
+  const memberAliasIds = resolveMergedMemberIds(member.id, allMembers);
+  const isRequired = isMemberRequiredForSchedule(
+    member,
+    schedule.date,
+    schedule,
+    memberAliasIds
+  );
   const kakaoMapLink = buildKakaoMapLink({
     name: schedule.locationName,
     lat: schedule.targetLat,
@@ -24,9 +31,15 @@ export const ScheduleDetailBody: React.FC<ScheduleDetailBodyProps> = ({ schedule
   });
 
   // Calculate RSVP and attendance tally
-  const allMembers = sheetsService.getMembers(true);
   const targetMembers = allMembers.filter(
-    (m) => m.status === 'ACTIVE' && isMemberRequiredForSchedule(m, schedule.date, schedule)
+    (m) =>
+      m.status === 'ACTIVE' &&
+      isMemberRequiredForSchedule(
+        m,
+        schedule.date,
+        schedule,
+        resolveMergedMemberIds(m.id, allMembers)
+      )
   );
   const votes = sheetsService.getRSVPVotes(schedule.id);
   const reconciled = sheetsService.reconcileAttendance(schedule.id);

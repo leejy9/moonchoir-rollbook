@@ -1,7 +1,10 @@
 import React from 'react';
 import { sheetsService } from '../../services/sheets';
 import type { Member, Schedule } from '../../types/rollbook';
-import { isMemberRequiredForSchedule } from '../../utils/attendanceStats';
+import {
+  isMemberRequiredForSchedule,
+  resolveMergedMemberIds,
+} from '../../utils/attendanceStats';
 import { IconCalendar } from '../Icons';
 import { LiquidGauge } from '../LiquidGauge';
 
@@ -22,6 +25,11 @@ export const HomeUpcomingListSection: React.FC<HomeUpcomingListSectionProps> = (
   onViewCalendar,
   onSelectSchedule,
 }) => {
+  const aliasIdsByMemberId = React.useMemo(
+    () => new Map(members.map((member) => [member.id, resolveMergedMemberIds(member.id, members)])),
+    [members]
+  );
+
   return (
     <section className="month-overview-card" style={{ marginTop: '16px' }}>
       <div className="section-title-row">
@@ -44,7 +52,16 @@ export const HomeUpcomingListSection: React.FC<HomeUpcomingListSectionProps> = (
           </div>
         ) : (
           upcomingSchedules.slice(0, 5).map((s) => {
-            const targetForSch = members.filter((m) => isMemberRequiredForSchedule(m, s.date, s));
+            const targetForSch = members.filter(
+              (m) =>
+                m.status !== 'MERGED' &&
+                isMemberRequiredForSchedule(
+                  m,
+                  s.date,
+                  s,
+                  aliasIdsByMemberId.get(m.id)
+                )
+            );
             const targetIdSet = new Set(targetForSch.map((tm) => tm.id));
             const votes = sheetsService.getRSVPVotes(s.id);
             const attendedTargetIds = new Set(

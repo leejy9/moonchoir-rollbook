@@ -586,6 +586,48 @@ describe('Member Lifecycle & Attendance Eligibility Engine', () => {
       expect(stats[1].absent).toBe(0);
     });
 
+    it('대표 단원은 병합 별칭이 지정된 CUSTOM_MEMBERS 일정의 필참 대상이다', () => {
+      const canonicalMember: Member = { ...sopranoMember, id: 'canonical' };
+      const mergedMember: Member = {
+        ...tenorMember,
+        id: 'old',
+        status: 'MERGED',
+        mergedIntoId: canonicalMember.id,
+      };
+      const customSchedule: Schedule = {
+        id: 'sch_merged_target',
+        title: '병합 대상 연습',
+        date: '2026-10-14',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '제1연습실',
+        category: '추가연습',
+        targetAudienceType: 'CUSTOM_MEMBERS',
+        targetMemberIds: ['old'],
+      };
+
+      expect(
+        isMemberRequiredForSchedule(
+          canonicalMember,
+          customSchedule.date,
+          customSchedule,
+          new Set([canonicalMember.id, mergedMember.id])
+        )
+      ).toBe(true);
+
+      const stats = calculateCumulativeAttendanceWithLifecycle(
+        [canonicalMember],
+        [customSchedule],
+        [],
+        '2026-10-15',
+        [],
+        10,
+        [canonicalMember, mergedMember]
+      );
+      expect(stats[0].totalSessions).toBe(1);
+      expect(stats[0].absent).toBe(1);
+    });
+
     it('관리자가 직접 지정(CUSTOM_MEMBERS)한 경우 휴단원도 필참으로 인정하되, 퇴단원은 실수로 지정해도 제외한다', () => {
       const inactiveMember: Member = {
         id: 'm_inactive',

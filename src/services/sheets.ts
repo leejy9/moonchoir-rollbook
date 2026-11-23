@@ -309,13 +309,14 @@ export class SheetsService {
     const schedules = this.getSchedules();
     if (!schedules.some((s) => s.visibility === 'TARGETS_ONLY')) return schedules;
 
+    const aliasIds = memberId ? resolveMergedMemberIds(memberId, this.members) : undefined;
     const canonicalId = memberId
       ? resolveMemberIdentity(memberId, this.members).canonicalId
       : undefined;
     const member = canonicalId ? this.members.find((m) => m.id === canonicalId) : undefined;
 
     return schedules.filter((s) => {
-      if (isScheduleVisibleToMember(member, s)) return true;
+      if (isScheduleVisibleToMember(member, s, aliasIds)) return true;
       if (!member) return false;
       // TARGETS_ONLY 일정이라도 해당 단원의 최종 출석이 실제로 인정된 경우에만 내역 보존을 위해 노출
       // (단순 raw 로그 존재나 취소/미인정 로그만 있는 비대상자에게는 절대 노출하지 않음)
@@ -1850,7 +1851,8 @@ export class SheetsService {
       schedule,
       memberLogs,
       memberRsvp,
-      lateGraceMinutes
+      lateGraceMinutes,
+      aliasIds
     );
   }
 

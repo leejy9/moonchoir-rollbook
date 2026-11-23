@@ -31,15 +31,23 @@ export function resolveMemberIdentity(memberId: string, members: Member[]): Memb
     console.warn(`[memberIdentity] Merge cycle found for ${memberId}; using it as canonical ID.`);
   }
 
+  const childrenByParent = new Map<string, string[]>();
+  for (const member of members) {
+    if (!member.mergedIntoId) continue;
+    const children = childrenByParent.get(member.mergedIntoId) || [];
+    children.push(member.id);
+    childrenByParent.set(member.mergedIntoId, children);
+  }
+
   const aliases = new Set([canonicalId]);
-  let addedAlias = true;
-  while (addedAlias) {
-    addedAlias = false;
-    for (const member of members) {
-      if (member.mergedIntoId && aliases.has(member.mergedIntoId) && !aliases.has(member.id)) {
-        aliases.add(member.id);
-        addedAlias = true;
-      }
+  const pending = [canonicalId];
+  while (pending.length > 0) {
+    const parentId = pending.pop();
+    if (parentId === undefined) continue;
+    for (const childId of childrenByParent.get(parentId) || []) {
+      if (aliases.has(childId)) continue;
+      aliases.add(childId);
+      pending.push(childId);
     }
   }
 

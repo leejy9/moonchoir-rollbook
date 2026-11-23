@@ -16,6 +16,7 @@ export interface TodayFocusInput {
    */
   schedules: Schedule[];
   member: Member | undefined;
+  memberAliasIds?: ReadonlySet<string>;
   now: Date;
   todayStr: string;
   selectedId?: string | null;
@@ -29,7 +30,8 @@ export interface TodayFocusInput {
 export function getSchedulePriorityScore(
   sch: Schedule,
   member: Member | undefined,
-  now: Date
+  now: Date,
+  memberAliasIds?: ReadonlySet<string>
 ): number {
   const win = getCheckInWindowState(sch, now);
   let timeScore = 100;
@@ -39,7 +41,9 @@ export function getSchedulePriorityScore(
     timeScore = 200;
   }
 
-  const isTarget = member ? isMemberRequiredForSchedule(member, sch.date, sch) : false;
+  const isTarget = member
+    ? isMemberRequiredForSchedule(member, sch.date, sch, memberAliasIds)
+    : false;
   const targetScore = isTarget ? 50 : 0;
 
   return timeScore + targetScore;
@@ -64,7 +68,7 @@ export function computeDDayDifference(targetDate: string, todayStr: string): num
  * - 반환값: { mode: 'TODAY' | 'NEXT' | 'NONE', schedules: Schedule[], focus?: Schedule, dDay?: number }
  */
 export function selectTodayFocus(input: TodayFocusInput): TodayFocusResult {
-  const { schedules, member, now, todayStr, selectedId } = input;
+  const { schedules, member, memberAliasIds, now, todayStr, selectedId } = input;
 
   // 1. 유효 일정 필터링 (취소 및 보관 제외)
   const validSchedules = schedules.filter((s) => !s.isCancelled && !s.isArchived);
@@ -79,8 +83,8 @@ export function selectTodayFocus(input: TodayFocusInput): TodayFocusResult {
 
   const sortByPriority = (list: Schedule[]) => {
     return [...list].sort((a, b) => {
-      const scoreA = getSchedulePriorityScore(a, member, now);
-      const scoreB = getSchedulePriorityScore(b, member, now);
+      const scoreA = getSchedulePriorityScore(a, member, now, memberAliasIds);
+      const scoreB = getSchedulePriorityScore(b, member, now, memberAliasIds);
       if (scoreB !== scoreA) {
         return scoreB - scoreA;
       }

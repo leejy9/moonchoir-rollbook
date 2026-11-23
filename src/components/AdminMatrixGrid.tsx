@@ -3,7 +3,7 @@ import { sheetsService } from '../services/sheets';
 import type { Member, Schedule } from '../types/rollbook';
 import { LiquidGauge } from './LiquidGauge';
 import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString } from '../utils/date';
-import { isMemberRequiredForSchedule } from '../utils/attendanceStats';
+import { isMemberRequiredForSchedule, resolveMergedMemberIds } from '../utils/attendanceStats';
 import { getMatrixCellDisplay } from '../utils/matrixCell';
 import {
   getDefaultArrivalTime,
@@ -56,6 +56,23 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
   const [arrivalTime, setArrivalTime] = useState('');
   const [arrivalError, setArrivalError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const allMembersForIdentity = React.useMemo(
+    () => {
+      const combined = [...sheetsService.getMembers(true, true), ...members];
+      return [...new Map(combined.map((member) => [member.id, member])).values()];
+    },
+    [members]
+  );
+  const aliasIdsByMemberId = React.useMemo(
+    () =>
+      new Map(
+        members.map((member) => [
+          member.id,
+          resolveMergedMemberIds(member.id, allMembersForIdentity),
+        ])
+      ),
+    [members, allMembersForIdentity]
+  );
 
   // Pre-calculate reconciliations for all visible schedules
   const reconciliationsBySchedule = React.useMemo(() => {
@@ -89,7 +106,12 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
       schedules.forEach((s) => {
         const recList = reconciliationsBySchedule.get(s.id) || [];
         const item = recList.find((r) => r.memberId === m.id);
-        const isRequired = isMemberRequiredForSchedule(m, s.date, s);
+        const isRequired = isMemberRequiredForSchedule(
+          m,
+          s.date,
+          s,
+          aliasIdsByMemberId.get(m.id)
+        );
         const isPastOrToday = s.date <= todayStr;
         const status = item?.finalStatus || (isRequired ? '결석' : '미참');
 
@@ -122,7 +144,7 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
       map.set(m.id, { attended, late, excused, absent, exempt, rate });
     });
     return map;
-  }, [members, schedules, reconciliationsBySchedule]);
+  }, [members, schedules, reconciliationsBySchedule, aliasIdsByMemberId]);
 
   // Sorting
   const sortedMembers = React.useMemo(() => {
@@ -164,7 +186,12 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
     const recList = reconciliationsBySchedule.get(schedule.id) || [];
     const item = recList.find((r) => r.memberId === member.id);
     const rect = e.currentTarget.getBoundingClientRect();
-    const isRequired = isMemberRequiredForSchedule(member, schedule.date, schedule);
+    const isRequired = isMemberRequiredForSchedule(
+      member,
+      schedule.date,
+      schedule,
+      aliasIdsByMemberId.get(member.id)
+    );
     const defaultStatus = getMatrixCellDisplay({ schedule, item, isRequired }).statusText;
 
     setPopoverTarget({
@@ -448,7 +475,12 @@ export const AdminMatrixGrid: React.FC<AdminMatrixGridProps> = ({
                   {schedules.map((s) => {
                     const recList = reconciliationsBySchedule.get(s.id) || [];
                     const item = recList.find((r) => r.memberId === m.id);
-                    const isRequired = isMemberRequiredForSchedule(m, s.date, s);
+                    const isRequired = isMemberRequiredForSchedule(
+                      m,
+                      s.date,
+                      s,
+                      aliasIdsByMemberId.get(m.id)
+                    );
                     const display = getMatrixCellDisplay({ schedule: s, item, isRequired });
 
                     return (
