@@ -5,6 +5,7 @@ import { uploadQueue } from '../../../services/media/uploadQueue';
 import { validateAudioFile, COMPRESSION_ERROR_MESSAGE } from '../../../services/media/audioCompress';
 import { createUploadSaveFn } from '../../../services/media/uploadSave';
 import { readAudioDuration } from '../../../services/media/audioMetadata';
+import { formatStorageUsage } from '../../../utils/formatStorage';
 
 interface MediaUploadSheetProps {
   pieceId?: string;
@@ -302,7 +303,7 @@ export const MediaUploadSheet: React.FC<MediaUploadSheetProps> = ({
               {usageError
                 ? '확인할 수 없음'
                 : mediaUsage
-                ? `${totalGB.toFixed(1)}GB / 10GB`
+                ? `${formatStorageUsage(mediaUsage.totalBytes)} / 10GB`
                 : '계산 중...'}
             </span>
           </div>
