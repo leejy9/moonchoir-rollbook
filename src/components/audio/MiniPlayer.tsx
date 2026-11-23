@@ -26,6 +26,7 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onOpenFullPlayer }) => {
     currentIndex,
     repeatMode,
     activeVideo,
+    showMinimizeHint,
   } = useAudioPlayer();
 
   const { currentTime, duration } = useAudioPosition();
@@ -185,6 +186,13 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onOpenFullPlayer }) => {
         style={{ width: `${progressPercent}%` }}
         aria-hidden="true"
       />
+
+      {/* 5. Minimize Toast Hint (Spec §3-3-5, §9, V25) */}
+      {showMinimizeHint && (
+        <div className="mini-player-toast" role="status" aria-live="polite">
+          영상은 플레이어를 열어야 재생돼요
+        </div>
+      )}
     </div>
   );
 };

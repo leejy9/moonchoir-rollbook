@@ -186,6 +186,41 @@
   margin-bottom: 20px;
 }
 
+.full-player-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.full-player-title-row .full-player-track-name {
+  margin-bottom: 0;
+}
+
+.full-player-yt-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-white, #ffffff);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-height: 44px;
+  min-width: 44px;
+  box-sizing: border-box;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.full-player-yt-badge-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 .full-player-track-name {
   font-size: 24px;
   font-weight: 800;

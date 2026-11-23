@@ -46,6 +46,8 @@ export interface AudioPlayerContextValue {
   audioElementRef: React.RefObject<HTMLAudioElement | null>;
   activeVideo?: ActiveVideoState | null;
   setActiveVideo?: (video: ActiveVideoState | null) => void;
+  showMinimizeHint?: boolean;
+  triggerMinimizeHint?: () => void;
 }
 
 export interface AudioPositionContextValue {

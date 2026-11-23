@@ -1,10 +1,4 @@
-import React, {
-  useRef,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-} from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import type { PlayableTrackItem } from '../../utils/audioQueue';
 import { clampSeekTime, snapPlaybackSpeed } from '../../utils/audioQueue';
 import {
@@ -14,11 +8,7 @@ import {
   indexOnTrackEnd,
   type RepeatMode,
 } from '../../utils/practiceQueue';
-import {
-  PREFERENCE_KEYS,
-  readPreference,
-  writePreference,
-} from '../../services/sheetsStorage';
+import { PREFERENCE_KEYS, readPreference, writePreference } from '../../services/sheetsStorage';
 import {
   AudioPlayerContext,
   AudioPositionContext,
@@ -28,6 +18,7 @@ import {
   type QueueSource,
 } from './audioPlayerContext';
 import { useMediaSession } from './useMediaSession';
+import { useYtMinimizeHint } from './useYtMinimizeHint';
 
 export interface AudioPlayerProviderProps {
   children: React.ReactNode;
@@ -63,6 +54,15 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
   );
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('one');
   const [activeVideo, setActiveVideo] = useState<ActiveVideoState | null>(null);
+  const { showHint: showMinimizeHint, triggerHint: triggerMinimizeHint } = useYtMinimizeHint();
+
+  const handleSetActiveVideo = useCallback((video: ActiveVideoState | null) => {
+    if (video) {
+      audioRef.current?.pause();
+      setIsPlaying(false);
+    }
+    setActiveVideo(video);
+  }, []);
 
   // --mini-player-h CSS 변수 연동
   useEffect(() => {
@@ -322,32 +322,18 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({
       closePlayer,
       audioElementRef: audioRef,
       activeVideo,
-      setActiveVideo,
+      setActiveVideo: handleSetActiveVideo,
+      showMinimizeHint,
+      triggerMinimizeHint,
     }),
     [
-      currentTrack,
-      queue,
-      currentIndex,
-      queueSource,
-      isPlaying,
-      isBlocked,
-      playbackSpeed,
-      repeatMode,
-      playTrack,
-      playQueue,
-      playQueueIndex,
-      togglePlay,
-      pause,
-      resume,
-      seekTo,
-      seekRelative,
-      setSpeed,
-      cycleSpeed,
-      cycleRepeat,
-      previousTrack,
-      nextTrack,
-      closePlayer,
-      activeVideo,
+      currentTrack, queue, currentIndex, queueSource,
+      isPlaying, isBlocked, playbackSpeed, repeatMode,
+      playTrack, playQueue, playQueueIndex,
+      togglePlay, pause, resume, seekTo, seekRelative,
+      setSpeed, cycleSpeed, cycleRepeat, previousTrack, nextTrack,
+      closePlayer, activeVideo, handleSetActiveVideo,
+      showMinimizeHint, triggerMinimizeHint,
     ]
   );
 

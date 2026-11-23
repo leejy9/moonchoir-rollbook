@@ -16,6 +16,7 @@ export const PREFERENCE_KEYS = {
   PLAYBACK_RATE: 'moonchoir_pref_playback_rate_v1',
   SEEN_STICKERS: 'moonchoir_pref_seen_stickers_v1',
   UPLOAD_JOBS: 'moonchoir_pref_upload_jobs_v1',
+  YT_MINIMIZE_HINT_COUNT: 'moonchoir_pref_yt_minimize_hint_v1',
 } as const;
 
 export const DATA_CACHE_KEYS: readonly string[] = Object.values(STORAGE_KEYS);

@@ -45,7 +45,7 @@ import { MiniPlayer } from './components/audio/MiniPlayer';
 import { FullPlayer } from './components/audio/FullPlayer';
 
 function MainApp() {
-  const { closePlayer, currentTrack } = useAudioPlayer();
+  const { closePlayer, currentTrack, activeVideo } = useAudioPlayer();
 
   // Device binding state
   const [profile, setProfile] = useState<BoundDeviceProfile | null>(() => getBoundDeviceProfile());
@@ -431,16 +431,15 @@ function MainApp() {
       {/* Full Screen Audio Player Overlay */}
       {isBound && route.area === 'member' && route.overlay?.kind === 'player' && (
         <FullPlayer
-          piece={
-            currentTrack
-              ? sheetsService.getPracticeCatalog().pieces.find((p) => p.id === currentTrack.track.pieceId) || null
-              : null
-          }
-          siblingTracks={
-            currentTrack
-              ? sheetsService.getPracticeCatalog().tracks.filter((t) => t.pieceId === currentTrack.track.pieceId)
-              : []
-          }
+          piece={(() => {
+            const pid = activeVideo?.track.pieceId || currentTrack?.track.pieceId;
+            return pid ? sheetsService.getPracticeCatalog().pieces.find((p) => p.id === pid) || null : null;
+          })()}
+          siblingTracks={(() => {
+            const pid = activeVideo?.track.pieceId || currentTrack?.track.pieceId;
+            return pid ? sheetsService.getPracticeCatalog().tracks.filter((t) => t.pieceId === pid) : [];
+          })()}
+          config={sheetsService.getConfig()}
           onClose={() => navigate({ type: 'CLOSE' })}
           onOpenScore={(piece) => {
             if (piece.scoreStorageKey) {
