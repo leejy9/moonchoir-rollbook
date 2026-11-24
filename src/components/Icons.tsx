@@ -35,6 +35,36 @@ export function IconCheck({ size = 20, ...props }: IconProps) {
   );
 }
 
+export function IconBackspace({ size = 20, ...props }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
+      <line x1="18" y1="9" x2="12" y2="15" />
+      <line x1="12" y1="9" x2="18" y2="15" />
+    </svg>
+  );
+}
+
+export function IconCameraOff({ size = 20, ...props }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <line x1="1" y1="1" x2="23" y2="23" />
+      <path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34" />
+      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+    </svg>
+  );
+}
+
+export function IconLocationOff({ size = 20, ...props }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <line x1="1" y1="1" x2="23" y2="23" />
+      <path d="M12.72 4.14A5 5 0 0 1 17 9c0 3.12-2.6 6.84-4.47 9.17a1 1 0 0 1-1.56 0A20.25 20.25 0 0 1 8.24 14.6" />
+      <path d="M9.1 9.1A3 3 0 0 0 12 12a3 3 0 0 0 2.9-2.9" />
+    </svg>
+  );
+}
+
 export function IconVote({ size = 20, ...props }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>

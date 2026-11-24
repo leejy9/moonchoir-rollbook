@@ -16,7 +16,11 @@ fs.mkdirSync(OUT_ARTIFACT_DIR, { recursive: true });
 async function tryPlaywright() {
   try {
     // 프로젝트에 설치하지 않은 경우 PLAYWRIGHT_MODULE_DIR(다른 곳에 있는 playwright 폴더)을 쓴다.
-    const dir = process.env.PLAYWRIGHT_MODULE_DIR;
+    let dir = process.env.PLAYWRIGHT_MODULE_DIR;
+    if (!dir) {
+      const fallback = '/Users/grasshop/.npm/_npx/e41f203b7505f1fb/node_modules/playwright';
+      if (fs.existsSync(fallback)) dir = fallback;
+    }
     const pw = dir
       ? await import(pathToFileURL(path.join(dir, 'index.mjs')).href)
       : await import('playwright');
@@ -169,8 +173,8 @@ async function scrollCards(page, index) {
 }
 
 /** 홈 화면 캡처와 빌드본 동작 확인(지시서 V3-22 §5 확인 방법). Playwright 경로 전용. */
-async function captureHome(pw, port) {
-  const browser = await pw.chromium.launch();
+async function captureHome(pw, port, chromeBin) {
+  const browser = await pw.chromium.launch({ executablePath: chromeBin || undefined });
   try {
     for (const dark of [false, true]) {
       const mode = dark ? 'dark' : 'light';
@@ -243,6 +247,352 @@ async function captureHome(pw, port) {
   }
 }
 
+/** 새 페이지를 만들고 출석 인증 모달(#/home?qr=1&sid=A)을 연다. */
+async function openCheckinPage(browser, port, opts = {}) {
+  const {
+    width = 390,
+    height = 844,
+    dark = false,
+    reducedMotion = 'no-preference',
+    geoMock = 'ok', // 'ok' | 'fail' | 'out_of_range'
+    pinMock = 'ok', // 'ok' | 'wrong'
+  } = opts;
+
+  const permissions = geoMock === 'fail' ? [] : ['geolocation'];
+  const geolocation =
+    geoMock === 'out_of_range'
+      ? { latitude: 38.0, longitude: 128.0 }
+      : { latitude: 37.5665, longitude: 126.978 };
+
+  const context = await browser.newContext({
+    viewport: { width, height },
+    colorScheme: dark ? 'dark' : 'light',
+    reducedMotion,
+    permissions,
+    geolocation: geoMock === 'fail' ? undefined : geolocation,
+  });
+
+  await context.route('**/*', async (route) => {
+    const req = route.request();
+    const u = new URL(req.url());
+
+    if (u.hostname === '127.0.0.1') {
+      return route.continue();
+    }
+
+    if (u.pathname.includes('fn_verify_on_site_pin')) {
+      if (pinMock === 'wrong') {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: false, message: '현장 PIN 번호가 일치하지 않습니다.' }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, message: '완료' }),
+      });
+    }
+
+    if (u.pathname.includes('fn_record_attendance') || u.pathname.includes('fn_add_log')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, message: '완료' }),
+      });
+    }
+
+    return route.abort();
+  });
+
+  const seed = buildSeed();
+  await context.addInitScript(
+    ({ seed, keys, dark, geoMock }) => {
+      if (localStorage.getItem('__seeded')) return;
+      localStorage.setItem('__seeded', '1');
+      localStorage.setItem(keys.profile, JSON.stringify(seed.profile));
+      localStorage.setItem(keys.members, JSON.stringify(seed.members));
+      localStorage.setItem(keys.schedules, JSON.stringify(seed.schedules));
+      localStorage.setItem(keys.votes, JSON.stringify(seed.votes));
+      localStorage.setItem(keys.comments, JSON.stringify(seed.comments));
+      localStorage.setItem(keys.dark, String(dark));
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition = (success, error) => {
+          if (geoMock === 'fail') {
+            if (error) {
+              error({
+                code: 1,
+                message: 'User denied Geolocation',
+                PERMISSION_DENIED: 1,
+                POSITION_UNAVAILABLE: 2,
+                TIMEOUT: 3,
+              });
+            }
+          } else if (geoMock === 'out_of_range') {
+            success({
+              coords: {
+                latitude: 38.0,
+                longitude: 128.0,
+                accuracy: 15,
+                altitude: null,
+                altitudeAccuracy: null,
+                heading: null,
+                speed: null,
+              },
+              timestamp: Date.now(),
+            });
+          } else {
+            success({
+              coords: {
+                latitude: 37.5665,
+                longitude: 126.978,
+                accuracy: 15,
+                altitude: null,
+                altitudeAccuracy: null,
+                heading: null,
+                speed: null,
+              },
+              timestamp: Date.now(),
+            });
+          }
+        };
+      }
+    },
+    { seed, keys: STORAGE, dark, geoMock }
+  );
+
+  const page = await context.newPage();
+  page.on('console', (msg) => console.log(`[browser:${msg.type()}]`, msg.text()));
+  page.on('pageerror', (err) => console.error('[pageerror]', err));
+  await page.clock.setFixedTime(new Date('2026-11-21T13:30:00+09:00'));
+  await page.goto(`http://127.0.0.1:${port}/#/home?qr=1&sid=A`, { waitUntil: 'load' });
+  await page.waitForSelector('.ci-modal', { timeout: 10000 });
+  await page.addStyleTag({ content: '.sync-notice-stack, .sync-status-pill { display: none !important; }' });
+  await page.waitForTimeout(300);
+
+  return { page, context };
+}
+
+async function measureCheckin(page) {
+  return page.evaluate(() => {
+    return {
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+      dialogLabel: document.querySelector('.ci-modal')?.getAttribute('aria-label'),
+      activeTab: document.querySelector('.ci-tab-btn.is-active')?.textContent?.trim() || null,
+      resultTitle: document.querySelector('.ci-result-title')?.textContent?.trim() || null,
+      errorText: document.querySelector('.ci-pin-alert')?.textContent?.trim() || null,
+      overflowers: [...document.querySelectorAll('body *')]
+        .filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1)
+        .slice(0, 4)
+        .map(
+          (e) =>
+            `${e.tagName.toLowerCase()}.${String(e.className).split(' ')[0]}:${Math.round(
+              e.getBoundingClientRect().right
+            )}`
+        ),
+    };
+  });
+}
+
+async function shotCheckin(page, name, tag) {
+  const localPath = path.join(OUT_DIR, name);
+  const artPath = path.join(OUT_ARTIFACT_DIR, name);
+  await page.screenshot({ path: localPath });
+  fs.copyFileSync(localPath, artPath);
+  const m = await measureCheckin(page);
+  console.log(`[capture-screens] ${tag ?? name}: ${JSON.stringify(m)}`);
+  return m;
+}
+
+/** 출석 인증 화면 캡처 및 검증 (지시서 V3-23 §5 Y3). Playwright 경로 전용. */
+async function captureCheckin(pw, port, chromeBin) {
+  const browser = await pw.chromium.launch({ executablePath: chromeBin || undefined });
+  try {
+    // 1. checkin-390x844-qr.png: 390×844 light, QR 탭 (카메라 대신 실패 상태)
+    {
+      const { page, context } = await openCheckinPage(browser, port, { width: 390, height: 844, dark: false });
+      await shotCheckin(page, 'checkin-390x844-qr.png');
+      await context.close();
+    }
+
+    // 2. checkin-390x844-pin2.png: 390×844 light, PIN 2자리 입력
+    {
+      const { page, context } = await openCheckinPage(browser, port, { width: 390, height: 844, dark: false });
+      await page.getByRole('tab', { name: '현장 PIN' }).click();
+      await page.waitForSelector('.ci-pin-panel', { timeout: 5000 });
+      await page.getByRole('button', { name: '1', exact: true }).click();
+      await page.getByRole('button', { name: '2', exact: true }).click();
+      await page.waitForTimeout(200);
+      await shotCheckin(page, 'checkin-390x844-pin2.png');
+      await context.close();
+    }
+
+    // 3. checkin-390x844-pin-wrong.png: 390×844 light, PIN WRONG
+    {
+      const { page, context } = await openCheckinPage(browser, port, {
+        width: 390,
+        height: 844,
+        dark: false,
+        pinMock: 'wrong',
+      });
+      await page.getByRole('tab', { name: '현장 PIN' }).click();
+      await page.waitForSelector('.ci-pin-panel', { timeout: 5000 });
+      await page.getByRole('button', { name: '1', exact: true }).click();
+      await page.getByRole('button', { name: '2', exact: true }).click();
+      await page.getByRole('button', { name: '3', exact: true }).click();
+      await page.getByRole('button', { name: '4', exact: true }).click();
+      await page.locator('.ci-submit-btn').click();
+      await page.waitForSelector('.ci-pin-alert', { timeout: 5000 });
+      await page.waitForTimeout(200);
+      await shotCheckin(page, 'checkin-390x844-pin-wrong.png');
+      await context.close();
+    }
+
+    // 4. checkin-390x844-done.png: 390×844 light, 완료 화면
+    {
+      const { page, context } = await openCheckinPage(browser, port, {
+        width: 390,
+        height: 844,
+        dark: false,
+        pinMock: 'ok',
+        geoMock: 'ok',
+      });
+      await page.getByRole('tab', { name: '현장 PIN' }).click();
+      await page.waitForSelector('.ci-pin-panel', { timeout: 5000 });
+      await page.getByRole('button', { name: '5', exact: true }).click();
+      await page.getByRole('button', { name: '0', exact: true }).click();
+      await page.getByRole('button', { name: '2', exact: true }).click();
+      await page.getByRole('button', { name: '7', exact: true }).click();
+      await page.locator('.ci-submit-btn').click();
+      await page.waitForSelector('.ci-result-icon-circle.is-success', { timeout: 5000 });
+      await page.waitForTimeout(300);
+      await shotCheckin(page, 'checkin-390x844-done.png');
+      await context.close();
+    }
+
+    // 5. checkin-390x844-geo-failed.png: 390×844 light, GEO_FAILED
+    {
+      const { page, context } = await openCheckinPage(browser, port, {
+        width: 390,
+        height: 844,
+        dark: false,
+        pinMock: 'ok',
+        geoMock: 'fail',
+      });
+      await page.getByRole('tab', { name: '현장 PIN' }).click();
+      await page.waitForSelector('.ci-pin-panel', { timeout: 5000 });
+      await page.getByRole('button', { name: '5', exact: true }).click();
+      await page.getByRole('button', { name: '0', exact: true }).click();
+      await page.getByRole('button', { name: '2', exact: true }).click();
+      await page.getByRole('button', { name: '7', exact: true }).click();
+      await page.locator('.ci-submit-btn').click();
+      await page.waitForSelector('.ci-result-icon-circle.is-fail', { timeout: 5000 });
+      await page.waitForTimeout(300);
+      await shotCheckin(page, 'checkin-390x844-geo-failed.png');
+      await context.close();
+    }
+
+    // 6. checkin-390x844-out-of-range.png: 390×844 light, OUT_OF_RANGE
+    {
+      const { page, context } = await openCheckinPage(browser, port, {
+        width: 390,
+        height: 844,
+        dark: false,
+        pinMock: 'ok',
+        geoMock: 'out_of_range',
+      });
+      await page.getByRole('tab', { name: '현장 PIN' }).click();
+      await page.waitForSelector('.ci-pin-panel', { timeout: 5000 });
+      await page.getByRole('button', { name: '5', exact: true }).click();
+      await page.getByRole('button', { name: '0', exact: true }).click();
+      await page.getByRole('button', { name: '2', exact: true }).click();
+      await page.getByRole('button', { name: '7', exact: true }).click();
+      await page.locator('.ci-submit-btn').click();
+      await page.waitForSelector('.ci-result-icon-circle.is-fail', { timeout: 5000 });
+      await page.waitForTimeout(300);
+      await shotCheckin(page, 'checkin-390x844-out-of-range.png');
+      await context.close();
+    }
+
+    // 7. checkin-dark-390x844-qr.png: 390×844 dark, QR 탭
+    {
+      const { page, context } = await openCheckinPage(browser, port, { width: 390, height: 844, dark: true });
+      await shotCheckin(page, 'checkin-dark-390x844-qr.png');
+      await context.close();
+    }
+
+    // 8. checkin-dark-390x844-done.png: 390×844 dark, 완료 화면
+    {
+      const { page, context } = await openCheckinPage(browser, port, {
+        width: 390,
+        height: 844,
+        dark: true,
+        pinMock: 'ok',
+        geoMock: 'ok',
+      });
+      await page.getByRole('tab', { name: '현장 PIN' }).click();
+      await page.waitForSelector('.ci-pin-panel', { timeout: 5000 });
+      await page.getByRole('button', { name: '5', exact: true }).click();
+      await page.getByRole('button', { name: '0', exact: true }).click();
+      await page.getByRole('button', { name: '2', exact: true }).click();
+      await page.getByRole('button', { name: '7', exact: true }).click();
+      await page.locator('.ci-submit-btn').click();
+      await page.waitForSelector('.ci-result-icon-circle.is-success', { timeout: 5000 });
+      await page.waitForTimeout(300);
+      await shotCheckin(page, 'checkin-dark-390x844-done.png');
+      await context.close();
+    }
+
+    // 9. checkin-1280x800-pin.png: 1280×800 light, PIN 탭
+    {
+      const { page, context } = await openCheckinPage(browser, port, { width: 1280, height: 800, dark: false });
+      await page.getByRole('tab', { name: '현장 PIN' }).click();
+      await page.waitForSelector('.ci-pin-panel', { timeout: 5000 });
+      await page.waitForTimeout(200);
+      await shotCheckin(page, 'checkin-1280x800-pin.png');
+      await context.close();
+    }
+
+    // 10. checkin-375x667-pin.png: 375×667 light, PIN 탭 (버튼까지 닿는지 확인)
+    {
+      const { page, context } = await openCheckinPage(browser, port, { width: 375, height: 667, dark: false });
+      await page.getByRole('tab', { name: '현장 PIN' }).click();
+      await page.waitForSelector('.ci-pin-panel', { timeout: 5000 });
+      await page.waitForTimeout(200);
+      await shotCheckin(page, 'checkin-375x667-pin.png');
+      await context.close();
+    }
+
+    // 11. checkin-reduced-motion-done-390x844.png: prefers-reduced-motion: reduce, 완료 화면 (체크 그려짐 확인)
+    {
+      const { page, context } = await openCheckinPage(browser, port, {
+        width: 390,
+        height: 844,
+        dark: false,
+        reducedMotion: 'reduce',
+        pinMock: 'ok',
+        geoMock: 'ok',
+      });
+      await page.getByRole('tab', { name: '현장 PIN' }).click();
+      await page.waitForSelector('.ci-pin-panel', { timeout: 5000 });
+      await page.getByRole('button', { name: '5', exact: true }).click();
+      await page.getByRole('button', { name: '0', exact: true }).click();
+      await page.getByRole('button', { name: '2', exact: true }).click();
+      await page.getByRole('button', { name: '7', exact: true }).click();
+      await page.locator('.ci-submit-btn').click();
+      await page.waitForSelector('.ci-result-icon-circle.is-success', { timeout: 5000 });
+      await page.waitForTimeout(300);
+      await shotCheckin(page, 'checkin-reduced-motion-done-390x844.png');
+      await context.close();
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
 async function main() {
   console.log('=== scripts/dev/capture-screens.mjs ===');
   const pw = await tryPlaywright();
@@ -261,10 +611,14 @@ async function main() {
     if (pw) {
       console.log('[capture-screens] Capturing with Playwright...');
       if (process.argv.includes('--home')) {
-        await captureHome(pw, port);
+        await captureHome(pw, port, chromeBin);
         return;
       }
-      const browser = await pw.chromium.launch();
+      if (process.argv.includes('--checkin')) {
+        await captureCheckin(pw, port, chromeBin);
+        return;
+      }
+      const browser = await pw.chromium.launch({ executablePath: chromeBin || undefined });
       for (const t of targets) {
         const page = await browser.newPage({ viewport: { width: t.width, height: t.height } });
         await page.goto(t.url, { waitUntil: 'networkidle' });
