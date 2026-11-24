@@ -5,6 +5,7 @@ import {
   loadFromStorage,
   PREFERENCE_KEYS,
   readPreference,
+  readPreferenceState,
   resetStorage,
   saveToStorage,
   STORAGE_KEYS,
@@ -132,5 +133,37 @@ describe('sheetsStorage', () => {
         1
       )
     ).toBe(1.25);
+  });
+
+  describe('readPreferenceState (V3-22 R7)', () => {
+    const isStrArr = (v: unknown): v is string[] =>
+      Array.isArray(v) && v.every((x) => typeof x === 'string');
+
+    it('키가 없으면 missing', () => {
+      expect(readPreferenceState('k_none', isStrArr)).toEqual({ kind: 'missing' });
+    });
+    it('정상 값은 ok', () => {
+      writePreference(PREFERENCE_KEYS.SEEN_COMMENTS, ['c1']);
+      expect(readPreferenceState(PREFERENCE_KEYS.SEEN_COMMENTS, isStrArr)).toEqual({
+        kind: 'ok',
+        value: ['c1'],
+      });
+    });
+    it('깨진 JSON은 invalid이고 저장값은 그대로다', () => {
+      store.set(PREFERENCE_KEYS.SEEN_COMMENTS, '{broken');
+      expect(readPreferenceState(PREFERENCE_KEYS.SEEN_COMMENTS, isStrArr)).toEqual({ kind: 'invalid' });
+      expect(store.get(PREFERENCE_KEYS.SEEN_COMMENTS)).toBe('{broken');
+    });
+    it('검사에 실패하면 invalid', () => {
+      store.set(PREFERENCE_KEYS.SEEN_COMMENTS, '[1,2]');
+      expect(readPreferenceState(PREFERENCE_KEYS.SEEN_COMMENTS, isStrArr)).toEqual({ kind: 'invalid' });
+    });
+    it('저장소 접근이 실패해도 invalid', () => {
+      const broken = { getItem: () => { throw new Error('denied'); }, setItem: () => undefined, removeItem: () => undefined, clear: () => undefined };
+      vi.stubGlobal('window', { localStorage: broken });
+      vi.stubGlobal('localStorage', broken);
+      resetStorage();
+      expect(readPreferenceState('k', isStrArr)).toEqual({ kind: 'invalid' });
+    });
   });
 });
