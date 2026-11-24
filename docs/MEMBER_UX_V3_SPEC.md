@@ -749,7 +749,7 @@ flowchart LR
 | `YT_MINIMIZE_HINT_COUNT` → `moonchoir_pref_yt_minimize_hint_v1` | 0~2 정수 | 2(안내 생략) |
 | `SEEN_COMMENTS` → `moonchoir_pref_seen_comments_v1` (V38) | 본 댓글 id 배열 | 새 댓글 표시 생략 |
 
-- 읽기와 쓰기는 모두 `try/catch`로 감싼 헬퍼(`readPreference` / `writePreference`) 하나로만 한다.
+- 읽기와 쓰기는 모두 `try/catch`로 감싼 헬퍼(`readPreference` / `writePreference`)로만 한다. "저장값 없음"과 "읽기 실패"를 구분해야 하는 키(`SEEN_COMMENTS`)는 `readPreferenceState`를 쓴다(V38).
 - 값이 형식에 맞지 않으면 실패 시 값을 쓴다.
 
 ---
