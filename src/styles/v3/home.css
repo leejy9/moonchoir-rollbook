@@ -7,7 +7,11 @@
   display: flex;
   flex-direction: column;
   gap: 28px;
-  padding-bottom: 24px;
+  padding: 0 16px 24px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 /* ---- 월간 달력: 바탕 위에 바로 둔다(상자 없음) ---- */
@@ -15,7 +19,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding-top: 24px;
+  padding-top: 36px;
 }
 
 .home-cal-header {
@@ -70,6 +74,11 @@
   font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
+}
+
+.app-shell[data-theme='dark'] .home-cal .calendar-grid-cells {
+  background-color: transparent !important;
+  border-color: transparent !important;
 }
 
 .home-cal .calendar-grid-cells {
@@ -135,7 +144,7 @@
 .home-card-section {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .home-card-track {
@@ -178,8 +187,8 @@
 .home-card.active-schedule-card {
   flex: 1;
   min-width: 0;
-  gap: 14px;
-  padding: 16px 18px 18px;
+  gap: 10px;
+  padding: 14px 18px 16px;
   border-radius: 18px;
 }
 
@@ -187,6 +196,10 @@
   margin: 0;
   font-size: 19px;
   font-weight: 700;
+}
+
+.home-card .schedule-info-grid {
+  gap: 4px;
 }
 
 .home-card .info-item {
@@ -279,7 +292,7 @@
 
 /* ---- 다가오는 일정 ---- */
 .home-upcoming-section {
-  padding-top: 14px;
+  padding-top: 8px;
   border-top: 1px solid var(--border-subtle);
 }
 

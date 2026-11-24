@@ -40,7 +40,7 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = ({
   onNextMonth,
 }) => {
   return (
-    <section className="integrated-calendar-card home-cal" aria-label="월간 달력">
+    <section className="home-cal" aria-label="월간 달력">
       <div className="home-cal-header">
         <button type="button" className="home-cal-nav" onClick={onPrevMonth} aria-label="이전 달">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
