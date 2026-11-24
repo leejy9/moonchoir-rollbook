@@ -150,12 +150,11 @@
 .home-card-track {
   position: relative;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   margin: 0 -16px;
-  padding: 2px 16px 6px;
+  padding: 2px 28px 6px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  scroll-padding-inline: 16px;
   scrollbar-width: none;
 }
 
@@ -163,10 +162,11 @@
   display: none;
 }
 
+/* 카드는 가운데에 맞춘다: 양옆(이전·다음 카드)이 모퉁이만 20px쯤 걸쳐 보여 끌어서 넘길 수 있다. */
 .home-card-slot {
-  flex: 0 0 min(318px, calc(100% - 32px));
+  flex: 0 0 100%;
   min-width: 0;
-  scroll-snap-align: start;
+  scroll-snap-align: center;
   display: flex;
 }
 

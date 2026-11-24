@@ -74,7 +74,10 @@ export const HomeCardCarousel: React.FC<HomeCardCarouselProps> = ({
     const track = trackRef.current;
     const item = track?.children[index] as HTMLElement | undefined;
     if (!track || !item) return;
-    track.scrollTo({ left: item.offsetLeft - 16, behavior: 'smooth' });
+    track.scrollTo({
+      left: item.offsetLeft - (track.clientWidth - item.offsetWidth) / 2,
+      behavior: 'smooth',
+    });
   };
 
   if (cards.length === 0) return null;

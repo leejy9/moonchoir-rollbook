@@ -163,7 +163,7 @@ async function scrollCards(page, index) {
   await page.evaluate((i) => {
     const track = document.querySelector('.home-card-track');
     const item = track.children[i];
-    track.scrollTo({ left: item.offsetLeft - 16, behavior: 'instant' });
+    track.scrollTo({ left: item.offsetLeft - (track.clientWidth - item.offsetWidth) / 2, behavior: 'instant' });
   }, index);
   await page.waitForTimeout(250);
 }
@@ -178,6 +178,8 @@ async function captureHome(pw, port) {
       await shot(page, `home-${mode}-card1-390x844.png`);
       await scrollCards(page, 1);
       await shot(page, `home-${mode}-card2-390x844.png`);
+      await scrollCards(page, 2);
+      await shot(page, `home-${mode}-card3-390x844.png`);
       const hi = await page.evaluate(() => [...document.querySelectorAll('.calendar-cell.highlight')].map((e) => e.textContent));
       console.log(`[capture-screens] ${mode} card2 달력 강조: ${JSON.stringify(hi)}`);
       await context.close();
