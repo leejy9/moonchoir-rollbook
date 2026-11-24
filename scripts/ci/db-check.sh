@@ -15,6 +15,8 @@ echo "== Supabase 기본 역할·확장 준비"
 do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role service_role nologin; exception when duplicate_object then null; end $$;
+-- Supabase 운영 pg_default_acl 재현: 새 함수에 anon/authenticated 실행 권한이 자동 부여됨
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 create schema if not exists extensions;
 create extension if not exists pgcrypto;
 SQL
