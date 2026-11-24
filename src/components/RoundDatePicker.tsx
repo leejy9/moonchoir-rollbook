@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { getCalendarGrid } from '../utils/calendar';
 import { getKSTDateString } from '../utils/date';
-import { buildYearOptions } from '../utils/datePickerYears';
+import { buildYearOptions, parseDateInput } from '../utils/datePickerYears';
 import '../styles/v3/datePicker.css';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
 const MONTH_INDEXES = Array.from({ length: 12 }, (_, i) => i);
+type PickerView = 'days' | 'months' | 'years';
 interface RoundDatePickerProps {
   value: string; // YYYY-MM-DD
   onChange: (dateStr: string) => void;
@@ -36,6 +37,11 @@ export const RoundDatePicker: React.FC<RoundDatePickerProps> = ({
     (initialM ? initialM - 1 : 9)
   );
 
+  const [pickerView, setPickerView] = useState<PickerView>('days');
+  const [typed, setTyped] = useState('');
+  const [typedError, setTypedError] = useState('');
+  const yearListRef = useRef<HTMLDivElement>(null);
+
   const yearOptions = useMemo(
     () => buildYearOptions(Number(todayStr.slice(0, 4)), viewYear),
     [todayStr, viewYear]
@@ -48,7 +54,27 @@ export const RoundDatePicker: React.FC<RoundDatePickerProps> = ({
       setViewYear(y);
       setViewMonthIndex(m - 1);
     }
+    setPickerView('days');
+    setTyped(value || '');
+    setTypedError('');
     setIsOpen(true);
+  };
+
+  // 연도 보기를 열면 고른 연도가 보이게 스크롤한다
+  useEffect(() => {
+    if (pickerView !== 'years') return;
+    const el = yearListRef.current?.querySelector<HTMLElement>('.rdp-grid-cell.selected');
+    el?.scrollIntoView({ block: 'center' });
+  }, [pickerView]);
+
+  const applyTyped = () => {
+    const parsed = parseDateInput(typed);
+    if (!parsed) {
+      setTypedError('2024-03-14처럼 연-월-일로 입력해 주세요.');
+      return;
+    }
+    onChange(parsed);
+    setIsOpen(false);
   };
 
   // Close on Escape key
@@ -63,6 +89,10 @@ export const RoundDatePicker: React.FC<RoundDatePickerProps> = ({
 
   const handlePrevMonth = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (pickerView === 'months') {
+      setViewYear((y) => y - 1);
+      return;
+    }
     if (viewMonthIndex === 0) {
       setViewMonthIndex(11);
       setViewYear((y) => y - 1);
@@ -73,6 +103,10 @@ export const RoundDatePicker: React.FC<RoundDatePickerProps> = ({
 
   const handleNextMonth = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (pickerView === 'months') {
+      setViewYear((y) => y + 1);
+      return;
+    }
     if (viewMonthIndex === 11) {
       setViewMonthIndex(0);
       setViewYear((y) => y + 1);
@@ -146,48 +180,50 @@ export const RoundDatePicker: React.FC<RoundDatePickerProps> = ({
           >
             {/* Header Controller */}
             <div className="popover-month-nav">
-              <button
-                type="button"
-                className="month-nav-btn"
-                onClick={handlePrevMonth}
-                aria-label="이전 달"
-              >
-                ‹
-              </button>
+              {pickerView !== 'years' ? (
+                <button
+                  type="button"
+                  className="month-nav-btn"
+                  onClick={handlePrevMonth}
+                  aria-label={pickerView === 'months' ? '이전 해' : '이전 달'}
+                >
+                  ‹
+                </button>
+              ) : (
+                <span className="rdp-nav-spacer" aria-hidden="true" />
+              )}
               <span className="popover-month-title rdp-ym">
-                <select
-                  className="rdp-ym-select"
-                  aria-label="연도 선택"
-                  value={viewYear}
-                  onChange={(e) => setViewYear(Number(e.target.value))}
+                <button
+                  type="button"
+                  className={`rdp-ym-btn ${pickerView === 'years' ? 'active' : ''}`}
+                  aria-label="연도 고르기"
+                  aria-expanded={pickerView === 'years'}
+                  onClick={() => setPickerView((v) => (v === 'years' ? 'days' : 'years'))}
                 >
-                  {yearOptions.map((y) => (
-                    <option key={y} value={y}>
-                      {y}년
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="rdp-ym-select"
-                  aria-label="월 선택"
-                  value={viewMonthIndex}
-                  onChange={(e) => setViewMonthIndex(Number(e.target.value))}
+                  {viewYear}년 <span aria-hidden="true">▾</span>
+                </button>
+                <button
+                  type="button"
+                  className={`rdp-ym-btn ${pickerView === 'months' ? 'active' : ''}`}
+                  aria-label="월 고르기"
+                  aria-expanded={pickerView === 'months'}
+                  onClick={() => setPickerView((v) => (v === 'months' ? 'days' : 'months'))}
                 >
-                  {MONTH_INDEXES.map((m) => (
-                    <option key={m} value={m}>
-                      {m + 1}월
-                    </option>
-                  ))}
-                </select>
+                  {viewMonthIndex + 1}월 <span aria-hidden="true">▾</span>
+                </button>
               </span>
-              <button
-                type="button"
-                className="month-nav-btn"
-                onClick={handleNextMonth}
-                aria-label="다음 달"
-              >
-                ›
-              </button>
+              {pickerView !== 'years' ? (
+                <button
+                  type="button"
+                  className="month-nav-btn"
+                  onClick={handleNextMonth}
+                  aria-label={pickerView === 'months' ? '다음 해' : '다음 달'}
+                >
+                  ›
+                </button>
+              ) : (
+                <span className="rdp-nav-spacer" aria-hidden="true" />
+              )}
               <button
                 type="button"
                 className="popover-close-btn"
@@ -199,6 +235,77 @@ export const RoundDatePicker: React.FC<RoundDatePickerProps> = ({
               </button>
             </div>
 
+            {/* 직접 입력 */}
+            <form
+              className="rdp-typed"
+              onSubmit={(e) => {
+                e.preventDefault();
+                applyTyped();
+              }}
+            >
+              <input
+                type="text"
+                className="rdp-typed-input"
+                aria-label="날짜 직접 입력"
+                placeholder="2024-03-14"
+                value={typed}
+                onChange={(e) => {
+                  setTyped(e.target.value);
+                  setTypedError('');
+                }}
+              />
+              <button type="submit" className="rdp-typed-apply">
+                적용
+              </button>
+            </form>
+            {typedError && (
+              <p className="rdp-typed-error" role="alert">
+                {typedError}
+              </p>
+            )}
+
+            {pickerView === 'years' && (
+              <div className="rdp-grid rdp-grid-years" ref={yearListRef} role="listbox" aria-label="연도">
+                {yearOptions.map((y) => (
+                  <button
+                    key={y}
+                    type="button"
+                    role="option"
+                    aria-selected={y === viewYear}
+                    className={`rdp-grid-cell ${y === viewYear ? 'selected' : ''}`}
+                    onClick={() => {
+                      setViewYear(y);
+                      setPickerView('months');
+                    }}
+                  >
+                    {y}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {pickerView === 'months' && (
+              <div className="rdp-grid rdp-grid-months" role="listbox" aria-label="월">
+                {MONTH_INDEXES.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="option"
+                    aria-selected={m === viewMonthIndex}
+                    className={`rdp-grid-cell ${m === viewMonthIndex ? 'selected' : ''}`}
+                    onClick={() => {
+                      setViewMonthIndex(m);
+                      setPickerView('days');
+                    }}
+                  >
+                    {m + 1}월
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {pickerView === 'days' && (
+            <>
             {/* Quick preset chips */}
             <div className="popover-quick-chips">
               <button type="button" onClick={handleSelectToday}>
@@ -246,6 +353,8 @@ export const RoundDatePicker: React.FC<RoundDatePickerProps> = ({
                 );
               })}
             </div>
+            </>
+            )}
           </div>
         </div>
       )}
