@@ -6,17 +6,20 @@ import { IconSettings } from './Icons';
 export interface AppHeaderProps {
   onOpenAdmin: () => void;
   onOpenSuperAdmin: () => void;
+  /** 설정(관리자 입구) 버튼 표시 여부. 표시일 뿐 권한이 아니다. */
+  showAdminEntry: boolean;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
   onOpenAdmin,
   onOpenSuperAdmin,
+  showAdminEntry,
 }) => {
   const { showEasterEgg, setShowEasterEgg, easterEggRef, logoHandlers } =
     useMasterEntryGesture();
 
   return (
-    <header className="home-header app-header" style={{ padding: '8px 16px 6px' }}>
+    <header className="home-header app-header" style={{ height: 68, boxSizing: 'border-box', alignItems: 'flex-end', padding: '0 8px 4px 16px' }}>
       <div className="header-brand" style={{ position: 'relative' }}>
         <img
           src={moonchoirLogo}
@@ -30,9 +33,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           onContextMenu={logoHandlers.onContextMenu}
           title="우클릭(PC) 또는 3연타(모바일) 시 최고 관리자 메뉴를 엽니다"
           style={{
-            width: 30,
-            height: 30,
-            borderRadius: '50%',
+            width: 32,
+            height: 32,
+            borderRadius: 'var(--radius-md)',
             objectFit: 'cover',
             cursor: 'pointer',
             userSelect: 'none',
@@ -41,10 +44,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             touchAction: 'manipulation',
           }}
         />
-        <div>
-          <h1 className="brand-title">문콰이어 출석부</h1>
-          <p className="brand-subtitle">MOONCHOIR ATTENDANCE</p>
-        </div>
+        <h1 className="brand-title">MOONCHOIR</h1>
 
         {/* Master Admin "Get in" Easter Egg Popover */}
         {showEasterEgg && (
@@ -111,18 +111,20 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         )}
       </div>
 
-      <div className="header-actions">
-        <button
-          type="button"
-          className="admin-icon-btn"
-          onClick={onOpenAdmin}
-          title="관리자 모드"
-          aria-label="관리자 모드"
-          style={{ minWidth: 44, minHeight: 44 }}
-        >
-          <IconSettings size={18} />
-        </button>
-      </div>
+      {showAdminEntry && (
+        <div className="header-actions">
+          <button
+            type="button"
+            className="admin-icon-btn"
+            onClick={onOpenAdmin}
+            title="관리자 모드"
+            aria-label="관리자 모드"
+            style={{ minWidth: 44, minHeight: 44 }}
+          >
+            <IconSettings size={18} />
+          </button>
+        </div>
+      )}
     </header>
   );
 };
