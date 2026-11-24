@@ -74,9 +74,9 @@ describe('끝에서 끝까지 손계산 (지시서 §4)', () => {
   const focusResult = selectTodayFocus({ schedules, member: undefined, now, todayStr: '2026-11-21' });
   const { cards, upcoming } = buildHomeCards({ focusResult, schedules, now, todayStr: '2026-11-21' });
 
-  it('1. 카드 [A,B,C], 목록 [D,E,F]', () => {
-    expect(cards.map((s) => s.id)).toEqual(['A', 'B', 'C']);
-    expect(upcoming.map((s) => s.id)).toEqual(['D', 'E', 'F']);
+  it('1. 카드 [A,B,C,D], 목록 [E,F]', () => {
+    expect(cards.map((s) => s.id)).toEqual(['A', 'B', 'C', 'D']);
+    expect(upcoming.map((s) => s.id)).toEqual(['E', 'F']);
   });
   it('2. A 댓글 3, 최근은 본인 c3, 새 댓글은 c2', () => {
     const a = commentsOf('A');

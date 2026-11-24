@@ -7,8 +7,11 @@ export interface BuildHomeCardsInput {
   schedules: Schedule[];
   now: Date;
   todayStr: string;
-  maxCards?: number;
+  maxPast?: number;
+  maxUpcomingCards?: number;
   maxUpcoming?: number;
+  /** @deprecated 하위 호환용 */
+  maxCards?: number;
 }
 
 export interface HomeCardsResult {
@@ -21,30 +24,40 @@ const byDateThenStart = (a: Schedule, b: Schedule) =>
 
 /**
  * 홈 카드 묶음과 "다가오는 일정" 목록을 한 번에 계산한다 (V3-22 R1).
- * 카드에 나온 일정은 목록에 다시 나오지 않는다.
+ * 직전 1개 일정, 오늘(집중) 일정, 다가오는 일정 3개를 카드로 구성한다.
+ * 카드에 나온 일정은 하단 목록에 다시 나오지 않는다.
  */
 export function buildHomeCards({
   focusResult,
   schedules,
   now,
   todayStr,
-  maxCards = 3,
+  maxPast = 1,
+  maxUpcomingCards = 3,
   maxUpcoming = 5,
 }: BuildHomeCardsInput): HomeCardsResult {
-  const valid = schedules.filter((s) => !s.isCancelled && !s.isArchived);
-
-  let cards: Schedule[] = [];
-  if (focusResult.mode !== 'NONE' && focusResult.schedules.length > 0) {
-    const group = focusResult.schedules;
-    const groupDate = group[0].date;
-    const groupIds = new Set(group.map((s) => s.id));
-    const later = valid
-      .filter((s) => s.date > groupDate && !groupIds.has(s.id))
-      .sort(byDateThenStart);
-    cards = [...group, ...later].slice(0, maxCards);
+  if (focusResult.mode === 'NONE' || focusResult.schedules.length === 0) {
+    return { cards: [], upcoming: [] };
   }
 
+  const valid = schedules.filter((s) => !s.isCancelled && !s.isArchived);
+  const group = focusResult.schedules;
+  const groupDate = group[0].date;
+  const groupIds = new Set(group.map((s) => s.id));
+
+  const earlier = valid
+    .filter((s) => s.date < groupDate && !groupIds.has(s.id))
+    .sort(byDateThenStart);
+  const pastCards = maxPast > 0 ? earlier.slice(-maxPast) : [];
+
+  const later = valid
+    .filter((s) => s.date > groupDate && !groupIds.has(s.id))
+    .sort(byDateThenStart);
+  const upcomingCards = later.slice(0, maxUpcomingCards);
+
+  const cards = [...pastCards, ...group, ...upcomingCards];
   const cardIds = new Set(cards.map((s) => s.id));
+
   const upcoming = valid
     .filter((s) => {
       if (cardIds.has(s.id)) return false;

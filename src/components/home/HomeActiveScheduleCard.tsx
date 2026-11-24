@@ -109,18 +109,26 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
       </div>
 
       {schedule.description && (
-        <p
-          className="schedule-desc-box schedule-desc-clamped"
-          style={{
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            margin: '0',
+        <div
+          role="button"
+          tabIndex={0}
+          className="home-card-desc-wrap"
+          onClick={() => onOpenDetail?.(schedule)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onOpenDetail?.(schedule);
+            }
           }}
+          aria-label="공지사항 전체보기"
         >
-          {schedule.description}
-        </p>
+          <p className="home-card-desc-text">
+            {schedule.description}
+          </p>
+          <span className="home-card-desc-more" aria-hidden="true">
+            더보기
+          </span>
+        </div>
       )}
 
       {checkedInCount !== undefined && (

@@ -167,6 +167,7 @@
   flex: 0 0 100%;
   min-width: 0;
   scroll-snap-align: center;
+  scroll-snap-stop: always;
   display: flex;
 }
 
@@ -190,6 +191,45 @@
   gap: 10px;
   padding: 14px 18px 16px;
   border-radius: 18px;
+}
+
+.home-card-desc-wrap {
+  position: relative;
+  background: var(--bg-subtle);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.home-card-desc-wrap:hover,
+.home-card-desc-wrap:focus-visible {
+  border-color: var(--border-subtle);
+}
+
+.home-card-desc-text {
+  font-size: 13px;
+  color: var(--text-sub);
+  line-height: 1.5;
+  white-space: pre-line;
+  word-break: keep-all;
+  text-wrap: balance;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+}
+
+.home-card-desc-more {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .home-card .schedule-card-title {
@@ -334,31 +374,42 @@
   border-bottom: 0;
 }
 
-.home-upcoming-date {
-  width: 36px;
+.home-upcoming-chip {
+  width: 44px;
+  height: 46px;
   flex-shrink: 0;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 3px 2px;
+  box-sizing: border-box;
 }
 
-.home-upcoming-weekday {
-  display: block;
-  font-size: 12px;
+.home-upcoming-chip-month {
+  font-size: 10px;
+  font-weight: 600;
   color: var(--text-muted);
+  line-height: 1.1;
+  letter-spacing: -0.2px;
 }
 
-.home-upcoming-weekday.is-sat {
+.home-upcoming-chip-day {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.home-upcoming-chip-day.is-sat {
   color: var(--status-info);
 }
 
-.home-upcoming-weekday.is-sun {
+.home-upcoming-chip-day.is-sun {
   color: var(--status-danger);
-}
-
-.home-upcoming-day {
-  display: block;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.2;
 }
 
 .home-upcoming-main {
