@@ -226,7 +226,7 @@
   right: 0;
   height: 2.5px;
   background: var(--brand-lavender);
-  box-shadow: 0 0 10px var(--brand-lavender), 0 0 4px #ffffff;
+  box-shadow: 0 0 10px var(--brand-lavender), 0 0 4px var(--text-white);
   animation: ci-laser-scan 2s ease-in-out infinite alternate;
 }
 
@@ -273,7 +273,7 @@
   right: 16px;
   text-align: center;
   font-size: 12px;
-  color: #ffffff;
+  color: var(--text-white);
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(4px);
   padding: 5px 12px;
@@ -454,7 +454,7 @@
   min-height: 52px;
   border: none;
   background: var(--brand-lavender);
-  color: #ffffff;
+  color: var(--text-white);
   border-radius: var(--radius-lg, 14px);
   font-size: 16px;
   font-weight: 700;
@@ -684,7 +684,7 @@
   min-height: 48px;
   border: none;
   background: var(--brand-lavender);
-  color: #ffffff;
+  color: var(--text-white);
   border-radius: var(--radius-md, 12px);
   font-size: 15px;
   font-weight: 700;
