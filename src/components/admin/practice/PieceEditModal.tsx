@@ -121,12 +121,14 @@ export const PieceEditModal: React.FC<PieceEditModalProps> = ({
         setStagedPerformanceIds([]);
         setSavedPiece(created);
         onSaved();
+        onClose();
       } else {
         const updated = await sheetsService.savePracticePiece({
           ...currentPiece, title: trimmedTitle, composer: composer.trim(), arranger: arranger.trim(),
         });
         setSavedPiece(updated);
         onSaved();
+        onClose();
       }
     } catch (err: unknown) {
       setFieldError(err instanceof Error ? err.message : '저장에 실패했습니다.');

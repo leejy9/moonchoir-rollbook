@@ -8,11 +8,19 @@ import { saveNewPieceWithStagedMedia } from '../../../services/media/uploadSave'
 import type { AppConfig, PracticePiece, PracticeTrack } from '../../../types/rollbook';
 
 let capturedTrackSectionProps: any = null;
+let capturedSaveButtonProps: any = null;
 
 vi.mock('./PieceTrackSection', () => ({
   PieceTrackSection: (props: any) => {
     capturedTrackSectionProps = props;
     return <div data-testid="mock-track-section" />;
+  },
+}));
+
+vi.mock('./PieceSaveButton', () => ({
+  PieceSaveButton: (props: any) => {
+    capturedSaveButtonProps = props;
+    return <button data-testid="mock-save-button" onClick={props.onSave}>저장</button>;
   },
 }));
 
@@ -54,6 +62,7 @@ describe('PieceEditModal Component', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     capturedTrackSectionProps = null;
+    capturedSaveButtonProps = null;
     vi.spyOn(sheetsService, 'getPracticeCatalog').mockReturnValue({
       pieces: [dummyPiece],
       tracks: [dummyTrack],
@@ -386,6 +395,36 @@ describe('PieceEditModal Component', () => {
       });
 
       expect(setPerfPiecesSpy).toHaveBeenCalledWith('perf_1', ['p_old_1', 'new_p999']);
+    });
+
+    it('calls onSaved and onClose when piece is saved successfully', async () => {
+      const saveSpy = vi.spyOn(sheetsService, 'savePracticePiece').mockResolvedValue(dummyPiece);
+      const onSaved = vi.fn();
+      const onClose = vi.fn();
+
+      renderToString(
+        <PieceEditModal
+          piece={dummyPiece}
+          catalog={{
+            pieces: [dummyPiece],
+            tracks: [dummyTrack],
+            programPieces: [],
+            performances: [],
+            performancePieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={onClose}
+          onSaved={onSaved}
+        />
+      );
+
+      expect(capturedSaveButtonProps).not.toBeNull();
+      await capturedSaveButtonProps.onSave();
+
+      expect(saveSpy).toHaveBeenCalled();
+      expect(onSaved).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
     });
   });
 });

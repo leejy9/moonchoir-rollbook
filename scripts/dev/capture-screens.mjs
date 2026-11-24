@@ -622,6 +622,8 @@ async function main() {
       for (const t of targets) {
         const page = await browser.newPage({ viewport: { width: t.width, height: t.height } });
         await page.goto(t.url, { waitUntil: 'networkidle' });
+        const sw = await page.evaluate(() => document.documentElement.scrollWidth);
+        console.log(`[capture-screens] ${t.name} scrollWidth: ${sw}`);
         const localPath = path.join(OUT_DIR, t.name);
         const artPath = path.join(OUT_ARTIFACT_DIR, t.name);
         await page.screenshot({ path: localPath });

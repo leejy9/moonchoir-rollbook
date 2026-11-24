@@ -151,8 +151,11 @@ describe('StudioTab Component (MEMBER_UX_V3_SPEC §3-1, §3-2)', () => {
       </AudioPlayerProvider>
     ).replace(/<!-- -->/g, '');
 
-    // Header title
+    // Header title and drive link
     expect(html).toContain('연습실');
+    expect(html).toContain('악보 모음');
+    expect(html).toContain('https://drive.google.com/drive/u/0/folders/1GNl2Cz9JjzOavmtBiFZXcbuvxFlmdY_U');
+    expect(html).toContain('aria-label="악보 모음 구글 드라이브 열기 (새 창)"');
 
     // Search bar
     expect(html).toContain('placeholder="곡 이름·작곡가 검색"');
