@@ -65,9 +65,9 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
       <ProfileTab
         profile={mockProfile}
         displayMode="AUTO"
-        isDarkMode={false}
+        themeMode="SYSTEM"
         onChangeDisplayMode={vi.fn()}
-        onChangeDarkMode={vi.fn()}
+        onChangeThemeMode={vi.fn()}
         onChangeBinding={vi.fn()}
         onLogout={vi.fn()}
       />
@@ -98,7 +98,10 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
 
     // 6. Settings section
     expect(html).toContain('화면 표시 모드');
-    expect(html).toContain('다크 모드');
+    expect(html).toContain('화면 테마');
+    expect(html).toContain('일반');
+    expect(html).toContain('다크');
+    expect(html).toContain('시스템');
     expect(html).toContain('앱처럼 설치하기');
     expect(html).toContain('브라우저 저장 단원 바꾸기');
     expect(html).toContain('로그아웃');
@@ -121,9 +124,9 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
       <ProfileTab
         profile={teacherProfile}
         displayMode="AUTO"
-        isDarkMode={false}
+        themeMode="SYSTEM"
         onChangeDisplayMode={vi.fn()}
-        onChangeDarkMode={vi.fn()}
+        onChangeThemeMode={vi.fn()}
         onChangeBinding={vi.fn()}
       />
     );
@@ -149,9 +152,9 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
       <ProfileTab
         profile={mockProfile}
         displayMode="AUTO"
-        isDarkMode={false}
+        themeMode="SYSTEM"
         onChangeDisplayMode={vi.fn()}
-        onChangeDarkMode={vi.fn()}
+        onChangeThemeMode={vi.fn()}
         onChangeBinding={vi.fn()}
       />
     );
@@ -163,9 +166,9 @@ describe('ProfileTab Component (Spec §5-1 ~ §5-4, §5-7, V3-11)', () => {
       <ProfileTab
         profile={mockProfile}
         displayMode="AUTO"
-        isDarkMode={false}
+        themeMode="SYSTEM"
         onChangeDisplayMode={vi.fn()}
-        onChangeDarkMode={vi.fn()}
+        onChangeThemeMode={vi.fn()}
         onChangeBinding={vi.fn()}
         onLogout={vi.fn()}
       />

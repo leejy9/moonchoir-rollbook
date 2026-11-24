@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, MemberActivity, Schedule } from '../types/rollbook';
-import type { DisplayMode } from '../services/displayMode';
+import type { DisplayMode, ThemeMode } from '../services/displayMode';
 import { getKSTDateString, parseKSTDate } from '../utils/date';
 import { buildMemberScheduleRecords } from '../utils/memberRecords';
 import { resolveMemberIdentity } from '../utils/memberIdentity';
@@ -28,9 +28,9 @@ import '../styles/v3/profile.css';
 export interface ProfileTabProps {
   profile: BoundDeviceProfile;
   displayMode: DisplayMode;
-  isDarkMode: boolean;
+  themeMode: ThemeMode;
   onChangeDisplayMode: (mode: DisplayMode) => void;
-  onChangeDarkMode: (enabled: boolean) => void;
+  onChangeThemeMode: (mode: ThemeMode) => void;
   onChangeBinding: () => void;
   onLogout?: () => Promise<void>;
   onOpenRSVP?: (schedule: Schedule) => void;
@@ -41,9 +41,9 @@ export interface ProfileTabProps {
 export const ProfileTab: React.FC<ProfileTabProps> = ({
   profile,
   displayMode,
-  isDarkMode,
+  themeMode,
   onChangeDisplayMode,
-  onChangeDarkMode,
+  onChangeThemeMode,
   onChangeBinding,
   onLogout,
   refreshTrigger,
@@ -352,8 +352,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       <ProfileSettingsSection
         displayMode={displayMode}
         onChangeDisplayMode={onChangeDisplayMode}
-        isDarkMode={isDarkMode}
-        onChangeDarkMode={onChangeDarkMode}
+        themeMode={themeMode}
+        onChangeThemeMode={onChangeThemeMode}
         onChangeBinding={onChangeBinding}
         onLogout={onLogout ? handleLogoutAction : undefined}
         isLoggingOut={isLoggingOut}

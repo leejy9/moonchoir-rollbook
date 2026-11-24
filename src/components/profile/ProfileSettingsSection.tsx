@@ -1,12 +1,12 @@
 import React from 'react';
-import type { DisplayMode } from '../../services/displayMode';
+import type { DisplayMode, ThemeMode } from '../../services/displayMode';
 import { InstallAppCard } from '../InstallAppCard';
 
 export interface ProfileSettingsSectionProps {
   displayMode: DisplayMode;
   onChangeDisplayMode: (mode: DisplayMode) => void;
-  isDarkMode: boolean;
-  onChangeDarkMode: (enabled: boolean) => void;
+  themeMode: ThemeMode;
+  onChangeThemeMode: (mode: ThemeMode) => void;
   onChangeBinding: () => void;
   onLogout?: () => Promise<void>;
   isLoggingOut: boolean;
@@ -18,11 +18,17 @@ const DISPLAY_MODE_LABELS: Record<DisplayMode, string> = {
   MOBILE: '모바일',
 };
 
+const THEME_MODE_LABELS: Record<ThemeMode, string> = {
+  LIGHT: '일반',
+  DARK: '다크',
+  SYSTEM: '시스템',
+};
+
 export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
   displayMode,
   onChangeDisplayMode,
-  isDarkMode,
-  onChangeDarkMode,
+  themeMode,
+  onChangeThemeMode,
   onChangeBinding,
   onLogout,
   isLoggingOut,
@@ -30,6 +36,12 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
   const handleDisplayModeChange = (value: string) => {
     if (value === 'AUTO' || value === 'DESKTOP' || value === 'MOBILE') {
       onChangeDisplayMode(value);
+    }
+  };
+
+  const handleThemeModeChange = (value: string) => {
+    if (value === 'LIGHT' || value === 'DARK' || value === 'SYSTEM') {
+      onChangeThemeMode(value);
     }
   };
 
@@ -52,20 +64,20 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
           </select>
         </label>
 
-        <div className="profile-settings-menu-row">
-          <span>다크 모드</span>
-          <button
-            type="button"
-            className={`profile-settings-switch ${isDarkMode ? 'is-on' : ''}`}
+        <label className="profile-settings-menu-row" htmlFor="profile-theme-mode">
+          <span>화면 테마</span>
+          <select
+            id="profile-theme-mode"
+            className="profile-settings-select"
             style={{ minHeight: 44, minWidth: 44 }}
-            role="switch"
-            aria-checked={isDarkMode}
-            aria-label="다크 모드"
-            onClick={() => onChangeDarkMode(!isDarkMode)}
+            value={themeMode}
+            onChange={(event) => handleThemeModeChange(event.target.value)}
           >
-            <span className="profile-settings-switch-knob" />
-          </button>
-        </div>
+            {Object.entries(THEME_MODE_LABELS).map(([mode, label]) => (
+              <option key={mode} value={mode}>{label}</option>
+            ))}
+          </select>
+        </label>
 
         <InstallAppCard compact />
 

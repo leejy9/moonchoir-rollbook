@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  getDarkModePreference,
+  getSystemPrefersDark,
+  getThemeModePreference,
+  resolveIsDark,
   getDisplayModePreference,
-  hasSavedDarkModePreference,
-  saveDarkModePreference,
+  saveThemeModePreference,
   saveDisplayModePreference,
 } from './displayMode';
 
@@ -46,32 +47,47 @@ describe('display mode preference', () => {
     expect(getDisplayModePreference()).toBe('AUTO');
   });
 
-  it('defaults dark mode to off and persists the selected state', () => {
-    expect(getDarkModePreference()).toBe(false);
+  it('defaults the theme to SYSTEM and persists the selected mode', () => {
+    expect(getThemeModePreference()).toBe('SYSTEM');
 
-    saveDarkModePreference(true);
-    expect(getDarkModePreference()).toBe(true);
+    saveThemeModePreference('DARK');
+    expect(getThemeModePreference()).toBe('DARK');
 
-    saveDarkModePreference(false);
-    expect(getDarkModePreference()).toBe(false);
+    saveThemeModePreference('LIGHT');
+    expect(getThemeModePreference()).toBe('LIGHT');
+
+    saveThemeModePreference('SYSTEM');
+    expect(getThemeModePreference()).toBe('SYSTEM');
   });
 
-  it('follows the system dark mode until the user picks one, then keeps the pick', () => {
-    vi.stubGlobal('window', { matchMedia: () => ({ matches: true }) });
+  it('migrates the legacy dark-mode switch value when no theme mode is saved', () => {
+    localStorage.setItem('moonchoir_dark_mode_v1', 'true');
+    expect(getThemeModePreference()).toBe('DARK');
 
-    expect(hasSavedDarkModePreference()).toBe(false);
-    expect(getDarkModePreference()).toBe(true);
+    localStorage.setItem('moonchoir_dark_mode_v1', 'false');
+    expect(getThemeModePreference()).toBe('LIGHT');
 
-    saveDarkModePreference(false);
-    expect(hasSavedDarkModePreference()).toBe(true);
-    expect(getDarkModePreference()).toBe(false);
+    // 새 선택값이 있으면 예전 값보다 우선한다
+    saveThemeModePreference('SYSTEM');
+    expect(getThemeModePreference()).toBe('SYSTEM');
   });
 
-  it('treats an unreadable stored value as "not chosen" and uses the system setting', () => {
-    vi.stubGlobal('window', { matchMedia: () => ({ matches: true }) });
+  it('treats an unreadable stored value as SYSTEM', () => {
+    localStorage.setItem('moonchoir_theme_mode_v1', 'maybe');
     localStorage.setItem('moonchoir_dark_mode_v1', 'maybe');
+    expect(getThemeModePreference()).toBe('SYSTEM');
+  });
 
-    expect(hasSavedDarkModePreference()).toBe(false);
-    expect(getDarkModePreference()).toBe(true);
+  it('resolves dark only for DARK, or for SYSTEM while the device is dark', () => {
+    expect(resolveIsDark('DARK', false)).toBe(true);
+    expect(resolveIsDark('LIGHT', true)).toBe(false);
+    expect(resolveIsDark('SYSTEM', true)).toBe(true);
+    expect(resolveIsDark('SYSTEM', false)).toBe(false);
+  });
+
+  it('reads the system dark preference from matchMedia', () => {
+    expect(getSystemPrefersDark()).toBe(false);
+    vi.stubGlobal('window', { matchMedia: () => ({ matches: true }) });
+    expect(getSystemPrefersDark()).toBe(true);
   });
 });
