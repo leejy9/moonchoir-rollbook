@@ -71,7 +71,7 @@ export function useSeenComments(
   const commentsBySchedule = useMemo(() => {
     void refreshKey;
     return schedules.map((s) => ({ scheduleId: s.id, comments: sheetsService.getComments(s.id) }));
-  }, [schedules, refreshKey, isReady]);
+  }, [schedules, refreshKey]);
 
   const resolution = useMemo(() => {
     void storeVersion;

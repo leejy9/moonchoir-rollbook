@@ -2,22 +2,30 @@ import React from 'react';
 import type { Schedule } from '../../types/rollbook';
 import type { TodayCtaState } from '../../utils/todayCta';
 import { sheetsService } from '../../services/sheets';
+import {
+  cardCornerLabel,
+  commentRowAriaLabel,
+  formatCardDateLine,
+  lastCommentText,
+} from '../../utils/homeCardText';
 import { buildKakaoMapLink, findScheduleAddress } from '../../utils/kakaoMaps';
-import { IconClock, IconLocation, IconQrScan, IconVote } from '../Icons';
+import { IconChat, IconChevronRight, IconClock, IconLocation, IconQrScan, IconVote } from '../Icons';
+
+export interface HomeCardComments {
+  count: number;
+  last?: { part: string; memberName: string; text: string };
+  hasNew: boolean;
+}
 
 export interface HomeActiveScheduleCardProps {
   schedule: Schedule;
-  schedulesCount: number;
-  scheduleIndex: number;
-  todayStr: string;
   isToday: boolean;
   dDay?: number;
   isRequired: boolean;
   cta: TodayCtaState;
   checkedInCount?: number;
   checkedInTimeStr?: string;
-  onPrevSchedule?: () => void;
-  onNextSchedule?: () => void;
+  comments: HomeCardComments;
   onOpenQRScanner: (scheduleId: string) => void;
   onOpenRSVP: (schedule: Schedule) => void;
   onOpenDetail?: (schedule: Schedule) => void;
@@ -25,16 +33,13 @@ export interface HomeActiveScheduleCardProps {
 
 export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
   schedule,
-  schedulesCount,
-  scheduleIndex,
   isToday,
   dDay,
   isRequired,
   cta,
   checkedInCount,
   checkedInTimeStr,
-  onPrevSchedule,
-  onNextSchedule,
+  comments,
   onOpenQRScanner,
   onOpenRSVP,
   onOpenDetail,
@@ -45,93 +50,10 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
     lat: schedule.targetLat,
     lon: schedule.targetLon,
   });
+  const corner = cardCornerLabel(isToday, dDay, cta.kind);
 
   return (
-    <section className="active-schedule-card">
-      {/* Multi-Schedule Carousel Switcher (Rendered only when 2+ schedules exist) */}
-      {schedulesCount > 1 && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'var(--bg-subtle)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            padding: '8px 12px',
-          }}
-        >
-          <button
-            type="button"
-            onClick={onPrevSchedule}
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-sm)',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 700,
-              color: 'var(--text-sub)',
-            }}
-            title="이전 일정 보기"
-            aria-label="이전 일정 보기"
-          >
-            ◀
-          </button>
-
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
-              {isToday ? '오늘' : schedule.date} 일정 {scheduleIndex + 1}/{schedulesCount}
-              <span style={{ color: 'var(--brand-lavender-text)', marginLeft: '6px' }}>({schedule.startTime})</span>
-            </span>
-            {/* Dot Indicators (Decorative aria-hidden) */}
-            <div style={{ display: 'flex', gap: '5px' }} aria-hidden="true">
-              {Array.from({ length: schedulesCount }).map((_, i) => (
-                <span
-                  key={i}
-                  style={{
-                    width: i === scheduleIndex ? '16px' : '6px',
-                    height: '6px',
-                    borderRadius: '3px',
-                    background: i === scheduleIndex ? 'var(--brand-primary)' : 'var(--border-subtle)',
-                    transition: 'all 0.2s ease',
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onNextSchedule}
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-sm)',
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 700,
-              color: 'var(--text-sub)',
-            }}
-            title="다음 일정 보기"
-            aria-label="다음 일정 보기"
-          >
-            ▶
-          </button>
-        </div>
-      )}
-
-      {/* Card Header: Category Badge + Requirement Badge + Date Badge */}
+    <section className="active-schedule-card home-card">
       <div className="schedule-card-header">
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="schedule-category-badge">{schedule.category}</span>
@@ -148,28 +70,18 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
           >
             {isRequired ? '필참' : '자율 참여'}
           </span>
-          <span className={`schedule-date-badge ${isToday ? 'is-today' : ''}`}>
-            {dDay !== undefined && dDay > 0
-              ? `D-${dDay}`
-              : isToday
-              ? '오늘 연습'
-              : schedule.date}
-          </span>
         </div>
+        {corner && <span className={`home-card-corner is-${corner.tone}`}>{corner.text}</span>}
       </div>
 
-      {/* Schedule Title */}
       <h2 className="schedule-card-title">{schedule.title}</h2>
 
-      {/* Info: Time & Location with Kakao Maps Link */}
       <div className="schedule-info-grid">
         <div className="info-item">
           <span className="info-icon" aria-hidden="true">
             <IconClock size={16} />
           </span>
-          <span className="info-text">
-            {schedule.startTime} ~ {schedule.endTime}
-          </span>
+          <span className="info-text">{formatCardDateLine(schedule)}</span>
         </div>
         <div className="info-item">
           <span className="info-icon" aria-hidden="true">
@@ -196,7 +108,6 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
         </div>
       </div>
 
-      {/* Clamped Description (max 2 lines) */}
       {schedule.description && (
         <p
           className="schedule-desc-box schedule-desc-clamped"
@@ -212,22 +123,12 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
         </p>
       )}
 
-      {/* Attendance Count Line (rendered when check-in window opens) */}
       {checkedInCount !== undefined && (
-        <div
-          className="checked-in-summary"
-          style={{
-            fontSize: '13px',
-            fontWeight: 600,
-            color: 'var(--text-sub)',
-            padding: '2px 0',
-          }}
-        >
+        <div className="checked-in-summary home-card-summary">
           현재 {checkedInCount}명 출석{checkedInTimeStr ? ` (${checkedInTimeStr} 기준)` : ''}
         </div>
       )}
 
-      {/* CTA Section */}
       <div className="action-buttons-stack">
         {cta.isButton ? (
           cta.kind === 'CHECKIN_OPEN' ? (
@@ -272,7 +173,6 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
             </button>
           )
         ) : (
-          /* Non-button Status Text: ATTENDED, LATE, MANUAL_OK, MANUAL_ABSENT, EXCUSED, CLOSED_ABSENT, CLOSED_EXEMPT, CANCELLED */
           <div
             className={`my-status-banner ${
               cta.kind === 'ATTENDED' || cta.kind === 'LATE' || cta.kind === 'MANUAL_OK'
@@ -297,27 +197,25 @@ export const HomeActiveScheduleCard: React.FC<HomeActiveScheduleCardProps> = ({
         )}
       </div>
 
-      {/* Detail View Button */}
       <button
         type="button"
-        className="btn-detail-view"
-        style={{
-          minHeight: '44px',
-          width: '100%',
-          padding: '10px 14px',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border-subtle)',
-          background: 'var(--bg-subtle)',
-          color: 'var(--text-main)',
-          fontSize: '13px',
-          fontWeight: 600,
-          cursor: 'pointer',
-          textAlign: 'center',
-          boxSizing: 'border-box',
-        }}
+        className="home-card-comment-row"
+        aria-label={commentRowAriaLabel(comments.count, comments.hasNew)}
         onClick={() => onOpenDetail?.(schedule)}
       >
-        상세 보기
+        <IconChat size={18} aria-hidden="true" />
+        {comments.count > 0 ? (
+          <>
+            <span className="home-card-comment-count">{comments.count}</span>
+            {comments.hasNew && <span className="home-card-comment-dot" />}
+            {comments.last && (
+              <span className="home-card-comment-text">{lastCommentText(comments.last)}</span>
+            )}
+          </>
+        ) : (
+          <span className="home-card-comment-text is-empty">첫 댓글을 남겨 보세요</span>
+        )}
+        <IconChevronRight size={20} aria-hidden="true" />
       </button>
     </section>
   );
