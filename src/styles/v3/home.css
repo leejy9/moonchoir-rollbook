@@ -1,229 +1,414 @@
 /* ==========================================================================
-   v3 Home Screen Styles (src/styles/v3/home.css)
-   Complies with R21: Screen-specific style isolated in src/styles/v3/
+   v3 Home Screen Styles (src/styles/v3/home.css) — 홈 B안 (V3-22)
+   Screen-specific style isolated in src/styles/v3/. 색은 src/index.css 변수만 쓴다.
    ========================================================================== */
 
 .home-tab-container {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding-bottom: 24px;
+  gap: 28px;
+  padding: 0 16px 24px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
-/* Calendar Card Container */
-.home-calendar-card {
-  background: var(--bg-card);
-  border-radius: var(--radius-xl);
-  padding: 12px 14px;
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-card);
+/* ---- 월간 달력: 바탕 위에 바로 둔다(상자 없음) ---- */
+.home-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 36px;
 }
 
-.home-calendar-header {
+.home-cal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin: 0 -8px;
 }
 
-.home-calendar-title-wrap {
+.home-cal-title-wrap {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.home-calendar-title {
-  font-size: 1rem;
-  font-weight: 800;
+.home-cal-title {
+  font-size: 17px;
+  font-weight: 700;
   color: var(--text-main);
   margin: 0;
 }
 
-.home-calendar-today-btn {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 4px 10px;
-  min-height: 44px;
+.home-cal-nav {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  color: var(--text-sub);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.home-cal-today {
   min-width: 44px;
+  min-height: 44px;
+  padding: 4px 10px;
+  border: 0;
   border-radius: var(--radius-full);
   background: var(--brand-primary-light);
-  color: var(--brand-primary);
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.home-calendar-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Week / Month Toggle Segment */
-.home-calendar-toggle {
-  display: flex;
-  align-items: center;
-  background: var(--bg-subtle);
-  border-radius: var(--radius-full);
-  padding: 2px;
-  border: 1px solid var(--border-subtle);
-}
-
-.home-calendar-toggle-btn {
-  border: none;
-  background: transparent;
-  padding: 6px 10px;
-  min-height: 44px;
-  min-width: 44px;
-  border-radius: var(--radius-full);
+  color: var(--brand-lavender-text);
   font-size: 12px;
   font-weight: 600;
+  cursor: pointer;
+}
+
+.home-cal .calendar-grid-weekdays {
+  padding: 6px 0 8px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all var(--transition-fast);
 }
 
-.home-calendar-toggle-btn.active {
-  background: var(--bg-card);
-  color: var(--text-main);
+.app-shell[data-theme='dark'] .home-cal .calendar-grid-cells {
+  background-color: transparent !important;
+  border-color: transparent !important;
+}
+
+.home-cal .calendar-grid-cells {
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.home-cal .calendar-cell {
+  aspect-ratio: auto;
+  min-height: 48px;
+  gap: 3px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.home-cal .calendar-cell.dimmed {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.home-cal .calendar-cell.today {
+  border: 0;
+  box-shadow: inset 0 0 0 1.5px var(--brand-primary);
   font-weight: 700;
-  box-shadow: var(--shadow-sm);
 }
 
-.home-calendar-nav-btn {
-  min-width: 44px;
-  min-height: 44px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-card);
-  color: var(--text-sub);
-  cursor: pointer;
-  display: flex;
+.home-cal .calendar-cell.selected,
+.home-cal .calendar-cell.highlight {
+  background: var(--brand-primary) !important;
+  color: var(--text-white) !important;
+  box-shadow: none;
+  font-weight: 700;
+}
+
+.home-cal .calendar-cell.highlight .schedule-dot {
+  background: var(--text-white) !important;
+}
+
+.home-cal .cell-dots-row {
+  position: static;
+  min-height: 5px;
   align-items: center;
-  justify-content: center;
-  font-size: 1.1rem;
 }
 
-/* Week Calendar Grid */
-.week-calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
+.cell-check {
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 5px;
+  color: var(--status-success);
+}
+
+.home-cal .calendar-cell.selected .cell-check,
+.home-cal .calendar-cell.highlight .cell-check {
+  color: var(--text-white);
+}
+
+/* ---- 일정 카드 줄(옆으로 넘김) ---- */
+.home-card-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.home-card-track {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 2px 28px 6px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.home-card-track::-webkit-scrollbar {
+  display: none;
+}
+
+/* 카드는 가운데에 맞춘다: 양옆(이전·다음 카드)이 모퉁이만 20px쯤 걸쳐 보여 끌어서 넘길 수 있다. */
+.home-card-slot {
+  flex: 0 0 100%;
+  min-width: 0;
+  scroll-snap-align: center;
+  display: flex;
+}
+
+.home-card-slot.is-peek {
+  cursor: pointer;
+}
+
+.home-card-inner {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.home-card-slot.is-peek .home-card-inner {
+  pointer-events: none;
+}
+
+.home-card.active-schedule-card {
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+  padding: 14px 18px 16px;
+  border-radius: 18px;
+}
+
+.home-card .schedule-card-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.home-card .schedule-info-grid {
   gap: 4px;
 }
 
-.week-day-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 48px;
-  min-width: 44px;
-  padding: 4px 2px;
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  border: 1px solid transparent;
-  background: var(--bg-subtle);
-  position: relative;
-  transition: all var(--transition-fast);
-  user-select: none;
-}
-
-.week-day-col:hover {
-  background: var(--bg-hover);
-}
-
-.week-day-col.today {
-  border-color: var(--brand-primary);
-  background: var(--brand-primary-light);
-}
-
-.week-day-col.selected {
-  border-color: var(--brand-accent);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-sm);
-}
-
-.week-day-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  margin-bottom: 2px;
-}
-
-.week-day-num {
+.home-card .info-item {
   font-size: 14px;
+}
+
+.home-card-corner {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.home-card-corner.is-warning {
+  color: var(--status-warning);
+}
+
+.home-card-corner.is-muted {
+  color: var(--text-sub);
+  font-weight: 500;
+}
+
+.home-card-summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+  padding: 2px 0;
+}
+
+.home-card-comment-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin: -4px -6px -8px;
+  padding: 0 6px;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0 0 12px 12px;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  color: var(--text-sub);
+  cursor: pointer;
+}
+
+.home-card-comment-count {
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-main);
 }
 
-.week-day-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--brand-accent);
-  margin-top: 3px;
+.home-card-comment-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--brand-apricot-text);
+  flex-shrink: 0;
 }
 
-.week-day-dot.attended {
-  background: var(--status-success);
+.home-card-comment-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Upcoming Schedules Section */
+.home-card-comment-text.is-empty {
+  color: var(--text-muted);
+}
+
+.home-card-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.home-card-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-default);
+}
+
+.home-card-dot.is-on {
+  width: 18px;
+  background: var(--brand-primary);
+}
+
+/* ---- 다가오는 일정 ---- */
 .home-upcoming-section {
-  background: var(--bg-card);
-  border-radius: var(--radius-xl);
-  padding: 18px 16px;
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-card);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.home-upcoming-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .home-upcoming-title {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-main);
+}
+
+.home-upcoming-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 16px 0;
   margin: 0;
 }
 
-.home-upcoming-badge {
+.home-upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.home-upcoming-row:last-child {
+  border-bottom: 0;
+}
+
+.home-upcoming-date {
+  width: 36px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.home-upcoming-weekday {
+  display: block;
   font-size: 12px;
   color: var(--text-muted);
 }
 
-.home-upcoming-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.home-upcoming-weekday.is-sat {
+  color: var(--status-info);
 }
 
-.home-upcoming-item {
+.home-upcoming-weekday.is-sun {
+  color: var(--status-danger);
+}
+
+.home-upcoming-day {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.home-upcoming-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-upcoming-name {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.home-upcoming-sub {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-upcoming-comments {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-subtle);
-  cursor: pointer;
-  min-height: 44px;
-  transition: background var(--transition-fast);
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
-.home-upcoming-item:hover {
-  background: var(--bg-hover);
+.home-upcoming-status {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.home-upcoming-status.is-success {
+  color: var(--status-success);
+}
+
+.home-upcoming-status.is-muted {
+  color: var(--text-sub);
+  font-weight: 500;
+}
+
+/* ---- 일정 상세 댓글: "새 댓글" 글자 ---- */
+.sc-new {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--brand-apricot-text);
 }
 
 /* 다크 모드: 오늘 배지는 밝은 바탕이므로 글자를 어둡게 (기본 흰 글자는 안 보임) */

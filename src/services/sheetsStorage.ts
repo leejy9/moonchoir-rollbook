@@ -15,6 +15,7 @@ export const PREFERENCE_KEYS = {
   STUDIO_SCOPE: 'moonchoir_pref_studio_scope_v1',
   PLAYBACK_RATE: 'moonchoir_pref_playback_rate_v1',
   SEEN_STICKERS: 'moonchoir_pref_seen_stickers_v1',
+  SEEN_COMMENTS: 'moonchoir_pref_seen_comments_v1',
   UPLOAD_JOBS: 'moonchoir_pref_upload_jobs_v1',
   YT_MINIMIZE_HINT_COUNT: 'moonchoir_pref_yt_minimize_hint_v1',
 } as const;
@@ -103,6 +104,30 @@ export function readPreference<T>(
   } catch (err) {
     console.warn(`[Storage] Failed to read preference key ${key}, falling back:`, err);
     return fallback;
+  }
+}
+
+export type PreferenceState<T> =
+  | { kind: 'missing' }
+  | { kind: 'invalid' }
+  | { kind: 'ok'; value: T };
+
+/**
+ * 저장값 없음(missing)과 읽기·검사 실패(invalid)를 구분해 읽는다 (V3-22 R7).
+ * 저장소 접근 자체가 실패해도 invalid다. invalid일 때는 덮어쓰지 않아야 한다.
+ */
+export function readPreferenceState<T>(
+  key: string,
+  validate: (val: unknown) => val is T
+): PreferenceState<T> {
+  try {
+    const raw = getStorage().getItem(key);
+    if (raw === null || raw === undefined) return { kind: 'missing' };
+    const parsed: unknown = JSON.parse(raw);
+    return validate(parsed) ? { kind: 'ok', value: parsed } : { kind: 'invalid' };
+  } catch (err) {
+    console.warn(`[Storage] Failed to read preference state ${key}:`, err);
+    return { kind: 'invalid' };
   }
 }
 

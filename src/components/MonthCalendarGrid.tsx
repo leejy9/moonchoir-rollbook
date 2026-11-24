@@ -13,6 +13,8 @@ export interface MonthCalendarGridProps {
   currentYear: number;
   currentMonthIndex: number;
   selectedDateStr?: string;
+  /** 카드를 넘길 때 따라가는 강조 날짜. `selectedDateStr`가 있으면 표시하지 않는다. */
+  highlightDateStr?: string;
   todayStr: string;
   calendarDays: CalendarDay[];
   schedulesByDate: Map<string, Schedule[]>;
@@ -21,13 +23,13 @@ export interface MonthCalendarGridProps {
   onJumpToToday?: () => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
-  headerExtra?: React.ReactNode;
 }
 
 export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = ({
   currentYear,
   currentMonthIndex,
   selectedDateStr,
+  highlightDateStr,
   todayStr,
   calendarDays,
   schedulesByDate,
@@ -36,105 +38,32 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = ({
   onJumpToToday,
   onPrevMonth,
   onNextMonth,
-  headerExtra,
 }) => {
   return (
-    <section
-      className="integrated-calendar-card"
-      style={{
-        background: 'var(--bg-card)',
-        borderRadius: 'var(--radius-xl)',
-        padding: '16px',
-        border: '1px solid var(--border-subtle)',
-        boxShadow: 'var(--shadow-card)',
-      }}
-    >
-      {/* Calendar Header Month Switcher */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '12px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+    <section className="home-cal" aria-label="월간 달력">
+      <div className="home-cal-header">
+        <button type="button" className="home-cal-nav" onClick={onPrevMonth} aria-label="이전 달">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </button>
+        <div className="home-cal-title-wrap">
+          <h2 className="home-cal-title">
             {currentYear}년 {currentMonthIndex + 1}월
           </h2>
           {selectedDateStr && selectedDateStr !== todayStr && onJumpToToday && (
-            <button
-              type="button"
-              onClick={onJumpToToday}
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                padding: '4px 10px',
-                minHeight: '44px',
-                minWidth: '44px',
-                borderRadius: 'var(--radius-full)',
-                background: 'var(--brand-primary-light)',
-                color: 'var(--brand-primary)',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
+            <button type="button" className="home-cal-today" onClick={onJumpToToday}>
               오늘
             </button>
           )}
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {headerExtra}
-          <button
-            type="button"
-            onClick={onPrevMonth}
-            aria-label="이전 달"
-            style={{
-              minWidth: '44px',
-              minHeight: '44px',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border-subtle)',
-              background: 'var(--bg-card)',
-              color: 'var(--text-sub)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={onNextMonth}
-            aria-label="다음 달"
-            style={{
-              minWidth: '44px',
-              minHeight: '44px',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border-subtle)',
-              background: 'var(--bg-card)',
-              color: 'var(--text-sub)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
-        </div>
+        <button type="button" className="home-cal-nav" onClick={onNextMonth} aria-label="다음 달">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </button>
       </div>
 
-      {/* Weekday Row */}
       <div className="calendar-grid-weekdays">
         {WEEKDAYS.map((wd, idx) => (
           <span
@@ -146,11 +75,11 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = ({
         ))}
       </div>
 
-      {/* Calendar Grid Cells */}
       <div className="calendar-grid-cells">
         {calendarDays.map((day) => {
           const daySchedules = schedulesByDate.get(day.dateStr) || [];
           const isSelected = day.dateStr === selectedDateStr;
+          const isHighlighted = !selectedDateStr && day.dateStr === highlightDateStr;
           const isToday = day.dateStr === todayStr;
           const hasCheckIn = daySchedules.some((s) => myLogsByScheduleId.has(s.id));
 
@@ -159,7 +88,7 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = ({
               key={day.dateStr}
               className={`calendar-cell ${day.isCurrentMonth ? '' : 'dimmed'} ${
                 isToday ? 'today' : ''
-              } ${isSelected ? 'selected' : ''}`}
+              } ${isSelected ? 'selected' : ''} ${isHighlighted ? 'highlight' : ''}`}
               onClick={() => onSelectDate(day.dateStr)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -173,19 +102,10 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = ({
             >
               <span className="cell-day-num">{day.dayNumber}</span>
 
-              {/* Attendance check or rehearsal dots */}
-              {daySchedules.length > 0 && (
-                <div className="cell-dots-row">
-                  {hasCheckIn ? (
-                    <span
-                      style={{
-                        fontSize: '9px',
-                        fontWeight: 800,
-                        color: isSelected ? 'var(--text-white)' : 'var(--status-success)',
-                        lineHeight: 1,
-                      }}
-                      title="출석 완료"
-                    >
+              <div className="cell-dots-row">
+                {daySchedules.length > 0 &&
+                  (hasCheckIn ? (
+                    <span className="cell-check" title="출석 완료">
                       ✓
                     </span>
                   ) : (
@@ -195,36 +115,11 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = ({
                         className={`schedule-dot ${getCategoryDotClass(sch.category)}`}
                       />
                     ))
-                  )}
-                </div>
-              )}
+                  ))}
+              </div>
             </div>
           );
         })}
-      </div>
-
-      {/* Legend row */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '12px',
-          fontSize: '0.75rem',
-          color: 'var(--text-muted)',
-          marginTop: '12px',
-          flexWrap: 'wrap',
-        }}
-      >
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--brand-primary)' }} /> 정기연습
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--status-danger)' }} /> 연주/행사
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <strong style={{ color: 'var(--status-success)' }}>✓</strong> 내 출석 완료
-        </span>
       </div>
     </section>
   );

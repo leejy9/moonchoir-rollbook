@@ -1,25 +1,23 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { sheetsService } from '../services/sheets';
-import { PREFERENCE_KEYS, readPreference, writePreference } from '../services/sheetsStorage';
-import type { BoundDeviceProfile, Member, Schedule } from '../types/rollbook';
+import type { BoundDeviceProfile, Member, RSVPVote, Schedule } from '../types/rollbook';
 import { isMemberRequiredForSchedule, resolveMergedMemberIds } from '../utils/attendanceStats';
 import { resolveMemberIdentity } from '../utils/memberIdentity';
 import { getCalendarGrid, groupSchedulesByDate } from '../utils/calendar';
-import {
-  addDaysKST,
-  getKSTClock,
-  getKSTDateString,
-  getKSTTimestampString,
-} from '../utils/date';
+import { getKSTClock, getKSTDateString, getKSTTimestampString } from '../utils/date';
 import type { NavAction } from '../utils/route';
 import { countCheckedIn } from '../utils/rsvpTally';
 import { getCheckInWindowState } from '../utils/timeWindow';
+import { isCheckedInFinalStatus } from '../utils/homeCardText';
+import { buildHomeCards } from '../utils/homeCards';
+import { calendarHighlightDate } from '../utils/homeCarousel';
+import { findMyVote } from '../utils/myVote';
 import { deriveTodayCta } from '../utils/todayCta';
-import { selectTodayFocus } from '../utils/todayFocus';
-import { HomeActiveScheduleCard } from './home/HomeActiveScheduleCard';
+import { computeDDayDifference, selectTodayFocus } from '../utils/todayFocus';
+import { HomeCardCarousel, type HomeCardModel } from './home/HomeCardCarousel';
 import { HomeUpcomingSection } from './home/HomeUpcomingSection';
+import { useSeenComments } from './home/useSeenComments';
 import { MonthCalendarGrid } from './MonthCalendarGrid';
-import { WeekCalendarGrid } from './home/WeekCalendarGrid';
 import '../styles/v3/home.css';
 
 export interface HomeTabProps {
@@ -45,19 +43,6 @@ export const HomeTab: React.FC<HomeTabProps> = ({
 }) => {
   const [currentNow, setCurrentNow] = useState(() => new Date());
   const [todayStr, setTodayStr] = useState(() => getKSTDateString());
-  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
-
-  // Preference for Week vs Month view
-  const [calendarView, setCalendarView] = useState<'week' | 'month'>(() => {
-    return readPreference<'week' | 'month'>(
-      PREFERENCE_KEYS.HOME_CALENDAR_VIEW,
-      (v): v is 'week' | 'month' => v === 'week' || v === 'month',
-      'week'
-    );
-  });
-
-  // Week view anchor date
-  const [weekAnchorDate, setWeekAnchorDate] = useState(() => getKSTDateString());
 
   // Month view year/month state
   const [internalYear, setInternalYear] = useState(() => parseInt(todayStr.slice(0, 4), 10));
@@ -130,14 +115,13 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         profile.name,
         currentNow
       );
-      if (rec?.finalStatus === 'ATTENDED') {
+      if (isCheckedInFinalStatus(rec?.finalStatus)) {
         map.set(sch.id, true);
       }
     }
     return map;
   }, [schedules, profile.memberId, profile.name, refreshTrigger, currentNow]);
 
-  // Top focus schedule
   const focusResult = useMemo(() => {
     return selectTodayFocus({
       schedules,
@@ -146,30 +130,108 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       identityMembers: allMembers,
       now: currentNow,
       todayStr,
-      selectedId: selectedScheduleId,
+    });
+  }, [schedules, currentMember, currentMemberAliasIds, allMembers, currentNow, todayStr]);
+
+  const { cards, upcoming } = useMemo(
+    () => buildHomeCards({ focusResult, schedules, now: currentNow, todayStr }),
+    [focusResult, schedules, currentNow, todayStr]
+  );
+
+  const syncState = useSyncExternalStore(
+    (listener) => sheetsService.subscribeSync(listener),
+    () => sheetsService.getSyncState(),
+    () => sheetsService.getSyncState()
+  );
+  const dataKey = (refreshTrigger ?? 0) + syncState.lastSyncedAt;
+  const seenComments = useSeenComments(
+    profile.memberId,
+    schedules,
+    syncState.lastSyncedAt > 0,
+    dataKey
+  );
+
+  const cardModels = useMemo<HomeCardModel[]>(() => {
+    void dataKey;
+    return cards.map((sch) => {
+      const isToday = sch.date === todayStr;
+      const isRequired = isMemberRequiredForSchedule(
+        currentMember,
+        sch.date,
+        sch,
+        currentMemberAliasIds,
+        allMembers
+      );
+      const windowState = getCheckInWindowState(sch, currentNow);
+      const comments = sheetsService.getComments(sch.id);
+      const last = comments[comments.length - 1];
+      return {
+        schedule: sch,
+        isToday,
+        dDay: computeDDayDifference(sch.date, todayStr),
+        isRequired,
+        cta: deriveTodayCta({
+          schedule: sch,
+          now: currentNow,
+          isRequired,
+          myVote: findMyVote(sheetsService.getRSVPVotes(sch.id), currentMemberAliasIds),
+          myReconciled:
+            sheetsService.reconcileMemberAttendance(
+              profile.memberId,
+              sch.id,
+              profile.name,
+              currentNow
+            ) || undefined,
+          isOnline:
+            typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean'
+              ? navigator.onLine
+              : true,
+        }),
+        checkedInCount:
+          isToday && (windowState.isOpen || windowState.status === 'WINDOW_CLOSED')
+            ? countCheckedIn(sheetsService.reconcileAttendance(sch.id, currentNow), allMembers)
+            : undefined,
+        checkedInTimeStr: isToday ? getKSTClock(getKSTTimestampString(currentNow)) : undefined,
+        comments: {
+          count: comments.length,
+          last: last
+            ? { part: last.part, memberName: last.memberName, text: last.text }
+            : undefined,
+          hasNew: seenComments.hasNewComment(sch.id),
+        },
+      };
     });
   }, [
-    schedules,
+    cards,
+    todayStr,
     currentMember,
     currentMemberAliasIds,
     allMembers,
     currentNow,
-    todayStr,
-    selectedScheduleId,
+    profile.memberId,
+    profile.name,
+    dataKey,
+    seenComments,
   ]);
 
-  const handleToggleCalendarView = (view: 'week' | 'month') => {
-    setCalendarView(view);
-    writePreference(PREFERENCE_KEYS.HOME_CALENDAR_VIEW, view);
-  };
+  const myVoteBySchedule = useMemo(() => {
+    void dataKey;
+    const map = new Map<string, RSVPVote>();
+    for (const sch of upcoming) {
+      const vote = findMyVote(sheetsService.getRSVPVotes(sch.id), currentMemberAliasIds);
+      if (vote) map.set(sch.id, vote);
+    }
+    return map;
+  }, [upcoming, currentMemberAliasIds, dataKey]);
 
-  const handlePrevWeek = () => {
-    setWeekAnchorDate((prev) => addDaysKST(prev, -7));
-  };
+  const commentCounts = useMemo(() => {
+    void dataKey;
+    return sheetsService.getCommentCounts();
+  }, [dataKey]);
 
-  const handleNextWeek = () => {
-    setWeekAnchorDate((prev) => addDaysKST(prev, 7));
-  };
+  const [activeCardDate, setActiveCardDate] = useState<string | undefined>(undefined);
+  const handleActiveDateChange = useCallback((date: string | undefined) => setActiveCardDate(date), []);
+  const highlightDateStr = calendarHighlightDate(activeCardDate, currentYear, currentMonthIndex);
 
   const handlePrevMonth = () => {
     let nextY = currentYear;
@@ -217,191 +279,42 @@ export const HomeTab: React.FC<HomeTabProps> = ({
     const m = parseInt(todayStr.slice(5, 7), 10) - 1;
     setInternalYear(y);
     setInternalMonthIndex(m);
-    setWeekAnchorDate(todayStr);
     const monthStr = `${y}-${String(m + 1).padStart(2, '0')}`;
     onNavigate({ type: 'TAB', tab: 'home', month: monthStr });
   };
 
-  // Upcoming 5 schedules
-  const upcoming5 = useMemo(() => {
-    return schedules
-      .filter((s) => !s.isCancelled && !s.isArchived && s.date >= todayStr)
-      .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime || '').localeCompare(b.startTime || ''))
-      .slice(0, 5);
-  }, [schedules, todayStr]);
-
-  const viewToggleButtons = (
-    <div className="home-calendar-toggle" role="group" aria-label="달력 보기 선택">
-      <button
-        type="button"
-        className={`home-calendar-toggle-btn ${calendarView === 'week' ? 'active' : ''}`}
-        onClick={() => handleToggleCalendarView('week')}
-        aria-pressed={calendarView === 'week'}
-      >
-        주간
-      </button>
-      <button
-        type="button"
-        className={`home-calendar-toggle-btn ${calendarView === 'month' ? 'active' : ''}`}
-        onClick={() => handleToggleCalendarView('month')}
-        aria-pressed={calendarView === 'month'}
-      >
-        월간
-      </button>
-    </div>
-  );
-
   return (
     <div className="home-tab-container">
-      {/* 1. Top Card (Today Schedule or Next Schedule) */}
-      {focusResult.mode !== 'NONE' && focusResult.focus && (
-        <HomeActiveScheduleCard
-          schedule={focusResult.focus}
-          schedulesCount={focusResult.schedules.length}
-          scheduleIndex={Math.max(
-            0,
-            focusResult.schedules.findIndex((s) => s.id === focusResult.focus?.id)
-          )}
-          todayStr={todayStr}
-          isToday={focusResult.focus.date === todayStr}
-          dDay={focusResult.dDay}
-          isRequired={isMemberRequiredForSchedule(
-            currentMember,
-            focusResult.focus.date,
-            focusResult.focus,
-            currentMemberAliasIds,
-            allMembers
-          )}
-          cta={deriveTodayCta({
-            schedule: focusResult.focus,
-            now: currentNow,
-            isRequired: isMemberRequiredForSchedule(
-              currentMember,
-              focusResult.focus.date,
-              focusResult.focus,
-              currentMemberAliasIds,
-              allMembers
-            ),
-            myVote: sheetsService
-              .getRSVPVotes(focusResult.focus.id)
-              .find((v) => v.memberId === profile.memberId || v.memberName === profile.name),
-            myReconciled:
-              sheetsService.reconcileMemberAttendance(
-                profile.memberId,
-                focusResult.focus.id,
-                profile.name,
-                currentNow
-              ) || undefined,
-            isOnline:
-              typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean'
-                ? navigator.onLine
-                : true,
-          })}
-          checkedInCount={
-            focusResult.focus.date === todayStr &&
-            (getCheckInWindowState(focusResult.focus, currentNow).isOpen ||
-              getCheckInWindowState(focusResult.focus, currentNow).status === 'WINDOW_CLOSED')
-              ? countCheckedIn(
-                  sheetsService.reconcileAttendance(focusResult.focus.id, currentNow),
-                  allMembers
-                )
-              : undefined
-          }
-          checkedInTimeStr={
-            focusResult.focus.date === todayStr
-              ? getKSTClock(getKSTTimestampString(currentNow))
-              : undefined
-          }
-          onPrevSchedule={() => {
-            if (focusResult.schedules.length <= 1) return;
-            const idx = focusResult.schedules.findIndex((s) => s.id === focusResult.focus?.id);
-            const prev = (idx - 1 + focusResult.schedules.length) % focusResult.schedules.length;
-            setSelectedScheduleId(focusResult.schedules[prev].id);
-          }}
-          onNextSchedule={() => {
-            if (focusResult.schedules.length <= 1) return;
-            const idx = focusResult.schedules.findIndex((s) => s.id === focusResult.focus?.id);
-            const next = (idx + 1) % focusResult.schedules.length;
-            setSelectedScheduleId(focusResult.schedules[next].id);
-          }}
-          onOpenQRScanner={onOpenQRScanner}
-          onOpenRSVP={onOpenRSVP}
-          onOpenDetail={onOpenDetail}
-        />
-      )}
+      <MonthCalendarGrid
+        currentYear={currentYear}
+        currentMonthIndex={currentMonthIndex}
+        selectedDateStr={routeSelectedDate}
+        highlightDateStr={highlightDateStr}
+        todayStr={todayStr}
+        calendarDays={calendarDays}
+        schedulesByDate={schedulesByDate}
+        myLogsByScheduleId={myLogsByScheduleId}
+        onSelectDate={handleSelectDate}
+        onJumpToToday={handleJumpToToday}
+        onPrevMonth={handlePrevMonth}
+        onNextMonth={handleNextMonth}
+      />
 
-      {/* 2. Calendar Section (Week or Month) */}
-      {calendarView === 'week' ? (
-        <section className="home-calendar-card" aria-label="주간 달력">
-          <div className="home-calendar-header">
-            <div className="home-calendar-title-wrap">
-              <h2 className="home-calendar-title">
-                {weekAnchorDate.slice(0, 4)}년 {parseInt(weekAnchorDate.slice(5, 7), 10)}월
-              </h2>
-              {weekAnchorDate !== todayStr && (
-                <button
-                  type="button"
-                  className="home-calendar-today-btn"
-                  onClick={handleJumpToToday}
-                >
-                  오늘
-                </button>
-              )}
-            </div>
-
-            <div className="home-calendar-controls">
-              {viewToggleButtons}
-              <button
-                type="button"
-                className="home-calendar-nav-btn"
-                onClick={handlePrevWeek}
-                aria-label="이전 주"
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                className="home-calendar-nav-btn"
-                onClick={handleNextWeek}
-                aria-label="다음 주"
-              >
-                ›
-              </button>
-            </div>
-          </div>
-
-          <WeekCalendarGrid
-            weekAnchorDate={weekAnchorDate}
-            todayStr={todayStr}
-            selectedDateStr={routeSelectedDate}
-            schedulesByDate={schedulesByDate}
-            myLogsByScheduleId={myLogsByScheduleId}
-            onSelectDate={handleSelectDate}
-          />
-        </section>
-      ) : (
-        <MonthCalendarGrid
-          currentYear={currentYear}
-          currentMonthIndex={currentMonthIndex}
-          selectedDateStr={routeSelectedDate}
-          todayStr={todayStr}
-          calendarDays={calendarDays}
-          schedulesByDate={schedulesByDate}
-          myLogsByScheduleId={myLogsByScheduleId}
-          onSelectDate={handleSelectDate}
-          onJumpToToday={handleJumpToToday}
-          onPrevMonth={handlePrevMonth}
-          onNextMonth={handleNextMonth}
-          headerExtra={viewToggleButtons}
-        />
-      )}
-
-      {/* 3. Upcoming Schedules (Max 5) */}
-      <HomeUpcomingSection
-        schedules={upcoming5}
-        currentNow={currentNow}
-        onNavigate={onNavigate}
+      <HomeCardCarousel
+        cards={cardModels}
+        onActiveDateChange={handleActiveDateChange}
+        onOpenQRScanner={onOpenQRScanner}
         onOpenRSVP={onOpenRSVP}
+        onOpenDetail={onOpenDetail}
+      />
+
+      <HomeUpcomingSection
+        schedules={upcoming}
+        currentNow={currentNow}
+        todayStr={todayStr}
+        myVoteBySchedule={myVoteBySchedule}
+        commentCounts={commentCounts}
+        onNavigate={onNavigate}
       />
     </div>
   );

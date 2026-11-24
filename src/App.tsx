@@ -40,6 +40,7 @@ import {
   type DisplayMode,
 } from './services/displayMode';
 import type { BoundDeviceProfile } from './types/rollbook';
+import { canShowAdminEntry } from './utils/adminEntry';
 import { parseRoute, type MemberTab } from './utils/route';
 import { AudioPlayerProvider } from './components/audio/AudioPlayerProvider';
 import { useAudioPlayer } from './components/audio/audioPlayerContext';
@@ -312,6 +313,11 @@ function MainApp() {
     setIsDarkMode(enabled);
   };
 
+  // 설정 버튼은 표시 여부일 뿐 권한이 아니다(#/admin은 PIN을 묻는다). 동기화 때 다시 그려진다.
+  const showAdminEntry = profile
+    ? canShowAdminEntry(profile.memberId, sheetsService.getMembers(true), isAdminLoggedIn())
+    : false;
+
   return (
     <div
       className={`app-shell ${route.area === 'admin' ? 'admin-mode' : ''}`}
@@ -328,6 +334,7 @@ function MainApp() {
         <AppHeader
           onOpenAdmin={handleOpenAdmin}
           onOpenSuperAdmin={handleOpenSuperAdmin}
+          showAdminEntry={showAdminEntry}
         />
       )}
 

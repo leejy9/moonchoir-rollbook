@@ -11,6 +11,7 @@ import type {
 } from '../types/rollbook';
 import { reconcileSingleMemberAttendance, resolveMergedMemberIds } from './attendanceStats';
 import { getKSTClock, getKSTDateString, normalizeToKSTTimestamp } from './date';
+import { findMyVote } from './myVote';
 import { isScheduleOver } from './scheduleTiming';
 
 export interface MemberScheduleRecord {
@@ -95,7 +96,10 @@ export function buildMemberScheduleRecords({
   const sortedSchedules = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
 
   return sortedSchedules.map((s) => {
-    const memberRsvp = rsvpVotes.find((v) => aliasIds.has(v.memberId) && v.scheduleId === s.id);
+    const memberRsvp = findMyVote(
+      rsvpVotes.filter((v) => v.scheduleId === s.id),
+      aliasIds
+    );
     const memberLogs = logs.filter((l) => aliasIds.has(l.memberId) && l.scheduleId === s.id);
 
     const rec = reconcileSingleMemberAttendance(

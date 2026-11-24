@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { ScheduleComments } from './ScheduleComments';
 import { resetStorage, sheetsService } from '../../services/sheets';
+import { PREFERENCE_KEYS, writePreference } from '../../services/sheetsStorage';
 import type { Member } from '../../types/rollbook';
 
 const member = (id: string, name: string): Member => ({
@@ -88,5 +89,29 @@ describe('ScheduleComments', () => {
   it('댓글이 없으면 안내 한 줄을 보여준다', () => {
     const html = render(<ScheduleComments scheduleId="s9" author={kim} />);
     expect(html).toContain('댓글이 없습니다');
+  });
+
+  describe('새 댓글 글자 (V3-22 R7)', () => {
+    it('저장값에 없는 남의 댓글에만 "새 댓글"이 붙는다', async () => {
+      const c1 = await sheetsService.addComment({ scheduleId: 's1', member: lee, text: '본 댓글' });
+      await sheetsService.addComment({ scheduleId: 's1', member: lee, text: '새로 온 댓글' });
+      await sheetsService.addComment({ scheduleId: 's1', member: kim, text: '내가 쓴 댓글' });
+      writePreference(PREFERENCE_KEYS.SEEN_COMMENTS, [c1.id]);
+      const html = render(<ScheduleComments scheduleId="s1" author={kim} />);
+      expect(html.match(/새 댓글</g)).toHaveLength(1);
+    });
+
+    it('저장값이 없으면(missing) 아무 것도 새 댓글이 아니다', async () => {
+      await sheetsService.addComment({ scheduleId: 's1', member: lee, text: '댓글' });
+      const html = render(<ScheduleComments scheduleId="s1" author={kim} />);
+      expect(html).not.toContain('새 댓글<');
+    });
+
+    it('저장값이 깨졌으면(invalid) 표시하지 않는다', async () => {
+      await sheetsService.addComment({ scheduleId: 's1', member: lee, text: '댓글' });
+      writePreference(PREFERENCE_KEYS.SEEN_COMMENTS, { not: 'an array' });
+      const html = render(<ScheduleComments scheduleId="s1" author={kim} />);
+      expect(html).not.toContain('새 댓글<');
+    });
   });
 });
