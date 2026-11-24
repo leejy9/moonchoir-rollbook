@@ -12,10 +12,14 @@ describe('homeCardText (V3-22 R2·R4)', () => {
     expect(formatCardDateLine({ date: '2026-11-24', startTime: '19:30', endTime: '21:40' })).toBe(
       '11월 24일 화 · 19:30 ~ 21:40'
     ));
-  it('토요일 오늘 카드', () =>
-    expect(formatCardDateLine({ date: '2026-11-21', startTime: '14:00', endTime: '17:00' })).toBe(
-      '11월 21일 토 · 14:00 ~ 17:00'
-    ));
+  it('종료 시각이 비면 시작 시각만 표기 (V3-23 §3 R1)', () => {
+    expect(formatCardDateLine({ date: '2026-11-21', startTime: '14:00', endTime: '' })).toBe(
+      '11월 21일 토 · 14:00'
+    );
+    expect(formatCardDateLine({ date: '2026-11-21', startTime: '14:00', endTime: '   ' })).toBe(
+      '11월 21일 토 · 14:00'
+    );
+  });
 
   it('오늘 + 투표 전 → "투표 전"(경고)', () =>
     expect(cardCornerLabel(true, 0, 'RSVP_NEW')).toEqual({ text: '투표 전', tone: 'warning' }));

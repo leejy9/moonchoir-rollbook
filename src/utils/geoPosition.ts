@@ -124,15 +124,15 @@ export function classifyCameraError(error: unknown, hasMediaDevices: boolean): C
 export function describeCameraFailure(kind: CameraFailureKind): string {
   switch (kind) {
     case 'UNSUPPORTED':
-      return '이 브라우저에서는 카메라를 사용할 수 없습니다. 기본 브라우저(사파리/크롬)로 열거나, 아래 [현장 PIN 번호]으로 출석해 주세요.';
+      return '이 브라우저에서는 카메라를 사용할 수 없습니다. 기본 브라우저(사파리/크롬)로 열거나, [현장 PIN]으로 출석해 주세요.';
     case 'PERMISSION_DENIED':
-      return '카메라 권한이 꺼져 있습니다. 브라우저(또는 휴대폰 설정)에서 이 사이트의 카메라 권한을 허용하거나, [현장 PIN 번호]으로 출석해 주세요.';
+      return '카메라 권한이 꺼져 있습니다. 브라우저(또는 휴대폰 설정)에서 이 사이트의 카메라 권한을 허용하거나, [현장 PIN]으로 출석해 주세요.';
     case 'NO_CAMERA':
-      return '사용할 수 있는 카메라를 찾지 못했습니다. [현장 PIN 번호]으로 출석해 주세요.';
+      return '사용할 수 있는 카메라를 찾지 못했습니다. [현장 PIN]으로 출석해 주세요.';
     case 'IN_USE':
-      return '다른 앱이 카메라를 사용 중입니다. 해당 앱을 닫고 다시 열거나, [현장 PIN 번호]으로 출석해 주세요.';
+      return '다른 앱이 카메라를 사용 중입니다. 해당 앱을 닫고 다시 열거나, [현장 PIN]으로 출석해 주세요.';
     default:
-      return '카메라를 실행하지 못했습니다. 다시 시도하거나 [현장 PIN 번호]으로 출석해 주세요.';
+      return '카메라를 실행하지 못했습니다. 다시 시도하거나 [현장 PIN]으로 출석해 주세요.';
   }
 }
 

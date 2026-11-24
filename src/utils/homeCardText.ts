@@ -8,7 +8,10 @@ const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 export function formatCardDateLine(schedule: Pick<Schedule, 'date' | 'startTime' | 'endTime'>): string {
   const [, m, d] = schedule.date.split('-').map(Number);
   const weekday = WEEKDAY_KO[getWeekdayOfDate(schedule.date)];
-  return `${m}월 ${d}일 ${weekday} · ${schedule.startTime} ~ ${schedule.endTime}`;
+  const timePart = schedule.endTime?.trim()
+    ? `${schedule.startTime} ~ ${schedule.endTime}`
+    : schedule.startTime;
+  return `${m}월 ${d}일 ${weekday} · ${timePart}`;
 }
 
 export interface CardCornerLabel {

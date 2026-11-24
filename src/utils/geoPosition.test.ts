@@ -84,9 +84,12 @@ describe('classifyCameraError', () => {
     expect(classifyCameraError({ name: 'Whatever' }, true)).toBe('UNKNOWN');
   });
 
-  it('모든 원인에 PIN 안내가 포함된다(권한·미지원·사용 중·카메라 없음·알 수 없음)', () => {
+  it('모든 원인에 [현장 PIN] 안내가 포함되고 옛 [현장 PIN 번호]는 포함되지 않는다 (V3-23 §3 R3)', () => {
     for (const kind of ['UNSUPPORTED', 'PERMISSION_DENIED', 'NO_CAMERA', 'IN_USE', 'UNKNOWN'] as const) {
-      expect(describeCameraFailure(kind)).toContain('PIN');
+      const msg = describeCameraFailure(kind);
+      expect(msg).toContain('[현장 PIN]');
+      expect(msg).not.toContain('[현장 PIN 번호]');
+      expect(msg).not.toContain('아래 [현장 PIN]');
     }
   });
 });
