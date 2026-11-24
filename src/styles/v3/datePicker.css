@@ -1,0 +1,24 @@
+/* 날짜 고르기 머리: 연도·월을 목록에서 바로 고른다(입단일처럼 먼 날짜용). */
+.popover-month-nav .rdp-ym {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.popover-month-nav .rdp-ym-select {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.popover-month-nav .rdp-ym-select:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}

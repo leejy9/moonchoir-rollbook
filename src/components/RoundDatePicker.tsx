@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { getCalendarGrid } from '../utils/calendar';
 import { getKSTDateString } from '../utils/date';
+import { buildYearOptions } from '../utils/datePickerYears';
+import '../styles/v3/datePicker.css';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
-
+const MONTH_INDEXES = Array.from({ length: 12 }, (_, i) => i);
 interface RoundDatePickerProps {
   value: string; // YYYY-MM-DD
   onChange: (dateStr: string) => void;
@@ -32,6 +34,11 @@ export const RoundDatePicker: React.FC<RoundDatePickerProps> = ({
   const [viewYear, setViewYear] = useState<number>(initialY || 2026);
   const [viewMonthIndex, setViewMonthIndex] = useState<number>(
     (initialM ? initialM - 1 : 9)
+  );
+
+  const yearOptions = useMemo(
+    () => buildYearOptions(Number(todayStr.slice(0, 4)), viewYear),
+    [todayStr, viewYear]
   );
 
   const handleOpen = () => {
@@ -147,8 +154,31 @@ export const RoundDatePicker: React.FC<RoundDatePickerProps> = ({
               >
                 ‹
               </button>
-              <span className="popover-month-title">
-                {viewYear}년 {viewMonthIndex + 1}월
+              <span className="popover-month-title rdp-ym">
+                <select
+                  className="rdp-ym-select"
+                  aria-label="연도 선택"
+                  value={viewYear}
+                  onChange={(e) => setViewYear(Number(e.target.value))}
+                >
+                  {yearOptions.map((y) => (
+                    <option key={y} value={y}>
+                      {y}년
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="rdp-ym-select"
+                  aria-label="월 선택"
+                  value={viewMonthIndex}
+                  onChange={(e) => setViewMonthIndex(Number(e.target.value))}
+                >
+                  {MONTH_INDEXES.map((m) => (
+                    <option key={m} value={m}>
+                      {m + 1}월
+                    </option>
+                  ))}
+                </select>
               </span>
               <button
                 type="button"
