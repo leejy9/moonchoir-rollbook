@@ -255,6 +255,75 @@ export class SupabaseBackend implements RemoteBackend {
           : [];
       return { p_member_ids: ids };
     }
+    if (
+      action === 'UPDATE_SCHEDULE' ||
+      action === 'CREATE_SCHEDULE' ||
+      action === 'REGISTER_SCHEDULE'
+    ) {
+      const schedulePayload = { ...(payload as Record<string, unknown>) };
+      if (typeof schedulePayload.targetParts === 'string') {
+        schedulePayload.targetParts = schedulePayload.targetParts
+          ? (schedulePayload.targetParts as string)
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+      } else if (!Array.isArray(schedulePayload.targetParts)) {
+        schedulePayload.targetParts = [];
+      }
+
+      if (typeof schedulePayload.targetMemberIds === 'string') {
+        schedulePayload.targetMemberIds = schedulePayload.targetMemberIds
+          ? (schedulePayload.targetMemberIds as string)
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+      } else if (!Array.isArray(schedulePayload.targetMemberIds)) {
+        schedulePayload.targetMemberIds = [];
+      }
+
+      if (schedulePayload.targetLat === '' || schedulePayload.targetLat === null) {
+        delete schedulePayload.targetLat;
+      }
+      if (schedulePayload.targetLon === '' || schedulePayload.targetLon === null) {
+        delete schedulePayload.targetLon;
+      }
+      if (schedulePayload.radiusMeters === '' || schedulePayload.radiusMeters === null) {
+        delete schedulePayload.radiusMeters;
+      }
+      if (schedulePayload.seriesIndex === '' || schedulePayload.seriesIndex === null) {
+        delete schedulePayload.seriesIndex;
+      }
+      if (schedulePayload.seriesTotal === '' || schedulePayload.seriesTotal === null) {
+        delete schedulePayload.seriesTotal;
+      }
+
+      return { p_payload: this.withAdminToken(schedulePayload) };
+    }
+    if (action === 'BATCH_UPDATE_SCHEDULES') {
+      const batchPayload = payload as { ids?: string[]; updates?: Record<string, unknown>; schedules?: unknown[] };
+      if (Array.isArray(batchPayload.schedules)) {
+        return { p_payload: this.withAdminToken(batchPayload) };
+      }
+      if (Array.isArray(batchPayload.ids) && batchPayload.updates) {
+        const schedules = batchPayload.ids.map((id) => {
+          const u: Record<string, unknown> = { ...(batchPayload.updates ?? {}), id };
+          if (typeof u.targetParts === 'string') {
+            u.targetParts = u.targetParts ? (u.targetParts as string).split(',').map((s) => s.trim()).filter(Boolean) : [];
+          } else if (!Array.isArray(u.targetParts)) {
+            u.targetParts = [];
+          }
+          if (typeof u.targetMemberIds === 'string') {
+            u.targetMemberIds = u.targetMemberIds ? (u.targetMemberIds as string).split(',').map((s) => s.trim()).filter(Boolean) : [];
+          } else if (!Array.isArray(u.targetMemberIds)) {
+            u.targetMemberIds = [];
+          }
+          return u;
+        });
+        return { p_payload: this.withAdminToken({ schedules }) };
+      }
+    }
     return { p_payload: this.withAdminToken(payload ?? {}) };
   }
 

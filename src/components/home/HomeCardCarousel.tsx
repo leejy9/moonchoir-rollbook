@@ -32,6 +32,7 @@ export const HomeCardCarousel: React.FC<HomeCardCarouselProps> = ({
 }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const hasInitializedRef = useRef(false);
   // 눌러도 되는 카드: 완전히 보이는 카드와 현재 카드. 일부만 보이는 카드는 첫 탭에 스크롤만 한다.
   const [interactive, setInteractive] = useState<ReadonlySet<number>>(() => new Set([0]));
 
@@ -64,6 +65,26 @@ export const HomeCardCarousel: React.FC<HomeCardCarouselProps> = ({
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, [measure, cards.length]);
+
+  useEffect(() => {
+    if (cards.length === 0 || hasInitializedRef.current) return;
+    const track = trackRef.current;
+    if (!track) return;
+
+    // 오늘 카드 우선, 없으면 첫 번째 미래 일정, 없으면 0번
+    const todayIdx = cards.findIndex((c) => c.isToday);
+    const fallbackIdx = cards.findIndex((c) => (c.dDay ?? 0) >= 0);
+    const resolvedIdx = todayIdx >= 0 ? todayIdx : fallbackIdx >= 0 ? fallbackIdx : 0;
+
+    if (resolvedIdx > 0) {
+      const item = track.children[resolvedIdx] as HTMLElement | undefined;
+      if (item) {
+        track.scrollLeft = item.offsetLeft - (track.clientWidth - item.offsetWidth) / 2;
+        measure();
+      }
+    }
+    hasInitializedRef.current = true;
+  }, [cards, measure]);
 
   const activeDate = cards[Math.min(activeIndex, cards.length - 1)]?.schedule.date;
   useEffect(() => {

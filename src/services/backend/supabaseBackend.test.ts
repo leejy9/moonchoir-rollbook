@@ -167,6 +167,49 @@ describe('SupabaseBackend', () => {
       expect(getAdminToken('admin')).toBeNull();
       expect(getAdminToken('super')).toBeNull();
     });
+
+    it('normalizes string targetParts and targetMemberIds into string arrays for UPDATE_SCHEDULE', async () => {
+      const backend = new SupabaseBackend(mockConfig);
+      setAdminToken('admin', 'a'.repeat(64));
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(okResponse());
+
+      await backend.callAction('UPDATE_SCHEDULE', {
+        id: 'sch-1',
+        title: '새 연습',
+        targetParts: '소프라노,알토',
+        targetMemberIds: '',
+        targetLat: '',
+      });
+
+      const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+      expect(body.p_payload).toEqual({
+        id: 'sch-1',
+        title: '새 연습',
+        targetParts: ['소프라노', '알토'],
+        targetMemberIds: [],
+        adminToken: 'a'.repeat(64),
+      });
+    });
+
+    it('normalizes BATCH_UPDATE_SCHEDULES ids and updates into schedules array', async () => {
+      const backend = new SupabaseBackend(mockConfig);
+      setAdminToken('admin', 'a'.repeat(64));
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(okResponse());
+
+      await backend.callAction('BATCH_UPDATE_SCHEDULES', {
+        ids: ['s1', 's2'],
+        updates: { category: '정기연습', targetParts: '테너,베이스' },
+      });
+
+      const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+      expect(body.p_payload).toEqual({
+        schedules: [
+          { id: 's1', category: '정기연습', targetParts: ['테너', '베이스'], targetMemberIds: [] },
+          { id: 's2', category: '정기연습', targetParts: ['테너', '베이스'], targetMemberIds: [] },
+        ],
+        adminToken: 'a'.repeat(64),
+      });
+    });
   });
 
   describe('practice catalog actions', () => {

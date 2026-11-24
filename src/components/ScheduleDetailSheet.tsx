@@ -48,9 +48,12 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
     (userPickedId && daySchedules.some((s) => s.id === userPickedId) ? userPickedId : null) ??
     (daySchedules.length === 1 ? daySchedules[0].id : null);
 
-  // Save and restore focus, focus first element on open
+  // Save and restore focus, focus first element on open & lock body scroll
   useEffect(() => {
     if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
 
     previousActiveElementRef.current = document.activeElement as HTMLElement | null;
 
@@ -60,6 +63,7 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
     }, 50);
 
     return () => {
+      document.body.style.overflow = originalOverflow;
       clearTimeout(timer);
       previousActiveElementRef.current?.focus?.();
     };
@@ -142,22 +146,35 @@ export const ScheduleDetailSheet: React.FC<ScheduleDetailSheetProps> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.45)',
-        backdropFilter: 'blur(3px)',
         zIndex: 1000,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-end',
         alignItems: 'center',
-        animation: 'fadeIn 0.15s ease-out',
+        overflow: 'hidden',
       }}
     >
+      {/* 딤드 백드롭: 시트 바깥 탭 시 확실하게 닫힘 */}
+      <div
+        className="schedule-detail-sheet-backdrop"
+        onClick={onClose}
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.45)',
+          backdropFilter: 'blur(3px)',
+          animation: prefersReducedMotion ? 'none' : 'fadeIn 0.15s ease-out',
+        }}
+      />
       <div
         ref={sheetRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={isInvalidExplicitSchedule ? undefined : 'schedule-detail-title'}
         style={{
+          position: 'relative',
+          zIndex: 1,
           width: '100%',
           maxWidth: '480px',
           maxHeight: '85vh',

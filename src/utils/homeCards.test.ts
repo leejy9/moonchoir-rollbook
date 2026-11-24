@@ -32,46 +32,46 @@ function run(schedules: Schedule[], at: string) {
   return { cards: r.cards.map((s) => s.id), upcoming: r.upcoming.map((s) => s.id) };
 }
 
-describe('buildHomeCards (V3-22 R1)', () => {
-  it('10:00 → 카드 A,B,C / 목록 D,E,F', () => {
-    expect(run(BASE, '10:00')).toEqual({ cards: ['A', 'B', 'C'], upcoming: ['D', 'E', 'F'] });
+describe('buildHomeCards (V3-22 R1 개정: 직전 1개 + 오늘 + 다가오는 3개)', () => {
+  it('10:00 → 카드 A,B,C,D / 목록 E,F', () => {
+    expect(run(BASE, '10:00')).toEqual({ cards: ['A', 'B', 'C', 'D'], upcoming: ['E', 'F'] });
   });
   it('16:59 → 같음', () => {
-    expect(run(BASE, '16:59')).toEqual({ cards: ['A', 'B', 'C'], upcoming: ['D', 'E', 'F'] });
+    expect(run(BASE, '16:59')).toEqual({ cards: ['A', 'B', 'C', 'D'], upcoming: ['E', 'F'] });
   });
   it('17:00은 종료 시각 포함으로 A가 남는다', () => {
-    expect(run(BASE, '17:00')).toEqual({ cards: ['A', 'B', 'C'], upcoming: ['D', 'E', 'F'] });
+    expect(run(BASE, '17:00')).toEqual({ cards: ['A', 'B', 'C', 'D'], upcoming: ['E', 'F'] });
   });
-  it('17:01은 A가 마감돼 B,C,D', () => {
-    expect(run(BASE, '17:01')).toEqual({ cards: ['B', 'C', 'D'], upcoming: ['E', 'F'] });
+  it('17:01은 A가 마감돼 직전 A + 포커스 B + 다가오는 C,D,E', () => {
+    expect(run(BASE, '17:01')).toEqual({ cards: ['A', 'B', 'C', 'D', 'E'], upcoming: ['F'] });
   });
-  it('오늘 일정이 둘이면 A,A2,B', () => {
-    const list = [...BASE, sch('A2', TODAY, '19:00', '21:00')];
-    expect(run(list, '10:00')).toEqual({ cards: ['A', 'A2', 'B'], upcoming: ['C', 'D', 'E', 'F'] });
+  it('직전 과거 일정 Z가 있으면 카드 맨 앞에 포함된다', () => {
+    const list = [sch('Z', '2026-11-18', '19:00', '21:00'), ...BASE];
+    expect(run(list, '10:00')).toEqual({ cards: ['Z', 'A', 'B', 'C', 'D'], upcoming: ['E', 'F'] });
   });
-  it('오늘 일정이 4개면 카드 3장, 4번째는 목록 맨 앞', () => {
+  it('과거 일정이 2개 이상이면 가장 최근 1개만 포함된다', () => {
     const list = [
+      sch('Y', '2026-11-15', '14:00', '17:00'),
+      sch('Z', '2026-11-18', '19:00', '21:00'),
       ...BASE,
-      sch('A2', TODAY, '19:00', '21:00'),
-      sch('A3', TODAY, '20:00', '21:00'),
-      sch('A4', TODAY, '21:00', '22:00'),
     ];
-    expect(run(list, '10:00')).toEqual({
-      cards: ['A', 'A2', 'A3'],
-      upcoming: ['A4', 'B', 'C', 'D', 'E'],
-    });
+    expect(run(list, '10:00')).toEqual({ cards: ['Z', 'A', 'B', 'C', 'D'], upcoming: ['E', 'F'] });
+  });
+  it('오늘 일정이 둘이면 A,A2 + 다가오는 3개 B,C,D', () => {
+    const list = [...BASE, sch('A2', TODAY, '19:00', '21:00')];
+    expect(run(list, '10:00')).toEqual({ cards: ['A', 'A2', 'B', 'C', 'D'], upcoming: ['E', 'F'] });
   });
   it('종료 시각 없는 오늘 일정은 마감으로 취급해 카드·목록 모두 빠진다', () => {
     const list = [...BASE, sch('A2', TODAY, '19:00', '')];
-    expect(run(list, '10:00')).toEqual({ cards: ['A', 'B', 'C'], upcoming: ['D', 'E', 'F'] });
+    expect(run(list, '10:00')).toEqual({ cards: ['A', 'B', 'C', 'D'], upcoming: ['E', 'F'] });
   });
   it('취소 일정은 빠진다', () => {
     const list = BASE.map((s) => (s.id === 'C' ? { ...s, isCancelled: true } : s));
-    expect(run(list, '10:00')).toEqual({ cards: ['A', 'B', 'D'], upcoming: ['E', 'F'] });
+    expect(run(list, '10:00')).toEqual({ cards: ['A', 'B', 'D', 'E'], upcoming: ['F'] });
   });
   it('보관 일정은 빠진다', () => {
     const list = BASE.map((s) => (s.id === 'D' ? { ...s, isArchived: true } : s));
-    expect(run(list, '10:00')).toEqual({ cards: ['A', 'B', 'C'], upcoming: ['E', 'F'] });
+    expect(run(list, '10:00')).toEqual({ cards: ['A', 'B', 'C', 'E'], upcoming: ['F'] });
   });
   it('23:00에 B만 있으면 카드 B, 목록 없음', () => {
     expect(run([BASE[1]], '23:00')).toEqual({ cards: ['B'], upcoming: [] });

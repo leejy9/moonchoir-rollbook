@@ -17,15 +17,15 @@ export interface HomeUpcomingSectionProps {
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
-function dayLabel(date: string, todayStr: string): string {
+function parseDateParts(date: string) {
   const [, m, d] = date.split('-').map(Number);
-  return date.slice(0, 7) === todayStr.slice(0, 7) ? String(d) : `${m}/${d}`;
+  return { month: `${m}월`, day: String(d) };
 }
 
 export const HomeUpcomingSection: React.FC<HomeUpcomingSectionProps> = ({
   schedules,
   currentNow,
-  todayStr,
+  todayStr: _todayStr,
   myVoteBySchedule,
   commentCounts,
   onNavigate,
@@ -44,6 +44,7 @@ export const HomeUpcomingSection: React.FC<HomeUpcomingSectionProps> = ({
               isRsvpOpenForSchedule(sch, currentNow)
             );
             const weekday = getWeekdayOfDate(sch.date);
+            const { month, day } = parseDateParts(sch.date);
             const commentCount = commentCounts.get(sch.id) ?? 0;
             return (
               <button
@@ -57,16 +58,20 @@ export const HomeUpcomingSection: React.FC<HomeUpcomingSectionProps> = ({
                   })
                 }
               >
-                <span className="home-upcoming-date">
-                  <span className={`home-upcoming-weekday${weekday === 0 ? ' is-sun' : weekday === 6 ? ' is-sat' : ''}`}>
-                    {WEEKDAY_KO[weekday]}
+                <span className="home-upcoming-chip" aria-hidden="true">
+                  <span className="home-upcoming-chip-month">{month}</span>
+                  <span
+                    className={`home-upcoming-chip-day${
+                      weekday === 0 ? ' is-sun' : weekday === 6 ? ' is-sat' : ''
+                    }`}
+                  >
+                    {day}
                   </span>
-                  <span className="home-upcoming-day">{dayLabel(sch.date, todayStr)}</span>
                 </span>
                 <span className="home-upcoming-main">
                   <span className="home-upcoming-name">{sch.title}</span>
                   <span className="home-upcoming-sub">
-                    {sch.startTime} · {sch.locationName || '장소 미정'}
+                    {WEEKDAY_KO[weekday]}요일 {sch.startTime} · {sch.locationName || '장소 미정'}
                   </span>
                 </span>
                 {commentCount > 0 && (
