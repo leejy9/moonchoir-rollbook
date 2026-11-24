@@ -55,24 +55,43 @@ begin
 end
 $$;
 
--- S3 / S4b: functions that must not be executable at all by anon
+-- S3 / S4b: functions that must not be executable at all by anon or authenticated
 insert into _checks
 select 'S3/S4b no execute: ' || f,
-       case when has_function_privilege('anon', f, 'execute') then 'FAIL (anon can execute)' else 'PASS' end
+       case
+         when has_function_privilege('anon', f, 'execute') then 'FAIL (anon can execute)'
+         when has_function_privilege('authenticated', f, 'execute') then 'FAIL (authenticated can execute)'
+         else 'PASS'
+       end
   from unnest(array[
     'fn_import_sheets_snapshot(jsonb)',
     'fn_delete_schedule__impl(jsonb)',
+    'fn_update_schedule__body(jsonb)',
+    'fn_update_schedule__impl(jsonb)',
+    'fn_batch_update_schedules__impl(jsonb)',
     'fn_save_config__impl(jsonb)',
     'fn_merge_members__impl(jsonb)',
     'fn_register_and_bind_member__impl(jsonb)',
     'fn_check_admin_token(text,text)',
     'fn_issue_admin_session(text)'
-  ]) as f;
+  ]) as f
+ where to_regprocedure(f) is not null;
 
 -- Old zero-argument secrets function must be gone
 insert into _checks
 select 'S1 old fn_get_admin_secrets() removed',
        case when to_regprocedure('fn_get_admin_secrets()') is null then 'PASS' else 'FAIL (still exists)' end;
+
+do $$
+declare
+  v_fail record;
+begin
+  select name, result into v_fail from _checks where result <> 'PASS' limit 1;
+  if found then
+    raise exception 'security_hardening_check FAIL: % -> %', v_fail.name, v_fail.result;
+  end if;
+end
+$$;
 
 select * from _checks order by name;
 rollback;
