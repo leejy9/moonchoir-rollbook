@@ -2312,9 +2312,13 @@ export class SheetsService {
       .then((result) => {
         if (result.success) return;
         const label = WRITE_LABELS[action] ?? '변경 사항';
+        // 관리자 세션이 끝난 경우: 원인을 "네트워크"로 안내하면 같은 실패를 반복한다.
+        // (백엔드가 토큰을 지우므로 화면은 관리자 모드에서 이미 나간 상태다.)
         this.emitNotice(
           `write:${action}`,
-          `[${label}] 저장하지 못했어요. 네트워크를 확인하고 다시 시도해 주세요. 화면은 시트에 저장된 상태로 되돌립니다.`
+          result.code === 'ADMIN_AUTH_REQUIRED'
+            ? `[${label}] 관리자 세션이 만료되었습니다. 다시 로그인한 후 변경해 주세요.`
+            : `[${label}] 저장하지 못했어요. 네트워크를 확인하고 다시 시도해 주세요. 화면은 시트에 저장된 상태로 되돌립니다.`
         );
         void this.refreshRemoteData({ force: true });
       })
@@ -2336,7 +2340,7 @@ export class SheetsService {
     action: string,
     payload: unknown,
     endpointUrl?: string
-  ): Promise<{ success: boolean; message?: string; existingMemberId?: string; boundDeviceId?: string; data?: unknown }> {
+  ): Promise<{ success: boolean; message?: string; code?: string; existingMemberId?: string; boundDeviceId?: string; data?: unknown }> {
     const targetUrl = endpointUrl || this.config.sheetsWebAppUrl;
     if (this.backend.kind === 'gas' && !targetUrl) {
       return Promise.resolve({
@@ -2367,7 +2371,7 @@ export class SheetsService {
     action: string,
     payload: unknown,
     endpointUrl?: string
-  ): Promise<{ success: boolean; message?: string; existingMemberId?: string; boundDeviceId?: string; data?: unknown }> {
+  ): Promise<{ success: boolean; message?: string; code?: string; existingMemberId?: string; boundDeviceId?: string; data?: unknown }> {
     return this.backend.callAction(action, payload, endpointUrl || this.config.sheetsWebAppUrl);
   }
 }

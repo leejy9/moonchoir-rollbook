@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { Member, Schedule, RawAttendanceLog, PartType, MemberStatus, RoleType, MemberStatusHistory } from '../types/rollbook';
 import { formatMatrixHeaderDate, getKSTTimestampString, getKSTDateString, addDaysKST, normalizeToKSTTimestamp } from '../utils/date';
 import { calculateCumulativeAttendanceWithLifecycle } from '../utils/attendanceStats';
+import { formatPhoneNumber, resolvePhoneForSubmit } from '../utils/memberPhone';
 import { sheetsService } from '../services/sheets';
 import { RoundDatePicker } from './RoundDatePicker';
 
@@ -26,13 +27,6 @@ export const MemberProfileModal: React.FC<MemberProfileModalProps> = (props) => 
   if (!props.isOpen || !props.member) return null;
   return <MemberProfileModalContent key={props.member.id} {...props} member={props.member} />;
 };
-
-function formatPhoneNumber(val: string): string {
-  const digits = val.replace(/\D/g, '').slice(0, 11);
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
-}
 
 const getTodayDateString = () => getKSTDateString();
 
@@ -78,6 +72,14 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
     joinedAt: member.joinedAt ? String(member.joinedAt) : (member.createdAt ? String(member.createdAt).slice(0, 10) : ''),
     note: member.note ? String(member.note) : '',
   }));
+
+  // 레거시 단원: 전체 번호 없이 뒷자리 4자리만 등록된 경우. 번호를 비워 두어도
+  // 기존 뒷자리로 저장되므로 입력을 강제하지 않는다 (T2).
+  const [isLegacyPhoneOnly] = useState(
+    () =>
+      String(member.phone || '').trim() === '' &&
+      String(member.phoneLast4 || '').replace(/\D/g, '').length === 4
+  );
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -255,14 +257,19 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
       return;
     }
 
-    const digits = String(formData.phone || formData.phoneLast4 || '').replace(/\D/g, '');
-    if (digits.length < 10) {
-      setErrorMessage('연락처는 전체 휴대폰 번호(10~11자리, 예: 010-1234-5678)를 정확히 입력해주세요.');
+    // 레거시 단원은 전체 번호 없이 뒷자리 4자리만 있다. 번호를 건드리지 않았다면
+    // 기존 뒷자리를 보존하고 저장을 허용한다 (파트·상태만 바꾸는 경우 차단 방지).
+    const phoneResolution = resolvePhoneForSubmit(
+      String(formData.phone || ''),
+      String(initialData.phoneLast4 || '')
+    );
+    if (!phoneResolution.ok) {
+      setErrorMessage(phoneResolution.error || '연락처를 확인해주세요.');
       return;
     }
 
-    const finalPhone = formatPhoneNumber(digits);
-    const finalLast4 = digits.slice(-4);
+    const finalPhone = phoneResolution.phone;
+    const finalLast4 = phoneResolution.phoneLast4;
     const finalPart = isCustomPart ? (customPartInput.trim() || '기타') : formData.part;
 
     let newHistoryItem: MemberStatusHistory | undefined;
@@ -488,12 +495,21 @@ const MemberProfileModalContent: React.FC<MemberProfileModalProps & { member: Me
                   className="modern-input"
                   value={formData.phone || ''}
                   onChange={handlePhoneInputChange}
-                  placeholder="010-0000-0000"
+                  placeholder={isLegacyPhoneOnly ? '010-0000-0000 (변경할 때만 입력)' : '010-0000-0000'}
                   maxLength={13}
-                  required
+                  required={!isLegacyPhoneOnly}
                 />
                 <span className="modern-input-hint">
-                  ℹ️ 전체 휴대폰 번호를 저장합니다. 기기 인증 시에는 뒷 4자리(<strong>{formData.phoneLast4 || '----'}</strong>)를 사용합니다.
+                  {isLegacyPhoneOnly ? (
+                    <>
+                      기존 번호(뒷자리: ****-
+                      {initialData.phoneLast4})가 보존됩니다. 변경하려면 전체 11자리를 입력하세요.
+                    </>
+                  ) : (
+                    <>
+                      ℹ️ 전체 휴대폰 번호를 저장합니다. 기기 인증 시에는 뒷 4자리(<strong>{formData.phoneLast4 || '----'}</strong>)를 사용합니다.
+                    </>
+                  )}
                 </span>
               </div>
 
