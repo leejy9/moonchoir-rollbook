@@ -130,4 +130,55 @@ describe('MemberProfileModal Component & Status History Invariant', () => {
     expect(payload.historyItem!.status).toBe('휴단원');
     expect(payload.historyItem!.endDate).toBe('2999-12-31');
   });
+
+  /**
+   * 회귀: 과거 시트에서 넘어온 단원은 전체 번호(phone) 없이 뒷자리 4자리만 있다.
+   * 관리자가 전화번호를 건드리지 않고 파트/상태만 바꿔도 digits.length === 4 라서
+   * 기존 검증(digits.length < 10)에 걸려 폼 제출 자체가 막혔다.
+   *
+   * 제출 유효성은 resolvePhoneForSubmit(src/utils/memberPhone.ts)이 결정하며,
+   * 그 함수의 실제 동작은 src/utils/memberPhone.test.ts가 값 수준으로 검사한다.
+   * 여기서는 모달이 그 규칙에 맞는 화면을 그리는지 본다.
+   */
+  describe('레거시 단원(전화번호 뒷자리만 보유) 안내', () => {
+    const legacyMember: Member = {
+      id: 'mem_legacy_1',
+      name: '레거시단원',
+      part: '소프라노',
+      phone: '',
+      phoneLast4: '1234',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      memberStatus: '정단원',
+      joinedAt: '2024-03-01',
+      createdAt: '2024-03-01T00:00:00Z',
+      note: '',
+    };
+
+    it('기존 뒷자리 보존을 안내하고 전화번호 입력을 필수로 만들지 않는다', () => {
+      const html = renderToString(
+        <MemberProfileModal
+          {...defaultProps}
+          member={legacyMember}
+          onSave={vi.fn().mockResolvedValue(undefined)}
+        />
+      );
+
+      // SSR은 텍스트 노드 사이에 <!-- --> 마커를 넣으므로 태그를 지우고 비교한다.
+      const text = html.replace(/<!--.*?-->/g, '');
+
+      expect(text).toContain('기존 번호(뒷자리: ****-1234)가 보존됩니다');
+      expect(text).toContain('변경하려면 전체 11자리를 입력하세요');
+      // 번호가 비어 있는데 required가 걸려 있으면 브라우저가 제출을 막는다.
+      expect(html).toMatch(/<input type="tel"[^>]*\/>/);
+      expect(html).not.toMatch(/<input type="tel"[^>]*required/);
+    });
+
+    it('전체 번호가 있는 일반 단원에게는 기존 안내 문구를 그대로 보여준다', () => {
+      const html = renderToString(<MemberProfileModal {...defaultProps} />);
+
+      expect(html).toContain('전체 휴대폰 번호를 저장합니다');
+      expect(html).not.toContain('가 보존됩니다');
+    });
+  });
 });

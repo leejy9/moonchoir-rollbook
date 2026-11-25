@@ -213,4 +213,67 @@ describe('SheetsService refresh & write confirmation', () => {
     expect(await offline.refreshRemoteData({ force: true })).toBe(false);
     expect(backend.gets).toBe(0);
   });
+
+  /**
+   * 회귀: 관리자 세션 토큰(30분)이 만료되면 백엔드는 { success: false, code: 'ADMIN_AUTH_REQUIRED' }를
+   * 돌려준다. 그런데 syncInBackground가 code를 보지 않고 모든 실패를 "네트워크를 확인하세요"로
+   * 안내해서, 관리자는 로그인이 풀린 것을 모른 채 같은 실패를 반복했다.
+   */
+  describe('관리자 세션 만료(ADMIN_AUTH_REQUIRED) 안내', () => {
+    // 이 서비스는 저장소에서 단원 목록을 읽는다. 테스트마다 명부를 먼저 채운다.
+    beforeEach(() => {
+      service.seedTestData({ members: [member] });
+    });
+
+    it('세션 만료는 네트워크 장애가 아니라 다시 로그인하라고 알린다', async () => {
+      const notices: SheetsNotice[] = [];
+      service.subscribeNotices((n) => notices.push(n));
+
+      const sendSpy = vi
+        .spyOn(service, 'sendToGoogleSheet')
+        .mockResolvedValue({ success: false, code: 'ADMIN_AUTH_REQUIRED' });
+
+      await service.updateMember(member.id, { memberStatus: '휴단원' });
+
+      await vi.waitFor(() => expect(notices.length).toBe(1));
+      expect(notices[0].message).toContain('관리자 세션');
+      expect(notices[0].message).toContain('다시 로그인');
+      expect(notices[0].message).not.toContain('네트워크를 확인');
+      expect(sendSpy).toHaveBeenCalledWith(
+        'UPDATE_MEMBER',
+        expect.objectContaining({ id: member.id })
+      );
+    });
+
+    it('세션 만료 코드가 없으면 기존 네트워크 안내를 유지한다', async () => {
+      const notices: SheetsNotice[] = [];
+      service.subscribeNotices((n) => notices.push(n));
+
+      vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+        success: false,
+        message: '통신 오류',
+      });
+
+      await service.updateMember(member.id, { memberStatus: '휴단원' });
+
+      await vi.waitFor(() => expect(notices.length).toBe(1));
+      expect(notices[0].message).toContain('네트워크를 확인');
+      expect(notices[0].message).not.toContain('관리자 세션');
+    });
+
+    it('세션 만료 코드 뒤에는 화면을 되돌리기 위해 강제 새로고침한다', async () => {
+      service.subscribeNotices(() => {});
+      vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+        success: false,
+        code: 'ADMIN_AUTH_REQUIRED',
+      });
+      const refreshSpy = vi.spyOn(service, 'refreshRemoteData');
+
+      await service.updateMember(member.id, { memberStatus: '휴단원' });
+
+      await vi.waitFor(() =>
+        expect(refreshSpy).toHaveBeenCalledWith({ force: true })
+      );
+    });
+  });
 });
