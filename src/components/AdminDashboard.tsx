@@ -9,13 +9,15 @@ import {
 } from '../utils/qr';
 import {
   IconCalendar,
-  IconSettings,
+  IconMusic,
   IconUsers,
 } from './Icons';
 import { LocationPickerModal } from './LocationPickerModal';
 import { BatchScheduleEditModal } from './BatchScheduleEditModal';
 import { AdminAttendanceTab } from './admin/AdminAttendanceTab';
 import { AdminSchedulesTab } from './admin/AdminSchedulesTab';
+import { AdminPracticeTab } from './admin/AdminPracticeTab';
+import { AdminStatsTab } from './admin/AdminStatsTab';
 import { AdminSettingsTab } from './admin/AdminSettingsTab';
 import { ScheduleDeleteModal } from './admin/ScheduleDeleteModal';
 import { CardGroupDeleteModal } from './admin/CardGroupDeleteModal';
@@ -31,7 +33,7 @@ interface AdminDashboardProps {
   refreshTrigger?: number;
 }
 
-type AdminTab = 'ROSTER' | 'SCHEDULES' | 'SETTINGS';
+type AdminTab = 'ROSTER' | 'SCHEDULES' | 'PRACTICE' | 'STATS' | 'SETTINGS';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onBackToHome,
@@ -88,6 +90,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     overrideTimeError,
     currentScheduleStartTime,
     handleManualOverrideSubmit,
+    periodOption,
+    setPeriodOption,
+    partFilter,
+    setPartFilter,
+    memberStatusFilter,
+    setMemberStatusFilter,
+    searchQuery,
+    setSearchQuery,
+    selectedMemberIds,
+    cumulativeSessions,
+    filteredSummaries,
+    selectedSummaries,
+    selectedAvgRate,
+    toggleSelectMember,
+    selectAllFiltered,
+    clearSelection,
   } = useAttendanceAdmin({
     schedules,
     members,
@@ -113,6 +131,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     selectedProgramCardId,
     scheduleSuccessMsg,
     setScheduleSuccessMsg,
+    scheduleErrorMsg,
     scheduleViewTab,
     setScheduleViewTab,
     selectedBatchScheduleIds,
@@ -212,7 +231,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <img
             src={moonchoirLogo}
             alt="Moonchoir"
-            style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+            draggable={false}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              objectFit: 'cover',
+              flexShrink: 0,
+            }}
           />
           <h1 className="admin-title" style={{ whiteSpace: 'nowrap' }}>
             관리자
@@ -261,10 +287,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </button>
         <button
           type="button"
+          className={`subtab-btn ${adminTab === 'PRACTICE' ? 'active' : ''}`}
+          onClick={() => setAdminTab('PRACTICE')}
+          style={{ minHeight: '44px', minWidth: '44px' }}
+        >
+          <IconMusic size={16} />
+          <span>연습곡</span>
+        </button>
+        <button
+          type="button"
+          className={`subtab-btn ${adminTab === 'STATS' ? 'active' : ''}`}
+          onClick={() => setAdminTab('STATS')}
+        >
+          <span style={{ fontSize: '15px' }}>📊</span>
+          <span>통계</span>
+        </button>
+        <button
+          type="button"
           className={`subtab-btn ${adminTab === 'SETTINGS' ? 'active' : ''}`}
           onClick={() => setAdminTab('SETTINGS')}
         >
-          <IconSettings size={16} />
+          <span style={{ fontSize: '15px' }}>⚙️</span>
           <span>설정</span>
         </button>
       </nav>
@@ -321,6 +364,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           selectedProgramCardId={selectedProgramCardId}
           scheduleSuccessMsg={scheduleSuccessMsg}
           setScheduleSuccessMsg={setScheduleSuccessMsg}
+          scheduleErrorMsg={scheduleErrorMsg}
           scheduleViewTab={scheduleViewTab}
           setScheduleViewTab={setScheduleViewTab}
           selectedBatchScheduleIds={selectedBatchScheduleIds}
@@ -361,8 +405,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           pinRegenMsg={pinRegenMsg}
         />
       )}
+
       {/* ============================================================== */}
-      {/* TAB 4: [환경설정] SETTINGS, LOCATIONS & TAXONOMY (Modularized) */}
+      {/* TAB 2.5: [연습곡 관리] PRACTICE (Pieces, Tracks, Program)      */}
+      {/* ============================================================== */}
+      {adminTab === 'PRACTICE' && (
+        <AdminPracticeTab
+          config={config}
+          programCards={programCards}
+          onDataChanged={onDataChanged}
+        />
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 3: [출결 통계 대시보드] STATS (Cumulative Attendance & Ranks) */}
+      {/* ============================================================== */}
+      {adminTab === 'STATS' && (
+        <AdminStatsTab
+          periodOption={periodOption}
+          setPeriodOption={setPeriodOption}
+          partFilter={partFilter}
+          setPartFilter={setPartFilter}
+          memberStatusFilter={memberStatusFilter}
+          setMemberStatusFilter={setMemberStatusFilter}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          selectedMemberIds={selectedMemberIds}
+          cumulativeSessions={cumulativeSessions}
+          filteredSummaries={filteredSummaries}
+          selectedSummaries={selectedSummaries}
+          selectedAvgRate={selectedAvgRate}
+          toggleSelectMember={toggleSelectMember}
+          selectAllFiltered={selectAllFiltered}
+          clearSelection={clearSelection}
+          dynamicParts={dynamicParts}
+          dynamicMemberStatuses={dynamicMemberStatuses}
+        />
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 4: [장소 및 태그 설정] SETTINGS (Notion Gallery & Drawers) */}
       {/* ============================================================== */}
       {adminTab === 'SETTINGS' && (
         <AdminSettingsTab
@@ -425,6 +507,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         scheduleToDelete={scheduleToDelete}
         schedules={schedules}
         programCards={programCards}
+        hasScheduleRecords={(scheduleId) =>
+          sheetsService.hasLocalScheduleRecords(scheduleId)
+        }
         forceHardDeleteSelected={forceHardDeleteSelected}
         setForceHardDeleteSelected={setForceHardDeleteSelected}
         onClose={() => {
@@ -447,7 +532,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           setTimeout(() => setScheduleSuccessMsg(''), 4000);
         }}
       />
-
     </div>
   );
 };

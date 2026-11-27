@@ -103,7 +103,7 @@ erDiagram
 | 필드명 (TS) | 시트 헤더/키 | 무슨 값인가 (의미 & 예시) | 타입 / 기본값 | 어디로 연결되는가 | 비고 |
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | `lateGraceMinutes` | `lateGraceMinutes` | 지각 판정 유예시간 (분 단위, 예: `10`) | `number` (10) | 출결 판정 엔진 (`reconcileAttendance`) | 지각 기준 시각 판정 |
-| `adminPin` | `adminPin` | 마스터 관리자 4자리 PIN (예: `1234`) | `string` ('1234') | 관리자 로그인 게이트 | 분실 시 시트에서 직접 수정 가능 |
+| `adminPin` | `adminPin` | 마스터 관리자 4자리 PIN (값은 문서에 적지 않음) | `string` | 관리자 로그인 게이트 | 분실 시 시트에서 직접 수정 가능 |
 | `customParts` | `customParts` | 등록된 파트 목록 (JSON 배열, 예: `["소프라노","알토"...]`) | `string[]` | 파트 드롭다운, 태그 매니저 | 동적 파트 체계 |
 | `customMemberStatuses` | `customMemberStatuses` | 회원 구분 목록 (JSON 배열) | `string[]` | 회원구분 드롭다운 | 정단원/준단원/휴단원 등 |
 | `customCategories` | `customCategories` | 연습 카테고리 목록 (JSON 배열) | `string[]` | 캘린더 분류 뱃지 | 정기연습/추가연습/연주/녹음 |
@@ -200,7 +200,7 @@ erDiagram
 | `targetAudienceType` | `targetAudienceType` | 참석 대상 필터 (`ALL`, `PARTS`, `CUSTOM_MEMBERS`) | `string` (선택) | 출결 통계 및 개인 홈 화면 분기 기준 | • `ALL`: 전체 필참<br>• `PARTS`: 특정 파트 한정<br>• `CUSTOM_MEMBERS`: 선발 단원 수동 지정 |
 | `targetParts` | `targetParts` | 대상 파트 목록 (예: `소프라노,알토`) | `string[]` (선택) | 시트에는 쉼표 CSV 문자열로 저장, 모델은 `string[]` 변환 | • 파트 한정 연습 시 대상 파트가 아니면 `[🌿 자율 참여 연습]`으로 분기 |
 | `targetMemberIds` | `targetMemberIds` | 선발 단원 ID 목록 (예: `mem_s01,mem_a02`) | `string[]` (선택) | 시트에는 쉼표 CSV 문자열로 저장, 모델은 `string[]` 변환 | • 선발 단원 외에는 `[🌿 자율 참여 연습]` 및 개인 연습 참여 투표로 분기 |
-| `checkInPin` | `checkInPin` | 당일 현장 4자리 인증 PIN (예: `5027`) | `string` (선택) | QR 카메라 미작동 단원의 키패드 수동 출석 검증 | • 회차별 고유 꼬리표 없이 상설 현장 출석 PIN으로 단순화 |
+| `checkInPin` | `checkInPin` | 당일 현장 4자리 인증 PIN (값은 문서에 적지 않음) | `string` (선택) | QR 카메라 미작동 단원의 키패드 수동 출석 검증 | • 회차별 고유 꼬리표 없이 상설 현장 출석 PIN으로 단순화 |
 | `category` | `category` | 일정 구분 (`정기연습`, `추가연습`, `연주` 등) | `string` (필수) | 캘린더 필터 및 통계 반영 여부 | • 수정 시 일정 목록 필터링 반영. |
 | `description` | `description` | 상세 설명 (준비물, 곡목 등) | `string` (선택) | 캘린더 상세 팝업 | • 수정 시 해당 셀만 갱신. |
 | `isArchived` | `isArchived` | 아카이브 여부 (`true` / `false`) | `boolean` (선택) | 일정 뷰 표시 여부 | • `true` 설정 시 단원 캘린더에서 숨김. |
@@ -271,7 +271,7 @@ erDiagram
 
 | 탭 이름 (Sheet Name) | 주체 엔티티 | 저장 방식 (Storage Pattern) | 인덱스 키 (PK / FK) | 설명 |
 | :--- | :--- | :--- | :--- | :--- |
-| **`환경설정`** | `SystemConfig` | Key-Value / In-place Upsert | PK: `key` | 지각 유예시간(10분), 관리자 PIN(1234), 동적 분류 체계(파트/상태/카테고리), A4 인쇄 서식을 중앙 관리. |
+| **`환경설정`** | `SystemConfig` | Key-Value / In-place Upsert | PK: `key` | 지각 유예시간(10분), 관리자 PIN, 동적 분류 체계(파트/상태/카테고리), A4 인쇄 서식을 중앙 관리. |
 | **`출석원천로그`** | `RawAttendanceLog` | **Append-Only (물리 삭제 절대 불가)** | PK: `id`<br>FK: `scheduleId`, `memberId` | QR/PIN 출석 시각, GPS 오차거리, GPS 검증 통과여부 및 **관리자 취소 로그**를 불변 이벤트 로그로 시트에 한 줄씩 영구 적재. |
 | **`단원변경로그`** | `MemberStatusHistory` | **Append-Only (감사 로그 DB)** | PK: `id`<br>FK: `memberId` | 단원의 상태(휴단/정단원 등)나 파트가 변경될 때마다 효력 기간(`startDate`~`endDate`)과 사유를 누적 기록. 직전 활성 이력은 자동 마감. |
 | **`단원명부`** | `Member` | In-place Upsert / Soft Delete | PK: `id` | 단원의 현재 프로필, 입단일, PIN, 최신 상태 관리. 이력이 있는 단원은 삭제 시 `status='DELETED'`로 보존. |

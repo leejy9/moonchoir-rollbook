@@ -7,6 +7,12 @@ import type {
   RawAttendanceLog,
   RSVPVote,
   LocationPreset,
+  AppConfig,
+  PracticePiece,
+  PracticeTrack,
+  PracticeProgramPiece,
+  PracticeCatalog,
+  TrackPlayback,
 } from './rollbook';
 
 describe('Data Contract & Schema Integrity (DATA_SCHEMA.md Compliance)', () => {
@@ -128,4 +134,92 @@ describe('Data Contract & Schema Integrity (DATA_SCHEMA.md Compliance)', () => {
     expect(samplePreset.radiusMeters).toBe(100);
     expect(samplePreset.isDefault).toBe(true);
   });
+
+  it('should preserve backward compatibility for AppConfig without new optional keys', () => {
+    const legacyConfig: AppConfig = {
+      rehearsalDay: '목요일',
+      startTime: '19:30',
+      lateGraceMinutes: 10,
+      defaultLat: 37.5665,
+      defaultLon: 126.978,
+      defaultRadius: 100,
+      adminPin: '1234',
+    };
+
+    expect(legacyConfig.mediaPublicBaseUrl).toBeUndefined();
+    expect(legacyConfig.practiceTrackKinds).toBeUndefined();
+  });
+
+  it('should accept AppConfig with mediaPublicBaseUrl and practiceTrackKinds', () => {
+    const extendedConfig: AppConfig = {
+      rehearsalDay: '목요일',
+      startTime: '19:30',
+      lateGraceMinutes: 10,
+      defaultLat: 37.5665,
+      defaultLon: 126.978,
+      defaultRadius: 100,
+      adminPin: '1234',
+      mediaPublicBaseUrl: 'https://media.moonchoir.org',
+      practiceTrackKinds: ['가이드', 'MR', '참고영상', '베이스 파트'],
+    };
+
+    expect(extendedConfig.mediaPublicBaseUrl).toBe('https://media.moonchoir.org');
+    expect(extendedConfig.practiceTrackKinds).toHaveLength(4);
+  });
+
+  it('should enforce PracticePiece, PracticeTrack, and PracticeProgramPiece contracts', () => {
+    const piece: PracticePiece = {
+      id: 'piece_1',
+      title: '아리랑',
+      composer: '한국 민요',
+      arranger: '김작곡',
+      scoreUrl: 'https://drive.google.com/file/d/score123/view',
+      notes: '세종문화회관 가을 연주회용',
+      isArchived: false,
+      createdAt: '2026-11-20T10:00:00Z',
+      updatedAt: '2026-11-20T10:00:00Z',
+    };
+
+    const track: PracticeTrack = {
+      id: 'track_1',
+      pieceId: 'piece_1',
+      label: '합창 MR',
+      kind: 'MR',
+      source: 'r2',
+      storageKey: 'audio/arirang_mr.mp3',
+      orderIndex: 0,
+      isArchived: false,
+      createdAt: '2026-11-20T10:00:00Z',
+      updatedAt: '2026-11-20T10:00:00Z',
+    };
+
+    const programPiece: PracticeProgramPiece = {
+      programId: 'card_2026_fall',
+      pieceId: 'piece_1',
+      orderIndex: 0,
+      isArchived: false,
+    };
+
+    const catalog: PracticeCatalog = {
+      pieces: [piece],
+      tracks: [track],
+      programPieces: [programPiece],
+      performances: [],
+      performancePieces: [],
+    };
+
+    const playback: TrackPlayback = {
+      mode: 'audio',
+      src: 'https://media.moonchoir.org/audio/arirang_mr.mp3',
+      canPrefetch: true,
+      supportsBackground: true,
+    };
+
+    expect(catalog.pieces).toHaveLength(1);
+    expect(catalog.tracks[0].kind).toBe('MR');
+    expect(catalog.tracks[0].source).toBe('r2');
+    expect(catalog.programPieces[0].programId).toBe('card_2026_fall');
+    expect(playback.mode).toBe('audio');
+  });
 });
+

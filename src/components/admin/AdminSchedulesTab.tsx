@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { sheetsService } from '../../services/sheets';
 import type {
@@ -37,6 +37,8 @@ function getStatusPillClass(status: AttendanceStatus): string {
       return 'late';
     case '사유결석':
       return 'excused';
+    case '대기':
+      return 'pending';
     case '결석':
     default:
       return 'absent';
@@ -64,6 +66,7 @@ export interface AdminSchedulesTabProps {
   setEditingProgramCard: (card: ProgramCard | null) => void;
   selectedProgramCardId: string | null;
   scheduleSuccessMsg: string;
+  scheduleErrorMsg?: string;
   setScheduleSuccessMsg: (msg: string) => void;
   scheduleViewTab: 'CALENDAR' | 'ALL_LIST' | 'PROGRAM_CARDS';
   setScheduleViewTab: (tab: 'CALENDAR' | 'ALL_LIST' | 'PROGRAM_CARDS') => void;
@@ -98,8 +101,8 @@ export interface AdminSchedulesTabProps {
   setSelectedScheduleId: (id: string) => void;
   currentSchedule: Schedule | undefined;
   reconciledList: AttendanceReconciliation[];
-  sessionFilter: '전체' | '출석' | '지각' | '사유결석' | '결석';
-  setSessionFilter: (filter: '전체' | '출석' | '지각' | '사유결석' | '결석') => void;
+  sessionFilter: '전체' | '출석' | '지각' | '사유결석' | '결석' | '대기';
+  setSessionFilter: (filter: '전체' | '출석' | '지각' | '사유결석' | '결석' | '대기') => void;
   filteredSessionList: AttendanceReconciliation[];
   setOverrideTarget: (target: { id: string; name: string; part: string } | null) => void;
 
@@ -128,6 +131,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
   setEditingProgramCard,
   selectedProgramCardId,
   scheduleSuccessMsg,
+  scheduleErrorMsg,
   setScheduleSuccessMsg: _setScheduleSuccessMsg,
   scheduleViewTab,
   setScheduleViewTab,
@@ -173,6 +177,19 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
   // 일정별 댓글 개수(배지·회차 선택창 표시용). 화면이 다시 그려질 때마다 최신 값을 읽는다.
   const commentCounts = sheetsService.getCommentCounts();
   const [isFormDrawerOpen, setIsFormDrawerOpen] = useState(false);
+  // 현장 PIN은 공개 설정이 아니라 서버 비밀값이다. 운영진 세션 토큰으로 서버에서 읽어 온다.
+  // getAdminSecrets()가 서비스 설정을 갱신하므로, 응답이 오면 한 번 다시 그린다.
+  // (재발급 시에는 상위 컴포넌트가 다시 그리며 갱신된 설정 값을 읽는다.)
+  const [, setSecretsLoadedAt] = useState(0);
+  useEffect(() => {
+    let mounted = true;
+    void sheetsService.getAdminSecrets().then(() => {
+      if (mounted) setSecretsLoadedAt(Date.now());
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const openScheduleFormFocus = (sch: Schedule | null) => {
     setRightPanelMode('SCHEDULE_FORM');
@@ -487,6 +504,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
           </div>
 
           {scheduleSuccessMsg && <div className="success-banner">{scheduleSuccessMsg}</div>}
+          {scheduleErrorMsg && <div className="error-banner" role="alert">{scheduleErrorMsg}</div>}
 
           {/* Sub-tab 1: SESSION ATTENDANCE DETAIL & MANUAL OVERRIDE */}
           {scheduleSubTab === 'SESSION' && currentSchedule && (
@@ -553,7 +571,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
               {/* Members List */}
               <div className="toss-section-card">
                 <div className="toss-filter-row">
-                  {(['전체', '출석', '지각', '사유결석', '결석'] as const).map((tabName) => (
+                  {(['전체', '출석', '지각', '사유결석', '결석', '대기'] as const).map((tabName) => (
                     <button
                       key={tabName}
                       type="button"
@@ -670,7 +688,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                       borderRadius: '8px',
                     }}
                   >
-                    {sheetsService.getActiveOnSitePin()}
+                    {sheetsService.getActiveOnSitePin() || '불러오는 중'}
                   </span>
                 </div>
 
@@ -790,6 +808,9 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
               {scheduleViewTab === 'CALENDAR' ? (
                 <AdminCalendarView
                   commentCounts={commentCounts}
+                  hasScheduleRecords={(scheduleId) =>
+                    sheetsService.hasLocalScheduleRecords(scheduleId)
+                  }
                   adminCalYear={adminCalYear}
                   adminCalMonth={adminCalMonth}
                   onPrevMonth={handleAdminPrevMonth}
@@ -797,6 +818,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                   calendarGrid={adminCalendarGrid}
                   schedulesByDate={schedulesByDate}
                   activeSchedulesByDate={activeSchedulesByDate}
+                  members={members}
                   selectedDate={adminSelectedDate}
                   onSelectDate={(dateStr) => {
                     setAdminSelectedDate(dateStr);
@@ -825,6 +847,7 @@ export const AdminSchedulesTab: React.FC<AdminSchedulesTabProps> = ({
                 <AdminScheduleListView
                   schedules={schedules}
                   categories={dynamicCategories}
+                  members={members}
                   programCards={programCards}
                   onAssignProgramCard={async (scheduleId, cardId) => {
                     await sheetsService.updateSchedule(scheduleId, { programId: cardId });

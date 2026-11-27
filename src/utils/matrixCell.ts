@@ -1,6 +1,6 @@
 import type { AttendanceReconciliation, Schedule } from '../types/rollbook';
 import { getKSTClock } from './date';
-import { getCheckInWindowState } from './timeWindow';
+import { isScheduleOver } from './scheduleTiming';
 
 export interface MatrixCellDisplay {
   badgeClass: string;
@@ -9,11 +9,6 @@ export interface MatrixCellDisplay {
   sub: string;
   /** 툴팁/팝오버용 한 줄 설명 */
   statusText: string;
-}
-
-/** 연습이 아직 끝나지 않았으면(당일 종료 전 포함) 결석을 확정하지 않는다. */
-export function isSchedulePending(schedule: Schedule, now: Date): boolean {
-  return getCheckInWindowState(schedule, now).status !== 'WINDOW_CLOSED';
 }
 
 function cell(badgeClass: string, label: string, sub = ''): MatrixCellDisplay {
@@ -46,7 +41,7 @@ export function getMatrixCellDisplay(input: {
   const isExempt = status === '미참' || status === '모수제외';
   const isManualAbsent = Boolean(item?.isManualOverride);
 
-  if (isSchedulePending(schedule, now) && !isManualAbsent) {
+  if (!isScheduleOver(schedule, now) && !isManualAbsent) {
     if (isExempt) {
       return vote === 'ATTEND' ? cell('cell-vote-attend', '참석', '자율') : cell('cell-exempt', '미참');
     }

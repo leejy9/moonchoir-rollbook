@@ -1,12 +1,23 @@
 import type { BoundDeviceProfile, PartType } from '../types/rollbook';
 import { sheetsService } from './sheets';
+import { getAdminToken, type AdminTier } from './adminSession';
 import { getKSTTimestampString } from '../utils/date';
 
 const AUTH_KEYS = {
   DEVICE_PROFILE: 'moonchoir_bound_device_v1',
   ADMIN_SESSION: 'moonchoir_admin_session_v1',
+  SUPER_ADMIN_SESSION: 'moonchoir_super_admin_session_v1',
 };
 const ADMIN_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+
+/**
+ * Supabase 백엔드에서는 서버가 발급한 토큰이 있어야 관리자 화면을 유지한다.
+ * 토큰이 없거나 서버가 만료를 알려 지워졌으면 관리자 모드에서 나간다.
+ */
+function hasServerSession(tier: AdminTier): boolean {
+  if (!sheetsService.requiresAdminToken()) return true;
+  return getAdminToken(tier) !== null;
+}
 
 class MemoryStorage {
   private store: Record<string, string> = {};
@@ -110,12 +121,6 @@ export function clearDeviceProfile(): void {
   }
 }
 
-export function validateAdminPin(inputPin: string): boolean {
-  const config = sheetsService.getConfig();
-  const validPin = config.adminPin || '1234';
-  return inputPin.trim() === validPin.trim();
-}
-
 export function isAdminLoggedIn(): boolean {
   const storage = getStorage();
   if (!storage) return false;
@@ -128,6 +133,11 @@ export function isAdminLoggedIn(): boolean {
       typeof session.lastActivityAt !== 'number' ||
       Date.now() - session.lastActivityAt >= ADMIN_IDLE_TIMEOUT_MS
     ) {
+      storage.removeItem(AUTH_KEYS.ADMIN_SESSION);
+      sheetsService.logoutAdminSession('admin');
+      return false;
+    }
+    if (!hasServerSession('admin')) {
       storage.removeItem(AUTH_KEYS.ADMIN_SESSION);
       return false;
     }
@@ -149,6 +159,7 @@ export function setAdminLoggedIn(loggedIn: boolean): void {
       );
     } else {
       storage.removeItem(AUTH_KEYS.ADMIN_SESSION);
+      sheetsService.logoutAdminSession('admin');
     }
   }
 }
@@ -161,3 +172,56 @@ export function touchAdminSession(): void {
     JSON.stringify({ lastActivityAt: Date.now() })
   );
 }
+
+export function isSuperAdminLoggedIn(): boolean {
+  const storage = getStorage();
+  if (!storage) return false;
+  const raw = storage.getItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
+  if (!raw) return false;
+
+  try {
+    const session = JSON.parse(raw) as { lastActivityAt?: number };
+    if (
+      typeof session.lastActivityAt !== 'number' ||
+      Date.now() - session.lastActivityAt >= ADMIN_IDLE_TIMEOUT_MS
+    ) {
+      storage.removeItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
+      sheetsService.logoutAdminSession('super');
+      return false;
+    }
+    if (!hasServerSession('super')) {
+      storage.removeItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Auth] Invalid super admin session; requiring sign-in:', err);
+    storage.removeItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
+    return false;
+  }
+}
+
+export function setSuperAdminLoggedIn(loggedIn: boolean): void {
+  const storage = getStorage();
+  if (storage) {
+    if (loggedIn) {
+      storage.setItem(
+        AUTH_KEYS.SUPER_ADMIN_SESSION,
+        JSON.stringify({ lastActivityAt: Date.now() })
+      );
+    } else {
+      storage.removeItem(AUTH_KEYS.SUPER_ADMIN_SESSION);
+      sheetsService.logoutAdminSession('super');
+    }
+  }
+}
+
+export function touchSuperAdminSession(): void {
+  if (!isSuperAdminLoggedIn()) return;
+  const storage = getStorage();
+  storage.setItem(
+    AUTH_KEYS.SUPER_ADMIN_SESSION,
+    JSON.stringify({ lastActivityAt: Date.now() })
+  );
+}
+

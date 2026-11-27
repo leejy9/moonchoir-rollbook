@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { sheetsService } from '../services/sheets';
 import type {
   Member,
@@ -10,7 +10,7 @@ import { getKSTDateString, getKSTTimestampString } from '../utils/date';
 import { getDefaultArrivalTime, resolveManualAttendanceTimestamp } from '../utils/manualAttendance';
 
 export type PeriodOption = '1M' | '3M' | '6M' | 'YEAR' | 'ALL';
-export type SessionFilterType = '전체' | '출석' | '지각' | '사유결석' | '결석';
+export type SessionFilterType = '전체' | '출석' | '지각' | '사유결석' | '결석' | '대기';
 
 export interface UseAttendanceAdminProps {
   schedules: Schedule[];
@@ -53,6 +53,12 @@ export function useAttendanceAdmin({
   onDataChanged,
   setMemberRefreshKey,
 }: UseAttendanceAdminProps) {
+  const [currentNow, setCurrentNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentNow(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+
   // --- 1. Member Modal Handlers & State ---
   const [selectedMemberForModal, setSelectedMemberForModal] = useState<Member | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -116,7 +122,7 @@ export function useAttendanceAdmin({
   const currentSchedule =
     schedules.find((s) => s.id === selectedScheduleId) || schedules[0];
   const reconciledList = currentSchedule
-    ? sheetsService.reconcileAttendance(currentSchedule.id)
+    ? sheetsService.reconcileAttendance(currentSchedule.id, currentNow)
     : [];
 
   const [sessionFilter, setSessionFilter] = useState<SessionFilterType>('전체');

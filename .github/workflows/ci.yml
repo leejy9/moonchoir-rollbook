@@ -1,0 +1,78 @@
+# 반복 실수를 사람이 아니라 기계가 막는다 (docs/agent/LESSONS.md).
+# PR마다 실행된다. 리뷰어는 개발 에이전트의 보고서보다 이 결과를 먼저 본다.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  green-bar:
+    name: Green Bar (typecheck · lint · test · build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  database:
+    name: DB 변경 파일 + 검증 스크립트 (빈 PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: ci
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y -q postgresql-client >/dev/null
+      - run: ./scripts/ci/db-check.sh
+
+  guards:
+    name: 반복 실수 검사 (R9 · R20 · R21)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 기준 정하기
+        # PR: 대상 브랜치와 비교 / 푸시: 직전에 올라와 있던 커밋과 비교
+        # (푸시를 main과 비교하면 아직 main에 안 들어간 앞 단계 PR의 파일까지 "새 파일"로 잘못 잡힌다)
+        run: |
+          if [ -n "${{ github.base_ref }}" ]; then
+            echo "BASE_REF=origin/${{ github.base_ref }}" >> "$GITHUB_ENV"
+          elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${{ github.event.before }}^{commit}" 2>/dev/null; then
+            echo "BASE_REF=${{ github.event.before }}" >> "$GITHUB_ENV"
+          else
+            echo "BASE_REF=origin/main" >> "$GITHUB_ENV"
+          fi
+      - run: ./scripts/ci/guards.sh

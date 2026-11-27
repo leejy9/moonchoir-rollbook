@@ -121,15 +121,39 @@ export function getKSTDateString(date: Date = new Date()): string {
 }
 
 /**
- * YYYY-MM-DD 기준 일(day) 단위를 가감하여 새 YYYY-MM-DD를 반환합니다.
+ * YYYY-MM-DD 날짜 문자열에 일(day)을 가감하여 새 YYYY-MM-DD를 반환합니다.
+ * 로컬 타임존이나 DST의 영향을 전혀 받지 않도록 Date.UTC를 사용하여 순수 캘린더 날짜로 연산합니다.
  */
-export function addDaysKST(dateStr: string, days: number): string {
+export function shiftCalendarDate(dateStr: string, days: number): string {
   if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return getKSTDateString();
   }
   const [y, m, d] = dateStr.split('-').map(Number);
-  const target = new Date(y, m - 1, d + days, 12, 0, 0);
-  return getKSTDateString(target);
+  const utcMs = Date.UTC(y, m - 1, d + days);
+  const res = new Date(utcMs);
+  const ry = res.getUTCFullYear();
+  const rm = String(res.getUTCMonth() + 1).padStart(2, '0');
+  const rd = String(res.getUTCDate()).padStart(2, '0');
+  return `${ry}-${rm}-${rd}`;
+}
+
+/**
+ * YYYY-MM-DD 날짜 문자열의 요일 번호(0=일, 1=월, ..., 6=토)를 반환합니다.
+ * 타임존에 영향받지 않도록 UTC 기준 캘린더 요일을 반환합니다.
+ */
+export function getWeekdayOfDate(dateStr: string): number {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return 0;
+  }
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/**
+ * YYYY-MM-DD 기준 일(day) 단위를 가감하여 새 YYYY-MM-DD를 반환합니다.
+ */
+export function addDaysKST(dateStr: string, days: number): string {
+  return shiftCalendarDate(dateStr, days);
 }
 
 /**
@@ -226,3 +250,29 @@ export function formatShortDate(dateStr: string): string {
   if (!match) return dateStr;
   return `${match[1].slice(2)}-${match[2]}-${match[3]}`;
 }
+
+/**
+ * 출석 기록 화면용 날짜(M/D 요일, 예: 11/14 토).
+ */
+export function formatRecordDate(dateStr: string): string {
+  const parts = (dateStr || '').split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
+  const [y, m, d] = parts;
+  const dateObj = new Date(y, m - 1, d, 12, 0, 0);
+  const weekday = KOREAN_DAY_NAMES[dateObj.getDay()] || '';
+  return `${m}/${d} ${weekday}`;
+}
+
+/**
+ * targetDate('YYYY-MM-DD')와 now(Date) 사이의 KST 기준 D-Day 차이를 계산합니다.
+ * targetDate > now 이면 양수 (예: 3일 후면 3, 오늘이면 0, 어제면 -1).
+ */
+export function computeDDay(targetDate: string, now: Date = new Date()): number {
+  const todayStr = getKSTDateString(now);
+  const [ty, tm, td] = targetDate.split('-').map(Number);
+  const [by, bm, bd] = todayStr.split('-').map(Number);
+  const tUtc = Date.UTC(ty, tm - 1, td);
+  const bUtc = Date.UTC(by, bm - 1, bd);
+  return Math.round((tUtc - bUtc) / (24 * 60 * 60 * 1000));
+}
+

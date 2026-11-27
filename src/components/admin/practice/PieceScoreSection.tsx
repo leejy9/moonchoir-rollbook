@@ -1,0 +1,106 @@
+import React from 'react';
+import type { PracticePiece } from '../../../types/rollbook';
+import type { UploadJob } from '../../../services/media/uploadQueue';
+import { FailedJobsList } from './FailedJobsList';
+
+interface PieceScoreSectionProps {
+  piece: Partial<PracticePiece>;
+  stagedScore?: { file: File; name: string } | null;
+  failedJobs?: UploadJob[];
+  onRetryJob?: (id: string) => void;
+  onDismissJob?: (id: string) => void;
+  hasMediaBaseUrl?: boolean;
+  onOpenUpload: (previousStorageKey?: string) => void;
+  onRemoveStagedScore?: () => void;
+}
+
+export const PieceScoreSection: React.FC<PieceScoreSectionProps> = ({
+  piece,
+  stagedScore,
+  failedJobs = [],
+  onRetryJob,
+  onDismissJob,
+  hasMediaBaseUrl = true,
+  onOpenUpload,
+  onRemoveStagedScore,
+}) => {
+  const scoreFailedJobs = failedJobs.filter((j) => j.pieceId === piece.id && j.kind === 'score');
+  return (
+    <>
+      <hr className="admin-section-divider" />
+
+      {/* 악보 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <label className="admin-field-label" style={{ margin: 0 }}>악보 (PDF)</label>
+        <button
+          type="button"
+          disabled={!hasMediaBaseUrl}
+          onClick={() => onOpenUpload(piece.scoreStorageKey)}
+          style={{
+            minHeight: '44px',
+            padding: '4px 10px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-card)',
+            color: 'var(--brand-primary)',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: !hasMediaBaseUrl ? 'not-allowed' : 'pointer',
+            opacity: !hasMediaBaseUrl ? 0.5 : 1,
+          }}
+        >
+          {stagedScore || piece.scoreStorageKey || piece.scoreUrl ? '교체' : '+ 악보 올리기'}
+        </button>
+      </div>
+      {!hasMediaBaseUrl && (
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+          파일 저장소가 아직 연결되지 않았어요
+        </div>
+      )}
+      {scoreFailedJobs.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+          <FailedJobsList
+            failedJobs={scoreFailedJobs}
+            onRetryJob={onRetryJob}
+            onDismissJob={onDismissJob}
+          />
+        </div>
+      )}
+      {stagedScore ? (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '12px' }}>
+          <div>
+            <span>{stagedScore.name}</span>
+            <span style={{ fontSize: '11px', color: 'var(--brand-primary)', marginLeft: '8px', fontWeight: 600 }}>저장 대기</span>
+          </div>
+          {onRemoveStagedScore && (
+            <button
+              type="button"
+              onClick={onRemoveStagedScore}
+              aria-label="악보 삭제"
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer', minWidth: '44px', minHeight: '44px', fontSize: '16px' }}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      ) : piece.scoreStorageKey ? (
+        <div style={{ padding: '8px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '12px' }}>
+          <span>{piece.scoreStorageKey.split('/').pop()}</span>
+          {piece.scoreSizeBytes && (
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+              ({(piece.scoreSizeBytes / (1024 * 1024)).toFixed(1)}MB)
+            </span>
+          )}
+        </div>
+      ) : piece.scoreUrl ? (
+        <div style={{ padding: '8px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '12px' }}>
+          <span>외부 링크: {piece.scoreUrl}</span>
+        </div>
+      ) : (
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+          등록된 악보가 없습니다.
+        </div>
+      )}
+    </>
+  );
+};

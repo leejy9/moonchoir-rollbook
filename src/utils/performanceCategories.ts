@@ -1,0 +1,1 @@
+export const DEFAULT_PERFORMANCE_CATEGORIES = ['연주'];

@@ -53,6 +53,7 @@ describe('AdminCalendarView Component', () => {
         onPrevMonth={vi.fn()}
         onNextMonth={vi.fn()}
         calendarGrid={mockCalendarGrid}
+        hasScheduleRecords={() => false}
         schedulesByDate={new Map([['2026-10-18', mockSchedules]])}
         activeSchedulesByDate={new Map([['2026-10-18', [mockSchedules[0]]]])}
         selectedDate="2026-10-18"
@@ -81,6 +82,7 @@ describe('AdminCalendarView Component', () => {
         onPrevMonth={vi.fn()}
         onNextMonth={vi.fn()}
         calendarGrid={mockCalendarGrid}
+        hasScheduleRecords={() => false}
         schedulesByDate={new Map([['2026-10-18', mockSchedules]])}
         activeSchedulesByDate={new Map([['2026-10-18', [mockSchedules[0]]]])}
         selectedDate="2026-10-18"
@@ -109,6 +111,7 @@ describe('AdminCalendarView Component', () => {
         onPrevMonth={vi.fn()}
         onNextMonth={vi.fn()}
         calendarGrid={mockCalendarGrid}
+        hasScheduleRecords={() => false}
         schedulesByDate={new Map([['2026-10-18', mockSchedules]])}
         activeSchedulesByDate={new Map([['2026-10-18', [mockSchedules[0]]]])}
         selectedDate="2026-10-18"
@@ -143,6 +146,7 @@ describe('AdminCalendarView Component', () => {
           onPrevMonth={vi.fn()}
           onNextMonth={vi.fn()}
           calendarGrid={mockCalendarGrid}
+          hasScheduleRecords={() => false}
           schedulesByDate={new Map([['2026-10-18', mockSchedules]])}
           activeSchedulesByDate={new Map([['2026-10-18', [mockSchedules[0]]]])}
           selectedDate="2026-10-18"

@@ -22,10 +22,10 @@ const item = (overrides: Partial<AttendanceReconciliation> = {}): AttendanceReco
   ...overrides,
 });
 
-// timeWindow.ts가 연습 시각을 로컬 시간으로 해석하므로 테스트 시각도 로컬 기준으로 만든다.
-const BEFORE = new Date('2026-10-21T12:00:00'); // 연습 전날
-const DURING = new Date('2026-10-22T20:00:00'); // 연습 진행 중
-const AFTER = new Date('2026-10-22T23:00:00'); // 연습 종료 후
+// KST 기준 일정 시간 판정에 맞춰 테스트 시각도 명시적 KST(+09:00)로 통일한다.
+const BEFORE = new Date('2026-10-21T12:00:00+09:00'); // 연습 전날
+const DURING = new Date('2026-10-22T20:00:00+09:00'); // 연습 진행 중
+const AFTER = new Date('2026-10-22T23:00:00+09:00'); // 연습 종료 후
 
 describe('getMatrixCellDisplay', () => {
   it('연습 전: 참석 투표는 결석이 아니라 참석(투표)으로 보인다', () => {

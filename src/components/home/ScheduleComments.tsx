@@ -1,14 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getOrCreateDeviceId } from '../../services/auth';
 import { sheetsService } from '../../services/sheets';
 import type { Member, PartType, ScheduleComment } from '../../types/rollbook';
 import { getKSTDateString } from '../../utils/date';
+import { readSeenCommentsState, recordSeenComments } from './useSeenComments';
+import { pickNewCommentIds } from '../../utils/seenComments';
 import { COMMENT_MAX_LENGTH, COMMENT_PAGE_SIZE, createCommentEventId, formatCommentTime } from '../../utils/scheduleComments';
 
 interface ScheduleCommentsProps {
   scheduleId: string;
   author: Pick<Member, 'id' | 'name' | 'part'>;
-  /** 시험·시안에서 처음부터 펼쳐 둘 때만 사용 */
+  /** 처음 펼침 여부. 기본은 펼침이며, 사용자가 접기 버튼으로 닫을 수 있다 */
   defaultExpanded?: boolean;
 }
 
@@ -28,10 +30,10 @@ const ChevronIcon: React.FC = () => (
 );
 
 /**
- * 투표 현황 카드 맨 아래에 붙는 접고 펴는 댓글 영역.
+ * 일정 상세 맨 아래에 붙는 댓글 영역. 기본으로 펼쳐 보이고, 접기 버튼으로 전체를 닫을 수 있다.
  * 일정이 바뀌면 입력 중이던 상태가 남지 않도록 호출하는 쪽에서 `key={scheduleId}`를 준다.
  */
-export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, author, defaultExpanded = false }) => {
+export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, author, defaultExpanded = true }) => {
   const [, setTick] = useState(0);
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [showAll, setShowAll] = useState(false);
@@ -51,6 +53,30 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
   const comments = sheetsService.getComments(scheduleId);
   const visible = showAll ? comments : comments.slice(-COMMENT_PAGE_SIZE);
   const hiddenCount = comments.length - visible.length;
+
+  // 상세를 열 때의 저장값 기준으로 "새 댓글"을 정한다(열려 있는 동안 지워지지 않는다).
+  const [seenAtOpen] = useState(() => {
+    const state = readSeenCommentsState();
+    return state.kind === 'ok' ? new Set(state.value) : null;
+  });
+  const newIds = useMemo(
+    () => new Set(pickNewCommentIds(comments, seenAtOpen, (id) => sheetsService.isOwnComment({ memberId: id }, author.id))),
+    [comments, seenAtOpen, author.id]
+  );
+
+  // 닫을 때(언마운트): 펼쳐 있었으면 보인 댓글을 "본 것"으로 기록한다. 저장 상태가 ok일 때만 쓴다.
+  // 개발 모드 <StrictMode>에서는 열자마자 기록될 수 있으니 확인은 빌드본으로 한다.
+  const latest = useRef({ expanded, ids: visible.map((c) => c.id) });
+  const visibleKey = visible.map((c) => c.id).join('|');
+  useEffect(() => {
+    latest.current = { expanded, ids: visibleKey ? visibleKey.split('|') : [] };
+  });
+  useEffect(
+    () => () => {
+      if (latest.current.expanded) recordSeenComments(latest.current.ids);
+    },
+    []
+  );
   const todayStr = getKSTDateString();
 
   const run = async (task: () => Promise<unknown>, onDone?: () => void) => {
@@ -137,6 +163,7 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
                       <div className="sc-head">
                         <strong>{comment.memberName}</strong>
                         <span className={`part-badge ${partClass(comment.part)}`}>{comment.part}</span>
+                        {newIds.has(comment.id) && <span className="sc-new">새 댓글</span>}
                         {mine && editingId !== comment.id && (
                           <button
                             type="button"

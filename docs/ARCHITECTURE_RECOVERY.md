@@ -1,5 +1,7 @@
 # Architecture Recovery Record
 
+> 관련 문서: [AGENTS.md](../AGENTS.md) 작업 헌장 · [기획 배경](./PRODUCT_BACKGROUND.md) 프로젝트 탄생 배경 및 목표
+
 ## Purpose
 
 This record separates verified behavior in the current code from decisions agreed for the desired behavior. The PRD describes product requirements; this file records the data-flow risks and why recovery work is needed. Keep it current as findings are verified and decisions change.
@@ -8,7 +10,18 @@ The complete phased plan, owner decision gates, and acceptance checks are in [Ar
 
 ## Decisions Agreed With The Owner
 
-- Google Spreadsheet is the official record for operational data such as members, schedules, attendance, and RSVP.
+- Google Spreadsheet is the official record for operational data such as members, schedules, attendance, and RSVP (retained as cold backup/archive).
+- **Supabase (PostgreSQL 15) Primary Backend Confirmed (2026-11-19):** To eliminate GAS concurrency lockouts and reduce mobile scan round-trip latency from ~5.7s to <600ms, the primary backend is Supabase with row-level security and stored procedures. Append-only attendance immutability is strictly enforced by DB triggers.
+- **Member UX / Practice Studio decisions confirmed (2026-11-20, details in [MEMBER_UX_AUDIO_SPEC.md](MEMBER_UX_AUDIO_SPEC.md) §0):** No per-part audio tracks. Practice audio files live in Cloudflare R2 served through a Cloudflare Worker on `workers.dev` (no custom domain yet); admins upload manually in the Cloudflare dashboard and the app stores only metadata plus the object key. Links are unlisted public URLs (no signed URLs); commercial/copyrighted audio is registered only as external links. The catalog is three new Supabase tables (`practice_pieces`, `practice_program_pieces`, `practice_tracks`) with piece usage recorded per ProgramCard (owner approved the schema addition). Level/badge gamification is deferred. Security hardening (Phase 0) precedes all other phases.
+- **Security hardening (2026-11-21, applied to the production database by the owner and verified; frontend deployment pending):** `supabase/migrations/20261121000000_security_hardening.sql` adds server-issued admin session tokens (`admin_sessions`, SHA-256 hash only, 30-minute sliding / 12-hour absolute), wraps every admin write RPC behind a token check (`<fn>__impl` is not client-executable), requires a token for `fn_get_admin_secrets(p_token)` and `fn_save_config`, revokes `fn_import_sheets_snapshot` from anon, blocks `MANUAL_BY_ADMIN` attendance and the RSVP cutoff bypass without a token, forces `role = 'MEMBER'` on self-registration, throttles failed PIN attempts, and refuses admin/super PINs shorter than 6 digits. The client no longer accepts hardcoded fallback PINs locally and requires a server token to stay in admin mode. Deployment order and PIN rotation: `docs/DEPLOYMENT.md` §0. Verification script: `supabase/tests/security_hardening_check.sql`. Remaining (Task 76): members can still be impersonated (no member authentication) and full phone numbers remain readable by anon.
+- **Production function contamination restored (2026-11-21):** Hand-written SQL relayed by the implementation agent (not the committed migration files) had been applied to production: `fn_reorder_practice_tracks` and `fn_unbind_member_device` were overwritten with versions calling a non-existent `fn_verify_admin_session()` and missing columns, and three functions that never existed in the repository were created (`fn_delete_practice_program_card`, `fn_reorder_practice_program_pieces`, a zero-argument `fn_get_practice_catalog()`). All failed before writing, so no data changed. The reviewer applied `20261122030000_drop_stray_catalog_functions.sql` and re-applied `20261122010000_review_followups.sql` verbatim, then verified that no stray or broken function remains and all token checks hold. Owner-confirmed rule: production SQL comes only from committed migration files, applied and verified by the reviewer through the Supabase connector; the implementation agent never runs SQL or asks the owner to.
+- **Super admin PIN save fix (2026-11-21, applied by the owner and verified):** Saving the super admin PIN reported success but did not change the login PIN: the production `fn_save_config__impl` was the older version that routed `superAdminPin` to the public `app_config` table (readable through `fn_get_initial_snapshot`) instead of `app_secrets`. `supabase/migrations/20261122020000_fix_save_config_secret_routing.sql` routes all four secret keys to `app_secrets`, deletes leaked secret keys from `app_config`, and adds a trigger that rejects secret keys in `app_config`. Any super admin PIN typed before the fix was publicly readable; set a new value that was never tried.
+- **Admin PIN length confirmed (2026-11-21):** Staff and super admin PINs stay 6-8 digits. The previously published 4-digit values must never be reused.
+- **2026-11 코드 리뷰 후속 수정(C2~C16) 완료 (2026-11-21):** 관리자 PIN 6~8자리 유지 확정, 비상 캐시 초기화는 데이터 캐시만 삭제.
+- **On-site PIN hotfix (2026-11-21):** The hardening migration read the on-site PIN from `inputPin`, but the client sends `checkInPin`; with the new empty-PIN rejection every `MANUAL_PIN` check-in failed in production. `supabase/migrations/20261121010000_fix_onsite_pin_payload_key.sql` reads `checkInPin` first (then `inputPin`) and clears the on-site failure counters. Applied to the production database by the owner on 2026-11-21.
+- **Verified security defects (2026-11-20, fixed in code by the hardening above; live until deployed):** With the public anon key, `fn_get_admin_secrets` returns all PINs, `fn_save_config` can overwrite them (`supabase/migrations/20261120000000_super_admin.sql`), and `fn_import_sheets_snapshot` can truncate every table including append-only attendance logs, bypassing the row-level protection triggers (`supabase/migrations/20261119000002_migration_function.sql`). Other admin write RPCs are also callable by anyone because admin status is only a browser-side timer. PIN values also appear in plain text in `docs/plans/1120_admin.md`. No Supabase-to-Sheets backup path exists in the code.
+- **Target-Only Schedule Visibility Rule Confirmed (2026-11-19):** For schedules marked `visibility: 'TARGETS_ONLY'`, non-target members are excluded from Home, Calendar, and Profile views. A non-target member only sees the schedule if they hold an actual confirmed attendance/late record (`reconciled.finalStatus === '출석' || '지각'`) to protect personal attendance history. Mere presence of raw, unconfirmed, or cleared logs (`[ATTENDANCE_CLEARED]`) does NOT expose target-only schedules.
+- **Member UX Revamp: Home Calendar Removal & Separate Calendar Tab Reversion (2026-11-20):** Reverts the previous decision (Task 16 / Plan 04) that embedded the calendar directly on the home screen. On rehearsal days, the primary task of the home screen is rapid on-site check-in within seconds. Having the full calendar grid on home forced critical check-in CTAs and today's schedule below the fold. The calendar is now promoted to a dedicated '일정' tab (`CalendarTab` + `MonthCalendarGrid`), keeping the '오늘' tab (`TodayTab`) lightweight, focused, and immediately actionable without scrolling. Legacy `CalendarView.tsx` (which had a hardcoded starting month and duplicate matching logic) was completely deleted in favor of `CalendarTab` and bottom sheet `ScheduleDetailSheet`.
 - Browser storage may cache data for display and temporarily hold writes that cannot yet reach the spreadsheet. It is not a second official record.
 - A write is not complete until the spreadsheet confirms it. The UI must distinguish saving, confirmed, and failed/pending states.
 - A check-in is not official attendance until the spreadsheet confirms it. If the same check-in is retried, it must retain the same unique ID so retries do not create duplicate records.
@@ -333,5 +346,80 @@ No spreadsheet schema was changed without approval. As of 2026-10-20, the recove
 - **Combined result (device-binding behavior):**
   - Local work kept: the lock UI and messages are removed (`BindingModal` wording, member profile device bar, portal text), member logout only clears the browser's own profile, `phone`/`phoneLast4` cells are formatted as text after Apps Script writes, numeric `phoneLast4` is restored to four digits, the admin matrix hides records of members not in the roster, and a manual absence override of an exempt member is `미참`.
   - PR #1 semantics kept for `boundDeviceId`: the first bound device stays in the sheet and a new browser causes no sheet write (the local work overwrote it with the latest browser). Full-phone identity check, `출석원천로그.deviceId`, KST normalization, refresh-on-navigation and the other PR #1 items are unchanged.
-- **Deployment status to verify:** The production Apps Script was at version 19 (atomic register/bind actions, one-device rule still enforced server-side) when the local log was written; a later paste of either script version is not confirmed. The combined `google-apps-script.js` needs a new Apps Script version (GAS first, then the front end).
+- **Comment latency root cause identified and fixed (2026-10-23):** The owner-provided Apps Script executions screenshot shows version 26 `doPost` runs of 3.656–4.684 seconds. Root cause was two compounding issues in `doPost`:
+  1. **`ensureSheetStructure` ran on every `doPost` call regardless of action**, including ADD/EDIT/DELETE_COMMENT. This function checks all 9 sheets (18+ Sheets API calls at ~200–400 ms each = 1.5–3.6 s per call). For comment operations the sheet structure already exists and this check is wasteful.
+  2. **`canonicalOf` read the full members sheet twice** for EDIT/DELETE comment operations (`getDataRange().getValues()` called once per `canonicalOf(authorId)` and once per `canonicalOf(memberId)`), adding ~200–400 ms when the author ID did not directly match the requesting member ID.
+  - **Fix applied to `google-apps-script.js` and `docs/google_apps_script.js`:** Payload is now parsed before `ensureSheetStructure` so the action is known first. ADD_COMMENT, EDIT_COMMENT, DELETE_COMMENT, RECORD_ATTENDANCE, and SUBMIT_CHECKIN skip `ensureSheetStructure` entirely. `canonicalOf` now caches the members sheet rows (`cachedMemberRows`) so `getDataRange().getValues()` is called at most once per request. Expected improvement: ADD_COMMENT drops from ~4 s to under 1 s; EDIT/DELETE_COMMENT from ~4–5 s to ~1 s; RECORD_ATTENDANCE from ~4 s to ~0.5 s (lock held only during dedup check + append, not during structure scan).
+  - **Required action:** Deploy the updated `google-apps-script.js` to Apps Script as a new version (edit → 배포 관리 → 새 버전 → 배포).
+- **Deployment status to verify:** The production Apps Script was at version 19 (atomic register/bind actions, one-device rule still enforced server-side) when the local log was written; the owner-provided execution screenshot later showed version 26. The local instrumentation requires a new Apps Script version to be deployed before its stage timings can be observed. `gas/Code.gs` remains the older five-tab protocol; live spreadsheet contents have not been audited.
 
+## 2026-11-22 — 운영 지각 판정 버그 수정 (설정값 문자열)
+
+- **확인된 현상:** `app_config.value`는 `text`이고 `fn_get_initial_snapshot`이 값을 문자열로 내려 준다. 운영의 `lateGraceMinutes`는 `"15"`였고, `reconcileSingleMemberAttendance`에서 `startMinutes + lateGraceMinutes`가 문자열 이어 붙이기(`1170 + "15"` → `"117015"`)가 되어 **지각이 판정되지 않았다**(40분 늦은 체크인도 "출석"). 리뷰어가 테스트로 재현.
+- **수정:** `src/services/configNormalize.ts`의 `normalizeAppConfig`가 숫자 필드(`lateGraceMinutes`, `defaultLat`, `defaultLon`, `defaultRadius`)와 배열 필드(`customParts`, `customMemberStatuses`, `customCategories`, `practiceTrackKinds`, `performanceCategories`)를 타입에 맞게 되돌린다. 서버 스냅샷 반영과 기기 저장소 읽기 두 곳에 적용.
+- **영향:** 원천 출석 로그는 그대로이므로 배포 후 과거 기록의 지각도 다시 올바르게 계산된다. 운영 화면의 최근 지각 수가 늘어나는 것은 정상이다.
+- 사용자 결정(2026-11-22): v3 묶음과 함께 배포한다.
+
+## 2026-11-22 — v3-A DB 변경 운영 적용 (리뷰어)
+
+- 사용자 승인 후 `feat/v3-member-ux`에 커밋된 원본 그대로 적용: `20261123000000_v3_media.sql`(sha256 `68e933ee…88cb`), `20261123010000_v3_performances.sql`(sha256 `31926b6a…82e0`).
+- 적용 전 확인: 운영의 `fn_get_practice_catalog`, `fn_save_practice_piece`, `fn_save_practice_track` 정의가 저장소의 v3 이전 정의와 같음(차이는 이전 붙여넣기로 생긴 CRLF 줄바꿈뿐).
+- 적용 후 확인: 기존 데이터(곡 5, 트랙 1, 시즌 카드 연결 1) 그대로. 새 함수 5개, 새 테이블 2개(RLS 켜짐, anon 직접 조회 불가), 새 열 3개, 삭제 방지·updated_at 트리거 3개. 카탈로그 응답에 `performances`, `performancePieces` 포함. 토큰 없는 공연 저장은 `ADMIN_AUTH_REQUIRED`.
+- 현재 배포된 앱은 새 응답 키와 새 함수를 쓰지 않으므로 영향 없음.
+
+## 2026-11-22 — 삭제 기능 DB 변경 운영 적용 (리뷰어)
+
+- 사용자 승인 후 `feat/v3-member-ux`에 커밋된 원본 그대로 적용: `20261123020000_v3_delete.sql`(sha256 `70494acd…4657`, 커밋 `62a01be`).
+- 적용 전 확인: `prevent_row_deletion()`을 쓰는 테이블은 카탈로그 5개(`practice_pieces`, `practice_tracks`, `practice_program_pieces`, `performances`, `practice_performance_pieces`)뿐이고, anon·authenticated는 이 테이블들을 직접 삭제할 권한이 없음.
+- 적용 후 확인: 삭제 함수 3개 생성, 트리거 함수에 트랜잭션 한정 우회 조건 반영, 토큰 없는 삭제는 `ADMIN_AUTH_REQUIRED`, 기존 데이터(곡 5, 트랙 2, 시즌 카드 연결 1) 그대로. 로컬 검증에서 함수 밖 직접 삭제는 계속 거부됨을 확인.
+- 참고: 우회 설정은 같은 트랜잭션 안에서는 함수가 끝난 뒤에도 남는다. PostgREST는 요청마다 트랜잭션이 따로라 실제 노출은 없음.
+
+## 2026-11-23 — 단원 UX v3 아키텍처 (v3-A, V3-01 ~ V3-19)
+
+- **바뀐 탭 구조:**
+  - 단원 화면 3개 탭: `home`(홈 — 주간/월간 캘린더 통합), `studio`(연습실 — 공연 드롭다운, 곡 목록, 곡 상세 읽기 전용, 인앱 악보 뷰어, 미니/전체화면 플레이어 v2), `profile`(내 활동 — 활동 기록, 출석률, 스티커 보드, 설정).
+  - 기존 `TodayTab`, `CalendarTab`은 `HomeTab`으로 통합되어 폐기됨.
+  - 전역 오디오 플레이어: `AudioPlayerProvider` 단일 오디오 인스턴스, `MiniPlayer` 고정 바, `FullPlayer` 전폭 오버레이, `QueueSheet`, `SpeedSheet`, YouTube 임베드 `VideoStage`.
+- **새 테이블 (2개):**
+  - `performances`: 공연 기본 정보 (`id`, `title`, `performance_date`(빈 값 또는 `YYYY-MM-DD`), `venue`, `archived_at`, `created_at`, `updated_at`).
+  - `practice_performance_pieces`: 공연과 연습곡의 N:M 연결 및 정렬 순서 (`performance_id`, `piece_id`, `order_index`, `archived_at`, `created_at`; 삭제 규칙 양쪽 `on delete restrict`).
+  - 기존 시즌 카드(`program_cards`)와 연습곡 연결(`practice_program_pieces`)은 일정용으로 유지하되, 연습곡 관리 UI는 "공연" 기준으로 전환됨.
+- **업로드 경로:**
+  - Cloudflare Worker (`POST /upload`): `X-Admin-Token` 헤더의 관리자 세션 토큰을 Worker가 `fn_authorize_media_upload` RPC로 확인한 뒤 R2에 저장(Worker에는 anon 키만 있음, service_role 키 없음) (`mediaPublicBaseUrl` 연동).
+  - 클라이언트 다중 파일 일괄 업로드 (`MediaBatchList`, `uploadBatch.ts`): 한 번에 하나씩 처리하는 큐, 업로드 전 기기에서 `mediabunny`로 m4a(64kbps) 압축(운영진 화면에서만 동적 import).
+- **알려진 한계 (§0-3):**
+  - "본인만 보기"는 화면 수준이다. 단원 본인 인증(Task 76)이 이번 범위 밖이므로 출석·투표 원천 데이터는 전원분을 수신하며, 열정 온도와 스티커는 타인 화면에 그리지 않는 방식으로 보호한다.
+  - 업로드는 앱(탭)이 열려 있는 동안에만 진행되며, 탭을 닫으면 중단되고 재개 시 미완료 항목을 안내한다.
+  - 숨겨진 iframe으로 유튜브 백그라운드 재생은 지원하지 않으며, 플레이어를 내리면 비디오 플레이어가 파괴되고 저장 위치부터 복구된다.
+
+## 2026-11-23 — 활동 기록 및 게이미피케이션 엔진 (v3-C, V3-07 ~ V3-13)
+
+- **새 테이블 및 함수:**
+  - `rsvp_events`: 투표 변경 이력(Event Sourcing). 트리거 `trg_rsvp_votes_log`로 투표 생성·수정·삭제를 자동 기록하며, `trg_rsvp_events_no_update_delete`로 수정 및 삭제를 원천 차단함. 백필(`action = 'backfill'`) 행은 활동 통계에서 제외됨(V27).
+  - `practice_listen_sessions`: 실시간 청취 세션 원천 로그. 호출당 120초 상한 clamp, 1인 일일 21,600초(6시간) 상한 적용. `trg_practice_listen_sessions_no_update`로 수정 불가.
+  - RPC: `fn_log_listen_session` (음원 청취 기록), `fn_get_member_activity` (병합 회원 기준 투표 이벤트 및 청취 통계 집계).
+- **열정 온도 엔진 (`src/utils/passionTemperature.ts`):**
+  - 36.5°C 기본값, 최근 12회차 연습 윈도우 기준, 출석(정시/일찍/지각/결석/연속)/약속(24h전 투표, 지킴률, 노쇼, 직전변경)/공연 출석 델타 반영. 34.0~42.0°C 범위 클램프 및 1주 전 기준 주간 변화율(▲/▼/—) 산출.
+- **칭찬 스티커 엔진 (`src/utils/praiseStickers.ts`):**
+  - 24종 스티커 (꾸준함 6, 시간 약속 5, 약속 4, 연습실 5, 무대 4), 스태프는 8종 한정(V26, 분모 8).
+  - KST 기준 일자 계산, `SEEN_STICKERS` 기반 신규 배지 추적 및 첫 기기 열람 시 초기화 지원.
+
+## 운영 주의: v3-C 이후 `fn_import_sheets_snapshot` 재실행 금지 (2026-11-23)
+- 이 함수는 `rsvp_votes`를 `TRUNCATE` 후 다시 넣는다. `TRUNCATE`는 행 트리거를 부르지 않아 `rsvp_events`의 기존 행은 남고, 다시 넣는 행마다 `action='insert'`, `occurred_at = 이관 시각` 이벤트가 생겨 약속 점수·스티커가 오염된다.
+- 실행 권한은 `service_role`뿐이다(`20261121000000_security_hardening.sql:511`). 앱에서 부르는 곳은 없다. 다시 실행해야 하면 먼저 리뷰어와 트리거 처리 방법을 정한다.
+- 근거: spec-auditor 검토(`docs/agent/SPEC_WRITING.md`), `20261119000002_migration_function.sql:31, 173-186`.
+
+## 2026-11-23 — v3-C 활동 기록 DB 변경 운영 적용 (리뷰어)
+
+- 사용자 승인(배포 전 선적용) 후 `feat/v3-activity-2`에 커밋된 원본 그대로 적용: `20261124000000_v3_activity.sql`(sha256 `5ef9758b…1c32`, 마지막 수정 커밋 `74546fa`).
+- 적용 전 확인: 대상 객체(함수 6개, 테이블 2개, `rsvp_votes` 트리거) 모두 없음. `rsvp_votes.timestamp` 형식 분포는 시간대 없는 KST 문자열 88건, 시간대 포함 ISO 2건. 운영 세션 시간대 `UTC`.
+- 적용 후 확인: 함수 6개·트리거 생성, 백필 90건 = 투표 90건, 시간대 없는 KST 88건 모두 `occurred_at = timestamp at time zone 'Asia/Seoul'`과 일치(9시간 밀림 없음). 두 테이블 RLS 켜짐, anon 직접 조회 불가, anon RPC 실행 가능. HTTP `rpc/fn_get_member_activity`는 200(없는 id → 빈 결과), 빈 배열은 400(`INVALID_INPUT`).
+- 영향: 이 시점부터 투표 변경이 `rsvp_events`에 쌓인다(앱 배포 전이라 화면에는 아직 안 보임). 현재 배포된 앱은 새 함수를 쓰지 않는다. 되돌릴 때는 `drop trigger trg_rsvp_votes_log on rsvp_votes`만으로 기록이 멈춘다.
+- 실제 데이터 화면 확인: 로컬 개발 서버 + 운영 데이터(쓰기 RPC 차단)로 내 활동 화면이 열리고 활동 조회 200, 390px 넘침 없음. 백필만 있어 약속 묶음이 숨겨지는 것(V27)도 확인.
+
+## 2026-11-24 — v3 배포 완료 확인 (리뷰어 사후 점검)
+
+- 코드: 릴리스 PR #55(`feat/v3-activity-2` → main, 01:26 KST)와 UI 다듬기 PR #56(`fix/v3-ui-polish`, 01:46 KST)이 main에 합쳐짐. GitHub Pages(`gh-pages`)가 01:28·01:49 KST에 갱신됨.
+- 운영 DB: `20261124010000_v3_record_guards.sql`(sha256 `df530256…17e6`)이 2026-11-23 16:27 UTC(01:27 KST)에 커넥터로 적용됨(마이그레이션 이력 `v3_record_guards`). 리뷰어가 사후 확인: 네 `__impl` 함수(`fn_delete_schedule`, `fn_batch_delete_schedules`, `fn_delete_member`, `fn_merge_members`) 본문 md5가 커밋된 파일과 모두 일치, anon 직접 실행 불가, `SCHEDULE_HAS_RECORDS`·`INVALID_MERGE` 가드 포함.
+- 이로써 `docs/DEPLOY_RUNBOOK_v3.md`의 1~4단계는 완료 상태. 남은 일: 단원 공지(부록 A), 옛 PR(#14~#17, #20, #27, #45, #46) 정리, 사용자 휴대폰 확인(5-2).
+- 주의: 다시 `20261119000001_rpc_functions.sql`이나 `20261121000000_security_hardening.sql`을 실행하면 가드가 사라진다. 그 경우 `20261124010000_v3_record_guards.sql`을 그 뒤에 다시 적용한다.

@@ -1,0 +1,430 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderToString } from 'react-dom/server';
+import { PieceEditModal } from './PieceEditModal';
+import { UnsavedChangesModal } from './UnsavedChangesModal';
+import { sheetsService } from '../../../services/sheets';
+import { uploadQueue } from '../../../services/media/uploadQueue';
+import { saveNewPieceWithStagedMedia } from '../../../services/media/uploadSave';
+import type { AppConfig, PracticePiece, PracticeTrack } from '../../../types/rollbook';
+
+let capturedTrackSectionProps: any = null;
+let capturedSaveButtonProps: any = null;
+
+vi.mock('./PieceTrackSection', () => ({
+  PieceTrackSection: (props: any) => {
+    capturedTrackSectionProps = props;
+    return <div data-testid="mock-track-section" />;
+  },
+}));
+
+vi.mock('./PieceSaveButton', () => ({
+  PieceSaveButton: (props: any) => {
+    capturedSaveButtonProps = props;
+    return <button data-testid="mock-save-button" onClick={props.onSave}>저장</button>;
+  },
+}));
+
+describe('PieceEditModal Component', () => {
+  const dummyConfig: AppConfig = {
+    choirName: '문콰이어',
+    rehearsalDay: '일요일',
+    startTime: '18:00',
+    defaultLat: 37.5,
+    defaultLon: 127.0,
+    defaultRadius: 100,
+    sheetsWebAppUrl: 'https://script.google.com/macros/s/test/exec',
+    lateGraceMinutes: 10,
+    adminPin: '1234',
+  };
+
+  const dummyPiece: PracticePiece = {
+    id: 'p1',
+    title: '아리랑',
+    composer: '민요',
+    isArchived: false,
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
+  };
+
+  const dummyTrack: PracticeTrack = {
+    id: 't1',
+    pieceId: 'p1',
+    label: '소프라노 가이드',
+    kind: '가이드',
+    source: 'r2',
+    storageKey: 'audio/t1.m4a',
+    orderIndex: 0,
+    isArchived: false,
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
+  };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    capturedTrackSectionProps = null;
+    capturedSaveButtonProps = null;
+    vi.spyOn(sheetsService, 'getPracticeCatalog').mockReturnValue({
+      pieces: [dummyPiece],
+      tracks: [dummyTrack],
+      programPieces: [],
+      performances: [],
+      performancePieces: [],
+    });
+  });
+
+  describe('F3: track archive uses setPracticeTrackArchived', () => {
+    it('calls setPracticeTrackArchived and does NOT call savePracticeTrack when archiving a track', async () => {
+      const setArchivedSpy = vi
+        .spyOn(sheetsService, 'setPracticeTrackArchived')
+        .mockResolvedValue(undefined);
+      const saveTrackSpy = vi
+        .spyOn(sheetsService, 'savePracticeTrack')
+        .mockResolvedValue(dummyTrack);
+
+      renderToString(
+        <PieceEditModal
+          piece={dummyPiece}
+          catalog={{
+            pieces: [dummyPiece],
+            tracks: [dummyTrack],
+            programPieces: [],
+            performances: [],
+            performancePieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      expect(capturedTrackSectionProps).not.toBeNull();
+      await capturedTrackSectionProps.onArchiveTrack(dummyTrack);
+
+      expect(setArchivedSpy).toHaveBeenCalledWith('t1', true);
+      expect(saveTrackSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('F4: piece and track archive, restore, reorder, edit', () => {
+    it('shows archive button for active piece in HTML', async () => {
+      const html = renderToString(
+        <PieceEditModal
+          piece={dummyPiece}
+          catalog={{
+            pieces: [dummyPiece],
+            tracks: [dummyTrack],
+            programPieces: [],
+            performances: [],
+            performancePieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      // Should render archive and delete buttons in footer
+      expect(html).toContain('곡 보관');
+      expect(html).toContain('삭제');
+    });
+
+    it('shows restore button for archived piece in HTML', async () => {
+      const archivedPiece: PracticePiece = {
+        ...dummyPiece,
+        isArchived: true,
+      };
+
+      const html = renderToString(
+        <PieceEditModal
+          piece={archivedPiece}
+          catalog={{
+            pieces: [archivedPiece],
+            tracks: [dummyTrack],
+            programPieces: [],
+            performances: [],
+            performancePieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      expect(html).toContain('곡 복원');
+    });
+
+    it('passes archived tracks to PieceTrackSection and restores track when onRestoreTrack is called', async () => {
+      const archivedTrack: PracticeTrack = {
+        id: 't_archived',
+        pieceId: 'p1',
+        label: '과거 가이드',
+        kind: '가이드',
+        source: 'r2',
+        storageKey: 'audio/old.m4a',
+        orderIndex: 0,
+        isArchived: true,
+        createdAt: '2025-01-01',
+        updatedAt: '2025-01-01',
+      };
+
+      const setTrackArchivedSpy = vi
+        .spyOn(sheetsService, 'setPracticeTrackArchived')
+        .mockResolvedValue(undefined);
+
+      renderToString(
+        <PieceEditModal
+          piece={dummyPiece}
+          catalog={{
+            pieces: [dummyPiece],
+            tracks: [dummyTrack, archivedTrack],
+            programPieces: [],
+            performances: [],
+            performancePieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      expect(capturedTrackSectionProps.archivedTracks).toHaveLength(1);
+      expect(capturedTrackSectionProps.archivedTracks[0].id).toBe('t_archived');
+
+      await capturedTrackSectionProps.onRestoreTrack(archivedTrack);
+      expect(setTrackArchivedSpy).toHaveBeenCalledWith('t_archived', false);
+    });
+
+    it('calls reorderPracticeTracks when onMoveTrackOrder is triggered', async () => {
+      const track1 = { ...dummyTrack, id: 't1', orderIndex: 0 };
+      const track2 = { ...dummyTrack, id: 't2', orderIndex: 1 };
+      const track3 = { ...dummyTrack, id: 't3', orderIndex: 2 };
+
+      const reorderSpy = vi
+        .spyOn(sheetsService, 'reorderPracticeTracks')
+        .mockResolvedValue(undefined);
+
+      renderToString(
+        <PieceEditModal
+          piece={dummyPiece}
+          catalog={{
+            pieces: [dummyPiece],
+            tracks: [track1, track2, track3],
+            programPieces: [],
+            performances: [],
+            performancePieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      await capturedTrackSectionProps.onMoveTrackOrder('t2', 'UP');
+      expect(reorderSpy).toHaveBeenCalledWith('p1', ['t2', 't1', 't3']);
+    });
+
+    it('calls savePracticeTrack with preserved metadata when onEditTrack is triggered', async () => {
+      const saveTrackSpy = vi
+        .spyOn(sheetsService, 'savePracticeTrack')
+        .mockResolvedValue(dummyTrack);
+
+      renderToString(
+        <PieceEditModal
+          piece={dummyPiece}
+          catalog={{
+            pieces: [dummyPiece],
+            tracks: [dummyTrack],
+            programPieces: [],
+            performances: [],
+            performancePieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      await capturedTrackSectionProps.onEditTrack(dummyTrack, { label: '수정된 라벨' });
+      expect(saveTrackSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 't1',
+          pieceId: 'p1',
+          label: '수정된 라벨',
+          kind: '가이드',
+          storageKey: 'audio/t1.m4a',
+        })
+      );
+    });
+  });
+
+  describe('G1: piece create and edit with save button and staging', () => {
+    it('disables save button when title is empty', () => {
+      const html = renderToString(
+        <PieceEditModal
+          piece={{ title: '', composer: '' }}
+          catalog={{ pieces: [], tracks: [], programPieces: [], performances: [], performancePieces: [] }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      // Save button exists, has disabled state, and header is '곡 추가'
+      expect(html).toContain('곡 추가');
+      expect(html).toMatch(/<button[^>]*disabled[^>]*>.*저장.*<\/button>/s);
+    });
+
+    it('does NOT call savePracticePiece on input blur and removes handleAutoSave', async () => {
+      const saveSpy = vi.spyOn(sheetsService, 'savePracticePiece').mockResolvedValue(dummyPiece);
+
+      const html = renderToString(
+        <PieceEditModal
+          piece={{ title: '새 곡', composer: '작곡가' }}
+          catalog={{ pieces: [], tracks: [], programPieces: [], performances: [], performancePieces: [] }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      );
+
+      expect(saveSpy).not.toHaveBeenCalled();
+      // Verify no onblur attribute or auto save trigger in HTML
+      expect(html).toContain('저장');
+    });
+
+    it('saves new piece first, then enqueues staged score with new piece id', async () => {
+      const createdPiece: PracticePiece = {
+        id: 'new_p123',
+        title: '신곡',
+        isArchived: false,
+        createdAt: '2026-11-22',
+        updatedAt: '2026-11-22',
+      };
+      const saveSpy = vi.spyOn(sheetsService, 'savePracticePiece').mockResolvedValue(createdPiece);
+      const enqueueSpy = vi.spyOn(uploadQueue, 'enqueue').mockReturnValue('job_1');
+
+      const dummyFile = new File(['dummy content'], 'score.pdf', { type: 'application/pdf' });
+
+      const saved = await saveNewPieceWithStagedMedia({
+        title: '신곡',
+        composer: '작곡가',
+        arranger: '',
+        stagedProgramIds: [],
+        stagedTracks: [],
+        stagedScore: { file: dummyFile, name: 'score.pdf' },
+        baseUrl: 'https://media.test',
+        catalogProgramPieces: [],
+        enqueueFn: (req) => uploadQueue.enqueue(req),
+      });
+
+      expect(saved.id).toBe('new_p123');
+      expect(saveSpy).toHaveBeenCalledWith({
+        title: '신곡',
+        composer: '작곡가',
+        arranger: '',
+      });
+      expect(enqueueSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pieceId: 'new_p123',
+          kind: 'score',
+          title: '신곡',
+          fileName: 'score.pdf',
+        })
+      );
+    });
+
+    it('shows confirm dialog with required Korean copy when closing with unsaved changes', () => {
+      const html = renderToString(
+        <UnsavedChangesModal
+          onConfirmClose={vi.fn()}
+          onContinueEditing={vi.fn()}
+        />
+      );
+
+      expect(html).toContain('저장하지 않고 닫을까요?');
+      expect(html).toContain('닫기');
+      expect(html).toContain('계속 편집');
+    });
+  });
+
+  describe('V3-15: performance assignment and staging in piece edit', () => {
+    it('appends piece to the end of performance piece list via setPerformancePieces', async () => {
+      const setPerfPiecesSpy = vi.spyOn(sheetsService, 'setPerformancePieces').mockResolvedValue(undefined);
+
+      const perfId = 'perf_target';
+      const existingPiecesInPerf = ['p_existing_1', 'p_existing_2'];
+      const pieceIdToAdd = 'p1';
+
+      const nextList = [...existingPiecesInPerf, pieceIdToAdd];
+      await sheetsService.setPerformancePieces(perfId, nextList);
+
+      expect(setPerfPiecesSpy).toHaveBeenCalledWith('perf_target', ['p_existing_1', 'p_existing_2', 'p1']);
+    });
+
+    it('saves new piece and attaches staged performance IDs to setPerformancePieces', async () => {
+      const createdPiece: PracticePiece = {
+        id: 'new_p999',
+        title: '새로운 찬양',
+        isArchived: false,
+        createdAt: '2026-11-22',
+        updatedAt: '2026-11-22',
+      };
+      vi.spyOn(sheetsService, 'savePracticePiece').mockResolvedValue(createdPiece);
+      const setPerfPiecesSpy = vi.spyOn(sheetsService, 'setPerformancePieces').mockResolvedValue(undefined);
+
+      await saveNewPieceWithStagedMedia({
+        title: '새로운 찬양',
+        composer: '미상',
+        arranger: '',
+        stagedPerformanceIds: ['perf_1'],
+        stagedTracks: [],
+        stagedScore: null,
+        baseUrl: 'https://media.test',
+        catalogPerformancePieces: [
+          { performanceId: 'perf_1', pieceId: 'p_old_1', orderIndex: 0, isArchived: false },
+        ],
+        enqueueFn: vi.fn(),
+      });
+
+      expect(setPerfPiecesSpy).toHaveBeenCalledWith('perf_1', ['p_old_1', 'new_p999']);
+    });
+
+    it('calls onSaved and onClose when piece is saved successfully', async () => {
+      const saveSpy = vi.spyOn(sheetsService, 'savePracticePiece').mockResolvedValue(dummyPiece);
+      const onSaved = vi.fn();
+      const onClose = vi.fn();
+
+      renderToString(
+        <PieceEditModal
+          piece={dummyPiece}
+          catalog={{
+            pieces: [dummyPiece],
+            tracks: [dummyTrack],
+            programPieces: [],
+            performances: [],
+            performancePieces: [],
+          }}
+          programCards={[]}
+          config={dummyConfig}
+          onClose={onClose}
+          onSaved={onSaved}
+        />
+      );
+
+      expect(capturedSaveButtonProps).not.toBeNull();
+      await capturedSaveButtonProps.onSave();
+
+      expect(saveSpy).toHaveBeenCalled();
+      expect(onSaved).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+});

@@ -290,3 +290,5 @@ export function parseRemoteCommentEvents(rawEvents: unknown[]): ScheduleCommentE
   }
   return events;
 }
+
+export { parsePracticeCatalog } from './practiceCatalogParser';

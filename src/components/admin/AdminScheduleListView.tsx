@@ -1,10 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import type { ProgramCard, Schedule } from '../../types/rollbook';
+import type { Member, ProgramCard, Schedule } from '../../types/rollbook';
 import { getKSTDateString } from '../../utils/date';
+import { sheetsService } from '../../services/sheets';
+import { ScheduleRsvpLogModal } from './ScheduleRsvpLogModal';
 
 export interface AdminScheduleListViewProps {
   schedules: Schedule[];
   categories: string[];
+  members?: Member[];
   programCards?: ProgramCard[];
   onAssignProgramCard?: (scheduleId: string, cardId: string | undefined) => void;
   selectedBatchScheduleIds: string[];
@@ -40,6 +43,7 @@ function formatShortDateWithWeekday(dateStr: string): string {
 export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
   schedules,
   categories,
+  members = [],
   programCards = [],
   onAssignProgramCard,
   selectedBatchScheduleIds,
@@ -63,6 +67,7 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
   const [showPastSchedules, setShowPastSchedules] = useState(true);
   const [isSelectMode, setIsSelectMode] = useState(() => selectedBatchScheduleIds.length > 0);
   const [expandedScheduleIds, setExpandedScheduleIds] = useState<Set<string>>(new Set());
+  const [selectedScheduleForRsvpLog, setSelectedScheduleForRsvpLog] = useState<Schedule | null>(null);
 
   const todayStr = getKSTDateString();
 
@@ -357,6 +362,9 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
             const isChecked = selectedBatchScheduleIds.includes(sch.id);
             const isSelectedForEdit = editingScheduleId === sch.id;
             const isExpanded = expandedScheduleIds.has(sch.id);
+            const schVotes = sheetsService.getRSVPVotes(sch.id);
+            const attCount = schVotes.filter((v) => v.status === 'ATTEND').length;
+            const absCount = schVotes.filter((v) => v.status === 'ABSENT').length;
 
             return (
               <div
@@ -440,6 +448,23 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
                     >
                       {sch.title}
                     </strong>
+                    {schVotes.length > 0 && (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          color: '#15803D',
+                          background: '#DCFCE7',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          fontWeight: 600,
+                          flexShrink: 0,
+                          whiteSpace: 'nowrap',
+                        }}
+                        title={`투표: 참석 ${attCount}명 / 불참 ${absCount}명`}
+                      >
+                        참석 {attCount}{absCount > 0 ? ` · 불참 ${absCount}` : ''}
+                      </span>
+                    )}
                   </div>
 
                   <span
@@ -549,6 +574,23 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
                     >
                       <button
                         type="button"
+                        onClick={() => setSelectedScheduleForRsvpLog(sch)}
+                        style={{
+                          background: '#F0FDF4',
+                          color: '#15803D',
+                          border: '1px solid #BBF7D0',
+                          borderRadius: '6px',
+                          padding: '5px 12px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        투표 로그 📋
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => onSelectScheduleForEdit(sch)}
                         style={{
                           background: '#EEF2FF',
@@ -645,6 +687,15 @@ export const AdminScheduleListView: React.FC<AdminScheduleListViewProps> = ({
         <p className="empty-subtext" style={{ padding: '24px 0', textAlign: 'center', margin: 0 }}>
           조건에 부합하는 일정이 없습니다.
         </p>
+      )}
+
+      {/* Schedule RSVP Log Modal */}
+      {selectedScheduleForRsvpLog && (
+        <ScheduleRsvpLogModal
+          schedule={selectedScheduleForRsvpLog}
+          members={members}
+          onClose={() => setSelectedScheduleForRsvpLog(null)}
+        />
       )}
     </div>
   );

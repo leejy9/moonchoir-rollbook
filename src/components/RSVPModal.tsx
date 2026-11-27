@@ -23,13 +23,13 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
 }) => {
   const [status, setStatus] = useState<RSVPStatus>(currentVote?.status || 'ATTEND');
   const [reason, setReason] = useState<string>(currentVote?.reason || '');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCancelVote = async () => {
     if (!currentVote) return;
     if (!isRsvpOpenForSchedule(schedule)) {
-      alert('연습 시작 1시간 전부터는 사전 투표를 변경하거나 취소할 수 없습니다.');
-      onClose();
+      setErrorMessage('연습 시작 1시간 전부터는 사전 투표를 변경하거나 취소할 수 없습니다.');
       return;
     }
     setIsSubmitting(true);
@@ -45,8 +45,7 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isRsvpOpenForSchedule(schedule)) {
-      alert('연습 시작 1시간 전부터는 사전 투표를 변경할 수 없습니다.');
-      onClose();
+      setErrorMessage('연습 시작 1시간 전부터는 사전 투표를 변경할 수 없습니다.');
       return;
     }
     setIsSubmitting(true);
@@ -80,6 +79,25 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="form-stack">
+          {errorMessage && (
+            <div
+              role="alert"
+              className="rsvp-error-banner"
+              style={{
+                padding: '10px 12px',
+                borderRadius: '8px',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#dc2626',
+                fontSize: '13px',
+                fontWeight: 600,
+                textAlign: 'center',
+              }}
+            >
+              {errorMessage}
+            </div>
+          )}
+
           <div className="selected-card">
             <span className={`part-badge part-${currentPart}`}>{currentPart}</span>
             <span className="selected-name">{currentName} 님의 투표</span>
@@ -89,18 +107,42 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
             <button
               type="button"
               className={`rsvp-choice-btn attend ${status === 'ATTEND' ? 'active' : ''}`}
-              onClick={() => setStatus('ATTEND')}
+              onClick={() => {
+                setErrorMessage(null);
+                setStatus('ATTEND');
+              }}
             >
-              <span className="rsvp-icon">🟢</span>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: 'var(--status-success)',
+                  marginRight: '6px',
+                }}
+              />
               <span className="rsvp-title">참석합니다</span>
             </button>
 
             <button
               type="button"
               className={`rsvp-choice-btn absent ${status === 'ABSENT' ? 'active' : ''}`}
-              onClick={() => setStatus('ABSENT')}
+              onClick={() => {
+                setErrorMessage(null);
+                setStatus('ABSENT');
+              }}
             >
-              <span className="rsvp-icon">🔴</span>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: 'var(--status-danger)',
+                  marginRight: '6px',
+                }}
+              />
               <span className="rsvp-title">불참합니다</span>
             </button>
           </div>
@@ -161,7 +203,7 @@ export const RSVPModal: React.FC<RSVPModalProps> = ({
                 className="btn-danger-outline"
                 style={{
                   width: '100%',
-                  minHeight: '38px',
+                  minHeight: '44px',
                   padding: '8px 12px',
                   borderRadius: '10px',
                   border: '1px solid #ff4d4f',

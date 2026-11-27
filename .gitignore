@@ -25,3 +25,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.agents/*
+# 저장소에서 공유하는 개발 에이전트 규칙만 예외로 올린다(나머지 개인 설정은 계속 무시)
+!.agents/rules/
+.agents/rules/*
+!.agents/rules/recurring-mistakes.md
+!.agents/workflows/
+.agents/workflows/*
+!.agents/workflows/report-ready.md
+!.agents/workflows/spec-check.md

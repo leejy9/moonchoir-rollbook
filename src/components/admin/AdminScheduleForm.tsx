@@ -15,6 +15,7 @@ import {
   type ScheduleAddMode,
 } from '../../utils/calendar';
 import { getKSTDateString } from '../../utils/date';
+import { NON_CHOIR_PART_KEYWORDS } from '../../utils/staff';
 import { RoundDatePicker } from '../RoundDatePicker';
 import { RoundTimePicker } from '../RoundTimePicker';
 
@@ -73,7 +74,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
   // Default 4 choir parts (exclude guest/teacher by default for new schedule)
   const defaultChoirParts = React.useMemo(() => {
     const filtered = dynamicParts.filter(
-      (p) => !p.includes('선생님') && !p.includes('객원') && !p.includes('지휘') && !p.includes('반주')
+      (p) => !NON_CHOIR_PART_KEYWORDS.some((kw) => p.includes(kw))
     );
     return filtered.length > 0 ? filtered : dynamicParts;
   }, [dynamicParts]);
@@ -728,6 +729,7 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
                   type="button"
                   onClick={() => {
                     setNewTargetAudienceType('CUSTOM_MEMBERS');
+                    setNewVisibility('TARGETS_ONLY');
                     setIsAudienceDropdownOpen(false);
                     setIsCustomMemberModalOpen(true);
                   }}
@@ -1027,7 +1029,12 @@ export const AdminScheduleForm: React.FC<AdminScheduleFormProps> = ({
               <button
                 type="button"
                 className="btn-primary-large"
-                onClick={() => setIsCustomMemberModalOpen(false)}
+                onClick={() => {
+                  if (newTargetMemberIds.length > 0) {
+                    setNewVisibility('TARGETS_ONLY');
+                  }
+                  setIsCustomMemberModalOpen(false);
+                }}
               >
                 확인
               </button>

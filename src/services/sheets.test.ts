@@ -1,6 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Member, RawAttendanceLog, RSVPVote } from '../types/rollbook';
 import { SheetsService, resetStorage } from './sheets';
+import { GasBackend } from './backend/gasBackend';
+import { SupabaseBackend } from './backend/supabaseBackend';
+import { clearAllAdminTokens, getAdminToken } from './adminSession';
 import {
   TEST_MOCK_SCHEDULES,
   TEST_MOCK_LOGS,
@@ -367,6 +370,28 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     }
   });
 
+  it('normalizes string config values from the server snapshot (late grace "15" becomes 15)', async () => {
+    const originalFetch = globalThis.fetch;
+    const mockApiResponse = {
+      success: true,
+      data: {
+        members: [],
+        schedules: [],
+        rsvpVotes: [],
+        recentLogs: [],
+        config: { lateGraceMinutes: '15', customParts: '["소프라노","테너"]' },
+      },
+    };
+    globalThis.fetch = (async () => ({ ok: true, json: async () => mockApiResponse })) as unknown as typeof fetch;
+    try {
+      await service.fetchRemoteData('https://script.google.com/macros/s/TEST/exec');
+      expect(service.getConfig().lateGraceMinutes).toBe(15);
+      expect(service.getConfig().customParts).toEqual(['소프라노', '테너']);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('calculates cumulative attendance across multiple rehearsal sessions', () => {
     const { sessions, memberSummaries } = service.calculateCumulativeAttendance('2026-09-01', '2026-10-31');
 
@@ -514,6 +539,79 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     await service.deleteSchedules(['sch_batch_1', 'sch_batch_2']);
     expect(service.getSchedules().some((s) => s.id === 'sch_batch_1')).toBe(false);
     expect(service.getSchedules().some((s) => s.id === 'sch_batch_2')).toBe(false);
+  });
+
+  it('keeps a schedule when the server rejects its deletion and preserves the server message', async () => {
+    const remoteService = new SheetsService(
+      new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'test-key' })
+    );
+    const schedule = TEST_MOCK_SCHEDULES[0];
+    remoteService.seedTestData({ schedules: [schedule], logs: [], rsvpVotes: [] });
+    const sendSpy = vi.spyOn(remoteService, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.',
+    });
+
+    await expect(remoteService.deleteSchedule(schedule.id)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
+
+    expect(remoteService.getSchedules()).toContainEqual(schedule);
+    expect(sendSpy).toHaveBeenCalledWith('DELETE_SCHEDULE', {
+      id: schedule.id,
+      forceHardDelete: false,
+    });
+  });
+
+  it('keeps every schedule when the server rejects a batch deletion', async () => {
+    const remoteService = new SheetsService(
+      new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'test-key' })
+    );
+    const schedules = TEST_MOCK_SCHEDULES.slice(0, 2);
+    remoteService.seedTestData({ schedules, logs: [], rsvpVotes: [] });
+    const sendSpy = vi.spyOn(remoteService, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '기록이 있는 일정 1개가 있어 삭제하지 않았어요. 보관하거나 취소해 주세요.',
+    });
+
+    await expect(
+      remoteService.deleteSchedules(schedules.map((schedule) => schedule.id))
+    ).rejects.toThrow(
+      '기록이 있는 일정 1개가 있어 삭제하지 않았어요. 보관하거나 취소해 주세요.'
+    );
+
+    expect(remoteService.getSchedules()).toEqual(schedules);
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy).toHaveBeenCalledWith('BATCH_DELETE_SCHEDULES', {
+      ids: schedules.map((schedule) => schedule.id),
+      forceHardDelete: false,
+    });
+  });
+
+  it('keeps a local schedule when its only known record is a comment event', async () => {
+    const schedule = TEST_MOCK_SCHEDULES[0];
+    service.seedTestData({
+      schedules: [schedule],
+      logs: [],
+      rsvpVotes: [],
+      comments: [
+        {
+          id: 'comment_only_record',
+          scheduleId: schedule.id,
+          memberId: 'mem_s01',
+          memberName: '단원',
+          part: '소프라노',
+          action: 'DELETE',
+          timestamp: '2026-11-24 19:00:00',
+        },
+      ],
+    });
+
+    await expect(service.deleteSchedule(schedule.id)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
+
+    expect(service.getSchedules()).toContainEqual(schedule);
   });
 
   it('allows several browsers per member and keeps the first bound device id', async () => {
@@ -830,6 +928,65 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     }
   });
 
+  it('keeps merge data unchanged when the server rejects the merge and preserves its message', async () => {
+    const remoteService = new SheetsService(
+      new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'test-key' })
+    );
+    const canonical: Member = {
+      id: 'merge_canonical',
+      name: '대표 단원',
+      part: '소프라노',
+      phoneLast4: '1234',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      createdAt: '2026-01-01T00:00:00Z',
+      joinedAt: '2026-01-01',
+    };
+    const secondary: Member = { ...canonical, id: 'merge_secondary', name: '보조 단원' };
+    const log: RawAttendanceLog = {
+      id: 'merge_log',
+      scheduleId: 'merge_schedule',
+      memberId: secondary.id,
+      memberName: secondary.name,
+      part: secondary.part,
+      timestamp: '2026-10-10 19:30:00',
+      authMethod: 'QR_WEB_CAM',
+      isVerifiedLocation: true,
+    };
+    const vote: RSVPVote = {
+      id: 'merge_vote',
+      scheduleId: 'merge_schedule',
+      memberId: secondary.id,
+      memberName: secondary.name,
+      part: secondary.part,
+      status: 'ATTEND',
+      timestamp: '2026-10-10 19:30:00',
+    };
+    remoteService.seedTestData({
+      members: [canonical, secondary],
+      logs: [log],
+      rsvpVotes: [vote],
+    });
+    const beforeMembers = remoteService.getMembers(true, true);
+    const beforeVotes = remoteService.getRSVPVotes();
+    const sendSpy = vi.spyOn(remoteService, 'sendToGoogleSheet').mockResolvedValue({
+      success: false,
+      message: '대표 단원은 ACTIVE 상태여야 합니다.',
+    });
+
+    await expect(
+      remoteService.mergeDuplicateMembers(canonical.id, secondary.id)
+    ).rejects.toThrow('대표 단원은 ACTIVE 상태여야 합니다.');
+
+    expect(remoteService.getMembers(true, true)).toEqual(beforeMembers);
+    expect(remoteService.getRSVPVotes()).toEqual(beforeVotes);
+    expect(remoteService.getLogs()).toEqual([log]);
+    expect(sendSpy).toHaveBeenCalledWith('MERGE_MEMBERS', {
+      canonicalId: canonical.id,
+      secondaryId: secondary.id,
+    });
+  });
+
   it('detects duplicate member groups and performs safe consolidation without log deletion', async () => {
     // 1. Add duplicate member with same name and phone
     const memberA = await addMemberConfirmed({
@@ -1003,9 +1160,8 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       success: true,
       message: '환경설정 저장 완료',
     });
-    const pin1 = service.getActiveOnSitePin();
-    expect(pin1).toBeDefined();
-    expect(pin1.length).toBe(4);
+    // 서버에서 받은 값이 없으면 기본 PIN을 지어내지 않는다.
+    expect(service.getActiveOnSitePin()).toBe('');
 
     const pin2 = await service.refreshActiveOnSitePin();
     expect(pin2).toBeDefined();
@@ -1249,33 +1405,25 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
     expect(logs.some((l) => l.memberId === testMemberId)).toBe(true);
   });
 
-  it('일정 삭제 시 출석 기록이 있으면 isCancelled=true 로 소프트 취소하고 출결 판정 시 미참으로 안전 투영한다', async () => {
+  it('출석 기록이 있는 일정은 삭제하지 않고 서버 거부 문구를 보존한다', async () => {
     const targetScheduleId = 'sch_20261001';
-    // 출석 기록이 있는 일정 삭제 시도
-    await service.deleteSchedule(targetScheduleId);
+    await expect(service.deleteSchedule(targetScheduleId)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
 
     const schedule = service.getSchedules().find((s) => s.id === targetScheduleId);
     expect(schedule).toBeDefined();
-    expect(schedule?.isCancelled).toBe(true);
-
-    // 취소된 일정에 대한 출결 판정: 결석이 아닌 '미참'으로 안전 투영 (모수 분모 제외)
-    const reconciliations = service.reconcileAttendance(targetScheduleId);
-    expect(reconciliations.length).toBeGreaterThan(0);
-    expect(reconciliations.every((r) => r.finalStatus === '미참')).toBe(true);
-
-    // restoreSchedule 검증: 다시 복원 시 isCancelled = false
-    await service.restoreSchedule(targetScheduleId);
-    const restored = service.getSchedules().find((s) => s.id === targetScheduleId);
-    expect(restored?.isCancelled).toBe(false);
+    expect(schedule?.isCancelled).toBeFalsy();
   });
 
-  it('forceHardDelete=true 시 출석 기록이 있더라도 일정 목록에서 물리적으로 영구 삭제된다', async () => {
+  it('forceHardDelete=true does not bypass the record guard', async () => {
     const targetScheduleId = 'sch_20261001';
-    // 강제 영구 삭제 호출
-    await service.deleteSchedule(targetScheduleId, true);
+    await expect(service.deleteSchedule(targetScheduleId, true)).rejects.toThrow(
+      '출석·투표 기록이 있는 일정은 삭제할 수 없어요. 보관하거나 취소해 주세요.'
+    );
 
     const schedule = service.getSchedules().find((s) => s.id === targetScheduleId);
-    expect(schedule).toBeUndefined();
+    expect(schedule).toBeDefined();
   });
 
   describe('단원용 일정 노출 범위 (visibility)', () => {
@@ -1332,4 +1480,732 @@ describe('Sheets Adapter & Attendance Reconciliation', () => {
       expect(service.getSchedulesForMember(undefined).some((s) => s.id === hiddenBass.id)).toBe(false);
     });
   });
+
+  describe('Realtime Event Merging', () => {
+    it('mergeRealtimeAttendanceLog appends new log, ignores duplicate, and notifies sync listeners', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      const log = {
+        id: 'log_rt_test_1',
+        timestamp: '2026-11-19 19:30:00',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        authMethod: 'QR_WEB_CAM' as const,
+        isVerifiedLocation: true,
+      };
+
+      service.mergeRealtimeAttendanceLog(log);
+
+      expect(service.getLogs('sch_20261105')).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: 'log_rt_test_1' })])
+      );
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // Attempt duplicate merge
+      service.mergeRealtimeAttendanceLog(log);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      unsub();
+    });
+
+    it('mergeRealtimeCommentEvent appends comment event, ignores duplicate, and notifies sync listeners', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      const commentEvent = {
+        id: 'cmt_rt_test_1',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        action: 'CREATE' as const,
+        text: '실시간 댓글 테스트입니다',
+        timestamp: '2026-11-19 19:31:00',
+      };
+
+      service.mergeRealtimeCommentEvent(commentEvent);
+
+      const comments = service.getComments('sch_20261105');
+      expect(comments.some((c) => c.id === 'cmt_rt_test_1')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // Attempt duplicate merge
+      service.mergeRealtimeCommentEvent(commentEvent);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      unsub();
+    });
+
+    it('mergeRealtimeRsvpVote handles INSERT, UPDATE, and DELETE actions', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      // INSERT
+      service.mergeRealtimeRsvpVote('INSERT', {
+        id: 'rsvp_rt_1',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        status: 'ATTEND',
+        timestamp: '2026-11-19 10:00:00',
+      });
+
+      expect(service.getRSVPVotes('sch_20261105').find((v) => v.memberId === 'mem_s01')?.status).toBe(
+        'ATTEND'
+      );
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // UPDATE
+      service.mergeRealtimeRsvpVote('UPDATE', {
+        id: 'rsvp_rt_1',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        status: 'ABSENT',
+        reason: '개인 사정',
+        timestamp: '2026-11-19 12:00:00',
+      });
+
+      const updated = service.getRSVPVotes('sch_20261105').find((v) => v.memberId === 'mem_s01');
+      expect(updated?.status).toBe('ABSENT');
+      expect(updated?.reason).toBe('개인 사정');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeRsvpVote('DELETE', null, {
+        id: 'rsvp_rt_1',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        status: 'ABSENT',
+        timestamp: '2026-11-19 12:00:00',
+      });
+
+      expect(
+        service.getRSVPVotes('sch_20261105').some((v) => v.memberId === 'mem_s01')
+      ).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+
+    it('mergeRealtimeAttendanceLog handles INSERT, UPDATE, and DELETE actions without poisoning lastSyncedAt', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+      const initialSyncedAt = service.getSyncState().lastSyncedAt;
+
+      // INSERT
+      service.mergeRealtimeAttendanceLog('INSERT', {
+        id: 'log_rt_2',
+        timestamp: '2026-11-19 19:30:00',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        authMethod: 'QR_WEB_CAM',
+        isVerifiedLocation: true,
+      });
+
+      expect(service.getLogs('sch_20261105').some((l) => l.id === 'log_rt_2')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+      expect(service.getSyncState().lastSyncedAt).toBe(initialSyncedAt);
+
+      // UPDATE
+      service.mergeRealtimeAttendanceLog('UPDATE', {
+        id: 'log_rt_2',
+        timestamp: '2026-11-19 19:35:00',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        authMethod: 'MANUAL_PIN',
+        isVerifiedLocation: true,
+        adminNote: '지각 처리',
+      });
+
+      const updated = service.getLogs('sch_20261105').find((l) => l.id === 'log_rt_2');
+      expect(updated?.authMethod).toBe('MANUAL_PIN');
+      expect(updated?.adminNote).toBe('지각 처리');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeAttendanceLog('DELETE', null, {
+        id: 'log_rt_2',
+        timestamp: '2026-11-19 19:35:00',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        authMethod: 'MANUAL_PIN',
+        isVerifiedLocation: true,
+      });
+
+      expect(service.getLogs('sch_20261105').some((l) => l.id === 'log_rt_2')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+
+    it('mergeRealtimeCommentEvent handles INSERT, UPDATE, and DELETE actions without poisoning lastSyncedAt', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+      const initialSyncedAt = service.getSyncState().lastSyncedAt;
+
+      // INSERT
+      service.mergeRealtimeCommentEvent('INSERT', {
+        id: 'cmt_rt_2',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        action: 'CREATE',
+        text: '첫 댓글',
+        timestamp: '2026-11-19 19:31:00',
+      });
+
+      expect(service.getComments('sch_20261105').some((c) => c.id === 'cmt_rt_2')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+      expect(service.getSyncState().lastSyncedAt).toBe(initialSyncedAt);
+
+      // UPDATE
+      service.mergeRealtimeCommentEvent('UPDATE', {
+        id: 'cmt_rt_2',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        action: 'CREATE',
+        text: '수정된 댓글',
+        timestamp: '2026-11-19 19:35:00',
+      });
+
+      expect(service.getComments('sch_20261105').find((c) => c.id === 'cmt_rt_2')?.text).toBe('수정된 댓글');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeCommentEvent('DELETE', null, {
+        id: 'cmt_rt_2',
+        scheduleId: 'sch_20261105',
+        memberId: 'mem_s01',
+        memberName: '김소프',
+        part: '소프라노',
+        action: 'DELETE',
+        timestamp: '2026-11-19 19:40:00',
+      });
+
+      expect(service.getComments('sch_20261105').some((c) => c.id === 'cmt_rt_2')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+
+    it('mergeRealtimeSchedule handles INSERT, UPDATE, and DELETE actions', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      // INSERT
+      service.mergeRealtimeSchedule('INSERT', {
+        id: 'sch_rt_1',
+        title: '실시간 생성 일정',
+        date: '2026-11-25',
+        startTime: '19:30',
+        endTime: '21:30',
+        locationName: '연습실',
+        category: '정기연습',
+      });
+
+      expect(service.getSchedules().some((s) => s.id === 'sch_rt_1')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // UPDATE
+      service.mergeRealtimeSchedule('UPDATE', {
+        id: 'sch_rt_1',
+        title: '실시간 수정 일정',
+        date: '2026-11-25',
+        startTime: '20:00',
+        endTime: '22:00',
+        locationName: '연습실',
+        category: '정기연습',
+      });
+
+      expect(service.getSchedules().find((s) => s.id === 'sch_rt_1')?.title).toBe('실시간 수정 일정');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeSchedule('DELETE', null, {
+        id: 'sch_rt_1',
+        title: '실시간 수정 일정',
+        date: '2026-11-25',
+        startTime: '20:00',
+        endTime: '22:00',
+        locationName: '연습실',
+        category: '정기연습',
+      });
+
+      expect(service.getSchedules().some((s) => s.id === 'sch_rt_1')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+
+    it('mergeRealtimeMember handles INSERT, UPDATE, and DELETE actions', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      // INSERT
+      service.mergeRealtimeMember('INSERT', {
+        id: 'mem_rt_1',
+        name: '실시간단원',
+        part: '테너',
+        phoneLast4: '1234',
+        role: 'MEMBER',
+        createdAt: '2026-11-20',
+        status: 'ACTIVE',
+      });
+
+      expect(service.getMembers().some((m) => m.id === 'mem_rt_1')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // UPDATE
+      service.mergeRealtimeMember('UPDATE', {
+        id: 'mem_rt_1',
+        name: '실시간수정단원',
+        part: '베이스',
+        phoneLast4: '1234',
+        role: 'MEMBER',
+        createdAt: '2026-11-20',
+        status: 'ACTIVE',
+      });
+
+      expect(service.getMembers().find((m) => m.id === 'mem_rt_1')?.name).toBe('실시간수정단원');
+      expect(service.getMembers().find((m) => m.id === 'mem_rt_1')?.part).toBe('베이스');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeMember('DELETE', null, {
+        id: 'mem_rt_1',
+        name: '실시간수정단원',
+        part: '베이스',
+        phoneLast4: '1234',
+        role: 'MEMBER',
+        createdAt: '2026-11-20',
+        status: 'ACTIVE',
+      });
+
+      expect(service.getMembers().some((m) => m.id === 'mem_rt_1')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+
+    it('mergeRealtimeLocation handles INSERT, UPDATE, and DELETE actions', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      // INSERT
+      service.mergeRealtimeLocation('INSERT', {
+        id: 'loc_rt_1',
+        name: '실시간연습실',
+        latitude: 37.5,
+        longitude: 127.0,
+        radiusMeters: 100,
+      });
+
+      expect(service.getLocationPresets().some((l) => l.id === 'loc_rt_1')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // UPDATE
+      service.mergeRealtimeLocation('UPDATE', {
+        id: 'loc_rt_1',
+        name: '실시간연습실_수정',
+        latitude: 37.6,
+        longitude: 127.1,
+        radiusMeters: 150,
+      });
+
+      expect(service.getLocationPresets().find((l) => l.id === 'loc_rt_1')?.name).toBe('실시간연습실_수정');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeLocation('DELETE', null, {
+        id: 'loc_rt_1',
+        name: '실시간연습실_수정',
+        latitude: 37.6,
+        longitude: 127.1,
+        radiusMeters: 150,
+      });
+
+      expect(service.getLocationPresets().some((l) => l.id === 'loc_rt_1')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+
+    it('mergeRealtimeProgramCard handles INSERT, UPDATE, and DELETE actions', () => {
+      const syncListener = vi.fn();
+      const unsub = service.subscribeSync(syncListener);
+
+      // INSERT
+      service.mergeRealtimeProgramCard('INSERT', {
+        id: 'card_rt_1',
+        title: '실시간카드',
+        category: '정기연습',
+        createdAt: '2026-11-20',
+      });
+
+      expect(service.getProgramCards().some((c) => c.id === 'card_rt_1')).toBe(true);
+      expect(syncListener).toHaveBeenCalledTimes(1);
+
+      // UPDATE
+      service.mergeRealtimeProgramCard('UPDATE', {
+        id: 'card_rt_1',
+        title: '실시간카드_수정',
+        category: '정기연습',
+        createdAt: '2026-11-20',
+      });
+
+      expect(service.getProgramCards().find((c) => c.id === 'card_rt_1')?.title).toBe('실시간카드_수정');
+      expect(syncListener).toHaveBeenCalledTimes(2);
+
+      // DELETE
+      service.mergeRealtimeProgramCard('DELETE', null, {
+        id: 'card_rt_1',
+        title: '실시간카드_수정',
+        category: '정기연습',
+        createdAt: '2026-11-20',
+      });
+
+      expect(service.getProgramCards().some((c) => c.id === 'card_rt_1')).toBe(false);
+      expect(syncListener).toHaveBeenCalledTimes(3);
+
+      unsub();
+    });
+  });
+
+  describe('Admin PIN verification (no local fallback, server-issued tokens)', () => {
+    afterEach(() => {
+      clearAllAdminTokens();
+    });
+
+    it('rejects formerly hardcoded fallback PINs when the server cannot be reached', async () => {
+      const gasService = new SheetsService(new GasBackend(() => ''));
+      gasService.updateConfig({ sheetsWebAppUrl: '' });
+
+      for (const pin of ['1004', '1234', '2315', '2325']) {
+        await expect(gasService.verifyAdminPin(pin)).rejects.toThrow();
+        await expect(gasService.verifySuperAdminPin(pin)).rejects.toThrow();
+      }
+    });
+
+    it('rejects when a network error prevents verification', async () => {
+      const supaService = new SheetsService(
+        new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' })
+      );
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+
+      await expect(supaService.verifyAdminPin('1004')).rejects.toThrow();
+      expect(getAdminToken('admin')).toBeNull();
+    });
+
+    it('stores the server-issued token after a successful Supabase admin login', async () => {
+      const supaService = new SheetsService(
+        new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' })
+      );
+      const token = 'a'.repeat(64);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({ success: true, message: 'ok', data: { token, tier: 'admin' } }),
+          { status: 200 }
+        )
+      );
+
+      await supaService.verifyAdminPin('777001');
+      expect(getAdminToken('admin')).toBe(token);
+      expect(getAdminToken('super')).toBeNull();
+    });
+
+    it('fails Supabase login when the server does not issue a token (migration not applied)', async () => {
+      const supaService = new SheetsService(
+        new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' })
+      );
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({ success: true, message: 'ok' }), { status: 200 })
+      );
+
+      await expect(supaService.verifySuperAdminPin('990011')).rejects.toThrow('세션');
+      expect(getAdminToken('super')).toBeNull();
+    });
+
+    it('returns empty secrets instead of invented default PINs when the server refuses', async () => {
+      const supaService = new SheetsService(
+        new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' })
+      );
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({ success: false, code: 'ADMIN_AUTH_REQUIRED', message: '관리자 인증이 필요합니다.' }),
+          { status: 200 }
+        )
+      );
+
+      const secrets = await supaService.getAdminSecrets();
+      expect(secrets.adminPin).toBe('');
+      expect(secrets.superAdminPin).toBe('');
+    });
+  });
+
+  describe('Backend Decoupling & Supabase Active Mode', () => {
+    it('isBackendActive and canSync return true for Supabase even if sheetsWebAppUrl is empty', () => {
+      const supaBackend = new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' });
+      const supaService = new SheetsService(supaBackend);
+      supaService.updateConfig({ sheetsWebAppUrl: '' });
+
+      expect(supaService.isBackendActive()).toBe(true);
+      expect(supaService.canSync()).toBe(true);
+    });
+
+    it('isBackendActive and canSync reflect sheetsWebAppUrl presence for GasBackend', () => {
+      const gasBackend = new GasBackend(() => '');
+      const gasService = new SheetsService(gasBackend);
+      gasService.updateConfig({ sheetsWebAppUrl: '' });
+
+      expect(gasService.isBackendActive()).toBe(false);
+      expect(gasService.canSync()).toBe(false);
+
+      gasService.updateConfig({ sheetsWebAppUrl: 'https://script.google.com/test' });
+      expect(gasService.isBackendActive()).toBe(true);
+      expect(gasService.canSync()).toBe(true);
+    });
+
+    it('Supabase backend fetches remote snapshot without requiring sheetsWebAppUrl', async () => {
+      const supaBackend = new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' });
+      const supaService = new SheetsService(supaBackend);
+      supaService.updateConfig({ sheetsWebAppUrl: '' });
+
+      vi.spyOn(supaBackend, 'requestSnapshot').mockResolvedValue({
+        members: [{ id: 'mem_supa_1', name: '수파단원', part: '소프라노', phoneLast4: '1111', role: 'MEMBER', createdAt: '2026-11-20', status: 'ACTIVE' }],
+        schedules: [],
+        rsvpVotes: [],
+        logs: [],
+        locations: [],
+        programCards: [],
+      });
+
+      const res = await supaService.fetchRemoteData();
+      expect(res.success).toBe(true);
+      expect(supaService.getMembers().some((m) => m.id === 'mem_supa_1')).toBe(true);
+    });
+
+    it('Supabase backend dispatches mutations without requiring sheetsWebAppUrl', async () => {
+      const supaBackend = new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' });
+      const supaService = new SheetsService(supaBackend);
+      supaService.updateConfig({ sheetsWebAppUrl: '' });
+
+      const callActionSpy = vi.spyOn(supaBackend, 'callAction').mockResolvedValue({ success: true });
+
+      await supaService.addCheckInLog({
+        id: 'log_supa_1',
+        timestamp: '2026-11-20 19:30:00',
+        scheduleId: 'sch_1',
+        memberId: 'mem_1',
+        memberName: '홍길동',
+        part: '소프라노',
+        authMethod: 'MANUAL_PIN',
+        isVerifiedLocation: true,
+      }, '1234');
+
+      expect(callActionSpy).toHaveBeenCalledWith(
+        'RECORD_ATTENDANCE',
+        expect.objectContaining({ id: 'log_supa_1', checkInPin: '1234' }),
+        ''
+      );
+    });
+  });
+
+  describe('Practice Catalog & Media Management (P2a-04)', () => {
+    it('refreshPracticeCatalog returns empty catalog in GAS mode without making network requests', async () => {
+      const gasBackend = new GasBackend(() => 'https://script.google.com/test');
+      const gasService = new SheetsService(gasBackend);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      const catalog = await gasService.refreshPracticeCatalog();
+      expect(catalog).toEqual({
+        pieces: [],
+        tracks: [],
+        programPieces: [],
+        performances: [],
+        performancePieces: [],
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('refreshPracticeCatalog updates and caches catalog in Supabase mode', async () => {
+      const supaBackend = new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' });
+      const supaService = new SheetsService(supaBackend);
+
+      vi.spyOn(supaService, 'sendToGoogleSheet').mockResolvedValue({
+        success: true,
+        data: {
+          pieces: [{ id: 'p1', title: '아리랑', isArchived: false, createdAt: '2026-11-20', updatedAt: '2026-11-20' }],
+          tracks: [{ id: 't1', pieceId: 'p1', label: 'MR', kind: 'MR', source: 'r2', orderIndex: 0, isArchived: false, createdAt: '2026-11-20', updatedAt: '2026-11-20' }],
+          programPieces: [{ programId: 'card1', pieceId: 'p1', orderIndex: 0, isArchived: false }],
+        },
+      });
+
+      const catalog = await supaService.refreshPracticeCatalog();
+      expect(catalog.pieces).toHaveLength(1);
+      expect(catalog.pieces[0].title).toBe('아리랑');
+      expect(supaService.getPracticeCatalog().pieces).toHaveLength(1);
+    });
+
+    it('savePracticePiece throws error on failure and does not mutate local catalog', async () => {
+      const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+        success: false,
+        message: '서버 에러',
+      });
+
+      await expect(service.savePracticePiece({ title: '실패할 곡' })).rejects.toThrow('서버 에러');
+      expect(service.getPracticeCatalog().pieces).toHaveLength(0);
+      expect(sendSpy).toHaveBeenCalledWith('SAVE_PRACTICE_PIECE', expect.objectContaining({ title: '실패할 곡' }));
+    });
+
+    it('setPracticePieceArchived and setPracticeTrackArchived send archive actions only and never delete', async () => {
+      const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+
+      // Seed local piece and track
+      await service.savePracticePiece({ id: 'p1', title: '곡1' });
+      await service.savePracticeTrack({ id: 't1', pieceId: 'p1', label: '트랙1' });
+
+      await service.setPracticePieceArchived('p1', true);
+      expect(sendSpy).toHaveBeenCalledWith('SET_PRACTICE_PIECE_ARCHIVED', { id: 'p1', isArchived: true });
+      expect(service.getPracticeCatalog().pieces.find((p) => p.id === 'p1')?.isArchived).toBe(true);
+
+      await service.setPracticeTrackArchived('t1', true);
+      expect(sendSpy).toHaveBeenCalledWith('SET_PRACTICE_TRACK_ARCHIVED', { id: 't1', isArchived: true });
+      expect(service.getPracticeCatalog().tracks.find((t) => t.id === 't1')?.isArchived).toBe(true);
+
+      // Verify no DELETE actions were dispatched
+      const actions = sendSpy.mock.calls.map((c) => c[0]);
+      expect(actions.some((a) => a.includes('DELETE'))).toBe(false);
+    });
+
+    it('setProgramPieces and reorderPracticeTracks update local ordering upon server confirmation', async () => {
+      vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+
+      await service.setProgramPieces('card1', ['p1', 'p2']);
+      const catalog1 = service.getPracticeCatalog();
+      expect(catalog1.programPieces.map((pp) => pp.pieceId)).toEqual(['p1', 'p2']);
+      expect(catalog1.programPieces.map((pp) => pp.orderIndex)).toEqual([0, 1]);
+
+      // Archive p1 by excluding it
+      await service.setProgramPieces('card1', ['p2']);
+      const catalog2 = service.getPracticeCatalog();
+      expect(catalog2.programPieces.find((pp) => pp.pieceId === 'p1')?.isArchived).toBe(true);
+      expect(catalog2.programPieces.find((pp) => pp.pieceId === 'p2')?.isArchived).toBe(false);
+
+      // Reorder tracks
+      await service.savePracticeTrack({ id: 't1', pieceId: 'p2', label: '1번', orderIndex: 0 });
+      await service.savePracticeTrack({ id: 't2', pieceId: 'p2', label: '2번', orderIndex: 1 });
+
+      await service.reorderPracticeTracks('p2', ['t2', 't1']);
+      const tracks = service.getPracticeCatalog().tracks.filter((t) => t.pieceId === 'p2');
+      expect(tracks.find((t) => t.id === 't2')?.orderIndex).toBe(0);
+      expect(tracks.find((t) => t.id === 't1')?.orderIndex).toBe(1);
+    });
+
+    it('reorderPracticeTracks does not change local track order when server returns failure', async () => {
+      vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+      await service.savePracticeTrack({ id: 't1', pieceId: 'p2', label: '1번', orderIndex: 0 });
+      await service.savePracticeTrack({ id: 't2', pieceId: 'p2', label: '2번', orderIndex: 1 });
+
+      // Server rejects due to duplicate tracks or other error
+      vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({
+        success: false,
+        message: '중복된 트랙이 있습니다.',
+      });
+
+      await expect(service.reorderPracticeTracks('p2', ['t2', 't2'])).rejects.toThrow(
+        '중복된 트랙이 있습니다.'
+      );
+
+      const tracks = service.getPracticeCatalog().tracks.filter((t) => t.pieceId === 'p2');
+      expect(tracks.find((t) => t.id === 't1')?.orderIndex).toBe(0);
+      expect(tracks.find((t) => t.id === 't2')?.orderIndex).toBe(1);
+    });
+
+    it('savePracticePiece passes scoreStorageKey and scoreSizeBytes, savePracticeTrack passes sizeBytes', async () => {
+      const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true });
+
+      await service.savePracticePiece({
+        id: 'p_media',
+        title: '미디어 곡',
+        scoreStorageKey: '2026/score/media1.pdf',
+        scoreSizeBytes: 2048,
+      });
+      expect(sendSpy).toHaveBeenCalledWith(
+        'SAVE_PRACTICE_PIECE',
+        expect.objectContaining({
+          scoreStorageKey: '2026/score/media1.pdf',
+          scoreSizeBytes: 2048,
+        })
+      );
+
+      await service.savePracticeTrack({
+        id: 't_media',
+        pieceId: 'p_media',
+        label: '트랙1',
+        sizeBytes: 10485760,
+      });
+      expect(sendSpy).toHaveBeenCalledWith(
+        'SAVE_PRACTICE_TRACK',
+        expect.objectContaining({
+          sizeBytes: 10485760,
+        })
+      );
+    });
+
+    it('getMediaUsage parses usage stats on Supabase and returns null on gas backend', async () => {
+      const gasBackend = new GasBackend(() => 'https://script.google.com/test');
+      const gasService = new SheetsService(gasBackend);
+      expect(await gasService.getMediaUsage()).toBeNull();
+
+      const supaBackend = new SupabaseBackend({ url: 'https://test.supabase.co', anonKey: 'anon-key' });
+      const supaService = new SheetsService(supaBackend);
+      vi.spyOn(supaService, 'sendToGoogleSheet').mockResolvedValue({
+        success: true,
+        data: {
+          tracksBytes: 5000000,
+          scoresBytes: 2000000,
+          totalBytes: 7000000,
+        },
+      });
+
+      const usage = await supaService.getMediaUsage();
+      expect(usage).toEqual({
+        tracksBytes: 5000000,
+        scoresBytes: 2000000,
+        totalBytes: 7000000,
+      });
+    });
+
+    it('savePerformance, setPerformanceArchived and setPerformancePieces delegate to sendToGoogleSheet', async () => {
+      const sendSpy = vi.spyOn(service, 'sendToGoogleSheet').mockResolvedValue({ success: true, data: { id: 'perf_1' } });
+
+      const res = await service.savePerformance({ title: '정기공연' });
+      expect(res).toEqual({ success: true, id: 'perf_1' });
+      expect(sendSpy).toHaveBeenCalledWith('SAVE_PERFORMANCE', { title: '정기공연' });
+
+      await service.setPerformanceArchived('perf_1', true);
+      expect(sendSpy).toHaveBeenCalledWith('SET_PERFORMANCE_ARCHIVED', { performanceId: 'perf_1', archived: true });
+
+      await service.setPerformancePieces('perf_1', ['p1', 'p2']);
+      expect(sendSpy).toHaveBeenCalledWith('SET_PERFORMANCE_PIECES', { performanceId: 'perf_1', pieceIds: ['p1', 'p2'] });
+    });
+  });
 });
+

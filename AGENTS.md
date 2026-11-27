@@ -1,5 +1,7 @@
 # Moonchoir Rollbook — Agent Constitution & System Harness
 
+> 관련 문서: [기획 배경](docs/PRODUCT_BACKGROUND.md) 프로젝트 탄생 배경 및 목표 · [구조 복구 기록](docs/ARCHITECTURE_RECOVERY.md) 현재 코드 상태
+
 ## 0. 비판적 파트너십 (Critical Partnership)
 - 상위 워크스페이스 규칙([critical_partnership.md](file:///Users/grasshop/Desktop/Antigravity/.agents/rules/critical_partnership.md))을 준수한다.
 - 무조건적인 칭찬과 맹목적 동조를 절대 금지한다.
@@ -28,8 +30,21 @@
   - 구글 시트 API 통신 로직은 UI 컴포넌트와 분리된 단일 어댑터(`services/sheets.ts`)를 통해서만 호출.
   - 모바일 터치 타깃 최소 44px 이상 유지 (합창 연습 현장에서 스마트폰으로 손쉽게 출석 체크 및 대시보드 열람 보장).
   - 작업 완료 보고 전 반드시 결정론적 센서(Green Bar: `npm run typecheck`, `npm run lint`, `npm test`) 통과할 것.
+- **운영 DB(Supabase) 변경 규칙 (2026-11-21 사용자 확정)**:
+  - 운영 DB에 적용되는 SQL은 **저장소에 커밋된 `supabase/migrations/*.sql` 파일 원본만** 허용한다. 채팅으로 재구성하거나 요약한 SQL을 운영에 넣지 않는다.
+  - 개발 에이전트는 마이그레이션 파일을 작성·커밋만 하고, **운영 DB에 직접 실행하거나 사용자에게 실행을 요청하지 않는다.**
+  - 운영 적용과 적용 전후 검증은 리뷰어(Claude, Supabase 커넥터)가 담당한다.
 - **ASK FIRST**:
   - 구글 시트의 원천 스키마(새로운 필수 열 추가 등) 구조를 변경할 때는 사용자에게 사전 확인.
+
+- **반복 실수 방지 (2026-11-22):**
+  - 작업 전 `.agents/rules/recurring-mistakes.md`를 읽는다.
+  - 보고 전 `.agents/workflows/report-ready.md`(`/report-ready`)를 실행한다.
+  - PR은 GitHub CI(`.github/workflows/ci.yml`: Green Bar, 빈 PostgreSQL에서 DB 변경·검증 스크립트 실행, 반복 실수 검사)가 초록불이어야 한다.
+  - 실수 기록은 `docs/agent/LESSONS.md`에 쌓는다.
+  - 리뷰어가 명세·지시서를 쓸 때는 `docs/agent/SPEC_WRITING.md`의 순서와 점검표를 따른다(2026-11-23).
+  - 명세 작성: 리뷰어는 `.claude/skills/spec-writer` 스킬로 쓰고 `.claude/agents/spec-auditor`로 독립 검토를 받는다. 개발 에이전트는 티켓 시작 전 `.agents/workflows/spec-check.md`(`/spec-check`)로 지시서를 코드에 대 보고, 어긋나면 시작하지 않고 보고한다.
+  - 데이터 관계·계산 검토: 배포 전이나 스키마·계산 로직을 바꾼 뒤 `.claude/skills/data-integrity-review` 절차로 연결부(병합 id, 시간대, 보관 상태, 단일 원천, 서버↔화면 계약)를 점검한다. v3 계획은 `docs/plans/18_v3_data_integrity_review.md`(2026-11-23).
 
 ## 3. 기술 스택 & 결정론적 명령어 (Tech Stack & Exact Commands)
 - **Frontend Core**: Vite + React 19 + TypeScript
@@ -70,4 +85,5 @@ Moonchoir_rollbook/
 ## 6. 구조 복구 작업 시 필수 참고 문서
 - 데이터 저장, Google Sheets 동기화, 회원 병합, 출석 기록을 조사하거나 수정하기 전 [구조 복구 기록](docs/ARCHITECTURE_RECOVERY.md)을 읽는다.
 - 해당 기록은 확인된 현재 동작과 사용자 합의 사항을 구분한다. 새 사실이나 결정이 확인되면 함께 갱신한다.
+- 단원 UX v3(홈·연습실·내 활동·운영진 연습곡) 작업은 [v3 명세](docs/MEMBER_UX_V3_SPEC.md)와 [v3 개발 지시서](docs/plans/17_v3_implementation_guide.md)를 먼저 읽고, 지시서의 티켓 순서와 §2 반복 실수 방지 규칙을 따른다. v3와 다른 부분이 없는 내용은 [v2 명세](docs/MEMBER_UX_AUDIO_SPEC.md)와 [v2 지시서](docs/plans/16_member_ux_studio_implementation_guide.md)를 따른다.
 - PRD는 원하는 제품 동작을 정의하고, 구조 복구 기록은 현재 코드와의 차이 및 변경 근거를 기록한다. 둘이 다르면 임의로 추정하지 말고 차이를 사용자와 확인한다.

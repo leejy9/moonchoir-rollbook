@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { CalendarDay } from '../../utils/calendar';
-import type { Schedule } from '../../types/rollbook';
+import type { Member, Schedule } from '../../types/rollbook';
 import { getKSTDateString } from '../../utils/date';
+import { ScheduleRsvpLogModal } from './ScheduleRsvpLogModal';
 
 export interface AdminCalendarViewProps {
   /** 일정별 댓글 개수 (있으면 일정 줄에 `댓글 N` 배지를 보인다) */
   commentCounts?: Map<string, number>;
+  hasScheduleRecords: (scheduleId: string) => boolean;
+  members?: Member[];
   adminCalYear: number;
   adminCalMonth: number;
   onPrevMonth: () => void;
@@ -30,6 +33,8 @@ export interface AdminCalendarViewProps {
 
 export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
   commentCounts,
+  hasScheduleRecords,
+  members = [],
   adminCalYear,
   adminCalMonth,
   onPrevMonth,
@@ -51,12 +56,16 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
   onCloneSchedule,
   onDeleteSchedule,
 }) => {
+  const [selectedScheduleForRsvpLog, setSelectedScheduleForRsvpLog] = useState<Schedule | null>(null);
   const todayStr = getKSTDateString();
 
   return (
     <div className="admin-calendar-view-root">
-      {/* Calendar Header with Month Switcher */}
-      <div className="admin-cal-header-row">
+      <div className="admin-calendar-split-container">
+        {/* Left: 70% Calendar Grid */}
+        <div className="admin-calendar-split-left">
+          {/* Calendar Header with Month Switcher */}
+          <div className="admin-cal-header-row">
         <h2 className="section-title" style={{ margin: 0 }}>
           캘린더
         </h2>
@@ -126,9 +135,11 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
           })}
         </div>
       </div>
+    </div>
 
-      {/* Selected Date Schedule List */}
-      <div className="selected-date-schedules-box" style={{ marginTop: '18px' }}>
+    {/* Right: 30% Selected Date Schedules Detail */}
+    <div className="admin-calendar-split-right">
+      <div className="selected-date-schedules-box">
         <div
           className="box-header-row"
           style={{
@@ -198,7 +209,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  <div className="sch-item-info">
+                  <div className="sch-item-info" style={{ minWidth: 0, width: '100%', wordBreak: 'keep-all' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       {sch.isCancelled && (
                         <span
@@ -239,16 +250,16 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                         {sch.title}
                       </strong>
                     </div>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7684' }}>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7684', wordBreak: 'keep-all' }}>
                       {sch.startTime} ~ {sch.endTime} · {sch.locationName}
                     </p>
                     {sch.description && (
-                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b95a1' }}>
+                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b95a1', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                         {sch.description}
                       </p>
                     )}
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                  <div className="sch-item-actions" onClick={(e) => e.stopPropagation()}>
                     {sch.isCancelled ? (
                       <>
                         {onRestoreSchedule && (
@@ -270,7 +281,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                             복원
                           </button>
                         )}
-                        {onDeleteScheduleSingle && (
+                        {onDeleteScheduleSingle && !hasScheduleRecords(sch.id) && (
                           <button
                             type="button"
                             onClick={() => {
@@ -300,6 +311,23 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                       </>
                     ) : (
                       <>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedScheduleForRsvpLog(sch)}
+                          style={{
+                            background: '#F0FDF4',
+                            color: '#15803D',
+                            border: '1px solid #BBF7D0',
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          투표 로그 📋
+                        </button>
                         {onToggleArchiveSchedule && (
                           <button
                             type="button"
@@ -360,7 +388,18 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
             등록된 일정이 없습니다.
           </p>
         )}
+        </div>
       </div>
+    </div>
+
+    {/* Schedule RSVP Log Modal */}
+      {selectedScheduleForRsvpLog && (
+        <ScheduleRsvpLogModal
+          schedule={selectedScheduleForRsvpLog}
+          members={members}
+          onClose={() => setSelectedScheduleForRsvpLog(null)}
+        />
+      )}
     </div>
   );
 };

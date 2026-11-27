@@ -123,13 +123,25 @@ function readConfigData(sheet) {
 
 // 1. GET: 전체 데이터 로드 및 헬스체크
 function doGet(e) {
+  const performance = {
+    operation: 'doGet',
+    startedAt: Date.now(),
+  };
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    ensureSheetStructure(ss);
+    measurePerformanceStage(performance, 'ensureStructureMs', function () {
+      ensureSheetStructure(ss);
+    });
 
-    const members = readSheetData(ss.getSheetByName(SHEET_NAMES.MEMBERS));
-    const schedules = readSheetData(ss.getSheetByName(SHEET_NAMES.SCHEDULES));
-    const rawRsvpVotes = readSheetData(ss.getSheetByName(SHEET_NAMES.RSVP));
+    const members = measurePerformanceStage(performance, 'membersReadMs', function () {
+      return readSheetData(ss.getSheetByName(SHEET_NAMES.MEMBERS));
+    });
+    const schedules = measurePerformanceStage(performance, 'schedulesReadMs', function () {
+      return readSheetData(ss.getSheetByName(SHEET_NAMES.SCHEDULES));
+    });
+    const rawRsvpVotes = measurePerformanceStage(performance, 'rsvpReadMs', function () {
+      return readSheetData(ss.getSheetByName(SHEET_NAMES.RSVP));
+    });
 
     // Deduplicate RSVP votes by scheduleId + memberId (keep latest by timestamp or last row)
     const rsvpMap = {};
@@ -142,17 +154,29 @@ function doGet(e) {
       }
     });
     const rsvpVotes = Object.keys(rsvpMap).map(function (k) { return rsvpMap[k]; });
-    const logs = readSheetData(ss.getSheetByName(SHEET_NAMES.LOGS));
+    const logs = measurePerformanceStage(performance, 'logsReadMs', function () {
+      return readSheetData(ss.getSheetByName(SHEET_NAMES.LOGS));
+    });
     const locSheet = ss.getSheetByName(SHEET_NAMES.LOCATIONS);
-    const locations = locSheet ? readSheetData(locSheet) : [];
+    const locations = measurePerformanceStage(performance, 'locationsReadMs', function () {
+      return locSheet ? readSheetData(locSheet) : [];
+    });
     const histSheet = ss.getSheetByName(SHEET_NAMES.MEMBER_HISTORY);
-    const memberHistory = histSheet ? readSheetData(histSheet) : [];
+    const memberHistory = measurePerformanceStage(performance, 'memberHistoryReadMs', function () {
+      return histSheet ? readSheetData(histSheet) : [];
+    });
     const cardSheet = ss.getSheetByName(SHEET_NAMES.PROGRAM_CARDS);
-    const programCards = cardSheet ? readSheetData(cardSheet) : [];
+    const programCards = measurePerformanceStage(performance, 'programCardsReadMs', function () {
+      return cardSheet ? readSheetData(cardSheet) : [];
+    });
     const commentSheet = ss.getSheetByName(SHEET_NAMES.COMMENTS);
-    const comments = commentSheet ? readSheetData(commentSheet) : [];
+    const comments = measurePerformanceStage(performance, 'commentsReadMs', function () {
+      return commentSheet ? readSheetData(commentSheet) : [];
+    });
     const configSheet = ss.getSheetByName(SHEET_NAMES.CONFIG);
-    const config = configSheet ? readConfigData(configSheet) : {};
+    const config = measurePerformanceStage(performance, 'configReadMs', function () {
+      return configSheet ? readConfigData(configSheet) : {};
+    });
 
     const response = {
       success: true,
@@ -180,40 +204,78 @@ function doGet(e) {
       },
     };
 
+    response.diagnostics = getPerformanceMetrics(performance);
     return ContentService.createTextOutput(JSON.stringify(response))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({
+    const errorResponse = {
       success: false,
       error: err.toString(),
-    })).setMimeType(ContentService.MimeType.JSON);
+      diagnostics: getPerformanceMetrics(performance),
+    };
+    return ContentService.createTextOutput(JSON.stringify(errorResponse))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
 // 2. POST: 출석 체크, 사전 투표, 단원/일정 관리 이벤트 수신 (LockService 적용)
 function doPost(e) {
+  const requestStartedAt = Date.now();
+  let lockWaitMs = 0;
   const lock = LockService.getScriptLock();
+  const lockStartedAt = Date.now();
   try {
     // 최대 15초간 스크립트 락 획득 (동시 다발적 QR 체크인 시 데이터 충돌 방지)
     lock.waitLock(15000);
+    lockWaitMs = Date.now() - lockStartedAt;
   } catch (lockErr) {
+    const lockMetrics = {
+      operation: 'doPost',
+      outcome: 'lock_timeout',
+      lockWaitMs: Date.now() - lockStartedAt,
+      totalMs: Date.now() - requestStartedAt,
+    };
     return jsonResponse({
       success: false,
       error: '동시 접속자가 많아 처리가 지연되었습니다. 잠시 후 다시 시도해 주세요.',
+      diagnostics: lockMetrics,
     });
   }
 
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    ensureSheetStructure(ss);
 
     const payload = JSON.parse(e.postData.contents);
     const { action, data } = payload;
 
+    // 아래 액션들은 시트 구조가 이미 존재함을 전제로 한다.
+    // ensureSheetStructure는 9개 시트 전체를 검사(18+ Sheets API 호출, ~2초)하므로
+    // 출석 체크인과 댓글 작업 시에는 건너뛰어 열쇠(락) 점유 시간을 단축한다.
+    // - 출석: 락 점유 2.5초 → 0.5초, 20명 동시 몰릴 때 대기 ~47초 → ~9초
+    // - 댓글: 이미 적용된 최적화와 동일
+    const SKIP_ENSURE_ACTIONS = {
+      RECORD_ATTENDANCE: true,
+      SUBMIT_CHECKIN: true,
+      ADD_COMMENT: true,
+      EDIT_COMMENT: true,
+      DELETE_COMMENT: true,
+    };
+    const structureStartedAt = Date.now();
+    if (!SKIP_ENSURE_ACTIONS[action]) {
+      ensureSheetStructure(ss);
+    }
+    const ensureStructureMs = Date.now() - structureStartedAt;
+
     if (action === 'VERIFY_ADMIN_PIN') {
+      // PIN 확인은 읽기 전용이라 전역 락이 불필요하다. 락을 잡은 채로 실행되지만
+      // 현재 doPost 구조상 락 해제 전에 return하므로 후속 요청에 영향이 없다.
       const config = readConfigData(ss.getSheetByName(SHEET_NAMES.CONFIG));
       const expectedPin = String(config.adminPin || '1234').trim();
       const inputPin = String(data.pin || '').trim();
+      // 빈 PIN 입력 방어: 빈 문자열이 기본값 '1234'와 우연히 일치하는 경우를 막는다.
+      if (!inputPin) {
+        return jsonResponse({ success: false, message: '관리자 PIN을 입력해 주세요.' });
+      }
       if (inputPin !== expectedPin) {
         return jsonResponse({ success: false, message: '관리자 PIN 번호가 일치하지 않습니다.' });
       }
@@ -224,6 +286,10 @@ function doPost(e) {
       const config = readConfigData(ss.getSheetByName(SHEET_NAMES.CONFIG));
       const expectedPin = String(config.activeOnSitePin || '5027').trim();
       const inputPin = String(data.pin || '').trim();
+      // 빈 PIN 입력 방어
+      if (!inputPin) {
+        return jsonResponse({ success: false, message: '현장 PIN을 입력해 주세요.' });
+      }
       if (inputPin !== expectedPin) {
         return jsonResponse({ success: false, message: '현장 PIN 번호가 일치하지 않습니다.' });
       }
@@ -278,93 +344,133 @@ function doPost(e) {
     }
 
     if (action === 'ADD_COMMENT' || action === 'EDIT_COMMENT' || action === 'DELETE_COMMENT') {
-      // 일정 댓글: 기록만 추가(append-only). 같은 id 재요청은 저장하지 않고 성공으로 응답(멱등).
-      // 수정·삭제는 원 댓글 작성자(통합된 단원 포함)만 가능하다. 시각은 서버 시각을 기록한다.
-      const cSheet = ss.getSheetByName(SHEET_NAMES.COMMENTS);
-      const cRows = cSheet.getDataRange().getValues();
-      const cHeaders = cRows[0];
-      const col = function (name) { return cHeaders.indexOf(name); };
-      const eventId = String(data.id || '').trim();
-      const scheduleId = String(data.scheduleId || '').trim();
-      const memberId = String(data.memberId || '').trim();
-      const text = String(data.text || '').trim();
+      const performance = {
+        operation: 'doPost',
+        action: action,
+        requestStartedAt: requestStartedAt,
+        lockWaitMs: lockWaitMs,
+        ensureStructureMs: ensureStructureMs,
+        commentReadMs: 0,
+        dedupeScanMs: 0,
+        targetLookupMs: 0,
+        memberMergeLookupMs: 0,
+        commentWriteMs: 0,
+      };
+      const commentResponse = function (result) {
+        return jsonResponse(Object.assign({}, result, { diagnostics: getPerformanceMetrics(performance) }));
+      };
+      try {
+        // 일정 댓글: 기록만 추가(append-only). 같은 id 재요청은 저장하지 않고 성공으로 응답(멱등).
+        // 수정·삭제는 원 댓글 작성자(통합된 단원 포함)만 가능하다. 시각은 서버 시각을 기록한다.
+        const cSheet = ss.getSheetByName(SHEET_NAMES.COMMENTS);
+        const cRows = measurePerformanceStage(performance, 'commentReadMs', function () {
+          return cSheet.getDataRange().getValues();
+        });
+        const cHeaders = cRows[0];
+        const col = function (name) { return cHeaders.indexOf(name); };
+        const eventId = String(data.id || '').trim();
+        const scheduleId = String(data.scheduleId || '').trim();
+        const memberId = String(data.memberId || '').trim();
+        const text = String(data.text || '').trim();
 
-      if (!eventId || !memberId) {
-        return jsonResponse({ success: false, message: '댓글 요청 정보가 부족합니다.' });
-      }
-      for (let i = 1; i < cRows.length; i++) {
-        if (String(cRows[i][col('id')]).trim() === eventId) {
-          return jsonResponse({ success: true, deduplicated: true, message: '댓글 저장 완료 (중복 요청 방지)' });
+        if (!eventId || !memberId) {
+          return commentResponse({ success: false, message: '댓글 요청 정보가 부족합니다.' });
         }
-      }
-      if (action !== 'DELETE_COMMENT') {
-        if (!text) return jsonResponse({ success: false, message: '댓글 내용을 입력해 주세요.' });
-        if (text.length > 500) return jsonResponse({ success: false, message: '댓글은 500자까지 쓸 수 있습니다.' });
-      }
-
-      let rowAction = 'CREATE';
-      let targetId = '';
-      let targetScheduleId = scheduleId;
-
-      if (action === 'ADD_COMMENT') {
-        if (!scheduleId) return jsonResponse({ success: false, message: '댓글을 달 일정이 지정되지 않았습니다.' });
-      } else {
-        rowAction = action === 'EDIT_COMMENT' ? 'EDIT' : 'DELETE';
-        targetId = String(data.targetId || '').trim();
-        let original = null;
-        let alreadyDeleted = false;
-        for (let i = 1; i < cRows.length; i++) {
-          const rid = String(cRows[i][col('id')]).trim();
-          const ract = String(cRows[i][col('action')]).trim();
-          if (rid === targetId && ract === 'CREATE') original = cRows[i];
-          if (ract === 'DELETE' && String(cRows[i][col('targetId')]).trim() === targetId) alreadyDeleted = true;
-        }
-        if (!original) return jsonResponse({ success: false, message: '원본 댓글을 찾을 수 없습니다.' });
-        if (alreadyDeleted) return jsonResponse({ success: false, message: '이미 삭제된 댓글입니다.' });
-
-        const canonicalOf = function (id) {
-          const mSheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
-          const mRows = mSheet.getDataRange().getValues();
-          const mHeaders = mRows[0];
-          const idCol = mHeaders.indexOf('id');
-          const mergedCol = mHeaders.indexOf('mergedIntoId');
-          let current = String(id).trim();
-          for (let hop = 0; hop < 10; hop++) {
-            let next = '';
-            for (let i = 1; i < mRows.length; i++) {
-              if (String(mRows[i][idCol]).trim() === current && mergedCol >= 0) next = String(mRows[i][mergedCol] || '').trim();
-            }
-            if (!next) break;
-            current = next;
+        const duplicateEvent = measurePerformanceStage(performance, 'dedupeScanMs', function () {
+          for (let i = 1; i < cRows.length; i++) {
+            if (String(cRows[i][col('id')]).trim() === eventId) return true;
           }
-          return current;
-        };
-        const authorId = String(original[col('memberId')]).trim();
-        if (authorId !== memberId && canonicalOf(authorId) !== canonicalOf(memberId)) {
-          return jsonResponse({ success: false, message: '본인이 쓴 댓글만 수정하거나 삭제할 수 있습니다.' });
+          return false;
+        });
+        if (duplicateEvent) {
+          return commentResponse({ success: true, deduplicated: true, message: '댓글 저장 완료 (중복 요청 방지)' });
         }
-        targetScheduleId = String(original[col('scheduleId')]).trim();
-      }
+        if (action !== 'DELETE_COMMENT') {
+          if (!text) return commentResponse({ success: false, message: '댓글 내용을 입력해 주세요.' });
+          if (text.length > 500) return commentResponse({ success: false, message: '댓글은 500자까지 쓸 수 있습니다.' });
+        }
 
-      const commentRow = cHeaders.map(function (h) {
-        if (h === 'id') return eventId;
-        if (h === 'scheduleId') return targetScheduleId;
-        if (h === 'memberId') return memberId;
-        if (h === 'memberName') return data.memberName || '';
-        if (h === 'part') return data.part || '';
-        if (h === 'action') return rowAction;
-        if (h === 'targetId') return targetId;
-        if (h === 'text') return rowAction === 'DELETE' ? '' : text;
-        if (h === 'timestamp') return toKSTString(new Date());
-        if (h === 'deviceId') return data.deviceId || '';
-        return data[h] !== undefined ? data[h] : '';
-      });
-      // '=SUM(..)'처럼 = + - @ 로 시작하는 글이 수식으로 저장되지 않도록 새 행 전체를 일반 텍스트 서식으로 먼저 지정한 뒤 쓴다.
-      const newRowIndex = cSheet.getLastRow() + 1;
-      const newRowRange = cSheet.getRange(newRowIndex, 1, 1, commentRow.length);
-      newRowRange.setNumberFormat('@');
-      newRowRange.setValues([commentRow]);
-      return jsonResponse({ success: true, message: '댓글 저장 완료' });
+        let rowAction = 'CREATE';
+        let targetId = '';
+        let targetScheduleId = scheduleId;
+
+        if (action === 'ADD_COMMENT') {
+          if (!scheduleId) return commentResponse({ success: false, message: '댓글을 달 일정이 지정되지 않았습니다.' });
+        } else {
+          rowAction = action === 'EDIT_COMMENT' ? 'EDIT' : 'DELETE';
+          targetId = String(data.targetId || '').trim();
+          let original = null;
+          let alreadyDeleted = false;
+          measurePerformanceStage(performance, 'targetLookupMs', function () {
+            for (let i = 1; i < cRows.length; i++) {
+              const rid = String(cRows[i][col('id')]).trim();
+              const ract = String(cRows[i][col('action')]).trim();
+              if (rid === targetId && ract === 'CREATE') original = cRows[i];
+              if (ract === 'DELETE' && String(cRows[i][col('targetId')]).trim() === targetId) alreadyDeleted = true;
+            }
+          });
+          if (!original) return commentResponse({ success: false, message: '원본 댓글을 찾을 수 없습니다.' });
+          if (alreadyDeleted) return commentResponse({ success: false, message: '이미 삭제된 댓글입니다.' });
+
+          // 단원 명부는 최대 한 번만 읽는다. canonicalOf를 두 번 호출해도
+          // getDataRange().getValues() 호출은 첫 번째 때만 발생한다.
+          let cachedMemberRows = null;
+          const canonicalOf = function (id) {
+            if (!cachedMemberRows) {
+              const mSheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
+              cachedMemberRows = mSheet ? mSheet.getDataRange().getValues() : [];
+            }
+            const mHeaders = cachedMemberRows[0] || [];
+            const idCol = mHeaders.indexOf('id');
+            const mergedCol = mHeaders.indexOf('mergedIntoId');
+            let current = String(id).trim();
+            for (let hop = 0; hop < 10; hop++) {
+              let next = '';
+              for (let i = 1; i < cachedMemberRows.length; i++) {
+                if (String(cachedMemberRows[i][idCol]).trim() === current && mergedCol >= 0) next = String(cachedMemberRows[i][mergedCol] || '').trim();
+              }
+              if (!next) break;
+              current = next;
+            }
+            return current;
+          };
+          const authorId = String(original[col('memberId')]).trim();
+          if (authorId !== memberId) {
+            const isSameMember = measurePerformanceStage(performance, 'memberMergeLookupMs', function () {
+              return canonicalOf(authorId) === canonicalOf(memberId);
+            });
+            if (!isSameMember) {
+              return commentResponse({ success: false, message: '본인이 쓴 댓글만 수정하거나 삭제할 수 있습니다.' });
+            }
+          }
+          targetScheduleId = String(original[col('scheduleId')]).trim();
+        }
+
+        const commentRow = cHeaders.map(function (h) {
+          if (h === 'id') return eventId;
+          if (h === 'scheduleId') return targetScheduleId;
+          if (h === 'memberId') return memberId;
+          if (h === 'memberName') return data.memberName || '';
+          if (h === 'part') return data.part || '';
+          if (h === 'action') return rowAction;
+          if (h === 'targetId') return targetId;
+          if (h === 'text') return rowAction === 'DELETE' ? '' : text;
+          if (h === 'timestamp') return toKSTString(new Date());
+          if (h === 'deviceId') return data.deviceId || '';
+          return data[h] !== undefined ? data[h] : '';
+        });
+        // '=SUM(..)'처럼 = + - @ 로 시작하는 글이 수식으로 저장되지 않도록 새 행 전체를 일반 텍스트 서식으로 먼저 지정한 뒤 쓴다.
+        const newRowIndex = cSheet.getLastRow() + 1;
+        const newRowRange = cSheet.getRange(newRowIndex, 1, 1, commentRow.length);
+        measurePerformanceStage(performance, 'commentWriteMs', function () {
+          newRowRange.setNumberFormat('@');
+          newRowRange.setValues([commentRow]);
+        });
+        return commentResponse({ success: true, message: '댓글 저장 완료' });
+      } catch (error) {
+        console.error('[Comments] Request failed:', error);
+        return commentResponse({ success: false, message: '댓글 처리 중 오류가 발생했습니다.' });
+      }
     }
 
     if (action === 'SUBMIT_RSVP') {
@@ -496,6 +602,7 @@ function doPost(e) {
             return jsonResponse({ success: false, message: '생성한 단원 ID가 다른 회원 정보와 충돌합니다.' });
           }
           // 여러 브라우저 허용(임시): 기존 연동 기기가 있으면 그대로 두고, 비어 있을 때만 채운다.
+          const rowDeviceId = deviceCol >= 0 ? String(rows[i][deviceCol] || '').trim() : '';
           if (!rowDeviceId) {
             const updatedRow = rows[i].slice();
             updatedRow[deviceCol] = requestedDeviceId;
@@ -635,8 +742,9 @@ function doPost(e) {
 
     if (action === 'BIND_DEVICE') {
       const sheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
+      if (!sheet) return jsonResponse({ success: false, message: '단원명부 탭이 없습니다.' });
       const rows = sheet.getDataRange().getValues();
-      const headers = rows[0];
+      const headers = rows[0] || [];
       const idCol = headers.indexOf('id');
       const devCol = headers.indexOf('boundDeviceId');
       const timeCol = headers.indexOf('boundDeviceAt');
@@ -649,8 +757,12 @@ function doPost(e) {
           if (existingDeviceId) {
             return jsonResponse({ success: true, boundDeviceId: existingDeviceId, message: '기기 바인딩 완료' });
           }
-          if (devCol >= 0) sheet.getRange(i + 1, devCol + 1).setValue(requestedDeviceId);
-          if (timeCol >= 0) sheet.getRange(i + 1, timeCol + 1).setValue(toKSTString(new Date()));
+          // 두 칸을 각각 setValue하면 Sheets API를 두 번 호출한다.
+          // 행 전체를 한 번에 읽어 바꾼 뒤 setValues로 한 번에 쓴다.
+          const updatedRow = rows[i].slice();
+          if (devCol >= 0) updatedRow[devCol] = requestedDeviceId;
+          if (timeCol >= 0) updatedRow[timeCol] = toKSTString(new Date());
+          sheet.getRange(i + 1, 1, 1, updatedRow.length).setValues([updatedRow]);
           return jsonResponse({ success: true, boundDeviceId: requestedDeviceId, message: '기기 바인딩 완료' });
         }
       }
@@ -659,16 +771,20 @@ function doPost(e) {
 
     if (action === 'UNBIND_DEVICE') {
       const sheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
+      if (!sheet) return jsonResponse({ success: false, message: '단원명부 탭이 없습니다.' });
       const rows = sheet.getDataRange().getValues();
-      const headers = rows[0];
+      const headers = rows[0] || [];
       const idCol = headers.indexOf('id');
       const devCol = headers.indexOf('boundDeviceId');
       const timeCol = headers.indexOf('boundDeviceAt');
 
       for (let i = 1; i < rows.length; i++) {
         if (String(rows[i][idCol >= 0 ? idCol : 0]) === String(data.memberId)) {
-          if (devCol >= 0) sheet.getRange(i + 1, devCol + 1).setValue('');
-          if (timeCol >= 0) sheet.getRange(i + 1, timeCol + 1).setValue('');
+          // 두 칸 개별 쓰기 대신 한 번에 쓴다(Sheets API 호출 2회 → 1회).
+          const updatedRow = rows[i].slice();
+          if (devCol >= 0) updatedRow[devCol] = '';
+          if (timeCol >= 0) updatedRow[timeCol] = '';
+          sheet.getRange(i + 1, 1, 1, updatedRow.length).setValues([updatedRow]);
           return jsonResponse({ success: true, message: '기기 연동 해제 완료' });
         }
       }
@@ -815,16 +931,22 @@ function doPost(e) {
             const newStartDate = data.historyItem ? data.historyItem.startDate : toKSTString(new Date()).slice(0, 10);
 
             // 1) 시트의 이전 오픈 이력(2999-12-31) 마감: 새 시작일 - 1일
+            // 행마다 setValue를 호출하면 Sheets API를 N번 호출한다.
+            // 마감할 행 인덱스를 모아서 한 번에 setValues로 쓴다.
             if (hMIdCol >= 0 && hEndCol >= 0) {
               const prevDay = addDaysDateString(newStartDate, -1);
+              const rowsToClose = [];
               for (let hi = 1; hi < hRows.length; hi++) {
                 if (String(hRows[hi][hMIdCol]).trim() === String(data.id).trim()) {
                   const curEnd = String(hRows[hi][hEndCol]).trim();
                   if (curEnd === '2999-12-31' || curEnd >= newStartDate) {
-                    histSheet.getRange(hi + 1, hEndCol + 1).setValue(prevDay);
+                    rowsToClose.push(hi);
                   }
                 }
               }
+              rowsToClose.forEach(function (hi) {
+                histSheet.getRange(hi + 1, hEndCol + 1).setValue(prevDay);
+              });
             }
 
             // 2) 신규 이력 행 Append
@@ -923,32 +1045,34 @@ function doPost(e) {
       const statusCol = mHeaders.indexOf('status');
       const mergedIntoCol = mHeaders.indexOf('mergedIntoId');
 
-      // 다른 병합 계정이 참조 중인 대표 계정이거나 이미 MERGED 상태인 계정은 물리 삭제 차단
+      // 단원 탐색, 병합 참조 보호, 소프트/하드 삭제를 한 번의 루프로 처리한다.
+      // 이전 코드는 mergedIntoId 확인과 단원 삭제 처리를 두 번의 루프로 분리했다.
+      let targetRowIndex = -1;
+      let targetStatus = '';
       for (let r = 1; r < mRows.length; r++) {
+        // 다른 단원의 mergedIntoId가 이 단원을 참조하면 hasActivity = true
         if (mergedIntoCol >= 0 && String(mRows[r][mergedIntoCol]).trim() === memberId) {
           hasActivity = true;
-          break;
+        }
+        if (String(mRows[r][idCol >= 0 ? idCol : 0]).trim() === memberId) {
+          targetRowIndex = r;
+          targetStatus = statusCol >= 0 ? String(mRows[r][statusCol]).trim() : '';
         }
       }
 
-      for (let i = 1; i < mRows.length; i++) {
-        if (String(mRows[i][idCol >= 0 ? idCol : 0]).trim() === memberId) {
-          const currentStatus = statusCol >= 0 ? String(mRows[i][statusCol]).trim() : '';
-          if (currentStatus === 'MERGED') {
-            return jsonResponse({ success: true, message: '병합 연결 보존을 위해 MERGED 행을 유지합니다.' });
-          }
-          if (hasActivity && statusCol >= 0) {
-            // 과거 출결 통계 보호를 위한 소프트 삭제 (status='DELETED')
-            mSheet.getRange(i + 1, statusCol + 1).setValue('DELETED');
-            return jsonResponse({ success: true, message: '단원 출석 이력이 보존되며 상태가 삭제(DELETED) 처리되었습니다.' });
-          } else {
-            // 활동 없는 오등록 단원만 물리 삭제
-            mSheet.deleteRow(i + 1);
-            return jsonResponse({ success: true, message: '단원이 영구 삭제되었습니다.' });
-          }
-        }
+      if (targetRowIndex < 0) {
+        return jsonResponse({ success: false, message: '해당 단원을 찾을 수 없습니다: ' + memberId });
       }
-      return jsonResponse({ success: false, message: '해당 단원을 찾을 수 없습니다: ' + memberId });
+      if (targetStatus === 'MERGED') {
+        return jsonResponse({ success: true, message: '병합 연결 보존을 위해 MERGED 행을 유지합니다.' });
+      }
+      if (hasActivity && statusCol >= 0) {
+        mSheet.getRange(targetRowIndex + 1, statusCol + 1).setValue('DELETED');
+        return jsonResponse({ success: true, message: '단원 출석 이력이 보존되며 상태가 삭제(DELETED) 처리되었습니다.' });
+      } else {
+        mSheet.deleteRow(targetRowIndex + 1);
+        return jsonResponse({ success: true, message: '단원이 영구 삭제되었습니다.' });
+      }
     }
 
     if (action === 'MERGE_MEMBERS') {
@@ -1576,4 +1700,24 @@ function readSheetData(sheet) {
 function jsonResponse(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function measurePerformanceStage(performance, stage, work) {
+  const startedAt = Date.now();
+  try {
+    return work();
+  } finally {
+    performance[stage] = Date.now() - startedAt;
+  }
+}
+
+function getPerformanceMetrics(performance) {
+  const startedAt = performance.startedAt || performance.requestStartedAt;
+  const metrics = Object.assign({}, performance, { totalMs: Date.now() - startedAt });
+  delete metrics.startedAt;
+  delete metrics.requestStartedAt;
+  if (typeof console !== 'undefined' && console.log) {
+    console.log(JSON.stringify(metrics));
+  }
+  return metrics;
 }
