@@ -1,7 +1,7 @@
 # 22. 댓글 반응 · 새 소식 · 계정별 읽음 · 스티커 축하 개발 지시서 (V3-24)
 
 > 작성: 리뷰어(Claude), 2026-11-27. 기준 코드: `origin/main` @ `3d34859`.
-> 명세: `docs/MEMBER_UX_V3_SPEC.md` §0-1 V41~V50.
+> 명세: `docs/MEMBER_UX_V3_SPEC.md` §0-1 V41~V51.
 > 시안(사용자 확정): https://claude.ai/artifact/78R1NaARRVq6a9zKrpZM9r "댓글 반응 · 새 소식" 줄의 `SocialReact`, `SocialPick`, `SocialWho`, `NewsHome`, `NewsList`, `NewsEmpty`, `StickerCelebrate`, `StickerCelebrate2`. 시안 hex는 쓰지 않는다. 시안의 예시 이름·숫자는 넣지 않는다.
 > 시작 전: `.agents/rules/recurring-mistakes.md`를 읽고 `/spec-check`로 §3 표를 코드에 대 본다. 어긋나면 시작하지 말고 보고한다.
 > **DB 변경이 있다.** 개발 에이전트는 마이그레이션 파일과 검증 스크립트만 커밋한다. 운영 적용은 리뷰어가 앱 배포 **전에** 한다(§7).
@@ -10,7 +10,7 @@
 
 ## 1. 바뀌는 것 한 줄
 
-댓글에 고정 6개 이모지 반응을 달고, 홈 머리의 종에서 "새 소식"을 보고, 읽음 기록을 기기가 아닌 계정(단원)별로 서버에 두고, 새 칭찬 스티커를 받으면 앱을 열 때 축하 화면을 띄운다.
+댓글에 고정 6개 이모지 반응과 @언급을 달고, 홈 머리의 종에서 "새 소식"을 보고, 읽음 기록을 기기가 아닌 계정(단원)별로 서버에 두고, 새 칭찬 스티커를 받으면 앱을 열 때 축하 화면을 띄운다.
 
 ## 2. 데이터 관계 (가장 중요)
 
@@ -21,7 +21,8 @@
 | 댓글 반응 칩 | **새** `comment_reaction_events`(추가만, 서버 시각 `received_at`) | `fn_get_initial_snapshot`의 `reactions` | `buildCommentReactions` | 댓글 아래 칩, 반응한 사람 |
 | 반응 남기기 | — | **새** RPC `fn_add_reaction` | — | 칩 누름 |
 | 새 댓글 표시 | `schedule_comment_events.received_at`(이미 있음, 스냅샷에 **추가**) + **새** `member_seen_state` | 스냅샷 + **새** RPC `fn_get_seen_state` | `isCommentUnread` | 홈 카드 점, 상세 "새 댓글" |
-| 새 소식 | 반응·댓글 `received_at`, 일정·투표, 스티커 판정 + `member_seen_state` | 위와 같음 | `buildNewsItems` | 종 숫자, 소식 목록 |
+| @언급 | `schedule_comment_events`에 **새 열** `mention_member_ids text[]` | 스냅샷 `mentionMemberIds` | `buildScheduleComments`(언급 반영) | 댓글 글자 강조, 새 소식 |
+| 새 소식 | 반응·댓글 `received_at`, 언급, 일정·투표, 스티커 판정 + `member_seen_state` | 위와 같음 | `buildNewsItems` | 종 숫자, 소식 목록 |
 | 스티커 축하 | 스티커 판정(`evaluatePraiseStickers`) + `member_seen_state`(kind `sticker`) | 활동 RPC `fn_get_member_activity` + 위 | `useEarnedStickers` → `pickUnseenStickers` | 축하 화면, 내 활동 "신규" |
 
 ### 2-2. 데이터 관계 점검 (data-integrity-review 기준)
@@ -49,7 +50,8 @@
 | 이름 | 정의 위치 | 호출부 | 받는 것 → 돌려주는 것 | 이 티켓에서 |
 |---|---|---|---|---|
 | `schedule_comment_events` | `supabase/migrations/20261119000000_schema_and_tables.sql:144-158` | `fn_add_comment` 등 | `id`(unique), `schedule_id`, `member_id`, `action`(CREATE/EDIT/DELETE), `target_id`, `timestamp`(text), `received_at timestamptz default now()`, 수정·삭제 막는 트리거(`:191-194`, `prevent_raw_log_mutation`) | 반응 표를 같은 모양으로 만든다 |
-| `fn_add_comment` | `supabase/migrations/20261119000001_rpc_functions.sql:324` | `supabaseBackend.ts:118` | payload → insert, 검사 없음 | 참고만(반응 RPC는 검사를 더 둔다) |
+| `fn_add_comment` / `fn_edit_comment` / `fn_delete_comment` | `supabase/migrations/20261119000001_rpc_functions.sql:324` / `:348` / `:372`(유일한 정의) | `supabaseBackend.ts:118-123` | payload → insert, 검사 없음 | add·edit는 **최신 정의 전체를 복사해** `mentionMemberIds` 저장만 추가(R10). delete는 그대로 |
+| `sheetsService.addComment` / `editComment` | `src/services/sheets.ts:390` / 그 아래 | `ScheduleComments.tsx` | 글자 정리(`normalizeCommentText`) → 이벤트 | `mentionMemberIds` 인자 추가 |
 | `fn_get_initial_snapshot` | `20261119000001_rpc_functions.sql:18`(유일한 정의) | `supabaseBackend.ts:36` | 전체 데이터. 댓글은 `seq` 순(`order by cmt.seq asc`), `receivedAt` 없음 | **최신 정의 전체를 복사해** 댓글에 `receivedAt` 추가, `reactions` 배열 추가(규칙 4) |
 | `fn_safe_timestamptz` | `20261124000000_v3_activity.sql:22` | 활동 RPC | text, fallback → timestamptz | `fn_mark_seen`의 `upTo` 해석 |
 | `fn_get_kst_now_string` | `20261119000001_rpc_functions.sql:8` | 여러 RPC | KST 문자열 | 쓰지 않는다(서버 시각은 `now()`) |
@@ -345,6 +347,51 @@ create table if not exists member_seen_state (
 | 삭제된 댓글의 반응 | 줄은 남고 댓글 칸 "(삭제된 댓글)" |
 | 병합된 별칭 id로 기록 | 단원 칸은 별칭 행의 이름(기록 그대로) |
 
+### R10. @언급 (V51)
+
+**데이터 (같은 마이그레이션)**
+- `alter table schedule_comment_events add column if not exists mention_member_ids text[] not null default '{}'`. 기존 83행은 빈 배열(옛 행 그대로 읽힘).
+- `fn_add_comment`·`fn_edit_comment`: 최신 정의 전체를 복사하고 `mention_member_ids` 값만 추가한다. 값은 payload `mentionMemberIds`에서 **members에 있는 id만**, 중복 제거, 최대 10개(서버에서 거름). 그 밖의 줄은 바꾸지 않는다.
+- 스냅샷 댓글 객체에 `'mentionMemberIds', to_jsonb(cmt.mention_member_ids)`.
+- 쓸 때 언급 대상 id는 **대표 id**로 바꿔 보낸다(`resolveMemberIdentity(...).canonicalId`).
+
+**투영 (`buildScheduleComments`)**
+- `ScheduleComment.mentionMemberIds: string[]`: CREATE의 목록, EDIT가 있으면 마지막 EDIT의 목록으로 바꾼다(글자와 같은 규칙).
+- `ScheduleComment.mentionedAt: Record<memberId, string>`: 그 단원이 **처음 들어간 이벤트**의 `receivedAt`(CREATE 또는 그 단원을 처음 넣은 EDIT). 수정으로 빠졌다가 다시 들어오면 다시 들어온 시각.
+
+**입력 화면**
+- 댓글 입력칸(새 댓글·수정 모두)에서 `@`를 치면 입력칸 바로 위에 단원 목록이 뜬다. 대상은 활성 단원(병합·삭제 제외, `getMembers()`), 나 자신 제외.
+- `@` 뒤 글자로 이름을 걸러 낸다(공백 무시, 앞부분 일치 우선, 그다음 포함).
+- 줄마다 이름 + 파트 배지를 둔다(같은 이름 구분). 터치 영역 44px, 최대 5줄 보이고 스크롤.
+- 고르면 `@이름 ` + 공백을 넣고 그 id를 언급 목록에 넣는다. 일치하는 단원이 없으면 "일치하는 단원이 없어요".
+- 보내기 직전 글자에 `@{그 단원 이름}`이 더는 없으면 그 id를 목록에서 뺀다(지운 언급은 저장하지 않음).
+- 키보드: 위·아래 화살표로 고르고, Enter로 넣고, Esc로 닫는다.
+
+**보여 주기**
+- 댓글 글자 안의 `@{이름}` 중 언급 목록에 있는 단원 이름과 맞는 부분만 `--brand-primary` 글자 + 굵게로 보여 준다. 링크는 아니다.
+- 이름 원천은 쓸 당시 글자다(이름을 바꿔도 옛 글자는 그대로).
+
+**새 소식**
+- 종류 "언급": 나(별칭 포함)를 언급한 남의 댓글(삭제 안 됨). at = `mentionedAt[나]`.
+  - 문구: "{작성자} 님이 댓글에서 나를 언급했어요" / "\"{댓글 앞 20자}…\" · {일정 제목} · {상대 시각}"
+  - 누르면 그 일정 상세가 열린다.
+- 같은 댓글은 "새 댓글" 묶음 개수에서 뺀다(두 번 알리지 않음).
+- GAS 모드에서는 `@` 목록을 띄우지 않는다.
+
+| 입력 | 기대 |
+|---|---|
+| m2가 "@이하은 악보 챙겨요"로 m1 언급 | m1 새 소식 "민지 님이 댓글에서 나를 언급했어요", 글자 "@이하은" 강조 |
+| m2가 별칭 m1b를 골라 언급(대표 m1로 저장) | m1에게 소식 |
+| m1이 자기 자신을 언급하려 함 | 목록에 m1 없음 |
+| 입력 중 "@이하은"을 지우고 보냄 | 언급 없음, 소식 없음 |
+| 수정으로 m3 언급 추가(11:30) | m3 소식 at 11:30, m1 기존 시각 유지 |
+| 수정으로 m1 언급 삭제 | m1 소식 사라짐 |
+| 언급한 댓글 삭제 | 소식 사라짐 |
+| 없는 id `x9`를 payload에 넣음 | 서버가 빼고 저장 |
+| 언급 11개 | 서버가 앞 10개만 저장 |
+| 이름이 같은 두 단원 | 목록에서 파트로 구분, 저장은 id |
+| A에 내 댓글이 있고 m2가 나를 언급한 새 댓글 | "언급" 1개, "새 댓글" 묶음에는 안 셈 |
+
 ---
 
 ## 5. 끝에서 끝까지 손계산 (테스트에 그대로)
@@ -389,7 +436,8 @@ create table if not exists member_seen_state (
   - R3 표와 `fn_mark_seen`, `fn_get_seen_state`
   - `fn_get_initial_snapshot`: **`20261119000001_rpc_functions.sql:18`의 정의 전체를 복사**해 댓글 객체에 `'receivedAt', to_char(cmt.received_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`를 넣고, `reactions`(seq 순, 같은 시각 형식)를 추가한다. 다른 줄은 바꾸지 않는다. 복사 원본과 diff를 보고한다(규칙 4).
   - 새 함수의 `grant execute ... to anon, authenticated`와 `set search_path = public`
-- `supabase/tests/v3_reactions_seen_check.sql`(트랜잭션 + ROLLBACK): R1·R3 표의 모든 줄과 스냅샷의 `receivedAt`·`reactions` 존재를 검사한다.
+  - R10: `mention_member_ids` 열 추가, `fn_add_comment`·`fn_edit_comment` 복사 수정, 스냅샷에 `mentionMemberIds`
+- `supabase/tests/v3_reactions_seen_check.sql`(트랜잭션 + ROLLBACK): R1·R3 표의 모든 줄, R10 서버 줄(없는 id 제거·10개 제한·옛 행 빈 배열), 스냅샷의 `receivedAt`·`reactions`·`mentionMemberIds`를 검사한다.
 - SQL에서 text 시각을 `::timestamptz`로 바로 바꾸지 않는다(규칙 12). `fn_safe_timestamptz`를 쓴다.
 
 ### W2. 데이터 층 (순수 함수 + 어댑터)
@@ -406,9 +454,10 @@ create table if not exists member_seen_state (
   - `rpcContract.test.ts`: 새 RPC 3개 payload 키, `REACTION_EMOJIS`와 SQL check 목록이 같은지 검사.
   - 스냅샷 파서: `receivedAt` 없는 옛 행.
 
-### W3. 반응 화면
+### W3. 반응·언급 화면
 - `ScheduleComments.tsx`에 칩 줄·☺+·고르기·길게 누르기 → `src/components/home/CommentReactions.tsx`, `ReactorsSheet.tsx`(새 파일, 각 400줄 이하).
-- **테스트:** 가짜 DOM(`ScheduleDetailSheet.test.tsx` 방식)으로 칩 누름 → 낙관적 반영, 실패 → 되돌림.
+- 언급: `src/components/home/MentionPicker.tsx`(새), 입력칸 연결, 글자 강조. 걸러 내기·지운 언급 빼기·강조 범위는 순수 함수(`src/utils/mentions.ts`: `filterMentionCandidates`, `pruneMentions`, `splitMentionText`)로 만든다.
+- **테스트:** 가짜 DOM(`ScheduleDetailSheet.test.tsx` 방식)으로 칩 누름 → 낙관적 반영, 실패 → 되돌림. R10 표의 클라이언트 줄 전부(순수 함수).
 
 ### W4. 계정 읽음 기록으로 교체 + 새 소식
 - `useSeenComments.ts`를 계정 기록 기반으로 고친다(R4·R5). `ScheduleComments.tsx`의 닫을 때 기록을 `markSeen`으로 바꾼다.
@@ -425,7 +474,7 @@ create table if not exists member_seen_state (
 
 ### 확인 방법
 - `scripts/dev/capture-screens.mjs`(V3-22 `--home` 방식)에 장면 추가. 장마다 `scrollWidth`를 적는다.
-  - 390×844: 댓글 반응, 고르기 열림, 반응한 사람, 홈 종(숫자 3), 소식 목록, 빈 상태, 축하(0.4초·완료 2장), 축하 2개 중 1
+  - 390×844: 댓글 반응, 고르기 열림, 반응한 사람, `@` 단원 목록 열림, 언급 강조된 댓글, 홈 종(숫자), 소식 목록(언급 포함), 빈 상태, 축하(0.4초·완료 2장), 축하 2개 중 1, 요약 축하
   - 다크: 소식 목록, 축하
 - 로컬 PostgreSQL이 없으면 `db-check.sh`는 "미실행"으로 적고 CI 결과를 붙인다.
 
@@ -451,4 +500,5 @@ create table if not exists member_seen_state (
 - **V48:** 한 댓글에 여러 이모지 가능, 반응한 사람은 모두 공개, 최고 관리자 화면에 반응 이력.
 - **V49:** 기능 첫 실행 때 이미 받은 스티커는 요약 축하 한 번.
 - **V50:** 출석 직후 받은 스티커는 바로 축하.
-- 범위 밖: 대댓글(스레드), @언급(다음 단계 후보), 푸시 알림(다음 주).
+- **V51:** @언급은 이번 티켓에 넣는다(사용자 결정).
+- 범위 밖: 대댓글(스레드), 푸시 알림(다음 주).
