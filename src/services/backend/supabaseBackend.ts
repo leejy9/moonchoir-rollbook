@@ -121,6 +121,12 @@ export class SupabaseBackend implements RemoteBackend {
         return 'fn_edit_comment';
       case 'DELETE_COMMENT':
         return 'fn_delete_comment';
+      case 'ADD_REACTION':
+        return 'fn_add_reaction';
+      case 'MARK_SEEN':
+        return 'fn_mark_seen';
+      case 'GET_SEEN_STATE':
+        return 'fn_get_seen_state';
       case 'SUBMIT_RSVP':
         return 'fn_submit_rsvp';
       case 'CANCEL_RSVP':

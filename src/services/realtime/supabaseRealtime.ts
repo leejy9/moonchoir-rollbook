@@ -1,10 +1,13 @@
 import type {
   AuthMethod,
+  CommentReactionAction,
+  CommentReactionEvent,
   LocationPreset,
   Member,
   MemberStatus,
   PartType,
   ProgramCard,
+  ReactionEmoji,
   RoleType,
   RSVPStatus,
   RSVPVote,
@@ -16,6 +19,8 @@ import type {
   ScheduleVisibility,
   TargetAudienceType,
 } from '../../types/rollbook';
+import { isReactionEmoji } from '../../utils/commentReactions';
+import { parseMentionMemberIds } from '../sheetsParser';
 import { sheetsService, type SheetsService } from '../sheets';
 
 export interface SupabaseRealtimeConfig {
@@ -97,6 +102,8 @@ export function mapSnakeToCamelCommentEvent(raw: Record<string, unknown>): Sched
   const actionRaw = str(raw.action, 'CREATE').toUpperCase();
   const action: ScheduleCommentAction =
     actionRaw === 'EDIT' ? 'EDIT' : actionRaw === 'DELETE' ? 'DELETE' : 'CREATE';
+  const receivedAt = str(raw.received_at ?? raw.receivedAt) || undefined;
+  const mentionMemberIds = parseMentionMemberIds(raw.mention_member_ids ?? raw.mentionMemberIds);
 
   return {
     id: str(raw.id),
@@ -109,6 +116,38 @@ export function mapSnakeToCamelCommentEvent(raw: Record<string, unknown>): Sched
     text: raw.text !== undefined && raw.text !== null ? String(raw.text) : undefined,
     timestamp: str(raw.timestamp),
     deviceId: str(raw.device_id ?? raw.deviceId) || undefined,
+    ...(receivedAt ? { receivedAt } : {}),
+    ...(mentionMemberIds !== undefined ? { mentionMemberIds } : {}),
+  };
+}
+
+export function mapSnakeToCamelReactionEvent(raw: Record<string, unknown>): CommentReactionEvent | null {
+  const str = (val: unknown, fallback = ''): string => {
+    if (val === undefined || val === null) return fallback;
+    return String(val).trim();
+  };
+
+  const id = str(raw.id);
+  const commentId = str(raw.comment_id ?? raw.commentId);
+  const scheduleId = str(raw.schedule_id ?? raw.scheduleId);
+  const memberId = str(raw.member_id ?? raw.memberId);
+  const emojiRaw = str(raw.emoji);
+  const actionRaw = str(raw.action).toUpperCase();
+  if (!id || !commentId || !memberId || !isReactionEmoji(emojiRaw)) return null;
+  if (actionRaw !== 'ADD' && actionRaw !== 'REMOVE') return null;
+
+  const receivedAt = str(raw.received_at ?? raw.receivedAt) || undefined;
+  const deviceId = str(raw.device_id ?? raw.deviceId) || undefined;
+
+  return {
+    id,
+    commentId,
+    scheduleId,
+    memberId,
+    emoji: emojiRaw as ReactionEmoji,
+    action: actionRaw as CommentReactionAction,
+    ...(deviceId ? { deviceId } : {}),
+    ...(receivedAt ? { receivedAt } : {}),
   };
 }
 
@@ -349,6 +388,7 @@ export class SupabaseRealtimeClient {
               postgres_changes: [
                 { event: '*', schema: 'public', table: 'attendance_logs' },
                 { event: '*', schema: 'public', table: 'schedule_comment_events' },
+                { event: '*', schema: 'public', table: 'comment_reaction_events' },
                 { event: '*', schema: 'public', table: 'rsvp_votes' },
                 { event: '*', schema: 'public', table: 'schedules' },
                 { event: '*', schema: 'public', table: 'members' },
@@ -447,6 +487,10 @@ export class SupabaseRealtimeClient {
           const mappedRecord = record && typeof record === 'object' ? mapSnakeToCamelCommentEvent(record) : null;
           const mappedOldRecord = oldRecord && typeof oldRecord === 'object' ? mapSnakeToCamelCommentEvent(oldRecord) : null;
           this.targetSheetsService.mergeRealtimeCommentEvent(type, mappedRecord, mappedOldRecord);
+        } else if (table === 'comment_reaction_events') {
+          const mappedRecord = record && typeof record === 'object' ? mapSnakeToCamelReactionEvent(record) : null;
+          const mappedOldRecord = oldRecord && typeof oldRecord === 'object' ? mapSnakeToCamelReactionEvent(oldRecord) : null;
+          this.targetSheetsService.mergeRealtimeReactionEvent(type, mappedRecord, mappedOldRecord);
         } else if (table === 'rsvp_votes') {
           const mappedRecord = record && typeof record === 'object' ? mapSnakeToCamelRsvpVote(record) : null;
           const mappedOldRecord = oldRecord && typeof oldRecord === 'object' ? mapSnakeToCamelRsvpVote(oldRecord) : null;

@@ -61,6 +61,8 @@ function mappedRpcFunctions(): Map<string, string> {
   return mappings;
 }
 
+import { REACTION_EMOJIS } from '../../utils/commentReactions';
+
 const contracts = [
   {
     rpc: 'fn_merge_members__impl',
@@ -71,6 +73,31 @@ const contracts = [
     rpc: 'fn_batch_delete_schedules__impl',
     clientKeys: ['ids'],
     legacyKeys: ['scheduleIds'],
+  },
+  {
+    rpc: 'fn_add_reaction',
+    clientKeys: ['id', 'commentId', 'memberId', 'emoji', 'action', 'deviceId'],
+    legacyKeys: [],
+  },
+  {
+    rpc: 'fn_mark_seen',
+    clientKeys: ['memberId', 'items'],
+    legacyKeys: [],
+  },
+  {
+    rpc: 'fn_get_seen_state',
+    clientKeys: ['memberIds'],
+    legacyKeys: [],
+  },
+  {
+    rpc: 'fn_add_comment',
+    clientKeys: ['id', 'scheduleId', 'memberId', 'text', 'mentionMemberIds'],
+    legacyKeys: [],
+  },
+  {
+    rpc: 'fn_edit_comment',
+    clientKeys: ['id', 'scheduleId', 'memberId', 'targetId', 'text', 'mentionMemberIds'],
+    legacyKeys: [],
   },
 ] as const;
 
@@ -97,6 +124,25 @@ describe('Supabase RPC payload contracts', () => {
       }
     }
   );
+
+  it('fn_mark_seen reads items[].kind, scope, upTo and REACTION_EMOJIS matches SQL check', () => {
+    const markSeenBody = latestFunctionBody('fn_mark_seen');
+    expect(markSeenBody).toBeDefined();
+    expect(markSeenBody).toContain("->>'kind'");
+    expect(markSeenBody).toContain("->>'scope'");
+    expect(markSeenBody).toContain("->>'upTo'");
+
+    const migrationSql = readFileSync(
+      join(migrationDirectory, '20261127000000_v3_reactions_seen.sql'),
+      'utf8'
+    );
+    const checkMatch = /check\s*\(\s*emoji\s+in\s*\(([^)]+)\)\s*\)/i.exec(migrationSql);
+    expect(checkMatch).not.toBeNull();
+    const sqlEmojis = [...checkMatch![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(sqlEmojis.map((e) => [...e].map((c) => c.codePointAt(0)))).toEqual(
+      REACTION_EMOJIS.map((e) => [...e].map((c) => c.codePointAt(0)))
+    );
+  });
 
   it('sends the actual merge and batch-delete payloads through SheetsService to their RPCs', async () => {
     resetStorage();

@@ -16,6 +16,7 @@ function makeSticker(
     bundleTitle: '무대',
     frame: 'circle',
     conditionDescription: '',
+    celebrationText: '',
     image: 'check_mark_button',
     staffEligible: true,
     earned,
