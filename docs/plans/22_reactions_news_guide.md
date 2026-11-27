@@ -673,3 +673,39 @@ alter table member_seen_state enable row level security;
 | S14 명세 §7·§10 | §7-8, 수용 기준 추가 |
 | S15 GAS에서 읽음 RPC | 바로 빠져나옴, GAS는 점·종 없음 |
 | 사소 | `n` 정의, `earnedOn` 없음, 옛 캐시 언급, 작성자 EDIT만, 속도 제한 색인, publication `schemaname`, `revoke` 재기재, 순환 규칙, 한 방향 연결 명시, UTC 입력, "2번째", 행 번호, 타입 목록, "표 밖 이름" 문구, 서버 시각 해석 함수, 실시간 배열 두 모양 |
+
+---
+
+## 10. 개발 에이전트(안티그래비티) 시작 프롬프트
+
+아래를 그대로 붙여 넣는다.
+
+```
+이번엔 **V3-24 댓글 반응 · @언급 · 새 소식 · 계정별 읽음 · 스티커 축하**야. 지시서는 docs/plans/22_reactions_news_guide.md, 명세는 docs/MEMBER_UX_V3_SPEC.md의 V41~V51, §7-8, §9, §10이야. 지시서를 끝까지 읽어(특히 §2 데이터 관계, §4 R11 공통 규칙).
+
+시작 전에:
+1. .agents/rules/recurring-mistakes.md를 다시 읽어.
+2. git fetch origin && git checkout -b feat/reactions-news origin/main
+3. /spec-check로 지시서 §3 계약 표를 코드에 대 봐. 함수·파일·행이 다르면 시작하지 말고 보고해.
+
+시안(사용자 확정): https://claude.ai/artifact/78R1NaARRVq6a9zKrpZM9r 맨 아래 "댓글 반응 · 새 소식" 줄(SocialReact, SocialPick, SocialWho, NewsHome, NewsList, NewsEmpty, StickerCelebrate, StickerCelebrate2). 링크가 안 열리면 지시서 §4를 기준으로 해. 시안 hex는 쓰지 말고 src/index.css 변수만 써.
+
+꼭 지킬 것:
+- DB 변경은 supabase/migrations/20261127000000_v3_reactions_seen.sql 파일과 supabase/tests/v3_reactions_seen_check.sql만 커밋해. 운영 DB에는 아무것도 실행하지 말고, 실행해 달라고 요청하지도 마. 기존 SQL 함수는 최신 정의 전체를 복사해서 필요한 줄만 바꾸고, 복사 원본과 diff를 보고해.
+- 새 RPC 3개(GET_SEEN_STATE, MARK_SEEN, ADD_REACTION)는 NON_MUTATING_ACTIONS에 넣어. 안 넣으면 새로고침이 무한 반복돼.
+- 서버 시각 비교는 parseServerTimeMs(ms)로만 해. 댓글의 timestamp 문자열이나 parseKSTDate로 비교하지 마. "내 첫 댓글보다 뒤" 같은 순서는 getComments 순서로 판정해.
+- 병합 회원: 쓸 때는 대표 id, 읽을 때는 별칭 포함 id 전체.
+- 계산은 한 곳에서만: 반응 buildCommentReactions, 새 소식 buildNewsItems, 읽음 seenStateStore, 스티커 useMemberActivityModel(App에서 한 번).
+- 실시간 댓글 매퍼(mapSnakeToCamelCommentEvent)도 receivedAt·mentionMemberIds를 읽게 고치고, 반응 표도 실시간 구독에 넣어.
+- §4에 없는 새 문구가 필요하면 멈추고 보고해.
+- 하지 말 것: npm 설치, package.json 수동 수정, PR 머지, 배포, 푸시 알림(다음 티켓).
+
+W1~W5를 각각 커밋하고 PR은 하나로 열어(Base main, gh pr view로 확인). 끝나면 /report-ready를 돌리고 CI가 초록불인지 확인한 뒤, docs/plans/17_v3_implementation_guide.md §5 형식으로 보고하고 멈춰. 보고에 넣을 것:
+- gh pr view <번호> --json baseRefName,headRefName,statusCheckRollup 결과
+- 마이그레이션 복사 원본과 diff
+- 지시서 §6 확인 방법의 캡처와 장마다 scrollWidth(못 찍으면 "미확인"과 이유)
+- 새 한글 문구 목록(지시서 §4와 대조)
+- 로컬 PostgreSQL이 없으면 db-check.sh는 "미실행", CI 결과 첨부
+```
+
+보고가 오면 리뷰어 세션(로컬 리뷰어 또는 이 저장소의 `docs/agent/HANDOFF.md`를 읽은 새 세션)에 붙여 넣는다. 리뷰어가 검토 → 마이그레이션 운영 적용·검증 → 앱 배포 순서로 진행한다(§7).
