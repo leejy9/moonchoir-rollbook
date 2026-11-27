@@ -198,5 +198,9 @@ class SeenStateStore {
 export const seenStateStore = new SeenStateStore();
 
 export function useSeenState(): SeenStoreSnapshot {
-  return useSyncExternalStore(seenStateStore.subscribe, seenStateStore.getSnapshot);
+  return useSyncExternalStore(
+    seenStateStore.subscribe,
+    seenStateStore.getSnapshot,
+    seenStateStore.getSnapshot
+  );
 }

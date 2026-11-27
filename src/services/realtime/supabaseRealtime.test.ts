@@ -351,6 +351,7 @@ describe('supabaseRealtime', () => {
       expect(joinMsg[4].config.postgres_changes).toEqual([
         { event: '*', schema: 'public', table: 'attendance_logs' },
         { event: '*', schema: 'public', table: 'schedule_comment_events' },
+        { event: '*', schema: 'public', table: 'comment_reaction_events' },
         { event: '*', schema: 'public', table: 'rsvp_votes' },
         { event: '*', schema: 'public', table: 'schedules' },
         { event: '*', schema: 'public', table: 'members' },

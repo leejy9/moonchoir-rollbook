@@ -1,22 +1,17 @@
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { seenStateStore, useSeenState } from '../services/seenStateStore';
-import { sheetsService } from '../services/sheets';
 import { useBlockingOverlay } from '../hooks/useBlockingOverlay';
 import { pickUnseenStickers } from '../utils/seenState';
-import type { BoundDeviceProfile, Member, MemberActivity, Schedule } from '../types/rollbook';
+import type { BoundDeviceProfile, Schedule } from '../types/rollbook';
 import type { DisplayMode, ThemeMode } from '../services/displayMode';
 import { getKSTDateString, parseKSTDate } from '../utils/date';
-import { buildMemberScheduleRecords } from '../utils/memberRecords';
-import { resolveMemberIdentity } from '../utils/memberIdentity';
-import { isActivityStaff } from '../utils/staff';
 import { DEFAULT_PERFORMANCE_CATEGORIES } from '../utils/performanceCategories';
 import {
   computeAttendance90Days, computeDaysTogether, computeMemberLevel,
   computePerformanceCount, computePracticeHours, formatStaffTenure,
 } from '../utils/memberProgress';
 import { computePassionTemperature } from '../utils/passionTemperature';
-import { evaluatePraiseStickers } from '../utils/praiseStickers';
-import { isStickerDataReady } from './profile/useSeenStickers';
+import { useMemberActivityModel, type MemberActivityModel } from './profile/useMemberActivityModel';
 import { ProfileSettingsSection } from './profile/ProfileSettingsSection';
 import { ProfileHeroCards } from './profile/ProfileHeroCards';
 import { ProfileNumbersRow } from './profile/ProfileNumbersRow';
@@ -39,6 +34,9 @@ export interface ProfileTabProps {
   onOpenRSVP?: (schedule: Schedule) => void;
   onOpenQRScanner?: (schedule: Schedule) => void;
   refreshTrigger?: number;
+  model?: MemberActivityModel;
+  openStickerBoardSignal?: number;
+  onStickerBoardOpened?: () => void;
 }
 
 export const ProfileTab: React.FC<ProfileTabProps> = ({
@@ -50,111 +48,46 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   onChangeBinding,
   onLogout,
   refreshTrigger,
+  model: modelProp,
+  openStickerBoardSignal = 0,
+  onStickerBoardOpened,
 }) => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [activeSheet, setActiveSheet] = useState<'NONE' | 'LEVEL' | 'ATTENDANCE' | 'TEMP' | 'STICKERS'>('NONE');
   useBlockingOverlay(activeSheet !== 'NONE');
   const [selectedScheduleFilter, setSelectedScheduleFilter] = useState<SelectedScheduleFilter | null>(null);
 
-  const [activity, setActivity] = useState<MemberActivity | null>(null);
-
-  const [currentNow, setCurrentNow] = useState(() => new Date());
+  const [prevBoardSignal, setPrevBoardSignal] = useState(0);
+  if (openStickerBoardSignal > 0 && openStickerBoardSignal !== prevBoardSignal) {
+    setPrevBoardSignal(openStickerBoardSignal);
+    setActiveSheet('STICKERS');
+  }
   useEffect(() => {
-    const timer = setInterval(() => setCurrentNow(new Date()), 10000);
-    return () => clearInterval(timer);
-  }, []);
+    if (openStickerBoardSignal > 0) {
+      onStickerBoardOpened?.();
+    }
+  }, [openStickerBoardSignal, onStickerBoardOpened]);
+
+  const fallbackModel = useMemberActivityModel(modelProp ? null : profile, refreshTrigger);
+  const {
+    currentMember,
+    members,
+    config,
+    currentNow,
+    schedules,
+    logs: allLogs,
+    rsvpVotes: allRsvpVotes,
+    isStaff,
+    scheduleRecords,
+    activity,
+    evaluatedStickers,
+    isDataReady,
+  } = modelProp ?? fallbackModel;
+
   const todayStr = useMemo(() => getKSTDateString(currentNow), [currentNow]);
-  const syncState = useSyncExternalStore(
-    (listener) => sheetsService.subscribeSync(listener),
-    () => sheetsService.getSyncState(),
-    () => sheetsService.getSyncState()
-  );
-
-  // Reactive data sources
-  const members = useMemo(() => {
-    void refreshTrigger;
-    return sheetsService.getMembers(true, true);
-  }, [refreshTrigger]);
-
-  const config = useMemo(() => {
-    void refreshTrigger;
-    return sheetsService.getConfig();
-  }, [refreshTrigger]);
-
-  const currentMember = useMemo((): Member => {
-    const canonicalId = resolveMemberIdentity(profile.memberId, members).canonicalId;
-    const found = members.find((m) => m.id === canonicalId);
-    if (found) return found;
-    return {
-      id: profile.memberId,
-      name: profile.name,
-      part: profile.part,
-      phoneLast4: profile.phoneLast4,
-      role: 'MEMBER',
-      status: 'ACTIVE',
-      createdAt: '',
-      joinedAt: '',
-      memberStatus: '정단원',
-    };
-  }, [members, profile]);
-
   const memberPart = currentMember.part || profile.part;
   const memberName = currentMember.name || profile.name;
-  const activityAliasIds = useMemo(
-    () => resolveMemberIdentity(currentMember.id, members).aliasIds,
-    [currentMember.id, members]
-  );
-  const activityAliasIdsKey = activityAliasIds.join(',');
-
-  // Fetch member activity (listen sessions, rsvp events) on mount & refresh
-  useEffect(() => {
-    let isMounted = true;
-    sheetsService
-      .getMemberActivity(activityAliasIds)
-      .then((act) => {
-        if (isMounted) setActivity(act);
-      })
-      .catch((err) => {
-        console.warn('[ProfileTab] Failed to fetch member activity:', err);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [activityAliasIds, activityAliasIdsKey, refreshTrigger]);
-
-  const schedules = useMemo(() => {
-    void refreshTrigger;
-    return sheetsService.getSchedulesForMember(profile.memberId);
-  }, [profile.memberId, refreshTrigger]);
-
-  const allLogs = useMemo(() => {
-    void refreshTrigger;
-    return sheetsService.getLogs();
-  }, [refreshTrigger]);
-
-  const allRsvpVotes = useMemo(() => {
-    void refreshTrigger;
-    return sheetsService.getRSVPVotes();
-  }, [refreshTrigger]);
-
   const lateGraceMinutes = config.lateGraceMinutes ?? 10;
-  const isStaff = useMemo(
-    () => isActivityStaff(currentMember, config, members),
-    [currentMember, config, members]
-  );
-  // Schedule records for practice hours & performance count
-  const scheduleRecords = useMemo(() => {
-    return buildMemberScheduleRecords({
-      member: currentMember,
-      members,
-      schedules,
-      logs: allLogs,
-      rsvpVotes: allRsvpVotes,
-      now: currentNow,
-      lateGraceMinutes,
-      includeArchived: true,
-    });
-  }, [currentMember, members, schedules, allLogs, allRsvpVotes, lateGraceMinutes, currentNow]);
 
   // Cumulative numbers (§5-2)
   const daysTogether = useMemo(() => {
@@ -226,45 +159,11 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     );
   }, [isStaff, currentMember, members, schedules, allLogs, activity, config, todayStr, scheduleRecords]);
 
-  // Praise Stickers (§5-6, §5-7)
-  const evaluatedStickers = useMemo(() => {
-    return evaluatePraiseStickers({
-      member: currentMember,
-      schedules,
-      logs: allLogs,
-      rsvpVotes: allRsvpVotes,
-      activity,
-      performanceCategories: config.performanceCategories,
-      lateGraceMinutes,
-      allMembers: members,
-      now: currentNow,
-      isStaff,
-      scheduleRecords,
-    });
-  }, [
-    currentMember,
-    schedules,
-    allLogs,
-    allRsvpVotes,
-    activity,
-    config.performanceCategories,
-    lateGraceMinutes,
-    members,
-    isStaff,
-    scheduleRecords,
-    currentNow,
-  ]);
-
   const earnedStickerIds = useMemo(
     () => evaluatedStickers.filter((s) => s.earned).map((s) => s.id),
     [evaluatedStickers]
   );
 
-  const isDataReady = isStickerDataReady(
-    Boolean(activity),
-    isStaff,
-    syncState.lastSyncedAt
-  );
   const seenState = useSeenState();
   const unseenIds = useMemo(
     () =>

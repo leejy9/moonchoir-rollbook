@@ -3,6 +3,7 @@ import { setSuperAdminLoggedIn } from '../../services/auth';
 import { sheetsService } from '../../services/sheets';
 import { clearDataCache } from '../../services/sheetsStorage';
 import type {
+  CommentReactionEvent,
   Member,
   RSVPVote,
   RawAttendanceLog,
@@ -12,6 +13,7 @@ import type {
 import { getActiveSupabaseRealtime } from '../../services/realtime/supabaseRealtime';
 import { getKSTDateString, getKSTTimestampString, addDaysKST, getWeekdayOfDate } from '../../utils/date';
 import { MediaStorageSettingSection } from './settings/MediaStorageSettingSection';
+import { ReactionLogTable } from './ReactionLogTable';
 
 interface SuperAdminDashboardProps {
   onBackToHome: () => void;
@@ -20,7 +22,7 @@ interface SuperAdminDashboardProps {
 }
 
 type SuperAdminTab = 'AUDIT_LOGS' | 'DIAGNOSTICS' | 'CLOUD_INTEGRATION' | 'SECURITY';
-type AuditSubTab = 'ATTENDANCE' | 'COMMENTS' | 'RSVP' | 'DEVICES';
+type AuditSubTab = 'ATTENDANCE' | 'COMMENTS' | 'REACTIONS' | 'RSVP' | 'DEVICES';
 type TimeRangePreset = 'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'CUSTOM';
 type SortField = 'timestamp' | 'memberName';
 type SortOrder = 'asc' | 'desc';
@@ -74,6 +76,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const comments: ScheduleCommentEvent[] = useMemo(() => {
     void refreshTrigger;
     return sheetsService.getCommentEvents();
+  }, [refreshTrigger]);
+
+  const reactions: CommentReactionEvent[] = useMemo(() => {
+    void refreshTrigger;
+    return sheetsService.getReactionEvents();
   }, [refreshTrigger]);
 
   const rsvpVotes: RSVPVote[] = useMemo(() => {
@@ -782,6 +789,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               {[
                 { id: 'ATTENDANCE', label: `출결 로그 (${logs.length})` },
                 { id: 'COMMENTS', label: `댓글 이력 (${comments.length})` },
+                { id: 'REACTIONS', label: `반응 이력 (${reactions.length})` },
                 { id: 'RSVP', label: `사전투표 (${rsvpVotes.length})` },
                 { id: 'DEVICES', label: `기기 바인딩 현황 (${members.filter((m) => m.boundDeviceId).length})` },
               ].map((sub) => (
@@ -1044,6 +1052,20 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                     )}
                   </tbody>
                 </table>
+              )}
+
+              {auditSubTab === 'REACTIONS' && (
+                <ReactionLogTable
+                  reactions={reactions}
+                  commentEvents={comments}
+                  members={members}
+                  scheduleMap={scheduleMap}
+                  rangeBounds={rangeBounds}
+                  searchQuery={searchQuery}
+                  sortField={sortField}
+                  sortOrder={sortOrder}
+                  onToggleSort={toggleSort}
+                />
               )}
 
               {auditSubTab === 'RSVP' && (
