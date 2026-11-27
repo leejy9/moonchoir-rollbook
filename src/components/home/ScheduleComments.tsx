@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getOrCreateDeviceId } from '../../services/auth';
+import { seenStateStore } from '../../services/seenStateStore';
 import { sheetsService } from '../../services/sheets';
 import type { Member, PartType, ReactionEmoji, ScheduleComment } from '../../types/rollbook';
 import { getKSTDateString } from '../../utils/date';
 import { resolveMemberIdentity } from '../../utils/memberIdentity';
 import { filterMentionCandidates, pruneMentions, splitMentionText } from '../../utils/mentions';
-import { readSeenCommentsState, recordSeenComments } from './useSeenComments';
-import { pickNewCommentIds } from '../../utils/seenComments';
+import { isCommentUnread } from '../../utils/seenState';
+import { parseServerTimeMs } from '../../utils/serverTime';
 import { COMMENT_MAX_LENGTH, COMMENT_PAGE_SIZE, createCommentEventId, formatCommentTime } from '../../utils/scheduleComments';
 import { CommentReactions } from './CommentReactions';
 import { MentionPicker } from './MentionPicker';
@@ -91,23 +92,35 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
   const hiddenCount = comments.length - visible.length;
 
   // 상세를 열 때의 저장값 기준으로 "새 댓글"을 정한다(열려 있는 동안 지워지지 않는다).
-  const [seenAtOpen] = useState(() => {
-    const state = readSeenCommentsState();
-    return state.kind === 'ok' ? new Set(state.value) : null;
-  });
+  const [seenAtOpen] = useState(() => seenStateStore.getSnapshot().seen);
   const newIds = new Set(
-    pickNewCommentIds(comments, seenAtOpen, (id) => sheetsService.isOwnComment({ memberId: id }, author.id))
+    comments
+      .filter((c) => isCommentUnread(c, seenAtOpen, sheetsService.isOwnComment(c, author.id)))
+      .map((c) => c.id)
   );
 
-  // 닫을 때(언마운트): 펼쳐 있었으면 보인 댓글을 "본 것"으로 기록한다. 저장 상태가 ok일 때만 쓴다.
-  const latest = useRef({ expanded, ids: visible.map((c) => c.id) });
-  const visibleKey = visible.map((c) => c.id).join('|');
+  // 닫을 때(언마운트): 펼쳐 있었으면 보인 댓글 중 가장 늦은 receivedAt을 "본 것"으로 기록한다.
+  const latest = useRef({ expanded, scheduleId, canonicalAuthorId, maxReceivedAt: '' });
+  let maxMs = -Infinity;
+  let maxReceivedAt = '';
+  for (const c of visible) {
+    if (!c.receivedAt) continue;
+    const ms = parseServerTimeMs(c.receivedAt);
+    if (!Number.isNaN(ms) && ms > maxMs) {
+      maxMs = ms;
+      maxReceivedAt = c.receivedAt;
+    }
+  }
   useEffect(() => {
-    latest.current = { expanded, ids: visibleKey ? visibleKey.split('|') : [] };
+    latest.current = { expanded, scheduleId, canonicalAuthorId, maxReceivedAt };
   });
   useEffect(
     () => () => {
-      if (latest.current.expanded) recordSeenComments(latest.current.ids);
+      if (latest.current.expanded && latest.current.maxReceivedAt) {
+        void seenStateStore.markSeen(latest.current.canonicalAuthorId, [
+          { kind: 'comments', scope: latest.current.scheduleId, upTo: latest.current.maxReceivedAt },
+        ]);
+      }
     },
     []
   );

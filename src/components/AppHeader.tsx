@@ -1,19 +1,25 @@
 import React from 'react';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 import { useMasterEntryGesture } from '../hooks/useMasterEntryGesture';
-import { IconSettings } from './Icons';
+import { IconBell, IconSettings } from './Icons';
 
 export interface AppHeaderProps {
   onOpenAdmin: () => void;
   onOpenSuperAdmin: () => void;
   /** 설정(관리자 입구) 버튼 표시 여부. 표시일 뿐 권한이 아니다. */
   showAdminEntry: boolean;
+  newsUnreadCount?: number;
+  onOpenNews?: () => void;
+  showNews?: boolean;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
   onOpenAdmin,
   onOpenSuperAdmin,
   showAdminEntry,
+  newsUnreadCount = 0,
+  onOpenNews,
+  showNews = false,
 }) => {
   const { showEasterEgg, setShowEasterEgg, easterEggRef, logoHandlers } =
     useMasterEntryGesture();
@@ -111,18 +117,37 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         )}
       </div>
 
-      {showAdminEntry && (
-        <div className="header-actions">
-          <button
-            type="button"
-            className="admin-icon-btn"
-            onClick={onOpenAdmin}
-            title="관리자 모드"
-            aria-label="관리자 모드"
-            style={{ minWidth: 44, minHeight: 44 }}
-          >
-            <IconSettings size={18} />
-          </button>
+      {(showNews || showAdminEntry) && (
+        <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {showNews && (
+            <button
+              type="button"
+              className="admin-icon-btn news-bell-btn"
+              onClick={onOpenNews}
+              title="새 소식"
+              aria-label={newsUnreadCount > 0 ? `새 소식 ${newsUnreadCount}개` : '새 소식'}
+              style={{ minWidth: 44, minHeight: 44, position: 'relative' }}
+            >
+              <IconBell size={18} />
+              {newsUnreadCount > 0 && (
+                <span className="news-bell-badge" aria-hidden="true">
+                  {newsUnreadCount >= 10 ? '9+' : newsUnreadCount}
+                </span>
+              )}
+            </button>
+          )}
+          {showAdminEntry && (
+            <button
+              type="button"
+              className="admin-icon-btn"
+              onClick={onOpenAdmin}
+              title="관리자 모드"
+              aria-label="관리자 모드"
+              style={{ minWidth: 44, minHeight: 44 }}
+            >
+              <IconSettings size={18} />
+            </button>
+          )}
         </div>
       )}
     </header>

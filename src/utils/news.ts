@@ -201,6 +201,7 @@ export function buildNewsItems(input: BuildNewsItemsInput): BuildNewsItemsResult
         sub,
         target: { type: 'schedule', scheduleId: schedule.id },
         scheduleId: schedule.id,
+        emoji: latestEmoji,
       };
       if (latestAt > newsThreshold) {
         unread.push(item);

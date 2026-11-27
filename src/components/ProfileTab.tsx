@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { seenStateStore, useSeenState } from '../services/seenStateStore';
 import { sheetsService } from '../services/sheets';
+import { useBlockingOverlay } from '../hooks/useBlockingOverlay';
+import { pickUnseenStickers } from '../utils/seenState';
 import type { BoundDeviceProfile, Member, MemberActivity, Schedule } from '../types/rollbook';
 import type { DisplayMode, ThemeMode } from '../services/displayMode';
 import { getKSTDateString, parseKSTDate } from '../utils/date';
@@ -13,7 +16,7 @@ import {
 } from '../utils/memberProgress';
 import { computePassionTemperature } from '../utils/passionTemperature';
 import { evaluatePraiseStickers } from '../utils/praiseStickers';
-import { isStickerDataReady, useSeenStickers } from './profile/useSeenStickers';
+import { isStickerDataReady } from './profile/useSeenStickers';
 import { ProfileSettingsSection } from './profile/ProfileSettingsSection';
 import { ProfileHeroCards } from './profile/ProfileHeroCards';
 import { ProfileNumbersRow } from './profile/ProfileNumbersRow';
@@ -50,6 +53,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
 }) => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [activeSheet, setActiveSheet] = useState<'NONE' | 'LEVEL' | 'ATTENDANCE' | 'TEMP' | 'STICKERS'>('NONE');
+  useBlockingOverlay(activeSheet !== 'NONE');
   const [selectedScheduleFilter, setSelectedScheduleFilter] = useState<SelectedScheduleFilter | null>(null);
 
   const [activity, setActivity] = useState<MemberActivity | null>(null);
@@ -261,7 +265,23 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     isStaff,
     syncState.lastSyncedAt
   );
-  const { unseenIds, unseenCount, markAllSeen } = useSeenStickers(earnedStickerIds, isDataReady);
+  const seenState = useSeenState();
+  const unseenIds = useMemo(
+    () =>
+      isDataReady
+        ? new Set(pickUnseenStickers(evaluatedStickers, seenState.seen).map((s) => s.id))
+        : new Set<string>(),
+    [evaluatedStickers, seenState.seen, isDataReady]
+  );
+  const unseenCount = unseenIds.size;
+  const markAllSeen = () => {
+    const missing = earnedStickerIds.filter((id) => !seenState.seen?.stickers.has(id));
+    if (missing.length === 0) return;
+    void seenStateStore.markSeen(
+      currentMember.id,
+      missing.map((id) => ({ kind: 'sticker' as const, scope: id }))
+    );
+  };
 
   const handleLogoutAction = async () => {
     if (!onLogout || isLoggingOut) return;

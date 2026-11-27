@@ -288,6 +288,7 @@ export interface NewsItem {
   target: NewsItemTarget;
   scheduleId?: string;
   stickerId?: string;
+  emoji?: ReactionEmoji;
 }
 
 /**
