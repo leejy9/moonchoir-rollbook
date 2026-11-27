@@ -220,6 +220,8 @@ export interface ScheduleCommentEvent {
   text?: string; // CREATE·EDIT 내용 (DELETE는 비움)
   timestamp: string; // 한국 시각 YYYY-MM-DD HH:mm:ss (서버 기록)
   deviceId?: string; // 쓴 기기(브라우저) 식별값 (추적용)
+  receivedAt?: string; // 서버 UTC ISO 시각
+  mentionMemberIds?: string[];
 }
 
 /** 화면에 보여주는 댓글(이벤트 로그를 투영한 결과) */
@@ -232,6 +234,61 @@ export interface ScheduleComment {
   text: string;
   createdAt: string;
   editedAt?: string;
+  receivedAt?: string;
+  mentionMemberIds?: string[];
+  mentionedAt?: Record<string, string>;
+}
+
+export type ReactionEmoji = '👍' | '❤️' | '👏' | '😂' | '🙏' | '🎵';
+export type CommentReactionAction = 'ADD' | 'REMOVE';
+
+export interface CommentReactionEvent {
+  id: string;
+  commentId: string;
+  scheduleId: string;
+  memberId: string;
+  emoji: ReactionEmoji;
+  action: CommentReactionAction;
+  deviceId?: string;
+  receivedAt?: string;
+}
+
+export type SeenStateKind = 'baseline' | 'news' | 'comments' | 'sticker' | 'vote';
+
+export interface SeenStateRow {
+  memberId: string;
+  kind: SeenStateKind;
+  scope: string;
+  seenAt: string;
+}
+
+export interface SeenStateItem {
+  kind: SeenStateKind;
+  scope: string;
+  upTo?: string;
+}
+
+export interface PendingSeenItem extends SeenStateItem {
+  memberId: string;
+}
+
+export type NewsItemKind = 'reaction' | 'comment' | 'mention' | 'unvoted' | 'sticker';
+
+export type NewsItemTarget =
+  | { type: 'schedule'; scheduleId: string }
+  | { type: 'rsvp'; scheduleId: string }
+  | { type: 'sticker'; stickerId: string };
+
+export interface NewsItem {
+  key: string;
+  kind: NewsItemKind;
+  at: number;
+  title: string;
+  sub: string;
+  target: NewsItemTarget;
+  scheduleId?: string;
+  stickerId?: string;
+  emoji?: ReactionEmoji;
 }
 
 /**

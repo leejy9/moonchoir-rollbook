@@ -35,6 +35,14 @@ export function buildScheduleComments(
   for (const event of events) {
     if (event.action === 'CREATE') {
       if (byId.has(event.id)) continue;
+      const mentionMemberIds = event.mentionMemberIds ? [...event.mentionMemberIds] : undefined;
+      let mentionedAt: Record<string, string> | undefined;
+      if (mentionMemberIds && mentionMemberIds.length > 0 && event.receivedAt) {
+        mentionedAt = {};
+        for (const id of mentionMemberIds) {
+          mentionedAt[id] = event.receivedAt;
+        }
+      }
       byId.set(event.id, {
         id: event.id,
         scheduleId: event.scheduleId,
@@ -43,6 +51,9 @@ export function buildScheduleComments(
         part: event.part,
         text: event.text ?? '',
         createdAt: event.timestamp,
+        ...(event.receivedAt ? { receivedAt: event.receivedAt } : {}),
+        ...(mentionMemberIds ? { mentionMemberIds } : {}),
+        ...(mentionedAt ? { mentionedAt } : {}),
       });
       order.push(event.id);
       continue;
@@ -56,6 +67,20 @@ export function buildScheduleComments(
     if (event.action === 'EDIT') {
       target.text = event.text ?? target.text;
       target.editedAt = event.timestamp;
+      if (event.mentionMemberIds !== undefined) {
+        const nextMentions = [...event.mentionMemberIds];
+        const prevMentionedAt = target.mentionedAt ?? {};
+        const nextMentionedAt: Record<string, string> = {};
+        for (const id of nextMentions) {
+          if (prevMentionedAt[id]) {
+            nextMentionedAt[id] = prevMentionedAt[id];
+          } else if (event.receivedAt) {
+            nextMentionedAt[id] = event.receivedAt;
+          }
+        }
+        target.mentionMemberIds = nextMentions;
+        target.mentionedAt = nextMentionedAt;
+      }
     } else if (event.action === 'DELETE') {
       deleted.add(targetId);
     }

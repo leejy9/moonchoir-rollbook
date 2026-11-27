@@ -1,5 +1,6 @@
 import type {
   AppConfig,
+  CommentReactionEvent,
   LocationPreset,
   Member,
   MemberStatusHistory,
@@ -12,6 +13,7 @@ import type {
   ScheduleVisibility,
   TargetAudienceType,
 } from '../types/rollbook';
+import { isReactionEmoji } from '../utils/commentReactions';
 import { getKSTTimestampString, normalizeDateToYYYYMMDD } from '../utils/date';
 
 export function resolveScheduleLocationFromPresets(
@@ -259,6 +261,36 @@ export function parseRemoteProgramCards(rawCards: ProgramCard[]): ProgramCard[] 
   });
 }
 
+export function parseMentionMemberIds(val: unknown): string[] | undefined {
+  if (val === undefined || val === null) return undefined;
+  if (Array.isArray(val)) {
+    return val.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item).trim()).filter(Boolean);
+        }
+      } catch {
+        return undefined;
+      }
+    }
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      const inner = trimmed.slice(1, -1).trim();
+      if (!inner) return [];
+      return inner
+        .split(',')
+        .map((part) => part.trim().replace(/^"(.*)"$/, '$1').trim())
+        .filter(Boolean);
+    }
+  }
+  return undefined;
+}
+
 /**
  * 시트 `일정댓글` 탭의 원천 행을 이벤트로 정리한다.
  * 필드가 빠진 과거·수동 행은 안전한 기본값으로 읽고, 알아볼 수 없는 행동이나 id·일정·단원이 없는 행은 건너뛴다(원본 시트는 그대로).
@@ -275,6 +307,8 @@ export function parseRemoteCommentEvents(rawEvents: unknown[]): ScheduleCommentE
     const scheduleId = str(row.scheduleId);
     const memberId = str(row.memberId);
     if (!id || !scheduleId || !memberId) continue;
+    const receivedAt = str(row.receivedAt) || undefined;
+    const mentionMemberIds = parseMentionMemberIds(row.mentionMemberIds);
     events.push({
       id,
       scheduleId,
@@ -286,6 +320,39 @@ export function parseRemoteCommentEvents(rawEvents: unknown[]): ScheduleCommentE
       text: row.text === undefined || row.text === null ? undefined : String(row.text),
       timestamp: str(row.timestamp),
       deviceId: str(row.deviceId) || undefined,
+      ...(receivedAt ? { receivedAt } : {}),
+      ...(mentionMemberIds !== undefined ? { mentionMemberIds } : {}),
+    });
+  }
+  return events;
+}
+
+export function parseRemoteReactionEvents(rawEvents: unknown[]): CommentReactionEvent[] {
+  const events: CommentReactionEvent[] = [];
+  for (const raw of rawEvents) {
+    if (!raw || typeof raw !== 'object') continue;
+    const row = raw as Record<string, unknown>;
+    const str = (value: unknown) => (value === undefined || value === null ? '' : String(value).trim());
+    const id = str(row.id);
+    const commentId = str(row.commentId);
+    const scheduleId = str(row.scheduleId);
+    const memberId = str(row.memberId);
+    const emoji = str(row.emoji);
+    const action = str(row.action).toUpperCase();
+    if (!id || !commentId || !memberId) continue;
+    if (!isReactionEmoji(emoji)) continue;
+    if (action !== 'ADD' && action !== 'REMOVE') continue;
+    const receivedAt = str(row.receivedAt) || undefined;
+    const deviceId = str(row.deviceId) || undefined;
+    events.push({
+      id,
+      commentId,
+      scheduleId,
+      memberId,
+      emoji,
+      action,
+      ...(deviceId ? { deviceId } : {}),
+      ...(receivedAt ? { receivedAt } : {}),
     });
   }
   return events;

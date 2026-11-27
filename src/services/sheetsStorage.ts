@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   LOCATIONS: 'moonchoir_locations_v3',
   PROGRAM_CARDS: 'moonchoir_program_cards_v3',
   COMMENTS: 'moonchoir_comments_v3',
+  REACTIONS: 'moonchoir_reactions_v1',
   PRACTICE_CATALOG: 'moonchoir_practice_catalog_v1',
 } as const;
 
@@ -16,6 +17,7 @@ export const PREFERENCE_KEYS = {
   PLAYBACK_RATE: 'moonchoir_pref_playback_rate_v1',
   SEEN_STICKERS: 'moonchoir_pref_seen_stickers_v1',
   SEEN_COMMENTS: 'moonchoir_pref_seen_comments_v1',
+  PENDING_SEEN: 'moonchoir_pref_pending_seen_v1',
   UPLOAD_JOBS: 'moonchoir_pref_upload_jobs_v1',
   YT_MINIMIZE_HINT_COUNT: 'moonchoir_pref_yt_minimize_hint_v1',
 } as const;

@@ -1,46 +1,67 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PREFERENCE_KEYS, resetStorage } from '../../services/sheetsStorage';
-import { readSeenCommentsState, recordSeenComments } from './useSeenComments';
+import type { BackendActionResult, RemoteBackend, RemoteSnapshot } from '../../services/backend/types';
+import { seenStateStore } from '../../services/seenStateStore';
+import { resetStorage, sheetsService } from '../../services/sheets';
+import { PREFERENCE_KEYS, readPreference } from '../../services/sheetsStorage';
 
-describe('recordSeenComments (V3-22 R7 봄 처리)', () => {
-  let store: Map<string, string>;
+class StubSeenBackend implements RemoteBackend {
+  public readonly kind = 'supabase' as const;
+  public calls: Array<{ action: string; payload: unknown }> = [];
+  public failMarkSeen = false;
+  public rows: Array<{ memberId: string; kind: string; scope: string; seenAt: string }> = [
+    { memberId: 'm1', kind: 'baseline', scope: '', seenAt: '2026-11-27T00:00:00.000Z' },
+  ];
+
+  async requestSnapshot(): Promise<RemoteSnapshot> {
+    return {};
+  }
+
+  async callAction(action: string, payload: unknown): Promise<BackendActionResult> {
+    this.calls.push({ action, payload });
+    if (action === 'GET_SEEN_STATE') {
+      return { success: true, data: { rows: this.rows } };
+    }
+    if (action === 'MARK_SEEN') {
+      return { success: !this.failMarkSeen };
+    }
+    return { success: true };
+  }
+}
+
+describe('seenStateStore (V3-24 R11-1)', () => {
+  let prevBackend: RemoteBackend;
+
   beforeEach(() => {
-    store = new Map<string, string>();
-    const mock = {
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => store.set(k, v),
-      removeItem: (k: string) => store.delete(k),
-      clear: () => store.clear(),
-    };
-    vi.stubGlobal('window', { localStorage: mock });
-    vi.stubGlobal('localStorage', mock);
     resetStorage();
-  });
-  afterEach(() => vi.unstubAllGlobals());
-
-  const KEY = PREFERENCE_KEYS.SEEN_COMMENTS;
-
-  it('ok면 보인 id를 더한다', () => {
-    store.set(KEY, JSON.stringify(['c1']));
-    recordSeenComments(['c1', 'c2', 'c3']);
-    expect(JSON.parse(store.get(KEY) ?? 'null')).toEqual(['c1', 'c2', 'c3']);
+    seenStateStore.reset();
+    prevBackend = sheetsService.getBackend();
   });
 
-  it('missing이면 아무것도 쓰지 않는다(일부 목록이 기준값을 대신하면 안 됨)', () => {
-    recordSeenComments(['c2']);
-    expect(store.has(KEY)).toBe(false);
-    expect(readSeenCommentsState()).toEqual({ kind: 'missing' });
+  afterEach(() => {
+    seenStateStore.reset();
+    sheetsService.setBackend(prevBackend);
+    vi.restoreAllMocks();
   });
 
-  it('invalid면 덮어쓰지 않는다', () => {
-    store.set(KEY, '{broken');
-    recordSeenComments(['c2']);
-    expect(store.get(KEY)).toBe('{broken');
-  });
+  it('queues failed markSeen in PENDING_SEEN and flushes on next successful fetch', async () => {
+    const backend = new StubSeenBackend();
+    backend.failMarkSeen = true;
+    sheetsService.setBackend(backend);
 
-  it('이미 다 본 것이면 다시 쓰지 않는다', () => {
-    store.set(KEY, JSON.stringify(['c1', 'c2']));
-    recordSeenComments(['c1']);
-    expect(store.get(KEY)).toBe(JSON.stringify(['c1', 'c2']));
+    await seenStateStore.syncForMember('m1', ['m1'], 100);
+    await seenStateStore.markSeen('m1', [{ kind: 'comments', scope: 's1', upTo: '2026-11-27T02:00:00.000Z' }]);
+
+    const pending = readPreference<unknown[]>(PREFERENCE_KEYS.PENDING_SEEN, Array.isArray, []);
+    expect(pending).toHaveLength(1);
+    // Local optimistic state reflects the markSeen immediately
+    expect(seenStateStore.getSnapshot().seen?.comments.get('s1')).toBe(
+      Date.parse('2026-11-27T02:00:00.000Z')
+    );
+
+    // Next sync succeeds and flushes pending queue
+    backend.failMarkSeen = false;
+    await seenStateStore.syncForMember('m1', ['m1'], 200);
+    const remaining = readPreference<unknown[]>(PREFERENCE_KEYS.PENDING_SEEN, Array.isArray, []);
+    expect(remaining).toHaveLength(0);
   });
 });

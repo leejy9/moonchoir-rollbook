@@ -3,6 +3,7 @@ import { bindDeviceProfile, getOrCreateDeviceId } from '../services/auth';
 import { ExistingMemberConflictError, sheetsService } from '../services/sheets';
 import type { BoundDeviceProfile, Member, PartType } from '../types/rollbook';
 import { buildNewMember } from '../utils/newMember';
+import { useBlockingOverlay } from '../hooks/useBlockingOverlay';
 import { InstallAppCard } from './InstallAppCard';
 import moonchoirLogo from '../assets/moonchoir-logo.png';
 
@@ -19,6 +20,7 @@ function formatPhoneNumber(val: string): string {
 }
 
 export const BindingModal: React.FC<BindingModalProps> = ({ onSuccess, onClose }) => {
+  useBlockingOverlay(true);
   const [tab, setTab] = useState<'SELECT' | 'REGISTER'>('SELECT');
   const [selectedPartFilter, setSelectedPartFilter] = useState<string>('전체');
   const [searchKeyword, setSearchKeyword] = useState('');

@@ -19,6 +19,7 @@ export interface RemoteSnapshot {
   memberHistory?: MemberStatusHistory[];
   programCards?: ProgramCard[];
   comments?: unknown[];
+  reactions?: unknown[];
   config?: Partial<AppConfig>;
 }
 

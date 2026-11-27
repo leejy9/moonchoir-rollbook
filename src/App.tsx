@@ -49,6 +49,19 @@ import { AudioPlayerProvider } from './components/audio/AudioPlayerProvider';
 import { useAudioPlayer } from './components/audio/audioPlayerContext';
 import { MiniPlayer } from './components/audio/MiniPlayer';
 import { FullPlayer } from './components/audio/FullPlayer';
+import { useBlockingOverlay, useIsAnyOverlayOpen } from './hooks/useBlockingOverlay';
+import { seenStateStore, useSeenState } from './services/seenStateStore';
+import { resolveMemberIdentity } from './utils/memberIdentity';
+import { pickUnseenStickers } from './utils/seenState';
+import type { EvaluatedSticker } from './utils/praiseStickerDefinitions';
+import { useMemberActivityModel } from './components/profile/useMemberActivityModel';
+import { useNewsItems } from './components/news/useNewsItems';
+import { NewsSheet } from './components/news/NewsSheet';
+import {
+  StickerCelebration,
+  nextCelebration,
+  type CelebrationAction,
+} from './components/celebration/StickerCelebration';
 
 function MainApp() {
   const { closePlayer, currentTrack, activeVideo } = useAudioPlayer();
@@ -85,9 +98,16 @@ function MainApp() {
   // Modal states
   const [showAdminPinModal, setShowAdminPinModal] = useState(false);
   const [showSuperAdminPinModal, setShowSuperAdminPinModal] = useState(false);
+  useBlockingOverlay(showAdminPinModal || showSuperAdminPinModal);
+  const isAnyOverlayOpen = useIsAnyOverlayOpen();
 
   // Refresh trigger for re-rendering when data changes
   const [refreshKey, setRefreshKey] = useState(0);
+  const [activityRefreshSignal, setActivityRefreshSignal] = useState(0);
+  const [newsOpen, setNewsOpen] = useState(false);
+  const [newsWindowDays, setNewsWindowDays] = useState(14);
+  const [openStickerBoardSignal, setOpenStickerBoardSignal] = useState(0);
+  const [summaryStickers, setSummaryStickers] = useState<EvaluatedSticker[] | null>(null);
   const triggerRefresh = () => setRefreshKey((k) => k + 1);
 
   // Automatic remote sync on initial load
@@ -272,6 +292,8 @@ function MainApp() {
   const isBound = profile !== null;
 
   const handleDeviceBound = (newProfile: BoundDeviceProfile) => {
+    seenStateStore.reset();
+    setSummaryStickers(null);
     setProfile(newProfile);
     setShowBindingModal(false);
     triggerRefresh();
@@ -318,6 +340,64 @@ function MainApp() {
     setThemeMode(mode);
   };
 
+  const activityModel = useMemberActivityModel(profile, activityRefreshSignal);
+  const identity = resolveMemberIdentity(activityModel.currentMember.id, activityModel.members);
+  const seenState = useSeenState();
+  const isSupabase = sheetsService.getBackendKind() === 'supabase';
+
+  const news = useNewsItems({
+    enabled: Boolean(isBound && isSupabase && profile),
+    canonicalId: identity.canonicalId,
+    aliasIds: identity.aliasIds,
+    currentMember: activityModel.currentMember,
+    members: activityModel.members,
+    schedules: activityModel.schedules,
+    rsvpVotes: activityModel.rsvpVotes,
+    evaluatedStickers: activityModel.evaluatedStickers,
+    isStickerDataReady: activityModel.isDataReady,
+    lastSyncedAt: activityModel.lastSyncedAt,
+    nowMs: activityModel.currentNow.getTime(),
+    windowDays: newsWindowDays,
+    onFirstRunSummary: (earned) => setSummaryStickers(earned),
+  });
+
+  const unseenStickers =
+    isBound && isSupabase && activityModel.isDataReady && seenState.status === 'ready'
+      ? pickUnseenStickers(activityModel.evaluatedStickers, seenState.seen)
+      : [];
+  const alreadySeenEarnedCount = activityModel.evaluatedStickers.filter(
+    (s) => s.earned && seenState.seen?.stickers.has(s.id)
+  ).length;
+
+  const canShowCelebration =
+    isBound &&
+    route.area === 'member' &&
+    !route.overlay &&
+    !isAnyOverlayOpen &&
+    !newsOpen;
+
+  const handleCelebrationAction = (action: CelebrationAction) => {
+    if (summaryStickers) {
+      setSummaryStickers(null);
+      if (action === 'OPEN_BOARD') {
+        navigate({ type: 'TAB', tab: 'profile' });
+        setOpenStickerBoardSignal((s) => s + 1);
+      }
+      return;
+    }
+    const next = nextCelebration(unseenStickers, action);
+    if (next.markIds.length > 0 && identity.canonicalId) {
+      void seenStateStore.markSeen(
+        identity.canonicalId,
+        next.markIds.map((id) => ({ kind: 'sticker' as const, scope: id }))
+      );
+    }
+    if (next.openBoard) {
+      navigate({ type: 'TAB', tab: 'profile' });
+      setOpenStickerBoardSignal((s) => s + 1);
+    }
+  };
+
   // 설정 버튼은 표시 여부일 뿐 권한이 아니다(#/admin은 PIN을 묻는다). 동기화 때 다시 그려진다.
   const showAdminEntry = profile
     ? canShowAdminEntry(profile.memberId, sheetsService.getMembers(true), isAdminLoggedIn())
@@ -340,6 +420,9 @@ function MainApp() {
           onOpenAdmin={handleOpenAdmin}
           onOpenSuperAdmin={handleOpenSuperAdmin}
           showAdminEntry={showAdminEntry}
+          showNews={isSupabase}
+          newsUnreadCount={news.unread.length}
+          onOpenNews={() => setNewsOpen(true)}
         />
       )}
 
@@ -394,6 +477,8 @@ function MainApp() {
               onChangeBinding={() => setShowBindingModal(true)}
               onLogout={async () => {
                 closePlayer();
+                seenStateStore.reset();
+                setSummaryStickers(null);
                 clearDeviceProfile();
                 setProfile(null);
                 navigate({ type: 'RESET' });
@@ -409,6 +494,9 @@ function MainApp() {
                 }
               }}
               refreshTrigger={refreshKey}
+              model={activityModel}
+              openStickerBoardSignal={openStickerBoardSignal}
+              onStickerBoardOpened={() => setOpenStickerBoardSignal(0)}
             />
           )}
         </main>
@@ -526,6 +614,7 @@ function MainApp() {
           onClose={() => navigate({ type: 'CLOSE' })}
           onSuccess={() => {
             navigate({ type: 'CLOSE' });
+            setActivityRefreshSignal((s) => s + 1);
             triggerRefresh();
           }}
         />
@@ -562,6 +651,55 @@ function MainApp() {
             navigate({ type: 'SUPER' });
           }}
           onClose={() => setShowSuperAdminPinModal(false)}
+        />
+      )}
+
+      {newsOpen && isBound && route.area === 'member' && (
+        <NewsSheet
+          canonicalId={identity.canonicalId}
+          unread={news.unread}
+          read={news.read}
+          stickers={activityModel.evaluatedStickers}
+          windowDays={newsWindowDays}
+          onShowMore={() => setNewsWindowDays((d) => Math.min(90, d + 14))}
+          onSelectItem={(item) => {
+            setNewsOpen(false);
+            if (item.target.type === 'schedule') {
+              const targetScheduleId = item.target.scheduleId;
+              const sch = activityModel.schedules.find((s) => s.id === targetScheduleId);
+              if (sch) {
+                navigate({
+                  type: 'OPEN',
+                  overlay: { kind: 'scheduleSheet', date: sch.date, scheduleId: sch.id },
+                });
+              }
+            } else if (item.target.type === 'rsvp') {
+              navigate({ type: 'OPEN', overlay: { kind: 'rsvp', scheduleId: item.target.scheduleId } });
+            } else if (item.target.type === 'sticker') {
+              navigate({ type: 'TAB', tab: 'profile' });
+              setOpenStickerBoardSignal((s) => s + 1);
+            }
+          }}
+          onClose={() => setNewsOpen(false)}
+        />
+      )}
+
+      {canShowCelebration && summaryStickers && summaryStickers.length > 0 && (
+        <StickerCelebration
+          mode="summary"
+          queue={[]}
+          alreadySeenCount={0}
+          summaryStickers={summaryStickers}
+          onAction={handleCelebrationAction}
+        />
+      )}
+
+      {canShowCelebration && (!summaryStickers || summaryStickers.length === 0) && unseenStickers.length > 0 && (
+        <StickerCelebration
+          mode="single"
+          queue={unseenStickers}
+          alreadySeenCount={alreadySeenEarnedCount}
+          onAction={handleCelebrationAction}
         />
       )}
     </div>

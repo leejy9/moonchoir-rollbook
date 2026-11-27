@@ -23,7 +23,7 @@ export interface CheckInWindowOptions {
  * 일정 날짜(YYYY-MM-DD)와 시각(HH:mm)을 한국 표준시(KST, UTC+09:00) 기준 Date로 파싱합니다.
  * 형식이 올바르지 않거나 유효하지 않은 숫자면 null을 반환합니다.
  */
-function parseScheduleKST(dateStr: string, timeStr: string): Date | null {
+export function parseScheduleKST(dateStr: string, timeStr: string): Date | null {
   if (!dateStr || !timeStr) return null;
   const match = /^(\d{1,2}):(\d{2})$/.exec(timeStr.trim());
   if (!match) return null;

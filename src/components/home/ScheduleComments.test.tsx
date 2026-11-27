@@ -2,8 +2,9 @@ import type React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { ScheduleComments } from './ScheduleComments';
+import { seenStateStore } from '../../services/seenStateStore';
+import type { BackendActionResult, RemoteBackend, RemoteSnapshot } from '../../services/backend/types';
 import { resetStorage, sheetsService } from '../../services/sheets';
-import { PREFERENCE_KEYS, writePreference } from '../../services/sheetsStorage';
 import type { Member } from '../../types/rollbook';
 
 const member = (id: string, name: string): Member => ({
@@ -91,25 +92,79 @@ describe('ScheduleComments', () => {
     expect(html).toContain('댓글이 없습니다');
   });
 
-  describe('새 댓글 글자 (V3-22 R7)', () => {
-    it('저장값에 없는 남의 댓글에만 "새 댓글"이 붙는다', async () => {
-      const c1 = await sheetsService.addComment({ scheduleId: 's1', member: lee, text: '본 댓글' });
-      await sheetsService.addComment({ scheduleId: 's1', member: lee, text: '새로 온 댓글' });
-      await sheetsService.addComment({ scheduleId: 's1', member: kim, text: '내가 쓴 댓글' });
-      writePreference(PREFERENCE_KEYS.SEEN_COMMENTS, [c1.id]);
+class SeenStubBackend implements RemoteBackend {
+  public readonly kind = 'supabase' as const;
+  public rows: Array<{ memberId: string; kind: string; scope: string; seenAt: string }> = [];
+  async requestSnapshot(): Promise<RemoteSnapshot> {
+    return {};
+  }
+  async callAction(action: string): Promise<BackendActionResult> {
+    if (action === 'GET_SEEN_STATE') {
+      return { success: true, data: { rows: this.rows } };
+    }
+    return { success: true };
+  }
+}
+
+  describe('새 댓글 글자 (V3-24 계정 읽음 기록)', () => {
+    it('seen 기준보다 늦은 남의 댓글에만 "새 댓글"이 붙는다', async () => {
+      const prevBackend = sheetsService.getBackend();
+      const backend = new SeenStubBackend();
+      backend.rows = [
+        { memberId: 'm1', kind: 'baseline', scope: '', seenAt: '2026-11-27T00:00:00.000Z' },
+        { memberId: 'm1', kind: 'comments', scope: 's1', seenAt: '2026-11-27T01:00:00.000Z' },
+      ];
+      sheetsService.setBackend(backend);
+      seenStateStore.reset();
+      await seenStateStore.syncForMember('m1', ['m1'], 100);
+
+      sheetsService.seedTestData({
+        members: [kim, lee],
+        comments: [
+          {
+            id: 'c1',
+            scheduleId: 's1',
+            memberId: 'm2',
+            memberName: '이서연',
+            part: '소프라노',
+            action: 'CREATE',
+            text: '본 댓글',
+            timestamp: '2026-11-27 09:30:00',
+            receivedAt: '2026-11-27T00:30:00.000Z',
+          },
+          {
+            id: 'c2',
+            scheduleId: 's1',
+            memberId: 'm2',
+            memberName: '이서연',
+            part: '소프라노',
+            action: 'CREATE',
+            text: '새로 온 댓글',
+            timestamp: '2026-11-27 10:30:00',
+            receivedAt: '2026-11-27T01:30:00.000Z',
+          },
+          {
+            id: 'c3',
+            scheduleId: 's1',
+            memberId: 'm1',
+            memberName: '김하은',
+            part: '소프라노',
+            action: 'CREATE',
+            text: '내가 쓴 댓글',
+            timestamp: '2026-11-27 10:40:00',
+            receivedAt: '2026-11-27T01:40:00.000Z',
+          },
+        ],
+      });
       const html = render(<ScheduleComments scheduleId="s1" author={kim} />);
       expect(html.match(/새 댓글</g)).toHaveLength(1);
+      seenStateStore.reset();
+      sheetsService.setBackend(prevBackend);
     });
 
-    it('저장값이 없으면(missing) 아무 것도 새 댓글이 아니다', async () => {
+    it('seen 기록이 준비되지 않았으면 아무 것도 새 댓글이 아니다', async () => {
+      seenStateStore.reset();
       await sheetsService.addComment({ scheduleId: 's1', member: lee, text: '댓글' });
-      const html = render(<ScheduleComments scheduleId="s1" author={kim} />);
-      expect(html).not.toContain('새 댓글<');
-    });
-
-    it('저장값이 깨졌으면(invalid) 표시하지 않는다', async () => {
-      await sheetsService.addComment({ scheduleId: 's1', member: lee, text: '댓글' });
-      writePreference(PREFERENCE_KEYS.SEEN_COMMENTS, { not: 'an array' });
       const html = render(<ScheduleComments scheduleId="s1" author={kim} />);
       expect(html).not.toContain('새 댓글<');
     });

@@ -1,16 +1,20 @@
 import type {
   AppConfig,
   AttendanceReconciliation,
+  CommentReactionEvent,
   CumulativeMemberAttendance,
   LocationPreset,
   Member,
   MemberStatusHistory,
   ProgramCard,
+  ReactionEmoji,
   RSVPVote,
   RawAttendanceLog,
   Schedule,
   ScheduleComment,
   ScheduleCommentEvent,
+  SeenStateItem,
+  SeenStateRow,
   PracticeCatalog,
   PracticePiece,
   PracticeTrack,
@@ -23,6 +27,12 @@ import {
   isScheduleVisibleToMember,
   resolveMergedMemberIds,
 } from '../utils/attendanceStats';
+import {
+  buildCommentReactions,
+  createReactionEventId,
+  type CommentReactionMap,
+  type EmojiReactionBucket,
+} from '../utils/commentReactions';
 import { resolveMemberIdentity } from '../utils/memberIdentity';
 import { buildMemberScheduleRecords } from '../utils/memberRecords';
 import { getKSTTimestampString, getKSTDateString, addDaysKST, parseKSTDate } from '../utils/date';
@@ -39,6 +49,7 @@ import {
   parseRemoteLocations,
   parseRemoteMembers,
   parseRemoteProgramCards,
+  parseRemoteReactionEvents,
   parseRemoteRSVPVotes,
   parseRemoteSchedules,
   resolveScheduleLocationFromPresets,
@@ -143,7 +154,19 @@ const NON_MUTATING_ACTIONS = new Set([
   'GET_MEDIA_USAGE',
   'GET_MEMBER_ACTIVITY',
   'LOG_LISTEN_SESSION',
+  'GET_SEEN_STATE',
+  'MARK_SEEN',
+  'ADD_REACTION',
 ]);
+
+interface ReactionQueueSlot {
+  running: Promise<void>;
+  runningAction: 'ADD' | 'REMOVE';
+  pending?: {
+    event: CommentReactionEvent;
+    resolve: (ok: boolean) => void;
+  };
+}
 
 export class SheetsService {
   private config: AppConfig;
@@ -154,6 +177,9 @@ export class SheetsService {
   private locations: LocationPreset[];
   private programCards: ProgramCard[];
   private commentEvents: ScheduleCommentEvent[];
+  private reactionEvents: CommentReactionEvent[];
+  private pendingLocalReactionIds = new Set<string>();
+  private reactionQueues = new Map<string, ReactionQueueSlot>();
   private practiceCatalog: PracticeCatalog;
 
   // --- Sync state (refresh-on-navigation, write tracking, failure notices) ---
@@ -184,6 +210,7 @@ export class SheetsService {
     this.locations = loadFromStorage(STORAGE_KEYS.LOCATIONS, []);
     this.programCards = loadFromStorage(STORAGE_KEYS.PROGRAM_CARDS, []);
     this.commentEvents = loadFromStorage(STORAGE_KEYS.COMMENTS, []);
+    this.reactionEvents = loadFromStorage(STORAGE_KEYS.REACTIONS, []);
     this.practiceCatalog = loadFromStorage(STORAGE_KEYS.PRACTICE_CATALOG, {
       pieces: [],
       tracks: [],
@@ -387,16 +414,23 @@ export class SheetsService {
     return event;
   }
 
+  private toCanonicalId = (memberId: string): string =>
+    resolveMemberIdentity(memberId, this.members).canonicalId;
+
   public async addComment(input: {
     scheduleId: string;
     member: Pick<Member, 'id' | 'name' | 'part'>;
     text: string;
     deviceId?: string;
+    mentionMemberIds?: string[];
     /** 같은 댓글을 다시 보낼 때 같은 id를 쓰도록 호출자가 유지한다 */
     eventId?: string;
   }): Promise<ScheduleCommentEvent> {
     const normalized = normalizeCommentText(input.text);
     if (normalized.error !== undefined) throw new Error(normalized.error);
+    const mentionMemberIds = input.mentionMemberIds
+      ? Array.from(new Set(input.mentionMemberIds.map(this.toCanonicalId)))
+      : undefined;
     return this.recordCommentEvent('ADD_COMMENT', {
       id: input.eventId || createCommentEventId(),
       scheduleId: input.scheduleId,
@@ -407,6 +441,7 @@ export class SheetsService {
       text: normalized.text,
       timestamp: getKSTTimestampString(),
       deviceId: input.deviceId,
+      ...(mentionMemberIds !== undefined ? { mentionMemberIds } : {}),
     });
   }
 
@@ -422,11 +457,15 @@ export class SheetsService {
     member: Pick<Member, 'id' | 'name' | 'part'>;
     text: string;
     deviceId?: string;
+    mentionMemberIds?: string[];
     eventId?: string;
   }): Promise<ScheduleCommentEvent> {
     const normalized = normalizeCommentText(input.text);
     if (normalized.error !== undefined) throw new Error(normalized.error);
     const comment = this.findOwnComment(input.commentId, input.member.id, '수정');
+    const mentionMemberIds = input.mentionMemberIds
+      ? Array.from(new Set(input.mentionMemberIds.map(this.toCanonicalId)))
+      : undefined;
     return this.recordCommentEvent('EDIT_COMMENT', {
       id: input.eventId || createCommentEventId(),
       scheduleId: comment.scheduleId,
@@ -438,6 +477,7 @@ export class SheetsService {
       text: normalized.text,
       timestamp: getKSTTimestampString(),
       deviceId: input.deviceId,
+      ...(mentionMemberIds !== undefined ? { mentionMemberIds } : {}),
     });
   }
 
@@ -459,6 +499,156 @@ export class SheetsService {
       timestamp: getKSTTimestampString(),
       deviceId: input.deviceId,
     });
+  }
+
+  /** 최고 관리자 감사 로그용 전체 원천 반응 이벤트 */
+  public getReactionEvents(): CommentReactionEvent[] {
+    return [...this.reactionEvents];
+  }
+
+  public getReactionsMap(): CommentReactionMap {
+    return buildCommentReactions(this.reactionEvents, this.toCanonicalId);
+  }
+
+  public getCommentReactions(commentId: string): Map<ReactionEmoji, EmojiReactionBucket> {
+    return this.getReactionsMap().get(commentId) ?? new Map();
+  }
+
+  private async dispatchReactionEvent(event: CommentReactionEvent): Promise<boolean> {
+    const result = await this.sendToGoogleSheet('ADD_REACTION', {
+      id: event.id,
+      commentId: event.commentId,
+      memberId: event.memberId,
+      emoji: event.emoji,
+      action: event.action,
+      deviceId: event.deviceId ?? '',
+    });
+    this.pendingLocalReactionIds.delete(event.id);
+    if (!result.success) {
+      const before = this.reactionEvents.length;
+      this.reactionEvents = this.reactionEvents.filter((r) => r.id !== event.id);
+      if (this.reactionEvents.length !== before) {
+        saveToStorage(STORAGE_KEYS.REACTIONS, this.reactionEvents);
+        this.notifySyncListeners();
+      }
+      return false;
+    }
+    return true;
+  }
+
+  public toggleReaction(input: {
+    commentId: string;
+    scheduleId: string;
+    memberId: string;
+    emoji: ReactionEmoji;
+    deviceId?: string;
+  }): Promise<boolean> {
+    const canonId = this.toCanonicalId(input.memberId);
+    const currentByEmoji = this.getCommentReactions(input.commentId).get(input.emoji);
+    const isActive = Boolean(currentByEmoji?.memberAt.has(canonId));
+    const action: 'ADD' | 'REMOVE' = isActive ? 'REMOVE' : 'ADD';
+
+    const event: CommentReactionEvent = {
+      id: createReactionEventId(),
+      commentId: input.commentId,
+      scheduleId: input.scheduleId,
+      memberId: canonId,
+      emoji: input.emoji,
+      action,
+      deviceId: input.deviceId ?? '',
+    };
+
+    this.reactionEvents.push(event);
+    this.pendingLocalReactionIds.add(event.id);
+    saveToStorage(STORAGE_KEYS.REACTIONS, this.reactionEvents);
+    this.notifySyncListeners();
+
+    if (this.getBackendKind() !== 'supabase') {
+      this.pendingLocalReactionIds.delete(event.id);
+      return Promise.resolve(true);
+    }
+
+    const queueKey = `${input.commentId}::${input.emoji}`;
+    const existingSlot = this.reactionQueues.get(queueKey);
+
+    if (existingSlot) {
+      if (existingSlot.pending) {
+        if (existingSlot.pending.event.action !== action && action === existingSlot.runningAction) {
+          // 반대 동작이 대기 중이고, 결과적으로 실행 중인 동작과 같아짐 → 대기 취소
+          const superseded = existingSlot.pending;
+          existingSlot.pending = undefined;
+          this.pendingLocalReactionIds.delete(superseded.event.id);
+          this.pendingLocalReactionIds.delete(event.id);
+          superseded.resolve(true);
+          return Promise.resolve(true);
+        }
+        const superseded = existingSlot.pending;
+        this.pendingLocalReactionIds.delete(superseded.event.id);
+        superseded.resolve(true);
+      }
+
+      return new Promise<boolean>((resolve) => {
+        existingSlot.pending = { event, resolve };
+      });
+    }
+
+    return new Promise<boolean>((resolve) => {
+      const runStep = async (stepEvent: CommentReactionEvent, stepResolve: (ok: boolean) => void) => {
+        const ok = await this.dispatchReactionEvent(stepEvent);
+        stepResolve(ok);
+        const slot = this.reactionQueues.get(queueKey);
+        if (!slot) return;
+        if (slot.pending) {
+          const next = slot.pending;
+          slot.pending = undefined;
+          slot.runningAction = next.event.action;
+          slot.running = runStep(next.event, next.resolve);
+        } else {
+          this.reactionQueues.delete(queueKey);
+        }
+      };
+
+      const slot: ReactionQueueSlot = {
+        runningAction: action,
+        running: Promise.resolve(),
+      };
+      this.reactionQueues.set(queueKey, slot);
+      slot.running = runStep(event, resolve);
+    });
+  }
+
+  public async fetchSeenState(aliasIds: string[]): Promise<SeenStateRow[] | null> {
+    if (this.getBackendKind() !== 'supabase') return null;
+    if (aliasIds.length === 0) return [];
+    const result = await this.sendToGoogleSheet('GET_SEEN_STATE', {
+      memberIds: aliasIds.slice(0, 20),
+    });
+    if (!result.success) return null;
+    const rawRows = (result as { rows?: unknown }).rows ?? (result.data as { rows?: unknown } | undefined)?.rows;
+    if (!Array.isArray(rawRows)) return [];
+    const rows: SeenStateRow[] = [];
+    for (const r of rawRows) {
+      if (!r || typeof r !== 'object') continue;
+      const obj = r as Record<string, unknown>;
+      const memberId = String(obj.memberId ?? '').trim();
+      const kind = String(obj.kind ?? '').trim() as SeenStateRow['kind'];
+      const scope = String(obj.scope ?? '');
+      const seenAt = String(obj.seenAt ?? '').trim();
+      if (!memberId || !kind || !seenAt) continue;
+      rows.push({ memberId, kind, scope, seenAt });
+    }
+    return rows;
+  }
+
+  public async markSeen(memberId: string, items: SeenStateItem[]): Promise<boolean> {
+    if (this.getBackendKind() !== 'supabase') return false;
+    if (items.length === 0) return true;
+    const canonId = this.toCanonicalId(memberId);
+    const result = await this.sendToGoogleSheet('MARK_SEEN', {
+      memberId: canonId,
+      items: items.slice(0, 50),
+    });
+    return result.success;
   }
 
   public getRSVPVotes(scheduleId?: string): RSVPVote[] {
@@ -1955,6 +2145,16 @@ export class SheetsService {
       saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
     }
 
+    if (Array.isArray(data.reactions)) {
+      const remoteReactions = parseRemoteReactionEvents(data.reactions);
+      const remoteIds = new Set(remoteReactions.map((r) => r.id));
+      const pendingLocal = this.reactionEvents.filter(
+        (r) => this.pendingLocalReactionIds.has(r.id) && !remoteIds.has(r.id)
+      );
+      this.reactionEvents = [...remoteReactions, ...pendingLocal];
+      saveToStorage(STORAGE_KEYS.REACTIONS, this.reactionEvents);
+    }
+
     if (Array.isArray(data.programCards)) {
       this.programCards = parseRemoteProgramCards(data.programCards);
       saveToStorage(STORAGE_KEYS.PROGRAM_CARDS, this.programCards);
@@ -2096,6 +2296,62 @@ export class SheetsService {
         this.commentEvents.push(targetRecord);
       }
       saveToStorage(STORAGE_KEYS.COMMENTS, this.commentEvents);
+      this.notifySyncListeners();
+    }
+  }
+
+  public mergeRealtimeReactionEvent(
+    eventTypeOrEvent: string | CommentReactionEvent,
+    rawRecord?: CommentReactionEvent | null,
+    rawOldRecord?: CommentReactionEvent | null
+  ): void {
+    let action: string;
+    let targetRecord: CommentReactionEvent | null | undefined;
+    let targetOldRecord: CommentReactionEvent | null | undefined;
+
+    if (typeof eventTypeOrEvent === 'object' && eventTypeOrEvent !== null) {
+      action = 'INSERT';
+      targetRecord = eventTypeOrEvent;
+      targetOldRecord = null;
+    } else {
+      action = String(eventTypeOrEvent || '').toUpperCase();
+      targetRecord = rawRecord;
+      targetOldRecord = rawOldRecord;
+    }
+
+    if (action === 'DELETE') {
+      const target = targetOldRecord ?? targetRecord;
+      if (!target || !target.id) return;
+      const initialLen = this.reactionEvents.length;
+      this.reactionEvents = this.reactionEvents.filter((r) => r.id !== target.id);
+      if (this.reactionEvents.length !== initialLen) {
+        saveToStorage(STORAGE_KEYS.REACTIONS, this.reactionEvents);
+        this.notifySyncListeners();
+      }
+    } else if (action === 'INSERT') {
+      if (!targetRecord || !targetRecord.id) return;
+      const idx = this.reactionEvents.findIndex((r) => r.id === targetRecord!.id);
+      if (idx >= 0) {
+        // 서버 확인 시각(receivedAt)이 오면 기존 낙관적 이벤트에 채워 둔다
+        if (targetRecord.receivedAt && !this.reactionEvents[idx].receivedAt) {
+          this.reactionEvents[idx] = { ...this.reactionEvents[idx], ...targetRecord };
+          saveToStorage(STORAGE_KEYS.REACTIONS, this.reactionEvents);
+          this.notifySyncListeners();
+        }
+        return;
+      }
+      this.reactionEvents.push(targetRecord);
+      saveToStorage(STORAGE_KEYS.REACTIONS, this.reactionEvents);
+      this.notifySyncListeners();
+    } else if (action === 'UPDATE') {
+      if (!targetRecord || !targetRecord.id) return;
+      const idx = this.reactionEvents.findIndex((r) => r.id === targetRecord!.id);
+      if (idx >= 0) {
+        this.reactionEvents[idx] = { ...this.reactionEvents[idx], ...targetRecord };
+      } else {
+        this.reactionEvents.push(targetRecord);
+      }
+      saveToStorage(STORAGE_KEYS.REACTIONS, this.reactionEvents);
       this.notifySyncListeners();
     }
   }
@@ -2349,18 +2605,23 @@ export class SheetsService {
       });
     }
 
-    this.writeEpoch += 1;
+    const isMutating = !NON_MUTATING_ACTIONS.has(action);
+    if (isMutating) {
+      this.writeEpoch += 1;
+    }
     const request = this.postToGoogleSheet(action, payload, targetUrl);
-    const track = request.then(
-      () => undefined,
-      () => undefined
-    );
-    this.inFlightWrites.add(track);
-    void track.then(() => {
-      this.inFlightWrites.delete(track);
-    });
+    if (isMutating) {
+      const track = request.then(
+        () => undefined,
+        () => undefined
+      );
+      this.inFlightWrites.add(track);
+      void track.then(() => {
+        this.inFlightWrites.delete(track);
+      });
+    }
     return request.then((result) => {
-      if (result.success && !endpointUrl && !NON_MUTATING_ACTIONS.has(action)) {
+      if (result.success && !endpointUrl && isMutating) {
         this.scheduleRefreshAfterWrite();
       }
       return result;
