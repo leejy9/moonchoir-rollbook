@@ -1,11 +1,17 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { getOrCreateDeviceId } from '../../services/auth';
 import { sheetsService } from '../../services/sheets';
-import type { Member, PartType, ScheduleComment } from '../../types/rollbook';
+import type { Member, PartType, ReactionEmoji, ScheduleComment } from '../../types/rollbook';
 import { getKSTDateString } from '../../utils/date';
+import { resolveMemberIdentity } from '../../utils/memberIdentity';
+import { filterMentionCandidates, pruneMentions, splitMentionText } from '../../utils/mentions';
 import { readSeenCommentsState, recordSeenComments } from './useSeenComments';
 import { pickNewCommentIds } from '../../utils/seenComments';
 import { COMMENT_MAX_LENGTH, COMMENT_PAGE_SIZE, createCommentEventId, formatCommentTime } from '../../utils/scheduleComments';
+import { CommentReactions } from './CommentReactions';
+import { MentionPicker } from './MentionPicker';
+import { ReactorsSheet } from './ReactorsSheet';
+import '../../styles/v3/reactions.css';
 
 interface ScheduleCommentsProps {
   scheduleId: string;
@@ -29,6 +35,16 @@ const ChevronIcon: React.FC = () => (
   </svg>
 );
 
+function detectMentionTrigger(value: string, cursorPos: number): { start: number; query: string } | null {
+  const before = value.slice(0, cursorPos);
+  const atIndex = before.lastIndexOf('@');
+  if (atIndex < 0) return null;
+  if (atIndex > 0 && !/[\s(]/.test(before[atIndex - 1])) return null;
+  const query = before.slice(atIndex + 1);
+  if (/[\n]/.test(query)) return null;
+  return { start: atIndex, query };
+}
+
 /**
  * 일정 상세 맨 아래에 붙는 댓글 영역. 기본으로 펼쳐 보이고, 접기 버튼으로 전체를 닫을 수 있다.
  * 일정이 바뀌면 입력 중이던 상태가 남지 않도록 호출하는 쪽에서 `key={scheduleId}`를 준다.
@@ -38,19 +54,39 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [showAll, setShowAll] = useState(false);
   const [text, setText] = useState('');
+  const [mentionIds, setMentionIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [menuId, setMenuId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [editMentionIds, setEditMentionIds] = useState<string[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [reactorsTarget, setReactorsTarget] = useState<{ commentId: string; emoji: ReactionEmoji } | null>(null);
+
+  const [mentionContext, setMentionContext] = useState<{
+    mode: 'new' | 'edit';
+    start: number;
+    end: number;
+    query: string;
+    highlightedIndex: number;
+  } | null>(null);
+
   // 같은 댓글을 다시 보낼 때 같은 id를 써서 중복 저장을 막는다(성공하면 비운다)
   const pendingEventId = useRef<string | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const editRef = useRef<HTMLTextAreaElement>(null);
 
   // 시트에서 새로 받아오면 목록을 다시 그린다
   useEffect(() => sheetsService.subscribeSync(() => setTick((t) => t + 1)), []);
 
+  const isSupabase = sheetsService.getBackendKind() === 'supabase';
+  const allMembers = sheetsService.getMembers(true, true);
+  const activeMembers = sheetsService.getMembers();
+  const canonicalAuthorId = resolveMemberIdentity(author.id, allMembers).canonicalId;
+
   const comments = sheetsService.getComments(scheduleId);
+  const reactionsMap = sheetsService.getReactionsMap();
   const visible = showAll ? comments : comments.slice(-COMMENT_PAGE_SIZE);
   const hiddenCount = comments.length - visible.length;
 
@@ -59,13 +95,11 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
     const state = readSeenCommentsState();
     return state.kind === 'ok' ? new Set(state.value) : null;
   });
-  const newIds = useMemo(
-    () => new Set(pickNewCommentIds(comments, seenAtOpen, (id) => sheetsService.isOwnComment({ memberId: id }, author.id))),
-    [comments, seenAtOpen, author.id]
+  const newIds = new Set(
+    pickNewCommentIds(comments, seenAtOpen, (id) => sheetsService.isOwnComment({ memberId: id }, author.id))
   );
 
   // 닫을 때(언마운트): 펼쳐 있었으면 보인 댓글을 "본 것"으로 기록한다. 저장 상태가 ok일 때만 쓴다.
-  // 개발 모드 <StrictMode>에서는 열자마자 기록될 수 있으니 확인은 빌드본으로 한다.
   const latest = useRef({ expanded, ids: visible.map((c) => c.id) });
   const visibleKey = visible.map((c) => c.id).join('|');
   useEffect(() => {
@@ -78,6 +112,88 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
     []
   );
   const todayStr = getKSTDateString();
+
+  const mentionCandidates =
+    mentionContext && isSupabase
+      ? filterMentionCandidates(activeMembers, mentionContext.query, canonicalAuthorId)
+      : [];
+
+  const handleTextChange = (mode: 'new' | 'edit', nextValue: string, cursorPos: number) => {
+    if (mode === 'new') setText(nextValue);
+    else setEditText(nextValue);
+
+    if (!isSupabase) {
+      setMentionContext(null);
+      return;
+    }
+    const trigger = detectMentionTrigger(nextValue, cursorPos);
+    if (trigger) {
+      setMentionContext({
+        mode,
+        start: trigger.start,
+        end: cursorPos,
+        query: trigger.query,
+        highlightedIndex: 0,
+      });
+    } else {
+      setMentionContext(null);
+    }
+  };
+
+  const applyMentionCandidate = (member: Member) => {
+    if (!mentionContext) return;
+    const isNew = mentionContext.mode === 'new';
+    const current = isNew ? text : editText;
+    const inserted = `@${member.name} `;
+    const next = current.slice(0, mentionContext.start) + inserted + current.slice(mentionContext.end);
+    const canonId = resolveMemberIdentity(member.id, allMembers).canonicalId;
+    if (isNew) {
+      setText(next.slice(0, COMMENT_MAX_LENGTH));
+      setMentionIds((prev) => [...prev, canonId]);
+    } else {
+      setEditText(next.slice(0, COMMENT_MAX_LENGTH));
+      setEditMentionIds((prev) => [...prev, canonId]);
+    }
+    setMentionContext(null);
+    const targetEl = isNew ? composerRef.current : editRef.current;
+    if (targetEl) {
+      const nextCursor = Math.min(COMMENT_MAX_LENGTH, mentionContext.start + inserted.length);
+      requestAnimationFrame(() => {
+        targetEl.focus();
+        targetEl.setSelectionRange(nextCursor, nextCursor);
+      });
+    }
+  };
+
+  const handleComposerKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>, mode: 'new' | 'edit') => {
+    if (!mentionContext || mentionContext.mode !== mode) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setMentionContext(null);
+      return;
+    }
+    if (mentionCandidates.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setMentionContext((prev) =>
+        prev ? { ...prev, highlightedIndex: (prev.highlightedIndex + 1) % mentionCandidates.length } : null
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setMentionContext((prev) =>
+        prev
+          ? {
+              ...prev,
+              highlightedIndex: (prev.highlightedIndex - 1 + mentionCandidates.length) % mentionCandidates.length,
+            }
+          : null
+      );
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const chosen = mentionCandidates[mentionContext.highlightedIndex] ?? mentionCandidates[0];
+      if (chosen) applyMentionCandidate(chosen);
+    }
+  };
 
   const run = async (task: () => Promise<unknown>, onDone?: () => void) => {
     setBusy(true);
@@ -96,6 +212,7 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
   const submit = () => {
     if (!text.trim() || busy) return;
     pendingEventId.current ??= createCommentEventId();
+    const pruned = isSupabase ? pruneMentions(text, mentionIds, allMembers) : undefined;
     void run(
       () =>
         sheetsService.addComment({
@@ -103,10 +220,13 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
           member: author,
           text,
           deviceId: getOrCreateDeviceId(),
+          ...(pruned !== undefined ? { mentionMemberIds: pruned } : {}),
           eventId: pendingEventId.current ?? undefined,
         }),
       () => {
         setText('');
+        setMentionIds([]);
+        setMentionContext(null);
         pendingEventId.current = null;
       }
     );
@@ -114,9 +234,21 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
 
   const saveEdit = (comment: ScheduleComment) => {
     if (!editText.trim() || busy) return;
+    const pruned = isSupabase ? pruneMentions(editText, editMentionIds, allMembers) : undefined;
     void run(
-      () => sheetsService.editComment({ commentId: comment.id, member: author, text: editText, deviceId: getOrCreateDeviceId() }),
-      () => setEditingId(null)
+      () =>
+        sheetsService.editComment({
+          commentId: comment.id,
+          member: author,
+          text: editText,
+          deviceId: getOrCreateDeviceId(),
+          ...(pruned !== undefined ? { mentionMemberIds: pruned } : {}),
+        }),
+      () => {
+        setEditingId(null);
+        setEditMentionIds([]);
+        setMentionContext(null);
+      }
     );
   };
 
@@ -180,30 +312,63 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
                       </div>
 
                       {editingId === comment.id ? (
-                        <div className="sc-edit">
+                        <div className="sc-edit sc-composer-wrap">
+                          <MentionPicker
+                            open={Boolean(mentionContext && mentionContext.mode === 'edit')}
+                            candidates={mentionCandidates}
+                            highlightedIndex={mentionContext?.highlightedIndex ?? 0}
+                            onSelect={applyMentionCandidate}
+                          />
                           <textarea
+                            ref={editRef}
                             className="sc-textarea"
                             value={editText}
                             maxLength={COMMENT_MAX_LENGTH}
-                            onChange={(e) => setEditText(e.target.value)}
+                            onChange={(e) => handleTextChange('edit', e.target.value, e.target.selectionStart ?? e.target.value.length)}
+                            onKeyDown={(e) => handleComposerKeyDown(e, 'edit')}
                             aria-label="댓글 수정"
                           />
                           <div className="sc-actions">
                             <button type="button" className="sc-btn primary" disabled={busy || !editText.trim()} onClick={() => saveEdit(comment)}>
                               저장
                             </button>
-                            <button type="button" className="sc-btn" onClick={() => setEditingId(null)}>
+                            <button
+                              type="button"
+                              className="sc-btn"
+                              onClick={() => {
+                                setEditingId(null);
+                                setEditMentionIds([]);
+                                setMentionContext(null);
+                              }}
+                            >
                               취소
                             </button>
                           </div>
                         </div>
                       ) : (
                         <>
-                          <div className="sc-text">{comment.text}</div>
+                          <div className="sc-text">
+                            {splitMentionText(comment.text, comment.mentionMemberIds, allMembers).map((seg, idx) =>
+                              seg.isMention ? (
+                                <span key={idx} className="sc-mention">
+                                  {seg.text}
+                                </span>
+                              ) : (
+                                <React.Fragment key={idx}>{seg.text}</React.Fragment>
+                              )
+                            )}
+                          </div>
                           <div className="sc-meta">
                             <span>{formatCommentTime(comment.createdAt, todayStr)}</span>
                             {comment.editedAt && <span>· 수정됨</span>}
                           </div>
+                          <CommentReactions
+                            commentId={comment.id}
+                            scheduleId={scheduleId}
+                            canonicalMemberId={canonicalAuthorId}
+                            reactions={reactionsMap.get(comment.id) ?? new Map()}
+                            onOpenReactors={(emoji) => setReactorsTarget({ commentId: comment.id, emoji })}
+                          />
                         </>
                       )}
 
@@ -215,6 +380,7 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
                             onClick={() => {
                               setEditingId(comment.id);
                               setEditText(comment.text);
+                              setEditMentionIds(comment.mentionMemberIds ? [...comment.mentionMemberIds] : []);
                               setMenuId(null);
                             }}
                           >
@@ -250,13 +416,21 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
             </ul>
           )}
 
-          <div className="sc-composer">
+          <div className="sc-composer sc-composer-wrap">
+            <MentionPicker
+              open={Boolean(mentionContext && mentionContext.mode === 'new')}
+              candidates={mentionCandidates}
+              highlightedIndex={mentionContext?.highlightedIndex ?? 0}
+              onSelect={applyMentionCandidate}
+            />
             <textarea
+              ref={composerRef}
               className="sc-textarea"
               placeholder="댓글 입력"
               value={text}
               maxLength={COMMENT_MAX_LENGTH}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => handleTextChange('new', e.target.value, e.target.selectionStart ?? e.target.value.length)}
+              onKeyDown={(e) => handleComposerKeyDown(e, 'new')}
               aria-label="댓글 입력"
             />
             <button type="button" className="sc-send" disabled={busy || !text.trim()} onClick={submit}>
@@ -270,6 +444,15 @@ export const ScheduleComments: React.FC<ScheduleCommentsProps> = ({ scheduleId, 
           )}
         </div>
       )}
+
+      <ReactorsSheet
+        open={Boolean(reactorsTarget)}
+        initialEmoji={reactorsTarget?.emoji ?? null}
+        reactions={reactorsTarget ? reactionsMap.get(reactorsTarget.commentId) ?? new Map() : new Map()}
+        members={allMembers}
+        canonicalMemberId={canonicalAuthorId}
+        onClose={() => setReactorsTarget(null)}
+      />
     </div>
   );
 };

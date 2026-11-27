@@ -2,12 +2,14 @@ import { useRef, useCallback } from 'react';
 
 interface UseLongPressOptions {
   thresholdMs?: number;
+  vibrate?: boolean;
   onLongPress: () => void;
   onClick?: () => void;
 }
 
 export function useLongPress({
   thresholdMs = 3000,
+  vibrate = true,
   onLongPress,
   onClick,
 }: UseLongPressOptions) {
@@ -20,7 +22,7 @@ export function useLongPress({
       isLongPressRef.current = false;
       timerRef.current = setTimeout(() => {
         isLongPressRef.current = true;
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        if (vibrate && typeof navigator !== 'undefined' && navigator.vibrate) {
           try {
             navigator.vibrate(100);
           } catch {
@@ -30,7 +32,7 @@ export function useLongPress({
         onLongPress();
       }, thresholdMs);
     },
-    [onLongPress, thresholdMs]
+    [onLongPress, thresholdMs, vibrate]
   );
 
   const cancel = useCallback(() => {
