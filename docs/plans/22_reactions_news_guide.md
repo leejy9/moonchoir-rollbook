@@ -1,6 +1,6 @@
 # 22. 댓글 반응 · 새 소식 · 계정별 읽음 · 스티커 축하 개발 지시서 (V3-24)
 
-> 작성: 리뷰어(Claude), 2026-11-27. 기준 코드: `origin/main` @ `3d34859`. spec-auditor 검토(차단 2·수정 21·사소 다수)를 반영한 판이다(§9).
+> 작성: 리뷰어(Claude), 2026-11-27. 기준 코드: `origin/main` @ `3d34859`. spec-auditor 검토 2회(1차 차단 2·수정 21, 2차 차단 1·수정 15)를 반영한 판이다(§9).
 > 명세: `docs/MEMBER_UX_V3_SPEC.md` §0-1 V41~V51.
 > 시안(사용자 확정): https://claude.ai/artifact/78R1NaARRVq6a9zKrpZM9r "댓글 반응 · 새 소식" 줄의 `SocialReact`, `SocialPick`, `SocialWho`, `NewsHome`, `NewsList`, `NewsEmpty`, `StickerCelebrate`, `StickerCelebrate2`. 시안 hex는 쓰지 않는다. 시안의 예시 이름·숫자는 넣지 않는다.
 > 시작 전: `.agents/rules/recurring-mistakes.md`를 읽고 `/spec-check`로 §3 표를 코드에 대 본다. 어긋나면 시작하지 말고 보고한다.
@@ -24,16 +24,16 @@
 | 새 댓글 표시 | `schedule_comment_events.received_at`(이미 있음, 스냅샷에 **추가**) + **새** `member_seen_state` | 스냅샷 + **새** RPC `fn_get_seen_state` | `isCommentUnread` | 홈 카드 점, 상세 "새 댓글" |
 | @언급 | `schedule_comment_events`에 **새 열** `mention_member_ids text[]` | 스냅샷 `mentionMemberIds` | `buildScheduleComments`(언급 반영) | 댓글 글자 강조, 새 소식 |
 | 새 소식 | 반응·댓글 `received_at`, 언급, 일정·투표, 스티커 판정 + `member_seen_state` | 위와 같음 | `buildNewsItems` | 종 숫자, 소식 목록 |
-| 스티커 축하 | 스티커 판정(`evaluatePraiseStickers`) + `member_seen_state`(kind `sticker`) | 활동 RPC `fn_get_member_activity` + 위 | `useEarnedStickers` → `pickUnseenStickers` | 축하 화면, 내 활동 "신규" |
+| 스티커 축하 | 스티커 판정(`evaluatePraiseStickers`) + `member_seen_state`(kind `sticker`) | 활동 RPC `fn_get_member_activity` + 위 | `useMemberActivityModel` → `pickUnseenStickers` | 축하 화면, 내 활동 "신규" |
 
 ### 2-2. 데이터 관계 점검 (data-integrity-review 기준)
 
 | 연결부 | 규칙 |
 |---|---|
 | **병합 회원(V33)** | 반응·읽음 기록을 **쓸 때**는 대표 id로 쓴다(`resolveMemberIdentity(...).canonicalId`). **읽을 때**는 별칭 포함 id 전체(`aliasIds`)의 행을 모아 계산한다. "내 것" 판정은 `sheetsService.isOwnComment`처럼 별칭까지 같은 사람으로 본다. 한 사람이 별칭 id와 대표 id로 같은 이모지를 둘 다 눌렀으면 한 명으로 센다. |
-| **시각** | 새 소식과 읽음 비교에는 **서버 시각만** 쓴다: 반응·댓글의 `received_at`, 읽음의 `seen_at`(서버 `now()`). 댓글의 `timestamp` 열(기기가 보낸 KST 문자열, 19자, 시간대 없음, 운영 83건)은 화면 표시용으로만 남긴다. 서버 시각은 스냅샷에서 **UTC ISO 문자열**(`YYYY-MM-DDTHH:MM:SS.mssZ`)로 보낸다(`to_char(... at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`). 기존 `createdAt`처럼 `OF` 형식(`+09`)을 쓰지 않는다. 실시간 경로로 오는 값은 `...123456+00:00` 모양이라, **서버 시각은 문자열로 비교하지 않고 `Date.parse` 값(ms)으로 비교한다.** `NaN`이면 "시각 없음"으로 본다. `parseKSTDate`(`date.ts:10-35`)는 빈 값에 지금 시각을 돌려주므로 이 티켓의 서버 시각·`earnedOn` 해석에 쓰지 않는다. `earnedOn`은 `new Date(\`${d}T00:00:00+09:00\`)`. 일정 시작은 기존 KST 해석(`parseScheduleKST`, `timeWindow.ts:26`)을 쓴다. |
+| **시각** | 새 소식과 읽음 비교에는 **서버 시각만** 쓴다: 반응·댓글의 `received_at`, 읽음의 `seen_at`(서버 `now()`). 댓글의 `timestamp` 열(기기가 보낸 KST 문자열, 19자, 시간대 없음, 운영 83건)은 화면 표시용으로만 남긴다. 서버 시각은 스냅샷에서 **UTC ISO 문자열**(`YYYY-MM-DDTHH:MM:SS.mssZ`)로 보낸다(`to_char(... at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`). 기존 `createdAt`처럼 `OF` 형식(`+09`)을 쓰지 않는다. 실시간 경로로 오는 값은 `...123456+00:00` 모양이라, **서버 시각은 문자열로 비교하지 않고 ms 값으로 비교한다.** 해석은 새 함수 `parseServerTimeMs(text)`(`src/utils/serverTime.ts`) 하나로 한다: 공백 구분자·`+00`·`+00:00`·`Z`, 소수 6자리(마이크로초)를 받아 `YYYY-MM-DDTHH:MM:SS.mmmZ`로 정규화한 뒤 `Date.parse`(아이폰 Safari가 6자리·공백을 못 읽는 경우를 막음). 실패면 `NaN` = "시각 없음". `parseKSTDate`(`date.ts:10-35`)는 빈 값에 지금 시각을 돌려주므로 이 티켓의 서버 시각·`earnedOn` 해석에 쓰지 않는다. `earnedOn`은 `new Date(\`${d}T00:00:00+09:00\`)`. 일정 시작은 기존 KST 해석(`parseScheduleKST`, `timeWindow.ts:26`)을 쓴다. |
 | **같은 시각 문제** | 운영 이관 댓글 62개가 `received_at` 20개 값에 몰려 있다(리뷰어 확인). 그래서 "내 첫 댓글보다 뒤" 같은 **순서 판정은 시각이 아니라 투영 순서(스냅샷 `seq` 순 = `getComments` 순서)**로 한다. 시각은 안 읽음 비교와 표시에만 쓴다. |
-| **단일 원천** | 반응 집계 = `buildCommentReactions` 하나. 새 소식 = `buildNewsItems` 하나. 스티커 판정 = `useEarnedStickers` 하나(내 활동과 축하가 같이 쓴다). 내 투표 = `findMyVote`(V3-22). 투표 가능 = `isRsvpOpenForSchedule`. |
+| **단일 원천** | 반응 집계 = `buildCommentReactions` 하나. 새 소식 = `buildNewsItems` 하나. 스티커 판정 = `useMemberActivityModel` 하나(내 활동과 축하가 같이 쓴다). 내 투표 = `findMyVote`(V3-22). 투표 가능 = `isRsvpOpenForSchedule`. |
 | **보관·취소·숨김** | 새 소식의 일정은 `getSchedulesForMember` 결과만(숨김 일정 제외). 미투표 소식은 취소·보관 일정 제외(`isRsvpOpenForSchedule`이 이미 거른다). 스티커는 기존 규칙 그대로(V31). |
 | **삭제된 댓글** | 반응 원천은 지우지 않는다. 화면은 `getComments`(삭제 제외)에 있는 댓글의 반응만 보여 준다. 서버는 삭제된 댓글에 새 반응을 받지 않는다. |
 | **서버↔화면 계약** | 새 RPC 3개의 payload 키는 `src/services/backend/rpcContract.test.ts` 방식으로 SQL 최신 정의와 대조하는 테스트를 둔다(V3-21 교훈). 이모지 목록도 SQL 검사식과 TS 상수가 같은지 테스트로 확인한다. |
@@ -64,29 +64,30 @@
 | `RemoteSnapshot` | `src/services/backend/types.ts:12-23` | 스냅샷 파싱 | — | `reactions?: unknown[]` 추가 |
 | `STORAGE_KEYS` | `src/services/sheetsStorage.ts:1-11` | 로컬 캐시 | — | `REACTIONS: 'moonchoir_reactions_v1'` 추가 |
 | `getBackendKind` | `src/services/sheets.ts:209` | — | `'gas' \| 'supabase'` | 새 기능 표시 조건은 이것(`isBackendActive` `:196`은 GAS URL이 있어도 true라 쓰지 않는다) |
-| `fn_delete_member__impl` | `supabase/migrations/20261124010000_v3_record_guards.sql:270~`(최신) | 운영진 단원 삭제 | 기록이 있으면 소프트 삭제(`:290-299`) | 최신 정의 전체를 복사해 기록 목록에 `comment_reaction_events` 추가, 물리 삭제 때 `member_seen_state` 행도 지운다(규칙 4) |
+| `fn_delete_member__impl` | `supabase/migrations/20261124010000_v3_record_guards.sql:270~`(최신) | 운영진 단원 삭제 | 기록이 있으면 소프트 삭제(`:283-297`, 정의 `:272`) | 최신 정의 전체를 복사해 기록 목록에 `comment_reaction_events` 추가, 물리 삭제 때 `member_seen_state` 행도 지운다(규칙 4) |
 | `ScheduleCommentEvent` / `ScheduleComment` | `src/types/rollbook.ts:212` / `:226` | 댓글 전반 | — | 둘 다 `receivedAt?: string` 추가(없으면 옛 데이터, R5 참고) |
-| `buildScheduleComments` | `src/utils/scheduleComments.ts:27` | `sheets.ts:347,355,414` | 이벤트 → 댓글(삭제 제외, 수정 반영, 이벤트 순) | `receivedAt`은 **CREATE 행의 값**을 쓴다(수정해도 바뀌지 않음) |
+| `buildScheduleComments` | `src/utils/scheduleComments.ts:27` | `sheets.ts:349,357,414` | 이벤트 → 댓글(삭제 제외, 수정 반영, 이벤트 순) | `receivedAt`은 **CREATE 행의 값**을 쓴다(수정해도 바뀌지 않음) |
 | `createCommentEventId` | `src/utils/scheduleComments.ts:8` | 댓글 쓰기 | 고유 id | 반응 이벤트 id에도 같은 방식 사용 |
 | `sheetsService.getComments` / `getCommentCounts` / `isOwnComment` | `src/services/sheets.ts:347` / `:355` / `:372` | 댓글·홈 | — | 재사용 |
 | `isSameMember`(private) | `src/services/sheets.ts:331` | 댓글 | 별칭 포함 같은 사람 | 반응 집계에 같은 판정 사용(public 래퍼를 새로 만들지 말고 `isOwnComment`처럼 필요한 메서드 안에서 쓴다) |
 | `recordCommentEvent` | `src/services/sheets.ts:376` | 댓글 쓰기 | 같은 id 재시도 무시 → 서버 → 로컬 반영 | 반응은 **낙관적 반영 후 실패 시 되돌림**(R2) |
+| `NON_MUTATING_ACTIONS` | `src/services/sheets.ts:137-145` | `sendToGoogleSheet` | 여기 없는 action은 성공하면 1.5초 뒤 전체 새로고침(`:2363-2364`, `:2297-2304`, `REFRESH_AFTER_WRITE_DELAY_MS` `:107`) → `lastSyncedAt` 변경(`:1963`). 또 모든 action이 `writeEpoch`를 올려(`:2352`) 진행 중 스냅샷을 버리게 한다(`:1902-1912`) | **`GET_SEEN_STATE`, `MARK_SEEN`, `ADD_REACTION`을 넣는다**(차단 B1: 안 넣으면 읽음 조회 → 새로고침 → 읽음 조회가 무한 반복). 그리고 이 목록의 action은 `writeEpoch`를 올리지 않게 고친다(읽기가 스냅샷을 버리지 않게). 반응은 실시간·낙관적 반영으로 충분하다 |
 | `sendToGoogleSheet` / `mapActionToRpc` | `sheets.ts:2339` / `supabaseBackend.ts:101` | 모든 쓰기 | action → RPC | `ADD_REACTION`→`fn_add_reaction`, `MARK_SEEN`→`fn_mark_seen`, `GET_SEEN_STATE`→`fn_get_seen_state` 추가 |
 | `GasBackend` | `src/services/backend/gasBackend.ts` | `sheets.ts:77` | 옛 GAS 경로 | 새 기능을 넣지 않는다. `getBackendKind() !== 'supabase'`면 반응 누르기·`@` 목록·종을 숨긴다 |
 | `rpcContract.test.ts` | `src/services/backend/rpcContract.test.ts:18-43` | — | 최신 정의(`as $$ … $$;`만 잡음)의 `p_payload->>'키'`와 대조 | 대상 추가: 새 RPC 3개, `fn_add_comment`·`fn_edit_comment`의 `mentionMemberIds`. 새 함수 본문은 **`as $$`**로 쓴다. 배열 안 키(`items[].kind/scope/upTo`)는 별도 단언으로 검사 |
 | `resolveMemberIdentity` | `src/utils/memberIdentity.ts:8` | `ProfileTab.tsx:100` 등 | → `{canonicalId, aliasIds}`(aliasIds 맨 앞이 대표 id, `:54-59`) | 쓰기=canonical, 읽기=aliasIds. **병합 행이 있는 목록과 함께**(`getMembers(true)` 또는 ProfileTab처럼 `getMembers(true, true)` `:72`) |
 | `getSyncState` / `subscribeSync` | `src/services/sheets.ts:1980` / `:1984` | 홈·내 활동 | `lastSyncedAt > 0`이면 준비 | 읽음 기록·축하의 준비 조건 |
-| `getMemberActivity` | `src/services/sheets.ts:823` | `ProfileTab.tsx:109` | 별칭 id들 → 활동(투표 이력·재생) | `useEarnedStickers`로 옮긴다 |
+| `getMemberActivity` | `src/services/sheets.ts:823` | `ProfileTab.tsx:109` | 별칭 id들 → 활동(투표 이력·재생) | `useMemberActivityModel`로 옮긴다 |
 | 스티커 입력 조립 | `src/components/ProfileTab.tsx:55-264` | — | members, config, currentMember, activity(`:106-119`, `refreshTrigger`에 걸림), schedules, logs, votes, `isActivityStaff`(:138), `buildMemberScheduleRecords`(:143), `evaluatePraiseStickers` 호출(:227) | **`src/components/profile/useMemberActivityModel.ts`로 추출해 App에서 한 번만 부르고** ProfileTab에는 props로 넘긴다(R11-4) |
 | `evaluatePraiseStickers` | `src/utils/praiseStickers.ts:55` | `ProfileTab.tsx:236` | → 스티커마다 `earned`, `earnedOn`(YYYY-MM-DD), `progress` | 재사용. 24개 모두 `earnedOn` 계산(`praiseStickerEvaluators.ts`) |
 | `isStickerDataReady` | `src/components/profile/useSeenStickers.ts:8` | `ProfileTab.tsx:259` | `lastSyncedAt > 0 && (isStaff \|\| activity 도착)` | 재사용 |
 | `useSeenStickers` | `src/components/profile/useSeenStickers.ts:34` | `ProfileTab.tsx:264` | 기기 저장 본 스티커 | **계정 기록으로 교체**. `StickerBoardSheet`의 `unseenStickerIds`(:397)는 계정 기록에서 받는다. `conditionDescription`은 스티커판(`StickerBoardSheet.tsx:165`)에서 계속 쓰고, 축하 화면에만 쓰지 않는다 |
 | `useSeenComments` / `recordSeenComments` / `readSeenCommentsState` | `src/components/home/useSeenComments.ts:59` / `:40` / `:16` | `HomeTab.tsx:147`, `ScheduleComments.tsx:59,76` | 기기 저장 새 댓글 | **계정 기록으로 교체**(같은 파일을 고친다. 호출부 모양은 가능하면 유지) |
-| `findMyVote(votes, aliasIds: Set)` | `src/utils/myVote.ts:9-12` | `HomeTab.tsx` | 별칭 포함 내 투표 | 미투표 소식. 인자 그대로(호출 예 `HomeTab.tsx:158-164`) |
+| `findMyVote(votes, aliasIds: Set)` | `src/utils/myVote.ts:9-12` | `HomeTab.tsx` | 별칭 포함 내 투표 | 미투표 소식. 인자 그대로(호출 예 `HomeTab.tsx:177,221`) |
 | `isRsvpOpenForSchedule` | `src/utils/timeWindow.ts:135` | 홈·상세 | 시작 60분 전까지 투표 가능, 취소·보관 false | 미투표 소식 |
 | `parseScheduleKST`(비공개) | `src/utils/timeWindow.ts:26` | 같은 파일 | 일정 날짜·시각 → KST Date | `export` 해서 소식의 "3일 전" 계산에 쓴다(새 해석기 금지) |
 | `isMemberRequiredForSchedule(member, date, schedule, aliasIds: Set, identityMembers)` | `src/utils/attendanceStats.ts:65-70` | 홈 | 필참 여부(선생님도 필참일 수 있음 `:109-114`) | 미투표 소식 대상(V45). 인자 다섯 개 모두 넘긴다 |
-| `AppHeader` | `src/components/AppHeader.tsx:10-16`(props) | `App.tsx` | 로고, `showAdminEntry`(:114) | props `newsUnreadCount`, `onOpenNews`, `showNews` 추가 |
+| `AppHeader` | `src/components/AppHeader.tsx:6-11`(props) | `App.tsx` | 로고, `showAdminEntry`(:114) | props `newsUnreadCount`, `onOpenNews`, `showNews` 추가 |
 | `Icons.tsx` | `src/components/Icons.tsx` | — | `IconChat`, `IconCalendar` 있음, 종 없음, `IconVote`는 엄지 모양(`:68-74`) | `IconBell` 추가. 미투표 소식 아이콘은 `IconCalendar`(👍 반응과 헷갈리지 않게) |
 | `StickerBoardSheet` 열림 상태 | `src/components/ProfileTab.tsx:52` | — | ProfileTab 안 상태 | prop `openStickerBoardSignal`(숫자, 바뀌면 연다)로 밖에서 열 수 있게 한다 |
 | `SuperAdminDashboard` | `src/components/admin/SuperAdminDashboard.tsx`(1813줄) | — | 하위 탭 타입 `:23`, 목록 `:782-787`, 댓글 필터 `:346-368`(KST 문자열 `timestamp.slice(0,10)`) | R9 |
@@ -94,7 +95,7 @@
 | `route` 겹침 화면 | `src/utils/route.ts:4-8` | — | `scheduleSheet`, `qr`, `rsvp`, `player`, `score` | 축하는 겹침 화면이 없을 때만. 새 소식은 경로 없이 시트로 연다(새 경로 금지) |
 | `scripts/ci/db-check.sh`, `supabase/tests/*.sql` | — | CI | 빈 PostgreSQL에 마이그레이션 + 검증 | `supabase/tests/v3_reactions_seen_check.sql` 추가 |
 
-표에 없는 이름을 새로 쓰려면 먼저 보고한다.
+§3 표 또는 §4·§6에 적힌 이름 밖의 것을 새로 쓰려면 먼저 보고한다.
 
 ---
 
@@ -128,7 +129,7 @@ create policy "Allow read comment_reaction_events" on comment_reaction_events fo
 -- 실시간: publication이 있고 아직 안 들어 있을 때만 추가(빈 CI DB에는 publication이 없을 수 있음)
 do $$ begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
-     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'comment_reaction_events') then
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'comment_reaction_events') then
     alter publication supabase_realtime add table comment_reaction_events;
   end if;
 end $$;
@@ -143,8 +144,8 @@ end $$;
   1. 같은 `id` 행이 이미 있으면 바로 `{success:true}`(멱등. 그 사이 댓글이 지워졌어도 성공).
   2. 길이: `id` 1~64자, `deviceId` ≤ 128자 → 아니면 `INVALID_REACTION`.
   3. `memberId`가 `members`에 있고 `status <> 'DELETED'` → 아니면 `MEMBER_NOT_FOUND`.
-  4. `commentId`인 CREATE 행이 있고, **작성자의 DELETE 행**(DELETE 행의 `member_id`와 CREATE 행의 `member_id`가 같은 대표 회원)이 없음 → 아니면 `COMMENT_NOT_FOUND`. 화면 투영(`buildScheduleComments` `:51-61`, 남의 DELETE는 무시)과 같은 규칙이다. 대표 회원 비교는 새 내부 함수 `fn_canonical_member_id(text)`(`members.merged_into_id`를 최대 5단계 따라감, anon 권한 회수).
-  5. 같은 대표 회원의 최근 1분 반응이 30건 이상이면 `RATE_LIMITED`.
+  4. `commentId`인 CREATE 행이 있고, **작성자의 DELETE 행**(DELETE 행의 `member_id`와 CREATE 행의 `member_id`가 같은 대표 회원)이 없음 → 아니면 `COMMENT_NOT_FOUND`. 화면 투영(`buildScheduleComments` `:51-61`, 남의 DELETE는 무시)과 같은 규칙이다. 대표 회원 비교는 새 내부 함수 `fn_canonical_member_id(text)`(`members.merged_into_id`를 따라감. 같은 id가 다시 나오면(순환) 멈추고 처음 id를 돌려준다. TS `memberIdentity.ts:15-28`과 같은 규칙. anon 권한 회수).
+  5. 같은 사람의 최근 1분 반응이 30건 이상이면 `RATE_LIMITED`. 조회는 그 사람의 id 묶음 배열로 `member_id = any(v_ids) and received_at > now() - interval '1 minute'`(색인 `(member_id, received_at)` 사용). 행마다 함수를 부르지 않는다.
   - 이모지·종류는 표의 check가 막는다(`check_violation`을 잡아 `INVALID_REACTION`으로 돌려준다).
 - `schedule_id`는 댓글 CREATE 행의 값으로 넣는다.
 - `insert ... on conflict (id) do nothing`. 같은 id 재전송은 성공으로 돌려준다(멱등).
@@ -166,10 +167,10 @@ end $$;
 ### R2. 반응 집계와 화면
 
 - 상수 `REACTION_EMOJIS = ['👍','❤️','👏','😂','🙏','🎵'] as const`(`src/utils/commentReactions.ts`). 화면의 순서도 이 순서다.
-- `buildCommentReactions(events, toCanonical)` → `Map<commentId, Map<emoji, { memberIds: string[]; lastAtMs: number }>>`:
+- `buildCommentReactions(events, toCanonical)` → `Map<commentId, Map<emoji, { memberAt: Map<canonicalId, number> }>>`(켜진 사람마다 그 사람의 마지막 ADD 시각 ms):
   - `toCanonical(id)` = `resolveMemberIdentity(id, members).canonicalId`(`sheets.ts` 안에서 넘긴다).
   - 이벤트를 배열 순서(스냅샷 `seq` 순, 실시간은 도착 순)대로 접는다. (댓글, `toCanonical(member)`, 이모지)마다 마지막 동작이 ADD면 켜짐.
-  - `lastAtMs` = 켜진 사람들의 마지막 ADD 시각(ms) 중 가장 늦은 값.
+  - 칩 숫자 = `memberAt.size`. 새 소식은 `memberAt`에서 나를 빼고 계산한다.
 - 칩: 켜진 수 > 0인 이모지만, `REACTION_EMOJIS` 순서. 내가 켠 칩은 진하게(`aria-pressed="true"`).
 - 칩을 누르면 내 반응을 켜거나 끈다. 끝의 ☺+ 버튼은 6개 고르기를 연다. 고른 게 이미 켜져 있으면 끈다.
 - **한 사람이 한 댓글에 여러 이모지를 켤 수 있다**(V48). 이모지마다 따로 켜고 끈다.
@@ -177,7 +178,7 @@ end $$;
 - **낙관적 반영:** 누르면 로컬 이벤트를 먼저 넣어 화면을 바꾼다. 서버 실패면 그 이벤트를 빼서 되돌리고 "반응을 남기지 못했어요. 다시 시도해 주세요."를 짧게 보여 준다.
 - **순서 보장:** (댓글, 이모지)마다 요청을 하나씩 보낸다(앞 요청이 끝나야 다음). 연타하면 마지막 의도만 남도록 대기 중인 반대 동작은 합친다.
 - **스냅샷 교체 때:** 전체 스냅샷으로 반응 배열을 바꿀 때 아직 서버 확인 전인 로컬 이벤트(id로 구분)는 남긴다.
-- 칩을 **0.5초 길게 누르면**(마우스는 우클릭) 반응한 사람 시트를 연다. 위에 칩 줄, 아래에 사람 목록. 이름·파트는 현재 명부(대표 회원) 기준. 내가 있으면 "나(이름)"로 맨 위.
+- 칩을 **0.5초 길게 누르면**(마우스는 우클릭) 반응한 사람 시트를 연다. 기존 훅 `src/hooks/useLongPress.ts`(기본 3000ms, 길게 누르면 `navigator.vibrate(100)`)를 `thresholdMs: 500`으로 쓰고, 훅에 `vibrate?: boolean`(기본 true) 옵션을 추가해 여기서는 `false`로 둔다(진동은 축하 때만, V47). 위에 칩 줄, 아래에 사람 목록. 이름·파트는 현재 명부(대표 회원) 기준. 내가 있으면 "나(이름)"로 맨 위.
 - GAS 모드(`getBackendKind() !== 'supabase'`)에서는 칩은 보이되 ☺+와 누르기를 막는다.
 
 | 입력(이벤트, 순서대로) | 기대 |
@@ -187,6 +188,7 @@ end $$;
 | m1b 👏 ADD, m1 👏 ADD | 👏 1(한 사람), m1 화면에서 진함 |
 | m1b 👏 ADD → m1 👏 REMOVE | 👏 없음(같은 사람의 마지막 동작) |
 | m2 ❤️ ADD, m3 👍 ADD | 칩 순서 👍 ❤️ |
+| m2 👏 ADD 10:00, m4 ❤️ ADD 11:50 | c1의 👏 `memberAt`={m2:10:00}, ❤️ `memberAt`={m4:11:50} |
 | m1 👏 ADD, m1 ❤️ ADD | 👏 1(진함), ❤️ 1(진함) — 둘 다 켜짐 |
 | ADD→REMOVE→ADD 빠르게 연타 | 서버 최종 켜짐, 화면 켜짐 |
 | 병합 전 m1b 👏 ADD, m1 👏 ADD, m1 👏 REMOVE, 그 뒤 병합 | 👏 없음(같은 사람의 마지막 동작이 REMOVE, 의도된 결과) |
@@ -240,7 +242,7 @@ alter table member_seen_state enable row level security;
   - seen 기록을 아직 못 받았으면(준비 안 됨) 새 댓글 0.
 - 홈 카드 점과 상세 "새 댓글" 글자가 이 판정 하나(`isCommentUnread`)를 쓴다. 상세 글자는 V3-22처럼 **열 때의 값**으로 고정한다.
 - 상세를 닫을 때 펼쳐져 있었으면 `fn_mark_seen({kind:'comments', scope: 일정 id, upTo: 보인 댓글 중 가장 늦은 receivedAt})`. V3-22의 닫을 때 기록 위치를 그대로 쓴다.
-- 서버 저장 실패: 로컬 상태만 먼저 바꾸고, 다음에 앱을 열 때 같은 값을 다시 보낸다(`greatest`라 중복 무해).
+- 서버 저장 실패: 로컬 상태만 먼저 바꾸고, R11-1 대기열 규칙대로 다시 보낸다.
 
 | 입력 | 기대 |
 |---|---|
@@ -255,6 +257,7 @@ alter table member_seen_state enable row level security;
 
 - seen 기록을 받았는데 `baseline('')` 행이 없으면, 준비(`lastSyncedAt > 0`) 뒤 한 번 `fn_mark_seen([{kind:'baseline',scope:''},{kind:'news',scope:''}])`. 이 시각 이전의 댓글·반응·소식은 모두 읽음.
 - `baseline('stickers')` 행이 없으면, **스티커 데이터 준비 뒤**(`isStickerDataReady`) 한 번 `baseline('stickers')` + 지금 받은 모든 스티커의 `sticker` 행을 쓴다. 이미 받은 스티커로 축하가 쏟아지지 않게 하려는 것이다.
+- 미투표는 baseline과 상관없이 `vote` 행으로만 판정한다(해야 할 일이라 첫 실행에도 안 읽음).
 - 그때 받은 스티커가 1개 이상이면 **요약 축하를 한 번** 띄운다(V49, R7 '요약 축하'). 0개면 띄우지 않는다.
 - 기기 저장 `SEEN_COMMENTS`·`SEEN_STICKERS`는 읽지도 쓰지도 않는다(지우지도 않는다. 키 상수는 유지).
 
@@ -263,6 +266,7 @@ alter table member_seen_state enable row level security;
 | 첫 실행, 동기화 전 | 아무것도 쓰지 않음, 점·숫자 0 |
 | 첫 실행, 동기화 후, 받은 스티커 7개 | 3행(`baseline ''`, `news ''`, `baseline 'stickers'`) + sticker 7행, 요약 축하 1번("지금까지 칭찬 스티커 7개를 받았네요!"), 개별 축하 없음 |
 | 첫 실행, 받은 스티커 0개 | 3행, 축하 없음 |
+| 첫 실행 + 72시간 안 필참 미투표 1개 | 종 숫자 1(미투표는 해야 할 일이라 처음부터 안 읽음, 의도) |
 | 그 뒤 8번째 스티커 획득 | 축하 1번 |
 | seen 조회 실패 | 준비 안 됨으로 처리(점·숫자·축하 없음), 다음 동기화 때 재시도 |
 
@@ -284,10 +288,11 @@ alter table member_seen_state enable row level security;
   - 미투표: 그 일정의 `vote` 행이 없으면 안 읽음(늦게 만든 일정도 안 읽음으로 뜨게, `Schedule`에 생성 시각이 없음).
   - 스티커: `sticker` 행이 없으면 안 읽음(날짜 무관, V44).
 - **기간:** `at ≥ now − 보는 기간`(14일, "이전 소식 더 보기"마다 +14, 최대 90). 예외로, 안 읽은 스티커는 기간과 상관없이 넣는다. 미투표는 마감 지나면 빠진다.
-- 묶음 개수 `n`은 기간 안의 것만 센다. 새 댓글 개수는 안 읽음이면 `at > seen.news`인 것만, 읽음이면 기간 안 전체.
+- 반응 `n` = 지금 켜져 있고 마지막 ADD가 기간 안인 **남의 사람 수**. 새 댓글 개수 = 안 읽음이면 `at > max(news, baseline, comments[일정])`인 것만(홈 점과 같은 기준), 읽음이면 기간 안 전체.
 - 종 숫자 = `unread.length`(묶음 하나 = 1). 0이면 숫자 없이 종만.
 - 소식 목록을 **닫을 때**: `news` 행을 `upTo` = 보여 준 안 읽은 반응·새 댓글·언급 항목 중 가장 늦은 `at`으로 저장한다(없으면 쓰지 않음). 보여 준 미투표 항목은 `vote` 행을 쓴다. 연 동안 새로 들어온 소식은 읽음이 되지 않는다. 목록을 연 동안에는 연 순간의 안/읽음을 유지한다.
-- "모두 읽음": `news` + 안 읽은 스티커 `sticker` 행 전부를 한 번에 저장한다.
+- "모두 읽음": `news`(`upTo` 없음 = 서버 now) + 안 읽은 스티커의 `sticker` 행 + 보이는 미투표의 `vote` 행을 한 번에 저장한다.
+- 소식을 읽어도 `comments[일정]`은 바꾸지 않는다(홈 점은 상세를 실제로 펼쳐 봐야 사라진다, 의도).
 - 스티커 항목을 누르면 그 `sticker` 행을 저장한 뒤 이동한다.
 - 목적어 조사: `withObjectParticle(name)`(받침 있으면 "을", 없으면 "를", 한글이 아니면 "을(를)").
 - 상대 시각(`formatRelativeKST(atMs, nowMs)`, 기기 시간대와 무관하게 KST 날짜로 계산): 60초 미만 "방금", 60분 미만 "n분 전"(내림), 24시간 미만이면서 KST로 같은 날 "n시간 전", KST로 어제 "어제", 그 외 "M월 D일".
@@ -307,6 +312,8 @@ alter table member_seen_state enable row level security;
 | 시작 48시간 전에 새로 만든 필참 일정, seen.news는 그보다 앞 | 미투표 안 읽음(vote 행 없음) |
 | 목록을 연 동안 반응 도착 후 닫음 | 그 반응은 안 읽음으로 남음 |
 | A 상세를 펼쳐 읽음(comments[A] 갱신) | 새 댓글 소식도 읽음 |
+| news 11:00, comments[A] 11:30, 남의 댓글 11:20·11:40 | 묶음 안 읽음, "새 댓글 1개"(11:40만) |
+| 모두 읽음, 미투표 1개 보임 | `vote` 행 저장 → 종 숫자 0 |
 | `startTime`이 빈 필참 일정 | 없음(`isRsvpOpenForSchedule` false) |
 | 선생님이 필참인 일정 | 선생님에게도 미투표 소식 |
 | `formatRelativeKST`: 59초 / 59분 59초 / 같은 날 23시간 / KST 어제 25시간 전 | "방금" / "59분 전" / "23시간 전" / "어제" |
@@ -319,11 +326,14 @@ alter table member_seen_state enable row level security;
 
 ### R7. 스티커 축하 (`StickerCelebration`, 시안 `StickerCelebrate`)
 
-- `useEarnedStickers(profile)`: `ProfileTab.tsx:70-264`의 입력 조립과 `evaluatePraiseStickers` 호출을 그대로 옮긴 훅이다. `ProfileTab`과 축하 화면이 이 훅 하나를 쓴다.
+- `useMemberActivityModel`: `ProfileTab.tsx:55-264`의 입력 조립과 `evaluatePraiseStickers` 호출을 그대로 옮긴 훅이다. `ProfileTab`과 축하 화면이 이 훅 하나를 쓴다.
 - **안 본 스티커** = 받았고 `sticker` 행이 없는 것. 준비 조건: `isStickerDataReady` 참, seen 기록 받음, `baseline('stickers')` 행 있음.
+- `earnedOn`이 없으면(`praiseStickerDefinitions.ts:19`에서 선택 값) 줄 맨 뒤, 새 소식 시각은 0(정렬 맨 끝), 날짜 라벨은 생략한다.
 - **보여 줄 때:** 회원 화면(`route.area === 'member'`)이고, 경로 겹침 화면이 없고, **앱이 띄운 시트·모달도 없을 때**(R11-3 `useBlockingOverlay`). 안 본 스티커를 `earnedOn` 오름차순, 같으면 정의 순서로 하나씩.
   - 여러 개면 점 표시와 "다음 스티커".
 - "좋아요!"·닫기: 지금 스티커의 `sticker` 행 저장 → 다음. "스티커판 보기": 남은 것까지 모두 저장 → 내 활동 탭으로 이동하고 스티커판을 연다.
+  - 스티커판 열기: App이 "열 요청"(`pendingStickerBoardOpen: boolean`)을 들고, ProfileTab에 prop `openStickerBoard`로 넘긴다. ProfileTab이 열고 나서 `onStickerBoardOpened()`를 불러 App이 요청을 지운다(다음에 탭에 들어갈 때 다시 열리지 않게).
+- 스티커판을 **닫을 때**(지금 `markAllSeen` `ProfileTab.tsx:397-401` 자리): 받은 스티커 중 `sticker` 행이 없는 것 전부를 저장한다.
 - 화면 글자: "칭찬 스티커를 받았어요!", 스티커 이름, **축하 문장**(아래 표), 메달 칩("동메달"/"은메달"/"금메달", `tier` 없으면 칩 없음), 묶음 칩(`bundleTitle`), "{n}번째 칭찬 스티커예요"(n = 이미 본 스티커 수 + 이번 줄에서의 순서. 늦게 도착한 과거 획득 스티커도 "8번째"처럼 자연스럽게).
 - 축하 문장은 `StickerDefinition`에 `celebrationText` 필드로 추가한다. `conditionDescription`은 개발자용 조건이라 화면에 쓰지 않는다. 새 스티커를 추가할 때 이 필드가 빠지면 타입 오류가 나게 필수로 둔다. 이 문장은 리뷰어가 정의의 조건(`praiseStickerDefinitions.ts`)을 보고 쓴 새 문구다.
 
@@ -367,6 +377,8 @@ alter table member_seen_state enable row level security;
 | 안 본 스티커 1개, 홈, 겹침 없음 | 축하 1장, "좋아요!" → 행 저장, 닫힘 |
 | 2개(earnedOn 11/20, 11/25) | 11/20 먼저, "다음 스티커" |
 | QR 화면이 열려 있음 | 닫힌 뒤에 보여 줌 |
+| 내 활동의 온도 시트가 열려 있음 | 닫힌 뒤에 보여 줌 |
+| 이미 본 스티커 1개, 새로 1개 | "2번째 칭찬 스티커예요" |
 | 동작 줄이기 켬 | 움직임·진동 없음 |
 | 스티커판 보기 | 남은 것 모두 저장 + 내 활동 스티커판 |
 | 스태프(선생님) | `staffEligible`인 스티커만(기존 판정) |
@@ -384,7 +396,7 @@ alter table member_seen_state enable row level security;
 
 ### R9. 최고 관리자 반응 이력 (V48)
 
-- `SuperAdminDashboard.tsx`의 감사 로그 하위 탭(`:782-786`, 출결 로그·댓글 이력·사전투표·기기 바인딩)에 **"반응 이력 ({n})"**을 댓글 이력 다음에 추가한다.
+- `SuperAdminDashboard.tsx`의 감사 로그 하위 탭(`:782-787`, 출결 로그·댓글 이력·사전투표·기기 바인딩)에 **"반응 이력 ({n})"**을 댓글 이력 다음에 추가한다.
 - 원천 이벤트를 그대로 보여 준다(투영하지 않음). 열: 시각(`received_at`을 KST로 "YYYY-MM-DD HH:mm:ss"), 단원(기록된 `member_id` → 현재 명부 이름, 없으면 id), 이모지, 동작("추가"/"취소"), 댓글(앞 30자, 삭제된 댓글이면 "(삭제된 댓글)"), 일정 제목, 기기.
 - 기존 댓글 이력과 같은 기간·검색 필터를 쓰되, 반응 시각(UTC)은 **KST로 바꾼 날짜**로 비교한다(`:346-368`처럼 문자열을 자르면 9시간 밀림). 정렬은 시각 ms, 이름은 바꾼 이름으로. 하위 탭 타입(`:23`)에 `'REACTIONS'`를 추가한다.
 - `SuperAdminDashboard.tsx`가 이미 1813줄이라 표는 새 파일 `src/components/admin/ReactionLogTable.tsx`로 만들고 탭에서 부른다.
@@ -403,14 +415,15 @@ alter table member_seen_state enable row level security;
 - `fn_add_comment`·`fn_edit_comment`: 최신 정의 전체를 복사하고 `mention_member_ids` 값만 추가한다. 그 밖의 줄은 바꾸지 않는다.
 - 정리 규칙(공용 내부 함수 `fn_clean_mention_ids(jsonb) returns text[]`, anon 권한 회수):
   - `jsonb_typeof(값) = 'array'`일 때만 처리, 아니면 빈 배열.
-  - `jsonb_array_elements_text … with ordinality` → `members`와 join(status가 DELETED·MERGED가 아닌 id만) → 처음 나온 위치 기준으로 중복 제거 → 위치순 → `limit 10`.
-- `fn_edit_comment`: payload에 `mentionMemberIds` 키가 **없으면**(옛 앱) 그 댓글의 마지막 CREATE/EDIT 행의 목록을 그대로 이어받는다. 키가 있으면 정리한 새 목록.
+  - `jsonb_array_elements_text … with ordinality` → 각 id를 `fn_canonical_member_id`로 대표 id로 바꿈 → `members`와 join(status가 DELETED가 아닌 대표만) → 처음 나온 위치(`min(ord)`) 기준으로 중복 제거 → 위치순 → `limit 10`.
+- `fn_edit_comment`: payload에 `mentionMemberIds` 키가 **없으면**(옛 앱) 그 댓글의 **작성자(같은 대표 회원)가 남긴** 마지막 CREATE/EDIT 행의 목록을 이어받는다(투영도 남의 EDIT는 무시, `scheduleComments.ts:52-53`). 키가 있으면 정리한 새 목록.
 - 스냅샷 댓글 객체에 `'mentionMemberIds', to_jsonb(cmt.mention_member_ids)`.
 - 쓸 때 언급 대상 id는 **대표 id**로 바꿔 보낸다(`resolveMemberIdentity(...).canonicalId`).
 
 **투영 (`buildScheduleComments`)**
 - `ScheduleComment.mentionMemberIds: string[]`: CREATE의 목록, EDIT가 있으면 마지막 EDIT의 목록으로 바꾼다(글자와 같은 규칙).
-- `ScheduleComment.mentionedAt: Record<memberId, string>`: 그 단원이 **처음 들어간 이벤트**의 `receivedAt`(CREATE 또는 그 단원을 처음 넣은 EDIT). 수정으로 빠졌다가 다시 들어오면 다시 들어온 시각.
+- `ScheduleComment.mentionedAt: Record<memberId, string>`: 그 단원이 **처음 들어간 이벤트**의 `receivedAt`(CREATE 또는 그 단원을 처음 넣은 EDIT). 수정으로 빠졌다가 다시 들어오면 다시 들어온 시각. 그 이벤트에 `receivedAt`이 없으면(옛 캐시) 언급 소식을 안 읽음으로 만들지 않는다.
+- 새 필드 `mentionMemberIds`·`mentionedAt`은 **선택 값**(`?`)으로 둔다(기존 테스트의 `ScheduleComment` 리터럴이 깨지지 않게). 없으면 빈 값으로 본다.
 
 **입력 화면**
 - 댓글 입력칸(새 댓글·수정 모두)에서 `@`를 치면 입력칸 바로 위에 단원 목록이 뜬다. 대상은 활성 단원(병합·삭제 제외, `getMembers()`), 나 자신 제외.
@@ -435,7 +448,7 @@ alter table member_seen_state enable row level security;
 | 입력 | 기대 |
 |---|---|
 | m2가 "@이하은 악보 챙겨요"로 m1 언급 | m1 새 소식 "민지 님이 댓글에서 나를 언급했어요", 글자 "@이하은" 강조 |
-| m2가 별칭 m1b를 골라 언급(대표 m1로 저장) | m1에게 소식 |
+| 옛 명부의 앱이 별칭 `m1b`를 보냄 | 서버가 `m1`로 바꿔 저장, m1에게 소식 |
 | m1이 자기 자신을 언급하려 함 | 목록에 m1 없음 |
 | 입력 중 "@이하은"을 지우고 보냄 | 언급 없음, 소식 없음 |
 | 수정으로 m3 언급 추가(11:30) | m3 소식 at 11:30, m1 기존 시각 유지 |
@@ -460,7 +473,10 @@ alter table member_seen_state enable row level security;
 **R11-1. 읽음 기록 저장소 (`src/services/seenStateStore.ts`, 하나만)**
 - 상태: `'notReady' | 'ready' | 'error'` + 합친 seen 값(`mergeSeenRows`) + 구독(`subscribe`, `useSyncExternalStore`로 쓰는 `useSeenState()`).
 - **받아 오는 때:** `lastSyncedAt`이 바뀔 때마다 `sheetsService.fetchSeenState(aliasIds)` 한 번(진행 중이면 다시 부르지 않음). 실패하면 `'error'`(점·숫자·축하 없음), 다음 동기화 때 다시.
-- **쓰기:** `markSeen(items)`는 로컬 값을 먼저 합쳐 바로 화면에 반영한 뒤 서버로 보낸다. 실패하면 대기열 `PREFERENCE_KEYS.PENDING_SEEN`(`'moonchoir_pref_pending_seen_v1'`, 항목 배열)에 넣고, 다음 받아 오기 성공 직후 보낸다(`greatest`라 중복 무해). 명세 §9 키 표에 추가.
+- **쓰기:** `markSeen(items)`는 로컬 값을 먼저 합쳐 바로 화면에 반영한 뒤 서버로 보낸다. 실패하면 대기열 `PREFERENCE_KEYS.PENDING_SEEN`(`'moonchoir_pref_pending_seen_v1'`, 항목 `{memberId, kind, scope, upTo?}` 배열)에 넣는다. **다시 보내는 때는 하나:** 받아 오기 성공 직후. 명세 §9 키 표에 추가.
+- **합치기:** 받아 온 서버 값과 로컬(전송 중·대기열) 값을 (kind, scope)마다 **더 늦은 값**으로 합친다. 옛 서버 값이 점·숫자를 되살리지 않는다.
+- **단원이 바뀌면**(다시 연결 `App.tsx:59,276`, 로그아웃 `:396-399`): 상태를 `'notReady'`로 돌리고 새로 받는다. 대기열은 `memberId`가 지금 단원(별칭 포함)인 항목만 보낸다.
+- **GAS 모드:** `fetchSeenState`·`markSeen`은 `getMemberActivity`(`sheets.ts:823-826`)처럼 바로 빠져나온다. 상태는 `'notReady'`로 두고, GAS 사용자는 새 댓글 점·종이 없다(수용).
 - HomeTab, ScheduleComments, ProfileTab, App(종·축하)은 모두 이 저장소만 읽는다. 각자 RPC를 부르지 않는다.
 
 **R11-2. 실시간**
@@ -470,11 +486,13 @@ alter table member_seen_state enable row level security;
 
 **R11-3. 겹침 화면 등록 (`src/hooks/useBlockingOverlay.ts`)**
 - 모듈 카운터 + `useBlockingOverlay(open: boolean)`. 열려 있는 동안 +1. App은 `useIsAnyOverlayOpen()`으로 읽는다.
+- 등록 대상(빠짐없이): `ProfileTab`의 `activeSheet !== 'NONE'`(LEVEL·ATTENDANCE·TEMP·STICKERS, `ProfileTab.tsx:52`), `NewsSheet`, `ReactorsSheet`, `MentionPicker`, `BindingModal`, 관리자 PIN 창, 최고 관리자 PIN 창(`App.tsx:87` `showSuperAdminPinModal`). 경로 겹침(`scheduleSheet`, `qr`, `rsvp`, `player`, `score`)은 `route.overlay`로 따로 본다.
 - 축하는 `route.overlay`가 없고 카운터가 0일 때만.
 
 **R11-4. 활동·스티커 모델 (`src/components/profile/useMemberActivityModel.ts`)**
 - App에서 **한 번만** 부르고 ProfileTab에 props로 넘긴다(활동 RPC 중복 방지).
-- 돌려주는 값: `{ currentMember, members, isStaff, scheduleRecords, activity, evaluatedStickers, isDataReady }`.
+- 돌려주는 값: `{ currentMember, members, config, currentNow, schedules, logs, rsvpVotes, isStaff, scheduleRecords, activity, evaluatedStickers, isDataReady }`. ProfileTab의 온도·90일 계산(`:168-213`)도 이 값(특히 같은 `currentNow`)을 쓴다.
+- ProfileTab의 prop `model?`은 **선택**이다. 없으면 ProfileTab 안에서 같은 훅을 부른다(기존 `ProfileTab.test.tsx:57-66`처럼 prop 없이 렌더하는 테스트가 그대로 통과).
 - 활동 조회는 `lastSyncedAt` 변경 때와 출석 직후(완료 → `onSuccess`)에만 한다. `refreshKey`(동기화 한 번에 두 번 오름, `App.tsx:108`)에 걸지 않는다.
 
 ---
@@ -522,14 +540,16 @@ alter table member_seen_state enable row level security;
   - `fn_get_initial_snapshot`: **`20261119000001_rpc_functions.sql:18`의 정의 전체를 복사**해 댓글 객체에 `'receivedAt', to_char(cmt.received_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`를 넣고, `reactions`(seq 순, 같은 시각 형식)를 추가한다. 다른 줄은 바꾸지 않는다. 복사 원본과 diff를 보고한다(규칙 4).
   - 새 함수의 `grant execute ... to anon, authenticated`와 `set search_path = public`
   - R10: `mention_member_ids` 열 추가, `fn_clean_mention_ids`, `fn_add_comment`·`fn_edit_comment` 복사 수정, 스냅샷에 `mentionMemberIds`
-  - `fn_canonical_member_id`(내부, 권한 회수), `fn_delete_member__impl` 복사 수정(반응 기록 포함, 물리 삭제 때 읽음 행 삭제)
+  - `fn_canonical_member_id`(내부, 권한 회수), `fn_delete_member__impl` 복사 수정(반응 기록 포함, 물리 삭제 때 읽음 행 삭제, 원본의 `revoke all … from public, anon, authenticated` `:315`도 다시 적음)
   - 실시간 publication에 반응 표(조건부)
   - `supabase/all_in_one_setup.sql`은 갱신 대상이 아니다(옛 정의가 따로 있음)
 - `supabase/tests/v3_reactions_seen_check.sql`(트랜잭션 + ROLLBACK): R1·R3 표의 모든 줄, R10 서버 줄(없는 id 제거·10개 제한·옛 행 빈 배열), 스냅샷의 `receivedAt`·`reactions`·`mentionMemberIds`를 검사한다.
 - SQL에서 text 시각을 `::timestamptz`로 바로 바꾸지 않는다(규칙 12). `fn_safe_timestamptz`를 쓴다.
 
 ### W2. 데이터 층 (순수 함수 + 어댑터)
-- 타입: `CommentReactionEvent`, `ReactionEmoji`, `SeenStateRow`, `ScheduleCommentEvent.receivedAt?`, `ScheduleComment.receivedAt?`.
+- 타입: `CommentReactionEvent`, `ReactionEmoji`, `SeenStateRow`, `NewsItem`, `ScheduleCommentEvent.receivedAt?`·`mentionMemberIds?`, `ScheduleComment.receivedAt?`·`mentionMemberIds?`·`mentionedAt?`, `StickerDefinition.celebrationText`.
+- `src/utils/serverTime.ts`: `parseServerTimeMs`(테스트: `...Z`, `...123456+00:00`, 공백 구분자, `+00`, 빈 값).
+- `sheets.ts`: `NON_MUTATING_ACTIONS`에 새 action 3개, 이 목록의 action은 `writeEpoch`를 올리지 않음(테스트: `GET_SEEN_STATE` 성공 후 `refreshRemoteData` 안 불림, 진행 중 스냅샷이 버려지지 않음).
 - `sheetsParser.ts`: `parseRemoteReactionEvents`, 댓글 `receivedAt`.
 - `src/utils/commentReactions.ts`: `REACTION_EMOJIS`, `buildCommentReactions`.
 - `src/utils/seenState.ts`: `mergeSeenRows`, `isCommentUnread`, `pickUnseenStickers`.
@@ -543,7 +563,8 @@ alter table member_seen_state enable row level security;
   - R1(클라이언트 쪽 payload)·R2·R3(합치기)·R4·R5·R6 표 전부와 §5 손계산 1~4.
   - `rpcContract.test.ts`: 새 RPC 3개 payload 키, `REACTION_EMOJIS`와 SQL check 목록이 같은지 검사.
   - 스냅샷 파서: `receivedAt`·`mentionMemberIds` 없는 옛 행.
-  - 실시간 INSERT(`received_at`이 `...+00:00`, 마이크로초) 한 건이 새 댓글·언급으로 잡히는지, 반응 실시간 한 건이 칩에 반영되는지.
+  - 실시간 INSERT(`received_at`이 `...+00:00`, 마이크로초) 한 건이 새 댓글·언급으로 잡히는지, 반응 실시간 한 건이 칩에 반영되는지. `mention_member_ids`는 JSON 배열과 `{a,b}` 문자열 두 모양 모두 받는다.
+  - §5 손계산 입력의 시각은 KST로 적었으니 테스트에는 UTC ISO로 넣는다(예: 11/27 09:00 KST = `2026-11-27T00:00:00.000Z`).
   - `REACTION_EMOJIS`와 SQL check 목록을 **코드포인트까지** 비교(❤️ = U+2764 U+FE0F).
 
 ### W3. 반응·언급 화면
@@ -577,6 +598,7 @@ alter table member_seen_state enable row level security;
 - §4에 없는 문구가 필요하면 멈춘다.
 - 운영 DB 실행, npm 설치, PR 머지, 배포를 하지 않는다. 푸시 알림은 범위 밖(다음 티켓).
 - 스티커 판정 결과가 추출 전후로 달라지면 멈춘다.
+- 출석 직후 그날 기록이 `buildMemberScheduleRecords`에서 바로 "출석"으로 잡히지 않아 V50(출석 직후 축하)이 안 되면 멈추고 보고한다(리뷰어가 끝까지 추적하지 못한 전제).
 
 ### 보고
 `docs/plans/17_v3_implementation_guide.md` §5 형식. 마이그레이션 복사 원본·diff, 새 문구 목록을 붙인다. `/report-ready` 후 CI 초록이면 보고하고 멈춘다.
@@ -629,3 +651,25 @@ alter table member_seen_state enable row level security;
 | 사소 | 행 번호, 인자 시그니처, 아이콘 교체, 축하 문장 4개 수정, n번째 계산, 순서 판정은 투영 순서 |
 
 리뷰어 운영 확인(읽기 전용, 2026-11-27): 이관 댓글 62개가 `received_at` 20개 값에 몰림 → 순서 판정은 투영 순서. 실시간 publication = `attendance_logs, rsvp_votes, schedule_comment_events`.
+
+### 2차 검토 반영 (2026-11-27)
+
+| 지적 | 반영 |
+|---|---|
+| B1 새 RPC가 새로고침 무한 반복 | `NON_MUTATING_ACTIONS`에 3개 추가, 읽기 action은 `writeEpoch` 안 올림, 테스트 |
+| S1 훅 이름 두 개 | `useMemberActivityModel` 하나, 범위 `55-264` |
+| S2 반응 반환형 | `memberAt: Map<대표 id, ms>` |
+| S3 모두 읽음과 미투표 | `vote` 행 함께 저장, `upTo` 없음 = now |
+| S4 첫 실행 미투표 | 의도(해야 할 일), 예시 |
+| S5 새 댓글 개수 기준 | 안 읽음 기준과 같게, 반례 예시 |
+| S6 서버 값이 로컬 덮어씀 | 더 늦은 값으로 합침, 재전송 시점 하나 |
+| S7 단원 바뀜 | 초기화, 대기열에 `memberId` |
+| S8 스티커판 닫기 | 행 없는 획득 스티커 저장, 명세 §5 갱신 |
+| S9 스티커판 열기 신호 | App이 요청 보관 → ProfileTab이 처리 후 지움 |
+| S10 겹침 화면 목록 | 파일·상태 이름으로 전부 |
+| S11 ProfileTab 테스트·값 | `model?` 선택 prop, 돌려주는 값 확대(`currentNow` 공유) |
+| S12 언급 병합 회원 | 서버가 대표 id로 바꾼 뒤 정리, 예시 교체 |
+| S13 길게 누르기 훅 | `useLongPress` 500ms, `vibrate: false` 옵션 |
+| S14 명세 §7·§10 | §7-8, 수용 기준 추가 |
+| S15 GAS에서 읽음 RPC | 바로 빠져나옴, GAS는 점·종 없음 |
+| 사소 | `n` 정의, `earnedOn` 없음, 옛 캐시 언급, 작성자 EDIT만, 속도 제한 색인, publication `schemaname`, `revoke` 재기재, 순환 규칙, 한 방향 연결 명시, UTC 입력, "2번째", 행 번호, 타입 목록, "표 밖 이름" 문구, 서버 시각 해석 함수, 실시간 배열 두 모양 |
