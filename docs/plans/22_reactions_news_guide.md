@@ -74,7 +74,7 @@
 | `findMyVote` | `src/utils/myVote.ts` | 홈 | 별칭 포함 내 투표 | 미투표 소식 |
 | `isRsvpOpenForSchedule` | `src/utils/timeWindow.ts:135` | 홈·상세 | 시작 60분 전까지 투표 가능, 취소·보관 false | 미투표 소식 |
 | `parseScheduleKST`(비공개) | `src/utils/timeWindow.ts:26` | 같은 파일 | 일정 날짜·시각 → KST Date | `export` 해서 소식의 "3일 전" 계산에 쓴다(새 해석기 금지) |
-| `isMemberRequiredForSchedule` | `src/utils/attendanceStats.ts:65` | 홈 | 필참 여부 | 미투표 소식 대상(V45, 사용자 확인 대기) |
+| `isMemberRequiredForSchedule` | `src/utils/attendanceStats.ts:65` | 홈 | 필참 여부 | 미투표 소식 대상(V45, 필참만) |
 | `AppHeader` | `src/components/AppHeader.tsx` | `App.tsx` | 로고, `showAdminEntry`(:114) | 종 버튼 추가(설정 버튼 왼쪽) |
 | `stickerImageUrl` | `src/utils/praiseStickers.ts:37` | 스티커판 | 그림 경로 | 축하 화면 |
 | `route` 겹침 화면 | `src/utils/route.ts:4-8` | — | `scheduleSheet`, `qr`, `rsvp`, `player`, `score` | 축하는 겹침 화면이 없을 때만. 새 소식은 경로 없이 시트로 연다(새 경로 금지) |
@@ -230,7 +230,7 @@ create table if not exists member_seen_state (
 |---|---|---|---|---|
 | 반응 | 내 댓글(별칭 포함, 삭제 안 됨)에 **남이** 켠 반응. 댓글마다 묶음 | 켜진 남의 반응 중 가장 늦은 ADD `received_at` | 1명: "{이름} 님이 내 댓글에 {이모지} 반응했어요" / 여러 명: "{가장 늦은 사람} 님 외 {n-1}명이 내 댓글에 반응했어요" · "\"{댓글 앞 20자}…\" · {일정 제목} · {상대 시각}" | 그 일정 상세 |
 | 새 댓글 | 내가 댓글을 단 일정에서, 내 첫 댓글보다 뒤에 남이 쓴 댓글. 일정마다 묶음 | 그중 가장 늦은 `receivedAt` | "{일정 제목}({날짜 라벨})에 새 댓글 {n}개" / "내가 댓글 단 일정 · {상대 시각}" | 그 일정 상세 |
-| 미투표 | 필참 일정(V45), 투표 가능, 내 투표 없음, now ≥ 시작 − 72시간 | 시작 − 72시간 | "{일정 제목}({M월 D일 요일}) 투표를 아직 안 했어요" / "투표 마감 {M월 D일 HH:mm}"(시작 − 60분) | 투표 창(`rsvp` 경로) |
+| 미투표 | 필참 일정만(V45), 투표 가능, 내 투표 없음, now ≥ 시작 − 72시간 | 시작 − 72시간 | "{일정 제목}({M월 D일 요일}) 투표를 아직 안 했어요" / "투표 마감 {M월 D일 HH:mm}"(시작 − 60분) | 투표 창(`rsvp` 경로) |
 | 스티커 | 받은 스티커 | `earnedOn`의 KST 0시 | "칭찬 스티커 {이름}{을/를} 받았어요" / {상대 날짜} | 내 활동 탭 + 스티커판 |
 
 - **안 읽음:** 반응·새 댓글·미투표는 `at > max(seen.news, seen.baseline)`. 스티커는 `sticker` 행이 없으면 안 읽음(날짜 무관, V44).
@@ -254,7 +254,7 @@ create table if not exists member_seen_state (
 | A(11/28 14:00) 투표 없음, now 11/27 12:00 | 미투표 소식, at = 11/25 14:00, 마감 "11월 28일 13:00" |
 | A 투표 없음, now 11/25 13:59 | 미투표 소식 없음(72시간 전) |
 | A 투표 없음, now 11/28 13:00 | 없음(마감) |
-| C(자율) 투표 없음 | 없음(V45 기본값) |
+| C(자율) 투표 없음 | 없음(V45) |
 | 별칭 m1b로 A 투표함 | 없음 |
 | 안 읽은 스티커 earnedOn 3주 전 | 안 읽음에 포함 |
 | 읽은 스티커 earnedOn 20일 전, 기간 14일 | 없음 → 더 보기(28일) 후 지난 소식에 |
@@ -421,5 +421,5 @@ create table if not exists member_seen_state (
    - 추가만 하는 변경이라 옛 앱은 새 필드를 무시한다.
 3. 그 뒤 앱 배포. 순서를 바꾸면 새 앱이 없는 RPC를 불러 반응·종이 실패한다.
 
-## 8. 사용자 확인 대기
-- **V45:** 미투표 소식은 **필참 일정만**으로 적었다(자율 참여 일정에 잔소리를 피하려고). 자율 일정도 넣을지 확인 필요.
+## 8. 사용자 결정
+- **V45:** 미투표 소식은 **필참 일정만**(2026-11-27 사용자 확정).
