@@ -1,7 +1,7 @@
 # 22. 댓글 반응 · 새 소식 · 계정별 읽음 · 스티커 축하 개발 지시서 (V3-24)
 
 > 작성: 리뷰어(Claude), 2026-11-27. 기준 코드: `origin/main` @ `3d34859`.
-> 명세: `docs/MEMBER_UX_V3_SPEC.md` §0-1 V41~V47.
+> 명세: `docs/MEMBER_UX_V3_SPEC.md` §0-1 V41~V50.
 > 시안(사용자 확정): https://claude.ai/artifact/78R1NaARRVq6a9zKrpZM9r "댓글 반응 · 새 소식" 줄의 `SocialReact`, `SocialPick`, `SocialWho`, `NewsHome`, `NewsList`, `NewsEmpty`, `StickerCelebrate`, `StickerCelebrate2`. 시안 hex는 쓰지 않는다. 시안의 예시 이름·숫자는 넣지 않는다.
 > 시작 전: `.agents/rules/recurring-mistakes.md`를 읽고 `/spec-check`로 §3 표를 코드에 대 본다. 어긋나면 시작하지 말고 보고한다.
 > **DB 변경이 있다.** 개발 에이전트는 마이그레이션 파일과 검증 스크립트만 커밋한다. 운영 적용은 리뷰어가 앱 배포 **전에** 한다(§7).
@@ -137,6 +137,8 @@ create index if not exists idx_reaction_events_member_time on comment_reaction_e
   - `lastAt` = 켜진 사람들의 마지막 ADD `received_at` 중 가장 늦은 값.
 - 칩: 켜진 수 > 0인 이모지만, `REACTION_EMOJIS` 순서. 내가 켠 칩은 진하게(`aria-pressed="true"`).
 - 칩을 누르면 내 반응을 켜거나 끈다. 끝의 ☺+ 버튼은 6개 고르기를 연다. 고른 게 이미 켜져 있으면 끈다.
+- **한 사람이 한 댓글에 여러 이모지를 켤 수 있다**(V48). 이모지마다 따로 켜고 끈다.
+- **반응한 사람은 모든 단원이 볼 수 있다**(V48, 익명 아님).
 - **낙관적 반영:** 누르면 로컬 이벤트를 먼저 넣어 화면을 바꾼다. 서버 실패면 그 이벤트를 빼서 되돌리고 "반응을 남기지 못했어요. 다시 시도해 주세요."를 짧게 보여 준다.
 - 칩을 **0.5초 길게 누르면**(마우스는 우클릭) 반응한 사람 시트를 연다. 위에 칩 줄, 아래에 사람 목록. 이름·파트는 현재 명부(대표 회원) 기준. 내가 있으면 "나(이름)"로 맨 위.
 - GAS 모드(`isBackendActive()`가 Supabase가 아님)에서는 칩은 보이되 ☺+와 누르기를 막는다.
@@ -148,6 +150,7 @@ create index if not exists idx_reaction_events_member_time on comment_reaction_e
 | m1b 👏 ADD, m1 👏 ADD | 👏 1(한 사람), m1 화면에서 진함 |
 | m1b 👏 ADD → m1 👏 REMOVE | 👏 없음(같은 사람의 마지막 동작) |
 | m2 ❤️ ADD, m3 👍 ADD | 칩 순서 👍 ❤️ |
+| m1 👏 ADD, m1 ❤️ ADD | 👏 1(진함), ❤️ 1(진함) — 둘 다 켜짐 |
 | 댓글 삭제 후 | 칩 안 보임(댓글이 목록에 없음) |
 | 서버 실패 | 화면 되돌림 + 문구 |
 
@@ -212,12 +215,14 @@ create table if not exists member_seen_state (
 
 - seen 기록을 받았는데 `baseline('')` 행이 없으면, 준비(`lastSyncedAt > 0`) 뒤 한 번 `fn_mark_seen([{kind:'baseline',scope:''},{kind:'news',scope:''}])`. 이 시각 이전의 댓글·반응·소식은 모두 읽음.
 - `baseline('stickers')` 행이 없으면, **스티커 데이터 준비 뒤**(`isStickerDataReady`) 한 번 `baseline('stickers')` + 지금 받은 모든 스티커의 `sticker` 행을 쓴다. 이미 받은 스티커로 축하가 쏟아지지 않게 하려는 것이다.
+- 그때 받은 스티커가 1개 이상이면 **요약 축하를 한 번** 띄운다(V49, R7 '요약 축하'). 0개면 띄우지 않는다.
 - 기기 저장 `SEEN_COMMENTS`·`SEEN_STICKERS`는 읽지도 쓰지도 않는다(지우지도 않는다. 키 상수는 유지).
 
 | 입력 | 기대 |
 |---|---|
 | 첫 실행, 동기화 전 | 아무것도 쓰지 않음, 점·숫자 0 |
-| 첫 실행, 동기화 후, 받은 스티커 7개 | baseline 2행 + sticker 7행, 축하 없음 |
+| 첫 실행, 동기화 후, 받은 스티커 7개 | baseline 2행 + sticker 7행, 요약 축하 1번("지금까지 칭찬 스티커 7개를 받았네요!"), 개별 축하 없음 |
+| 첫 실행, 받은 스티커 0개 | baseline 2행, 축하 없음 |
 | 그 뒤 8번째 스티커 획득 | 축하 1번 |
 | seen 조회 실패 | 준비 안 됨으로 처리(점·숫자·축하 없음), 다음 동기화 때 재시도 |
 
@@ -302,6 +307,8 @@ create table if not exists member_seen_state (
 - **진동(V47):** 스티커가 닿는 순간(열고 약 0.45초) 한 번 `navigator.vibrate([20, 40, 70])`. `prefers-reduced-motion`이거나 지원 안 하면(아이폰 웹 앱) 안 한다. try/catch.
 - `prefers-reduced-motion: reduce`면 움직임·색종이·진동 없이 완성 화면.
 - 스티커를 누르면 한 번 더 튕긴다.
+- **출석 직후(V50):** 출석 완료 화면(`QRScannerModal`의 완료 → `onSuccess` → `triggerRefresh`, `App.tsx`)이 닫히고 새로 계산한 스티커에 안 본 것이 생기면 **바로** 축하를 띄운다. 출석으로 받는 스티커는 출석 기록(`getLogs`)만으로 판정되므로 활동 RPC를 다시 기다리지 않는다. 활동 RPC가 필요한 스티커(재생·투표 이력)는 다음 활동 조회 뒤에 뜬다.
+- **요약 축하(V49):** 계정 기록을 처음 만들 때 한 번. 같은 화면 틀에 받은 스티커 그림을 최대 3장 겹쳐 보여 주고(최근 획득 순), 글자는 "지금까지 칭찬 스티커 {N}개를 받았네요!" / "앞으로 새 스티커를 받으면 바로 축하해 드릴게요". 메달·묶음 칩과 "n번째"는 없다. 버튼은 "좋아요!"·"스티커판 보기". 색종이·진동은 개별 축하와 같다.
 - 접근성: `role="dialog"`, `aria-modal`, `aria-label="칭찬 스티커를 받았어요"`, 열 때 "좋아요!"로 포커스.
 
 | 입력 | 기대 |
@@ -312,6 +319,9 @@ create table if not exists member_seen_state (
 | 동작 줄이기 켬 | 움직임·진동 없음 |
 | 스티커판 보기 | 남은 것 모두 저장 + 내 활동 스티커판 |
 | 스태프(선생님) | `staffEligible`인 스티커만(기존 판정) |
+| 오늘 출석으로 `att-10` 획득 | 출석 완료 화면을 닫자마자 축하 |
+| 출석 완료 화면이 열려 있는 동안 | 띄우지 않음(겹침 화면 조건) |
+| 첫 실행 요약 축하 직후 | 개별 축하 없음(모두 본 것) |
 
 ### R8. 홈 머리 종 (시안 `NewsHome`)
 
@@ -320,6 +330,20 @@ create table if not exists member_seen_state (
 - 누르면 아래에서 올라오는 시트(시안 `NewsList`): 제목 "새 소식", "모두 읽음", 구역 "새로 온 소식"/"지난 소식", 맨 아래 "이전 소식 더 보기"(90일이면 숨김) 또는 "최근 {N}일 소식만 보여요".
 - 빈 상태(시안 `NewsEmpty`): "새 소식이 없어요" / "댓글에 반응이 달리거나 투표할 일정이 생기면 알려 드릴게요".
 - 아이콘: 반응은 그 이모지 글자(내용이므로 허용), 새 댓글·미투표는 `Icons.tsx`(말풍선 `IconChat`, 투표는 기존 `IconVote`), 스티커는 스티커 그림.
+
+### R9. 최고 관리자 반응 이력 (V48)
+
+- `SuperAdminDashboard.tsx`의 감사 로그 하위 탭(`:782-786`, 출결 로그·댓글 이력·사전투표·기기 바인딩)에 **"반응 이력 ({n})"**을 댓글 이력 다음에 추가한다.
+- 원천 이벤트를 그대로 보여 준다(투영하지 않음). 열: 시각(`received_at`을 KST로 "YYYY-MM-DD HH:mm:ss"), 단원(기록된 `member_id` → 현재 명부 이름, 없으면 id), 이모지, 동작("추가"/"취소"), 댓글(앞 30자, 삭제된 댓글이면 "(삭제된 댓글)"), 일정 제목, 기기.
+- 기존 댓글 이력과 같은 기간·검색·정렬 필터를 쓴다(`:346-368` 방식).
+- `SuperAdminDashboard.tsx`가 이미 1813줄이라 표는 새 파일 `src/components/admin/ReactionLogTable.tsx`로 만들고 탭에서 부른다.
+- 원천 조회는 `sheetsService.getReactionEvents()`(얇은 접근자, `getCommentEvents` `:505`와 같은 모양).
+
+| 입력 | 기대 |
+|---|---|
+| m2 👏 추가 후 취소 | 2줄(추가, 취소) |
+| 삭제된 댓글의 반응 | 줄은 남고 댓글 칸 "(삭제된 댓글)" |
+| 병합된 별칭 id로 기록 | 단원 칸은 별칭 행의 이름(기록 그대로) |
 
 ---
 
@@ -394,9 +418,10 @@ create table if not exists member_seen_state (
 
 ### W5. 스티커 축하
 - `src/components/profile/useEarnedStickers.ts`(`ProfileTab`에서 추출, `ProfileTab` 결과가 바뀌지 않는지 기존 테스트로 확인)
-- `src/components/celebration/StickerCelebration.tsx` + `src/styles/v3/celebration.css`
+- `src/components/celebration/StickerCelebration.tsx`(개별·요약 두 모양) + `src/styles/v3/celebration.css`
 - `App.tsx`에서 조건에 맞을 때 보여 주기(R7)
-- **테스트:** 순서·저장·겹침 화면 조건(순수 함수 `nextCelebration(queue, action)`), 동작 줄이기 때 진동 안 함
+- **테스트:** 순서·저장·겹침 화면 조건·출석 직후·요약 축하(순수 함수 `nextCelebration(queue, action)`), 동작 줄이기 때 진동 안 함
+- 최고 관리자 반응 이력(R9): `ReactionLogTable.tsx` + 하위 탭. 테스트는 R9 표.
 
 ### 확인 방법
 - `scripts/dev/capture-screens.mjs`(V3-22 `--home` 방식)에 장면 추가. 장마다 `scrollWidth`를 적는다.
@@ -421,5 +446,9 @@ create table if not exists member_seen_state (
    - 추가만 하는 변경이라 옛 앱은 새 필드를 무시한다.
 3. 그 뒤 앱 배포. 순서를 바꾸면 새 앱이 없는 RPC를 불러 반응·종이 실패한다.
 
-## 8. 사용자 결정
-- **V45:** 미투표 소식은 **필참 일정만**(2026-11-27 사용자 확정).
+## 8. 사용자 결정 (2026-11-27)
+- **V45:** 미투표 소식은 필참 일정만.
+- **V48:** 한 댓글에 여러 이모지 가능, 반응한 사람은 모두 공개, 최고 관리자 화면에 반응 이력.
+- **V49:** 기능 첫 실행 때 이미 받은 스티커는 요약 축하 한 번.
+- **V50:** 출석 직후 받은 스티커는 바로 축하.
+- 범위 밖: 대댓글(스레드), @언급(다음 단계 후보), 푸시 알림(다음 주).
