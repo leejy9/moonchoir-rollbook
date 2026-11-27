@@ -755,7 +755,8 @@ flowchart LR
 | `HOME_CALENDAR_VIEW` → `moonchoir_pref_home_view_v1` | `'week' \| 'month'` (V35 이후 홈에서 안 씀, 키 상수는 유지) | — |
 | `STUDIO_SCOPE` → `moonchoir_pref_studio_scope_v1` | `'all' \| 'unassigned' \| performanceId` | `'all'` |
 | `PLAYBACK_RATE` → `moonchoir_pref_playback_rate_v1` | 0.5~2.0 숫자 | `1` |
-| `SEEN_STICKERS` → `moonchoir_pref_seen_stickers_v1` | id 배열 | 알림 생략 |
+| `SEEN_STICKERS` → `moonchoir_pref_seen_stickers_v1`(**V44 이후 안 씀**, 키 상수 유지) | id 배열 | — |
+| `PENDING_SEEN` → `moonchoir_pref_pending_seen_v1` (V44) | 서버에 못 보낸 읽음 기록 항목 배열 | 다음 동기화 때 재전송 |
 | `UPLOAD_JOBS` → `moonchoir_pref_upload_jobs_v1` | 미완료 업로드 메타데이터 | 알림 생략 |
 | `YT_MINIMIZE_HINT_COUNT` → `moonchoir_pref_yt_minimize_hint_v1` | 0~2 정수 | 2(안내 생략) |
 | `SEEN_COMMENTS` → `moonchoir_pref_seen_comments_v1` (V38, **V44 이후 안 씀**, 키 상수 유지) | 본 댓글 id 배열 | — |
