@@ -353,10 +353,6 @@ describe('supabaseRealtime', () => {
         { event: '*', schema: 'public', table: 'schedule_comment_events' },
         { event: '*', schema: 'public', table: 'comment_reaction_events' },
         { event: '*', schema: 'public', table: 'rsvp_votes' },
-        { event: '*', schema: 'public', table: 'schedules' },
-        { event: '*', schema: 'public', table: 'members' },
-        { event: '*', schema: 'public', table: 'locations' },
-        { event: '*', schema: 'public', table: 'program_cards' },
       ]);
 
       // Advance clock by heartbeat interval
