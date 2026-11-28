@@ -390,10 +390,8 @@ export class SupabaseRealtimeClient {
                 { event: '*', schema: 'public', table: 'schedule_comment_events' },
                 { event: '*', schema: 'public', table: 'comment_reaction_events' },
                 { event: '*', schema: 'public', table: 'rsvp_votes' },
-                { event: '*', schema: 'public', table: 'schedules' },
-                { event: '*', schema: 'public', table: 'members' },
-                { event: '*', schema: 'public', table: 'locations' },
-                { event: '*', schema: 'public', table: 'program_cards' },
+                // schedules, members, locations, program_cards는 실시간 전송 대상(publication)이 아니라서
+                // 여기 넣으면 서버가 구독 전체를 거절한다. 해당 테이블은 실시간 구독에서 뺀다.
               ],
               private: false,
             },
